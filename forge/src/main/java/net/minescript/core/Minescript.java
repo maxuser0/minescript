@@ -34,7 +34,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
@@ -43,9 +42,9 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component; // Forge only
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.LevelAccessor; // Forge only
+import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.ChunkAccess; // Forge only
+import net.minecraft.world.level.chunk.ChunkAccess;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
@@ -468,7 +467,7 @@ public class Minescript {
           if (entry.getValue() == jobId) {
             var listener = entry.getKey();
             listener.resume();
-            listener.updateChunkStatuses(loadedChunks::containsKey);
+            listener.updateChunkStatuses();
             if (listener.isFinished()) {
               listener.onFinished();
               iter.remove();
@@ -967,7 +966,6 @@ public class Minescript {
     int yMax = Math.min(Math.max(y0, y1), 320); // TODO(maxuser): Use an API for max build height.
     int zMax = Math.max(z0, z1);
 
-    // Fabric: player.getEntityWorld() or player.getWorld()? Both return this.world. [norewrite]
     Level level = player.getCommandSenderWorld();
 
     try (var writer = new PrintWriter(new FileWriter(MINESCRIPT_DIR + "/paste.py"))) {
@@ -1593,9 +1591,6 @@ public class Minescript {
   }
   /* End Forge only */
 
-  // Map from 2 packed ints representing x and z in chunk space to unused boolean.
-  private static Map<Long, Boolean> loadedChunks = new ConcurrentHashMap<>();
-
   private static long packInts(int x, int z) {
     return (((long) x) << 32) | (z & 0xffffffffL);
   }
@@ -1605,57 +1600,32 @@ public class Minescript {
     return new int[] {(int) (x >> 32), (int) x};
   }
 
-  public static boolean booleanOrNull(Boolean bool) {
-    return (bool == null) ? false : bool;
-  }
-
-  /* Begin Forge only */
-  public static void onChunkLoad(ChunkAccess chunkAccess) {
-    int chunkX = chunkAccess.getPos().x;
-    int chunkZ = chunkAccess.getPos().z;
-    long packedChunkXZ = packInts(chunkX, chunkZ);
-    boolean wasLoaded = booleanOrNull(loadedChunks.put(packedChunkXZ, true));
-    if (!wasLoaded) {
-      LOGGER.info("(minescript) world chunk loaded: {} {}", chunkX, chunkZ);
-      var iter = chunkLoadEventListeners.keySet().iterator();
-      while (iter.hasNext()) {
-        var listener = iter.next();
-        if (listener.onChunkLoaded(packedChunkXZ)) {
-          iter.remove();
-        }
+  public static void onChunkLoad(LevelAccessor chunkLevel, ChunkAccess chunk) {
+    int chunkX = chunk.getPos().x;
+    int chunkZ = chunk.getPos().z;
+    LOGGER.info("(minescript) world {} chunk loaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
+    var iter = chunkLoadEventListeners.keySet().iterator();
+    while (iter.hasNext()) {
+      var listener = iter.next();
+      if (listener.onChunkLoaded(chunkLevel, chunkX, chunkZ)) {
+        iter.remove();
       }
     }
   }
 
-  public static void onChunkUnload(ChunkAccess chunkAccess) {
-    int chunkX = chunkAccess.getPos().x;
-    int chunkZ = chunkAccess.getPos().z;
-    long packedChunkXZ = packInts(chunkX, chunkZ);
-    boolean wasLoaded = booleanOrNull(loadedChunks.remove(packedChunkXZ));
-    if (wasLoaded) {
-      LOGGER.info("(minescript) world chunk unloaded: {} {}", chunkX, chunkZ);
-      for (var listener : chunkLoadEventListeners.keySet()) {
-        listener.onChunkUnloaded(packedChunkXZ);
-      }
+  public static void onChunkUnload(LevelAccessor chunkLevel, ChunkAccess chunk) {
+    int chunkX = chunk.getPos().x;
+    int chunkZ = chunk.getPos().z;
+    LOGGER.info(
+        "(minescript) world {} chunk unloaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
+    for (var listener : chunkLoadEventListeners.keySet()) {
+      listener.onChunkUnloaded(chunkLevel, chunkX, chunkZ);
     }
   }
 
-  public static void onWorldUnload(LevelAccessor world) {
-    var minecraft = Minecraft.getInstance();
-    var player = minecraft.player;
-    if (player != null) {
-      // Fabric: player.getEntityWorld() or player.getWorld()? Both return this.world. [norewrite]
-      var playerWorld = player.getCommandSenderWorld();
-      if (world == playerWorld) {
-        LOGGER.info(
-            "(minescript) World unloaded, clearing chunk map of {} entries: {}", // [norewrite]
-            loadedChunks.size(),
-            playerWorld.dimension());
-        loadedChunks.clear();
-      }
-    }
+  public static void onWorldLoad(LevelAccessor level) {
+    LOGGER.info("(maxuser-debug) onWorldLoad {}: {}", level.hashCode(), level);
   }
-  /* End Forge only */
 
   public static boolean onClientChat(String message) {
     boolean cancel = false;
@@ -1834,13 +1804,24 @@ public class Minescript {
     // Map packed chunk (x, z) to boolean: true if chunk is loaded, false otherwise.
     private final Map<Long, Boolean> chunksToLoad = new ConcurrentHashMap<>();
 
+    // Level with chunks to listen for. Store hash rather than reference to avoid memory leak.
+    private final int levelHashCode;
+
     private final ScriptFunctionCall scriptFunction;
     private int numUnloadedChunks = 0;
     private boolean suspended = false;
 
     public ChunkLoadEventListener(
         int x1, int z1, int x2, int z2, ScriptFunctionCall scriptFunction) {
-      LOGGER.info("(minescript) listener chunk region: {} {} {} {}", x1, z1, x2, z2);
+      var minecraft = Minecraft.getInstance();
+      this.levelHashCode = minecraft.level.hashCode();
+      LOGGER.info(
+          "(minescript) listener chunk region in level {}: {} {} {} {}",
+          levelHashCode,
+          x1,
+          z1,
+          x2,
+          z2);
       int chunkX1 = worldCoordToChunkCoord(x1);
       int chunkZ1 = worldCoordToChunkCoord(z1);
       int chunkX2 = worldCoordToChunkCoord(x2);
@@ -1869,10 +1850,22 @@ public class Minescript {
       suspended = false;
     }
 
-    public synchronized void updateChunkStatuses(Predicate<Long> isChunkLoaded) {
+    public synchronized void updateChunkStatuses() {
+      var minecraft = Minecraft.getInstance();
+      var level = minecraft.level;
+      if (level.hashCode() != this.levelHashCode) {
+        LOGGER.info(
+            "(minescript) chunk listener's world doesn't match current world; clearing listener");
+        chunksToLoad.clear();
+        numUnloadedChunks = 0;
+        return;
+      }
       numUnloadedChunks = 0;
+      var chunkManager = level.getChunkSource();
       for (var entry : chunksToLoad.entrySet()) {
-        boolean isLoaded = isChunkLoaded.test(entry.getKey());
+        long packedChunkXZ = entry.getKey();
+        int[] chunkCoords = unpackLong(packedChunkXZ);
+        boolean isLoaded = chunkManager.getChunkNow(chunkCoords[0], chunkCoords[1]) != null;
         entry.setValue(isLoaded);
         if (!isLoaded) {
           numUnloadedChunks++;
@@ -1882,17 +1875,24 @@ public class Minescript {
     }
 
     /** Returns true if the final outstanding chunk is loaded. */
-    public synchronized boolean onChunkLoaded(long packedChunkXZ) {
+    public synchronized boolean onChunkLoaded(LevelAccessor chunkLevel, int chunkX, int chunkZ) {
       if (suspended) {
         return false;
       }
+      if (chunkLevel.hashCode() != levelHashCode) {
+        return false;
+      }
+      long packedChunkXZ = packInts(chunkX, chunkZ);
       if (!chunksToLoad.containsKey(packedChunkXZ)) {
         return false;
       }
       boolean wasLoaded = chunksToLoad.put(packedChunkXZ, true);
       if (!wasLoaded) {
-        int[] chunkCoords = unpackLong(packedChunkXZ);
-        LOGGER.info("(minescript) listener chunk loaded: {} {}", chunkCoords[0], chunkCoords[1]);
+        LOGGER.info(
+            "(minescript) listener chunk loaded for level {}: {} {}",
+            levelHashCode,
+            chunkX,
+            chunkZ);
         numUnloadedChunks--;
         if (numUnloadedChunks == 0) {
           onFinished();
@@ -1902,10 +1902,14 @@ public class Minescript {
       return false;
     }
 
-    public synchronized void onChunkUnloaded(long packedChunkXZ) {
+    public synchronized void onChunkUnloaded(LevelAccessor chunkLevel, int chunkX, int chunkZ) {
       if (suspended) {
         return;
       }
+      if (chunkLevel.hashCode() != levelHashCode) {
+        return;
+      }
+      long packedChunkXZ = packInts(chunkX, chunkZ);
       if (!chunksToLoad.containsKey(packedChunkXZ)) {
         return;
       }
@@ -1954,7 +1958,6 @@ public class Minescript {
 
       var player = minecraft.player;
       if (player != null && (!systemCommandQueue.isEmpty() || !jobs.getMap().isEmpty())) {
-        // Fabric: player.getEntityWorld() or player.getWorld()? Both return this.world. [norewrite]
         Level level = player.getCommandSenderWorld();
         for (int i = 0; i < minescriptCommandsPerCycle; ++i) {
           String command = systemCommandQueue.poll();
@@ -2025,7 +2028,7 @@ public class Minescript {
                               params.get(2),
                               params.get(3),
                               new ScriptFunctionCall(job, funcCallId));
-                      listener.updateChunkStatuses(loadedChunks::containsKey);
+                      listener.updateChunkStatuses();
                       if (listener.isFinished()) {
                         listener.onFinished();
                       } else {
