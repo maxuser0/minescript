@@ -56,6 +56,7 @@ public class Minescript {
   private static final String MINESCRIPT_DIR = "minescript";
 
   public static void init() {
+    LOGGER.info("(minescript) Starting Minescript on OS: {}", System.getProperty("os.name"));
     if (new File(MINESCRIPT_DIR).mkdir()) {
       LOGGER.info("(minescript) Created minescript dir");
     }
@@ -96,14 +97,16 @@ public class Minescript {
 
   private static List<String> getScriptCommandNames() {
     List<String> scriptNames = new ArrayList<>();
-    String minescriptDir = System.getProperty("user.dir") + "/" + MINESCRIPT_DIR;
+    String minescriptDir = Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR).toString();
     try {
       Files.list(new File(minescriptDir).toPath())
           .filter(path -> path.toString().endsWith(".py"))
           .forEach(
               path -> {
                 String commandName =
-                    path.toString().replace(minescriptDir + "/", "").replaceFirst("\\.py$", "");
+                    path.toString()
+                        .replace(minescriptDir + File.separator, "")
+                        .replaceFirst("\\.py$", "");
                 scriptNames.add(commandName);
               });
     } catch (IOException e) {
@@ -234,7 +237,7 @@ public class Minescript {
   }
 
   static class UndoableAction {
-    private static String UNDO_DIR = MINESCRIPT_DIR + "/undo/";
+    private static String UNDO_DIR = Paths.get(MINESCRIPT_DIR, "undo").toString();
 
     private volatile int originalJobId; // ID of the job that this undoes.
     private String[] originalCommand;
@@ -259,7 +262,7 @@ public class Minescript {
 
       // Write undo commands to a file and clear in-memory commands queue.
       new File(UNDO_DIR).mkdirs();
-      commandsFilename = UNDO_DIR + startTimeMillis + ".txt";
+      commandsFilename = Paths.get(UNDO_DIR, startTimeMillis + ".txt").toString();
       try (var writer = new PrintWriter(new FileWriter(commandsFilename))) {
         writer.printf(
             "# Generated from Minescript command `%s`:\n", String.join(" ", originalCommand));
@@ -557,21 +560,35 @@ public class Minescript {
 
     @Override
     public int run(String[] command, JobControl jobControl) {
-      // TODO(maxuser): Support non-Python executables in general.
-      String scriptExtension = ".py";
-      String scriptName = MINESCRIPT_DIR + "/" + command[0] + scriptExtension;
+      String scriptName = Paths.get(MINESCRIPT_DIR, command[0] + ".py").toString();
 
-      String pythonInterpreterPath = findFirstFile("/usr/bin/python3", "/usr/local/bin/python3");
-      if (pythonInterpreterPath == null) {
+      String homeDir = System.getProperty("user.home");
+      String[] pythonInterpreterPath =
+          System.getProperty("os.name").startsWith("Windows")
+              ? new String[] {
+                Paths.get(homeDir, "AppData", "Local", "Microsoft", "WindowsApps", "Python.exe")
+                    .toString(),
+                Paths.get(homeDir, "AppData", "Local", "Programs", "Python.exe").toString(),
+                Paths.get("C:", "Program Files", "Python.exe").toString()
+              }
+              : new String[] {
+                "/usr/bin/python3",
+                "/usr/local/bin/python3",
+                "/usr/bin/python",
+                "/usr/local/bin/python"
+              };
+      String pythonInterpreter = findFirstFile(pythonInterpreterPath);
+      if (pythonInterpreter == null) {
         jobControl.enqueueStderr("Cannot find Python3 interpreter at any of these locations:");
-        jobControl.enqueueStderr("  /usr/bin/python3");
-        jobControl.enqueueStderr("  /usr/local/bin/python3");
+        for (String pathname : pythonInterpreterPath) {
+          jobControl.enqueueStderr("  " + pathname);
+        }
         jobControl.enqueueStderr("See: https://www.python.org/downloads/");
         return -1;
       }
 
       String[] executableCommand = new String[command.length + 2];
-      executableCommand[0] = pythonInterpreterPath;
+      executableCommand[0] = pythonInterpreter;
       executableCommand[1] = "-u"; // `python3 -u` for unbuffered stdout and stderr.
       executableCommand[2] = scriptName;
       for (int i = 1; i < command.length; i++) {
@@ -753,8 +770,8 @@ public class Minescript {
   private static Queue<String> systemCommandQueue = new ConcurrentLinkedQueue<String>();
 
   private static boolean checkMinescriptDir() {
-    String minescriptDir = System.getProperty("user.dir") + "/" + MINESCRIPT_DIR;
-    if (!Files.isDirectory(Paths.get(minescriptDir))) {
+    Path minescriptDir = Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR);
+    if (!Files.isDirectory(minescriptDir)) {
       logUserError(
           "Minescript folder is missing. It should have been created at: {}", minescriptDir);
       return false;
@@ -1199,7 +1216,7 @@ public class Minescript {
     jobs.createSubprocess(command);
   }
 
-  private static String findFirstFile(String... filenames) {
+  private static String findFirstFile(String[] filenames) {
     for (String filename : filenames) {
       if (Files.exists(Paths.get(filename))) {
         return filename;
@@ -1641,7 +1658,7 @@ public class Minescript {
     private long lastCheckedTime = 0;
 
     public ServerBlockList() {
-      serverBlockListPath = Paths.get(MINESCRIPT_DIR + "/server_block_list.txt");
+      serverBlockListPath = Paths.get(MINESCRIPT_DIR, "server_block_list.txt");
     }
 
     public boolean areCommandsAllowedForServer(String serverName, String serverIp) {
