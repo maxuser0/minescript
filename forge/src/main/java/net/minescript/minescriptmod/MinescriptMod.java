@@ -465,13 +465,13 @@ public class MinescriptMod {
     int playerY = (int) player.getY();
     int playerZ = (int) player.getZ();
 
-    if (Math.abs(x0 - playerX) > 100
-        || Math.abs(y0 - playerY) > 100
-        || Math.abs(z0 - playerZ) > 100
-        || Math.abs(x1 - playerX) > 100
-        || Math.abs(y1 - playerY) > 100
-        || Math.abs(z1 - playerZ) > 100) {
-      logUserError("Player is more than 100 blocks from `copy` coordinate.");
+    if (Math.abs(x0 - playerX) > 200
+        || Math.abs(y0 - playerY) > 200
+        || Math.abs(z0 - playerZ) > 200
+        || Math.abs(x1 - playerX) > 200
+        || Math.abs(y1 - playerY) > 200
+        || Math.abs(z1 - playerZ) > 200) {
+      logUserError("Player is more than 200 blocks from `copy` coordinate.");
       return;
     }
 
