@@ -425,14 +425,7 @@ public class MinescriptMod {
 
     @Override
     public void enqueueStdout(String text) {
-      if (text.matches("^/[a-zA-Z].*")) {
-        jobCommandQueue.add(text);
-      } else if (text.startsWith("#")) {
-        jobCommandQueue.add(text.substring(1).stripLeading());
-      } else {
-        // Treat as plain text to write to the chat.
-        jobCommandQueue.add(tellrawFormat(text, "white"));
-      }
+      jobCommandQueue.add(text);
     }
 
     @Override
