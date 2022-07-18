@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
@@ -444,6 +445,12 @@ public class MinescriptMod {
         int timeoutSeconds = 2;
         if (lock.tryLock(timeoutSeconds, TimeUnit.SECONDS)) {
           state = JobState.SUSPENDED;
+          for (var entry : chunkLoadEventListeners.entrySet()) {
+            if (entry.getValue() == jobId) {
+              var listener = entry.getKey();
+              listener.suspend();
+            }
+          }
           return true;
         } else {
           logUserError(
@@ -463,6 +470,20 @@ public class MinescriptMod {
       }
       if (state == JobState.SUSPENDED) {
         state = JobState.RUNNING;
+
+        var iter = chunkLoadEventListeners.entrySet().iterator();
+        while (iter.hasNext()) {
+          var entry = iter.next();
+          if (entry.getValue() == jobId) {
+            var listener = entry.getKey();
+            listener.resume();
+            listener.updateChunkStatuses(loadedChunks::containsKey);
+            if (listener.isFinished()) {
+              listener.onFinished();
+              iter.remove();
+            }
+          }
+        }
       }
       try {
         lock.unlock();
@@ -527,16 +548,16 @@ public class MinescriptMod {
   }
 
   static class ScriptFunctionCall {
-    private final JobControl jobControl;
-    private final long id;
+    private final JobControl job;
+    private final long funcCallId;
 
-    public ScriptFunctionCall(JobControl jobControl, long id) {
-      this.jobControl = jobControl;
-      this.id = id;
+    public ScriptFunctionCall(JobControl job, long funcCallId) {
+      this.job = job;
+      this.funcCallId = funcCallId;
     }
 
     public boolean respond(String returnValue, boolean finalReply) {
-      return jobControl.respond(id, returnValue, finalReply);
+      return job.respond(funcCallId, returnValue, finalReply);
     }
   }
 
@@ -1566,7 +1587,7 @@ public class MinescriptMod {
     ChunkAccess chunkAccess = event.getChunk();
     int chunkX = chunkAccess.getPos().x;
     int chunkZ = chunkAccess.getPos().z;
-    Long packedChunkXZ = packInts(chunkX, chunkZ);
+    long packedChunkXZ = packInts(chunkX, chunkZ);
     boolean wasLoaded = booleanOrNull(loadedChunks.put(packedChunkXZ, true));
     if (!wasLoaded) {
       LOGGER.info("(minescript) world chunk loaded: {} {}", chunkX, chunkZ);
@@ -1585,7 +1606,7 @@ public class MinescriptMod {
     ChunkAccess chunkAccess = event.getChunk();
     int chunkX = chunkAccess.getPos().x;
     int chunkZ = chunkAccess.getPos().z;
-    Long packedChunkXZ = packInts(chunkX, chunkZ);
+    long packedChunkXZ = packInts(chunkX, chunkZ);
     boolean wasLoaded = booleanOrNull(loadedChunks.remove(packedChunkXZ));
     if (wasLoaded) {
       LOGGER.info("(minescript) world chunk unloaded: {} {}", chunkX, chunkZ);
@@ -1787,8 +1808,8 @@ public class MinescriptMod {
     private final Map<Long, Boolean> chunksToLoad = new ConcurrentHashMap<>();
 
     private final ScriptFunctionCall scriptFunction;
-
     private int numUnloadedChunks = 0;
+    private boolean suspended = false;
 
     public ChunkLoadEventListener(
         int x1, int z1, int x2, int z2, ScriptFunctionCall scriptFunction) {
@@ -1806,19 +1827,38 @@ public class MinescriptMod {
       for (int chunkX = chunkXMin; chunkX <= chunkXMax; chunkX++) {
         for (int chunkZ = chunkZMin; chunkZ <= chunkZMax; chunkZ++) {
           LOGGER.info("(minescript) listener chunk registered: {} {}", chunkX, chunkZ);
-          Long packedChunkXZ = packInts(chunkX, chunkZ);
-          boolean isLoaded = loadedChunks.containsKey(packedChunkXZ);
-          chunksToLoad.put(packedChunkXZ, isLoaded);
-          if (!isLoaded) {
-            numUnloadedChunks++;
-          }
+          long packedChunkXZ = packInts(chunkX, chunkZ);
+          chunksToLoad.put(packedChunkXZ, false);
         }
       }
       this.scriptFunction = scriptFunction;
     }
 
+    public synchronized void suspend() {
+      suspended = true;
+    }
+
+    public synchronized void resume() {
+      suspended = false;
+    }
+
+    public synchronized void updateChunkStatuses(Predicate<Long> isChunkLoaded) {
+      numUnloadedChunks = 0;
+      for (var entry : chunksToLoad.entrySet()) {
+        boolean isLoaded = isChunkLoaded.test(entry.getKey());
+        entry.setValue(isLoaded);
+        if (!isLoaded) {
+          numUnloadedChunks++;
+        }
+      }
+      LOGGER.info("(minescript) Unloaded chunks after updateChunkStatuses: {}", numUnloadedChunks);
+    }
+
     /** Returns true if the final outstanding chunk is loaded. */
-    public boolean onChunkLoaded(long packedChunkXZ) {
+    public synchronized boolean onChunkLoaded(long packedChunkXZ) {
+      if (suspended) {
+        return false;
+      }
       if (!chunksToLoad.containsKey(packedChunkXZ)) {
         return false;
       }
@@ -1835,7 +1875,10 @@ public class MinescriptMod {
       return false;
     }
 
-    public void onChunkUnloaded(long packedChunkXZ) {
+    public synchronized void onChunkUnloaded(long packedChunkXZ) {
+      if (suspended) {
+        return;
+      }
       if (!chunksToLoad.containsKey(packedChunkXZ)) {
         return;
       }
@@ -1845,19 +1888,19 @@ public class MinescriptMod {
       }
     }
 
-    public boolean isFinished() {
+    public synchronized boolean isFinished() {
       return numUnloadedChunks == 0;
     }
 
     /** To be called when all requested chunks are loaded. */
-    public void onFinished() {
+    public synchronized void onFinished() {
       scriptFunction.respond("true", true);
     }
   }
 
-  // Boolean value unused.
-  private static Map<ChunkLoadEventListener, Boolean> chunkLoadEventListeners =
-      new ConcurrentHashMap<ChunkLoadEventListener, Boolean>();
+  // Integer value represents the ID of the job that spawned this listener.
+  private static Map<ChunkLoadEventListener, Integer> chunkLoadEventListeners =
+      new ConcurrentHashMap<ChunkLoadEventListener, Integer>();
 
   @SubscribeEvent
   public void onPlayerTick(TickEvent.PlayerTickEvent event) {
@@ -1945,10 +1988,11 @@ public class MinescriptMod {
                               params.get(2),
                               params.get(3),
                               new ScriptFunctionCall(job, funcCallId));
+                      listener.updateChunkStatuses(loadedChunks::containsKey);
                       if (listener.isFinished()) {
                         listener.onFinished();
                       } else {
-                        chunkLoadEventListeners.put(listener, true);
+                        chunkLoadEventListeners.put(listener, job.jobId());
                       }
                     } else {
                       // TODO(maxuser): Support raising exceptions through script functions, e.g.
