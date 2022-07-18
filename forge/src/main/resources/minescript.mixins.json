@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "package": "net.minescript.forge.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "minescript.refmap.json",
+  "mixins": [
+    "M1CocoaMixin"
+  ],
+  "client": [
+  ],
+  "minVersion": "0.8"
+}

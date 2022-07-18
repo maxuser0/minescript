@@ -1,0 +1,65 @@
+# There are several mandatory fields (#mandatory), and many more that are optional (#optional).
+# The overall format is standard TOML format, v0.5.0.
+# Note that there are a couple of TOML lists in this file.
+# Find more information on toml format here:  https://github.com/toml-lang/toml
+# The name of the mod loader type to load - for regular FML @Mod mods it should be javafml
+modLoader="javafml" #mandatory
+# A version range to match for said mod loader - for regular FML @Mod it will be the forge version
+loaderVersion="[41,)" #mandatory This is typically bumped every Minecraft version by Forge. See our download page for lists of versions.
+# The license for you mod. This is mandatory metadata and allows for easier comprehension of your redistributive properties.
+# Review your options at https://choosealicense.com/. All rights reserved is the default copyright stance, and is thus the default here.
+license="All rights reserved"
+# A URL to refer people to when problems occur with this mod
+#issueTrackerURL="https://change.me.to.your.issue.tracker.example.invalid/" #optional
+# A list of mods - how many allowed here is determined by the individual mod loader
+[[mods]] #mandatory
+# The modid of the mod
+modId="minescript" #mandatory
+# The version number of the mod - there's a few well known ${} variables useable here or just hardcode it
+# ${file.jarVersion} will substitute the value of the Implementation-Version as read from the mod's JAR file metadata
+# see the associated build.gradle script for how to populate this completely automatically during a build
+version="${file.jarVersion}" #mandatory
+ # A display name for the mod
+displayName="Minescript" #mandatory
+# A URL to query for updates for this mod. See the JSON update specification https://mcforge.readthedocs.io/en/latest/gettingstarted/autoupdate/
+#updateJSONURL="https://change.me.example.invalid/updates.json" #optional
+# A URL for the "homepage" for this mod, displayed in the mod UI
+displayURL="https://minescript.net/" #optional
+# A file name (in the root of the mod JAR) containing a logo for display
+logoFile="minescript-devpreview-logo.png" #optional
+# A text field displayed in the mod UI
+#credits="..." #optional
+# A text field displayed in the mod UI
+authors="maxuser, ocymcpro" #optional
+# The description text for the mod (multi line!) (#mandatory)
+description='''
+Minescript is a platform for developing scripts written in various real-world programming languages like Python for controlling Minecraft via commands. Just follow these steps:
+
+1. Download and install Python 3.
+
+2. Create a folder named "minescript" within your Minecraft "mods" folder.
+
+3. Write Python scripts in your "minescript" folder.
+
+A script named "hello.py" within the "minescript" folder will be accessible within Minecraft by pressing backslash ("\") and entering the name of the script within the chat (without the ".py" on the end), e.g. "\hello". You can pass parameters to the "hello" command, and output from "hello.py", e.g. via "print(...)", is interpreted just like a command entered within the Minecraft chat. E.g. "print('/time set day')" in your Python script will run "/time set day" as if it were entered by hand in the Minecraft chat.
+'''
+# A dependency - use the . to indicate dependency for a specific modid. Dependencies are optional.
+[[dependencies.minescript]] #optional
+    # the modid of the dependency
+    modId="forge" #mandatory
+    # Does this dependency have to exist - if not, ordering below must be specified
+    mandatory=true #mandatory
+    # The version range of the dependency
+    versionRange="[41,)" #mandatory
+    # An ordering relationship for the dependency - BEFORE or AFTER required if the relationship is not mandatory
+    ordering="NONE"
+    # Side this dependency is applied on - BOTH, CLIENT or SERVER
+    side="BOTH"
+# Here's another dependency
+[[dependencies.minescript]]
+    modId="minecraft"
+    mandatory=true
+# This version range declares a minimum of the current minecraft version up to but not including the next major version
+    versionRange="[1.19,1.20)"
+    ordering="NONE"
+    side="BOTH"

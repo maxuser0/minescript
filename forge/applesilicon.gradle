@@ -1,0 +1,44 @@
+// AUTHOR  : LukeGrahamLandry#6888
+// LICENSE : MIT
+// README  : https://moddingtutorials.org/o19/m1
+// NOTE    : you MUST set mc_version in your gradle.properties file
+
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+
+if (System.getProperty("os.arch").equals("aarch64") && System.getProperty("os.name").equals("Mac OS X")){
+    project.ext.lwjglVersion = "3.3.0"
+    if (project.mc_version.contains("1.19")){
+        project.ext.lwjglVersion = "3.3.1" // minecraft uses a newer version as of 1.19
+    }
+    project.ext.lwjglNatives = "natives-macos-arm64"
+
+    configurations.all {
+        resolutionStrategy {
+            force "org.lwjgl:lwjgl:${lwjglVersion}"
+            force "org.lwjgl:lwjgl-openal:${lwjglVersion}"
+            force "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
+            force "org.lwjgl:lwjgl-jemalloc:${lwjglVersion}"
+            force "org.lwjgl:lwjgl-glfw:${lwjglVersion}"
+            force "org.lwjgl:lwjgl-stb:${lwjglVersion}"
+            force "org.lwjgl:lwjgl-tinyfd:${lwjglVersion}"
+        }
+    }
+
+    logger.error("Apple Silicon for MC version ${project.mc_version}")
+
+    String path = "caches/forge_gradle/mcp_repo/net/minecraft/client/${project.mc_version}/client-${project.mc_version}.pom"
+    File cache = new File(project.getGradle().getGradleUserHomeDir(), path)
+
+    if (cache.exists()) {
+        List<String> lines = Files.readAllLines(cache.toPath(), StandardCharsets.UTF_8);
+
+        FileWriter writer = new FileWriter(cache);
+
+        for (String line : lines){
+            if (!line.contains("arm")) line = line.replaceAll("natives-macos", "natives-macos-arm64") + "\n"
+            writer.append(line)
+        }
+        writer.close();
+    }
+}
