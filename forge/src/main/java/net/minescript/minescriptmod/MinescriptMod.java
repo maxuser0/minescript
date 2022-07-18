@@ -153,7 +153,8 @@ public class MinescriptMod {
     }
   }
 
-  private static String[] substituteMinecraftVars(String[] command) {
+  private static String[] substituteMinecraftVars(String[] originalCommand) {
+    String[] command = Arrays.copyOf(originalCommand, originalCommand.length);
     var player = Minecraft.getInstance().player;
     List<Integer> tildeParamPositions = new ArrayList<>();
     int consecutiveTildes = 0;
@@ -253,12 +254,12 @@ public class MinescriptMod {
 
     public Subprocess(String[] command, Consumer<Integer> doneCallback) {
       this.jobId = nextJobId.getAndIncrement();
-      this.command = command;
+      this.command = Arrays.copyOf(command, command.length);
       this.doneCallback = doneCallback;
     }
 
     public void start() {
-      thread = new Thread(this::runOnJobThread, String.format("%s-%d", command[0], jobId));
+      thread = new Thread(this::runOnJobThread, String.format("job-%d-%s", jobId, command[0]));
       thread.start();
     }
 
@@ -327,7 +328,7 @@ public class MinescriptMod {
 
       final Process process;
       try {
-        process = Runtime.getRuntime().exec(substituteMinecraftVars(executableCommand));
+        process = Runtime.getRuntime().exec(executableCommand);
       } catch (IOException e) {
         logException(e);
         logUserError(e.getMessage());
@@ -593,6 +594,8 @@ public class MinescriptMod {
       return;
     }
 
+    command = substituteMinecraftVars(command);
+
     // TODO(maxuser): Add commands for:
     // `suspendjob ID`: suspend job with ID
     // `resumejob ID`: resume job with ID
@@ -618,7 +621,7 @@ public class MinescriptMod {
 
     if (command[0].equals("copy")) {
       if (checkParamTypes(
-          substituteMinecraftVars(command),
+          command,
           ParamType.INT,
           ParamType.INT,
           ParamType.INT,
@@ -640,7 +643,7 @@ public class MinescriptMod {
     }
 
     if (command[0].equals("minescript_commands_per_cycle")) {
-      if (checkParamTypes(substituteMinecraftVars(command), ParamType.INT)) {
+      if (checkParamTypes(command, ParamType.INT)) {
         int numCommands = Integer.valueOf(command[1]);
         if (numCommands < 1) numCommands = 1;
         minescriptCommandsPerCycle = numCommands;
@@ -653,7 +656,7 @@ public class MinescriptMod {
     }
 
     if (command[0].equals("minescript_ticks_per_cycle")) {
-      if (checkParamTypes(substituteMinecraftVars(command), ParamType.INT)) {
+      if (checkParamTypes(command, ParamType.INT)) {
         int ticks = Integer.valueOf(command[1]);
         if (ticks < 1) ticks = 1;
         minescriptTicksPerCycle = ticks;
@@ -666,7 +669,7 @@ public class MinescriptMod {
     }
 
     if (command[0].equals("enable_minescript_on_chat_received_event")) {
-      if (checkParamTypes(substituteMinecraftVars(command), ParamType.BOOL)) {
+      if (checkParamTypes(command, ParamType.BOOL)) {
         boolean enable = command[1].equals("true");
         enableMinescriptOnChatReceivedEvent = enable;
         logUserInfo(
