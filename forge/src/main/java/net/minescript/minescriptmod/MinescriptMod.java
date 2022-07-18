@@ -21,7 +21,10 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import net.minecraft.client.Minecraft;
@@ -93,6 +96,8 @@ public class MinescriptMod {
         "ls",
         "copy",
         "jobs",
+        "suspend",
+        "resume",
         "killjob",
         "minescript_commands_per_cycle",
         "minescript_ticks_per_cycle",
@@ -224,11 +229,15 @@ public class MinescriptMod {
         + "\"}";
   }
 
+  // TODO(maxuser): Split Subprocess into Job interface with JobHandler impls SubprocessJobHandler
+  // and
+  // BuiltinJobHandler.
   static class Subprocess {
     public enum State {
       NOT_STARTED("Not started"),
       RUNNING("Running"),
-      STOPPED("Stopped"),
+      SUSPENDED("Suspended"),
+      KILLED("Killed"),
       DONE("Done");
 
       private final String displayName;
@@ -246,12 +255,11 @@ public class MinescriptMod {
     private static AtomicInteger nextJobId = new AtomicInteger(1);
     private final int jobId;
     private final String[] command;
-    private final Queue<String> stdoutQueue = new ConcurrentLinkedQueue<String>();
-    private final Queue<String> stderrQueue = new ConcurrentLinkedQueue<String>();
     private Thread thread;
-    private State state = State.RUNNING;
+    private volatile State state = State.NOT_STARTED;
     private Consumer<Integer> doneCallback;
     private Queue<String> jobCommandQueue = new ConcurrentLinkedQueue<String>();
+    private Lock lock = new ReentrantLock(true); // true indicates a fair lock to avoid starvation
 
     public Subprocess(String[] command, Consumer<Integer> doneCallback) {
       this.jobId = nextJobId.getAndIncrement();
@@ -268,13 +276,74 @@ public class MinescriptMod {
       thread.start();
     }
 
-    public Queue<String> getCommandQueue() {
+    public boolean suspend() {
+      if (state == State.KILLED) {
+        logUserError("Job already killed: {}", jobSummary());
+        return false;
+      }
+      if (state == State.SUSPENDED) {
+        logUserError("Job already suspended: {}", jobSummary());
+        return false;
+      }
+      try {
+        int timeoutSeconds = 2;
+        if (lock.tryLock(timeoutSeconds, TimeUnit.SECONDS)) {
+          state = Subprocess.State.SUSPENDED;
+          return true;
+        } else {
+          logUserError(
+              "Timed out trying to suspend job after {} seconds: {}", timeoutSeconds, jobSummary());
+          return false;
+        }
+      } catch (InterruptedException e) {
+        logException(e);
+        return false;
+      }
+    }
+
+    public boolean resume() {
+      if (state != State.SUSPENDED && state != State.KILLED) {
+        logUserError("Job not suspended: {}", jobSummary());
+        return false;
+      }
+      if (state == State.SUSPENDED) {
+        state = Subprocess.State.RUNNING;
+      }
+      try {
+        lock.unlock();
+      } catch (IllegalMonitorStateException e) {
+        logException(e);
+        return false;
+      }
+      return true;
+    }
+
+    public void kill() {
+      State prevState = state;
+      state = State.KILLED;
+      if (prevState == State.SUSPENDED) {
+        resume();
+      }
+    }
+
+    public Queue<String> commandQueue() {
       return jobCommandQueue;
     }
 
     private void runOnJobThread() {
+      if (state == State.NOT_STARTED) {
+        state = State.RUNNING;
+      }
       try {
         int exitCode = runExternalCommand(command);
+        final int millisToSleep = 1000;
+        while (state != State.KILLED && !jobCommandQueue.isEmpty()) {
+          try {
+            Thread.sleep(millisToSleep);
+          } catch (InterruptedException e) {
+            logJobException(e);
+          }
+        }
         if (exitCode != 0) {
           logUserError("Command exit code: {}", exitCode);
         }
@@ -290,8 +359,8 @@ public class MinescriptMod {
     String jobSummary() {
       // Same as toString(), but omits state.
       String displayCommand = String.join(" ", command);
-      if (displayCommand.length() > 24) {
-        displayCommand = displayCommand.substring(0, 24);
+      if (displayCommand.length() > 61) {
+        displayCommand = displayCommand.substring(0, 61) + "...";
       }
       return String.format("[%d] %s", jobId, displayCommand);
     }
@@ -299,20 +368,13 @@ public class MinescriptMod {
     @Override
     public String toString() {
       String displayCommand = String.join(" ", command);
-      if (displayCommand.length() > 24) {
-        displayCommand = displayCommand.substring(0, 24);
+      if (displayCommand.length() > 61) {
+        displayCommand = displayCommand.substring(0, 61) + "...";
       }
       return String.format("[%d] %s:  %s", jobId, state, displayCommand);
     }
 
-    public Queue<String> stdoutQueue() {
-      return stdoutQueue;
-    }
-
-    public Queue<String> stderrQueue() {
-      return stderrQueue;
-    }
-
+    // TODO(maxuser): Pass interface for accessing lock and print/logging outputs.
     private int runExternalCommand(String[] command) {
       // TODO(maxuser): Support non-Python executables in general.
       String scriptExtension = ".py";
@@ -320,10 +382,10 @@ public class MinescriptMod {
 
       String pythonInterpreterPath = findFirstFile("/usr/bin/python3", "/usr/local/bin/python3");
       if (pythonInterpreterPath == null) {
-        logUserError("Cannot find Python3 interpreter at any of these locations:");
-        logUserError("  /usr/bin/python3");
-        logUserError("  /usr/local/bin/python3");
-        logUserError("See: https://www.python.org/downloads/");
+        enqueueStderr("Cannot find Python3 interpreter at any of these locations:");
+        enqueueStderr("  /usr/bin/python3");
+        enqueueStderr("  /usr/local/bin/python3");
+        enqueueStderr("See: https://www.python.org/downloads/");
         return -1;
       }
 
@@ -339,8 +401,7 @@ public class MinescriptMod {
       try {
         process = Runtime.getRuntime().exec(executableCommand);
       } catch (IOException e) {
-        logException(e);
-        logUserError(e.getMessage());
+        logJobException(e);
         return -2;
       }
 
@@ -350,28 +411,50 @@ public class MinescriptMod {
           var stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
         String line;
         while ((line = stdoutReader.readLine()) != null) {
+          if (state == State.KILLED) {
+            process.destroy();
+            break;
+          }
+
+          // Lock and immediately unlock to respect job suspension which holds this lock.
+          lock.lock();
+          lock.unlock();
+
           enqueueStdout(line);
         }
         while ((line = stderrReader.readLine()) != null) {
-          logUserError(line);
+          if (state == State.KILLED) {
+            process.destroy();
+            break;
+          }
+
+          // Lock and immediately unlock to respect job suspension which holds this lock.
+          lock.lock();
+          lock.unlock();
+
+          enqueueStderr(line);
         }
       } catch (IOException e) {
-        logException(e);
-        logUserError(e.getMessage());
+        logJobException(e);
+        enqueueStderr(e.getMessage());
         return -3;
       }
       if (process == null) {
         return -4;
       }
+      if (state == State.KILLED) {
+        process.destroy();
+        return -5;
+      }
       try {
         return process.waitFor();
       } catch (InterruptedException e) {
-        logException(e);
-        return -5;
+        logJobException(e);
+        return -6;
       }
     }
 
-    private static void enqueueStdout(String text) {
+    private void enqueueStdout(String text) {
       if (text.matches("^/[a-zA-Z].*")) {
         jobCommandQueue.add(text);
       } else if (text.startsWith("#")) {
@@ -382,10 +465,19 @@ public class MinescriptMod {
       }
     }
 
-    private void logUserError(String messagePattern, Object... arguments) {
+    private void enqueueStderr(String messagePattern, Object... arguments) {
       String logMessage = ParameterizedMessage.format(messagePattern, arguments);
       LOGGER.error("(minescript) {}", logMessage);
       jobCommandQueue.add(tellrawFormat(logMessage, "red"));
+    }
+
+    private void logJobException(Exception e) {
+      var sw = new StringWriter();
+      var pw = new PrintWriter(sw);
+      e.printStackTrace(pw);
+      logUserError("Exception in job \"{}\": {}", jobSummary(), e.getMessage());
+      LOGGER.error(
+          "(minescript) exception stack trace in job \"{}\": {}", jobSummary(), sw.toString());
     }
   }
 
@@ -405,8 +497,7 @@ public class MinescriptMod {
 
   private static SubprocessMap subprocessMap = new SubprocessMap();
 
-  // TODO(maxuser): remove commandQueue in favor of subprocessMap.
-  private static Queue<String> commandQueue = new ConcurrentLinkedQueue<String>();
+  private static Queue<String> systemCommandQueue = new ConcurrentLinkedQueue<String>();
 
   private static boolean checkMinescriptDir() {
     String minescriptDir = System.getProperty("user.dir") + "/" + MINESCRIPT_DIR;
@@ -458,18 +549,18 @@ public class MinescriptMod {
   public static void logUserInfo(String messagePattern, Object... arguments) {
     String logMessage = ParameterizedMessage.format(messagePattern, arguments);
     LOGGER.info("(minescript) {}", logMessage);
-    commandQueue.add(tellrawFormat(logMessage, "yellow"));
+    systemCommandQueue.add(tellrawFormat(logMessage, "yellow"));
   }
 
   public static void logUserError(String messagePattern, Object... arguments) {
     String logMessage = ParameterizedMessage.format(messagePattern, arguments);
     LOGGER.error("(minescript) {}", logMessage);
-    commandQueue.add(tellrawFormat(logMessage, "red"));
+    systemCommandQueue.add(tellrawFormat(logMessage, "red"));
   }
 
   private static void listJobs() {
-    logUserInfo("There are no jobs running.");
     if (subprocessMap.getMap().isEmpty()) {
+      logUserInfo("There are no jobs running.");
       return;
     }
     for (var subprocess : subprocessMap.getMap().values()) {
@@ -477,13 +568,36 @@ public class MinescriptMod {
     }
   }
 
-  private static void killJob(int jobId) {
-    // TODO(maxuser): Don't just remove the job entry from the map, actually stop the subprocess.
-    var subprocess = subprocessMap.getMap().remove(jobId);
+  private static void suspendJob(int jobId) {
+    var subprocess = subprocessMap.getMap().get(jobId);
     if (subprocess == null) {
       logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
       return;
     }
+    if (subprocess.suspend()) {
+      logUserInfo("Job suspended: {}", subprocess.jobSummary());
+    }
+  }
+
+  private static void resumeJob(int jobId) {
+    var subprocess = subprocessMap.getMap().get(jobId);
+    if (subprocess == null) {
+      logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
+      return;
+    }
+    if (subprocess.resume()) {
+      logUserInfo("Job resumed: {}", subprocess.jobSummary());
+    }
+  }
+
+  private static void killJob(int jobId) {
+    // TODO(maxuser): Don't just remove the job entry from the map, actually stop the subprocess.
+    var subprocess = subprocessMap.getMap().get(jobId);
+    if (subprocess == null) {
+      logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
+      return;
+    }
+    subprocess.kill();
     logUserInfo("Removed job: {}", subprocess.jobSummary());
   }
 
@@ -611,15 +725,31 @@ public class MinescriptMod {
 
     command = substituteMinecraftVars(command);
 
-    // TODO(maxuser): Add commands for:
-    // `suspendjob ID`: suspend job with ID
-    // `resumejob ID`: resume job with ID
-
     if (command[0].equals("jobs")) {
       if (checkParamTypes(command)) {
         listJobs();
       } else {
         logUserError("Expected no params, instead got `{}`", getParamsAsString(command));
+      }
+      return;
+    }
+
+    if (command[0].equals("suspend")) {
+      if (checkParamTypes(command, ParamType.INT)) {
+        suspendJob(Integer.valueOf(command[1]));
+      } else {
+        logUserError(
+            "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
+      }
+      return;
+    }
+
+    if (command[0].equals("resume")) {
+      if (checkParamTypes(command, ParamType.INT)) {
+        resumeJob(Integer.valueOf(command[1]));
+      } else {
+        logUserError(
+            "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
       }
       return;
     }
@@ -978,7 +1108,7 @@ public class MinescriptMod {
                             int ticks = getInteger(context, "ticks");
                             if (ticks < 1) ticks = 1;
                             minescriptTicksPerCycle = ticks;
-                            commandQueue.add(
+                            systemCommandQueue.add(
                                 tellrawFormat(
                                     "Minescript execution set to " + ticks + " tick(s) per cycle.",
                                     "green"));
@@ -993,7 +1123,7 @@ public class MinescriptMod {
                             int commands = getInteger(context, "commands");
                             if (commands < 1) commands = 1;
                             minescriptCommandsPerCycle = commands;
-                            commandQueue.add(
+                            systemCommandQueue.add(
                                 tellrawFormat(
                                     "Minescript execution set to "
                                         + commands
@@ -1143,9 +1273,9 @@ public class MinescriptMod {
             }
             if (!newCommandSuggestions.isEmpty()) {
               if (!newCommandSuggestions.equals(commandSuggestions)) {
-                commandQueue.add(tellrawFormat("completions:", "aqua"));
+                systemCommandQueue.add(tellrawFormat("completions:", "aqua"));
                 for (String suggestion : newCommandSuggestions) {
-                  commandQueue.add(tellrawFormat("  " + suggestion, "aqua"));
+                  systemCommandQueue.add(tellrawFormat("  " + suggestion, "aqua"));
                 }
                 commandSuggestions = newCommandSuggestions;
               }
@@ -1362,24 +1492,24 @@ public class MinescriptMod {
       var minecraft = Minecraft.getInstance();
       var serverData = minecraft.getCurrentServer();
 
-      if (!commandQueue.isEmpty()
+      if (!systemCommandQueue.isEmpty()
           && serverData != null
           && !serverBlockList.areCommandsAllowedForServer(serverData.name, serverData.ip)) {
-        commandQueue.clear();
+        systemCommandQueue.clear();
         LOGGER.info("(minescript) Commands disabled, clearing command queue");
         return;
       }
 
       var player = minecraft.player;
-      if (player != null && !commandQueue.isEmpty()) {
+      if (player != null && (!systemCommandQueue.isEmpty() || !subprocessMap.getMap().isEmpty())) {
         for (int i = 0; i < minescriptCommandsPerCycle; ++i) {
-          String command = commandQueue.poll();
+          String command = systemCommandQueue.poll();
           if (command != null) {
             player.chat(command);
           }
           for (var subprocess : subprocessMap.getMap().values()) {
-            if (subprocess.state() != Subprocess.State.STOPPED) {
-              String jobCommand = subprocess.getCommandQueue().poll();
+            if (subprocess.state() == Subprocess.State.RUNNING) {
+              String jobCommand = subprocess.commandQueue().poll();
               if (jobCommand != null) {
                 player.chat(jobCommand);
               }
