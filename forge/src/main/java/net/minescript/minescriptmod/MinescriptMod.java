@@ -229,10 +229,22 @@ public class MinescriptMod {
         + "\"}";
   }
 
+  interface JobControl {
+    State state();
+
+    void yield();
+
+    void enqueueStdout(String text);
+
+    void enqueueStderr(String messagePattern, Object... arguments);
+
+    void logJobException(Exception e);
+  }
+
   // TODO(maxuser): Split Subprocess into Job interface with JobHandler impls SubprocessJobHandler
   // and
   // BuiltinJobHandler.
-  static class Subprocess {
+  static class Subprocess implements JobControl {
     public enum State {
       NOT_STARTED("Not started"),
       RUNNING("Running"),
@@ -267,8 +279,45 @@ public class MinescriptMod {
       this.doneCallback = doneCallback;
     }
 
+    @Override
     public State state() {
       return state;
+    }
+
+    @Override
+    public void yield() {
+      // Lock and immediately unlock to respect job suspension which holds this lock.
+      lock.lock();
+      lock.unlock();
+    }
+
+    @Override
+    public void enqueueStdout(String text) {
+      if (text.matches("^/[a-zA-Z].*")) {
+        jobCommandQueue.add(text);
+      } else if (text.startsWith("#")) {
+        jobCommandQueue.add(text.substring(1).stripLeading());
+      } else {
+        // Treat as plain text to write to the chat.
+        jobCommandQueue.add(tellrawFormat(text, "white"));
+      }
+    }
+
+    @Override
+    public void enqueueStderr(String messagePattern, Object... arguments) {
+      String logMessage = ParameterizedMessage.format(messagePattern, arguments);
+      LOGGER.error("(minescript) {}", logMessage);
+      jobCommandQueue.add(tellrawFormat(logMessage, "red"));
+    }
+
+    @Override
+    public void logJobException(Exception e) {
+      var sw = new StringWriter();
+      var pw = new PrintWriter(sw);
+      e.printStackTrace(pw);
+      logUserError("Exception in job \"{}\": {}", jobSummary(), e.getMessage());
+      LOGGER.error(
+          "(minescript) exception stack trace in job \"{}\": {}", jobSummary(), sw.toString());
     }
 
     public void start() {
@@ -335,13 +384,13 @@ public class MinescriptMod {
         state = State.RUNNING;
       }
       try {
-        int exitCode = runExternalCommand(command);
+        int exitCode = runExternalCommand(command, this);
         final int millisToSleep = 1000;
         while (state != State.KILLED && !jobCommandQueue.isEmpty()) {
           try {
             Thread.sleep(millisToSleep);
           } catch (InterruptedException e) {
-            logJobException(e);
+            jobControl.logJobException(e);
           }
         }
         if (exitCode != 0) {
@@ -374,18 +423,17 @@ public class MinescriptMod {
       return String.format("[%d] %s:  %s", jobId, state, displayCommand);
     }
 
-    // TODO(maxuser): Pass interface for accessing lock and print/logging outputs.
-    private int runExternalCommand(String[] command) {
+    private static int runExternalCommand(String[] command, JobControl jobControl) {
       // TODO(maxuser): Support non-Python executables in general.
       String scriptExtension = ".py";
       String scriptName = MINESCRIPT_DIR + "/" + command[0] + scriptExtension;
 
       String pythonInterpreterPath = findFirstFile("/usr/bin/python3", "/usr/local/bin/python3");
       if (pythonInterpreterPath == null) {
-        enqueueStderr("Cannot find Python3 interpreter at any of these locations:");
-        enqueueStderr("  /usr/bin/python3");
-        enqueueStderr("  /usr/local/bin/python3");
-        enqueueStderr("See: https://www.python.org/downloads/");
+        jobControl.enqueueStderr("Cannot find Python3 interpreter at any of these locations:");
+        jobControl.enqueueStderr("  /usr/bin/python3");
+        jobControl.enqueueStderr("  /usr/local/bin/python3");
+        jobControl.enqueueStderr("See: https://www.python.org/downloads/");
         return -1;
       }
 
@@ -401,7 +449,7 @@ public class MinescriptMod {
       try {
         process = Runtime.getRuntime().exec(executableCommand);
       } catch (IOException e) {
-        logJobException(e);
+        jobControl.logJobException(e);
         return -2;
       }
 
@@ -415,28 +463,20 @@ public class MinescriptMod {
             process.destroy();
             break;
           }
-
-          // Lock and immediately unlock to respect job suspension which holds this lock.
-          lock.lock();
-          lock.unlock();
-
-          enqueueStdout(line);
+          jobControl.yield();
+          jobControl.enqueueStdout(line);
         }
         while ((line = stderrReader.readLine()) != null) {
           if (state == State.KILLED) {
             process.destroy();
             break;
           }
-
-          // Lock and immediately unlock to respect job suspension which holds this lock.
-          lock.lock();
-          lock.unlock();
-
-          enqueueStderr(line);
+          jobControl.yield();
+          jobControl.enqueueStderr(line);
         }
       } catch (IOException e) {
-        logJobException(e);
-        enqueueStderr(e.getMessage());
+        jobControl.logJobException(e);
+        jobControl.enqueueStderr(e.getMessage());
         return -3;
       }
       if (process == null) {
@@ -449,35 +489,9 @@ public class MinescriptMod {
       try {
         return process.waitFor();
       } catch (InterruptedException e) {
-        logJobException(e);
+        jobControl.logJobException(e);
         return -6;
       }
-    }
-
-    private void enqueueStdout(String text) {
-      if (text.matches("^/[a-zA-Z].*")) {
-        jobCommandQueue.add(text);
-      } else if (text.startsWith("#")) {
-        jobCommandQueue.add(text.substring(1).stripLeading());
-      } else {
-        // Treat as plain text to write to the chat.
-        jobCommandQueue.add(tellrawFormat(text, "white"));
-      }
-    }
-
-    private void enqueueStderr(String messagePattern, Object... arguments) {
-      String logMessage = ParameterizedMessage.format(messagePattern, arguments);
-      LOGGER.error("(minescript) {}", logMessage);
-      jobCommandQueue.add(tellrawFormat(logMessage, "red"));
-    }
-
-    private void logJobException(Exception e) {
-      var sw = new StringWriter();
-      var pw = new PrintWriter(sw);
-      e.printStackTrace(pw);
-      logUserError("Exception in job \"{}\": {}", jobSummary(), e.getMessage());
-      LOGGER.error(
-          "(minescript) exception stack trace in job \"{}\": {}", jobSummary(), sw.toString());
     }
   }
 
