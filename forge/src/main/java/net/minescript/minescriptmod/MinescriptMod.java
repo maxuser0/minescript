@@ -251,6 +251,7 @@ public class MinescriptMod {
     private Thread thread;
     private State state = State.RUNNING;
     private Consumer<Integer> doneCallback;
+    private Queue<String> jobCommandQueue = new ConcurrentLinkedQueue<String>();
 
     public Subprocess(String[] command, Consumer<Integer> doneCallback) {
       this.jobId = nextJobId.getAndIncrement();
@@ -258,9 +259,17 @@ public class MinescriptMod {
       this.doneCallback = doneCallback;
     }
 
+    public State state() {
+      return state;
+    }
+
     public void start() {
       thread = new Thread(this::runOnJobThread, String.format("job-%d-%s", jobId, command[0]));
       thread.start();
+    }
+
+    public Queue<String> getCommandQueue() {
+      return jobCommandQueue;
     }
 
     private void runOnJobThread() {
@@ -364,13 +373,19 @@ public class MinescriptMod {
 
     private static void enqueueStdout(String text) {
       if (text.matches("^/[a-zA-Z].*")) {
-        commandQueue.add(text);
+        jobCommandQueue.add(text);
       } else if (text.startsWith("#")) {
-        commandQueue.add(text.substring(1).stripLeading());
+        jobCommandQueue.add(text.substring(1).stripLeading());
       } else {
         // Treat as plain text to write to the chat.
-        commandQueue.add(tellrawFormat(text, "white"));
+        jobCommandQueue.add(tellrawFormat(text, "white"));
       }
+    }
+
+    private void logUserError(String messagePattern, Object... arguments) {
+      String logMessage = ParameterizedMessage.format(messagePattern, arguments);
+      LOGGER.error("(minescript) {}", logMessage);
+      jobCommandQueue.add(tellrawFormat(logMessage, "red"));
     }
   }
 
@@ -1359,11 +1374,17 @@ public class MinescriptMod {
       if (player != null && !commandQueue.isEmpty()) {
         for (int i = 0; i < minescriptCommandsPerCycle; ++i) {
           String command = commandQueue.poll();
-          if (command == null) {
-            break;
+          if (command != null) {
+            player.chat(command);
           }
-          LOGGER.info("(minescript) Polled command from queue: " + command);
-          player.chat(command);
+          for (var subprocess : subprocessMap.getMap().values()) {
+            if (subprocess.state() != Subprocess.State.STOPPED) {
+              String jobCommand = subprocess.getCommandQueue().poll();
+              if (jobCommand != null) {
+                player.chat(jobCommand);
+              }
+            }
+          }
         }
       }
     }
