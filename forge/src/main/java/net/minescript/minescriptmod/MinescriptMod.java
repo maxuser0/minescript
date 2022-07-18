@@ -229,8 +229,27 @@ public class MinescriptMod {
         + "\"}";
   }
 
+  public enum JobState {
+    NOT_STARTED("Not started"),
+    RUNNING("Running"),
+    SUSPENDED("Suspended"),
+    KILLED("Killed"),
+    DONE("Done");
+
+    private final String displayName;
+
+    private JobState(String displayName) {
+      this.displayName = displayName;
+    }
+
+    @Override
+    public String toString() {
+      return displayName;
+    }
+  };
+
   interface JobControl {
-    State state();
+    JobState state();
 
     void yield();
 
@@ -245,30 +264,11 @@ public class MinescriptMod {
   // and
   // BuiltinJobHandler.
   static class Subprocess implements JobControl {
-    public enum State {
-      NOT_STARTED("Not started"),
-      RUNNING("Running"),
-      SUSPENDED("Suspended"),
-      KILLED("Killed"),
-      DONE("Done");
-
-      private final String displayName;
-
-      State(String displayName) {
-        this.displayName = displayName;
-      }
-
-      @Override
-      public String toString() {
-        return displayName;
-      }
-    };
-
     private static AtomicInteger nextJobId = new AtomicInteger(1);
     private final int jobId;
     private final String[] command;
     private Thread thread;
-    private volatile State state = State.NOT_STARTED;
+    private volatile JobState state = JobState.NOT_STARTED;
     private Consumer<Integer> doneCallback;
     private Queue<String> jobCommandQueue = new ConcurrentLinkedQueue<String>();
     private Lock lock = new ReentrantLock(true); // true indicates a fair lock to avoid starvation
@@ -280,7 +280,7 @@ public class MinescriptMod {
     }
 
     @Override
-    public State state() {
+    public JobState state() {
       return state;
     }
 
@@ -326,18 +326,18 @@ public class MinescriptMod {
     }
 
     public boolean suspend() {
-      if (state == State.KILLED) {
+      if (state == JobState.KILLED) {
         logUserError("Job already killed: {}", jobSummary());
         return false;
       }
-      if (state == State.SUSPENDED) {
+      if (state == JobState.SUSPENDED) {
         logUserError("Job already suspended: {}", jobSummary());
         return false;
       }
       try {
         int timeoutSeconds = 2;
         if (lock.tryLock(timeoutSeconds, TimeUnit.SECONDS)) {
-          state = Subprocess.State.SUSPENDED;
+          state = JobState.SUSPENDED;
           return true;
         } else {
           logUserError(
@@ -351,12 +351,12 @@ public class MinescriptMod {
     }
 
     public boolean resume() {
-      if (state != State.SUSPENDED && state != State.KILLED) {
+      if (state != JobState.SUSPENDED && state != JobState.KILLED) {
         logUserError("Job not suspended: {}", jobSummary());
         return false;
       }
-      if (state == State.SUSPENDED) {
-        state = Subprocess.State.RUNNING;
+      if (state == JobState.SUSPENDED) {
+        state = JobState.RUNNING;
       }
       try {
         lock.unlock();
@@ -368,9 +368,9 @@ public class MinescriptMod {
     }
 
     public void kill() {
-      State prevState = state;
-      state = State.KILLED;
-      if (prevState == State.SUSPENDED) {
+      JobState prevState = state;
+      state = JobState.KILLED;
+      if (prevState == JobState.SUSPENDED) {
         resume();
       }
     }
@@ -380,17 +380,17 @@ public class MinescriptMod {
     }
 
     private void runOnJobThread() {
-      if (state == State.NOT_STARTED) {
-        state = State.RUNNING;
+      if (state == JobState.NOT_STARTED) {
+        state = JobState.RUNNING;
       }
       try {
         int exitCode = runExternalCommand(command, this);
         final int millisToSleep = 1000;
-        while (state != State.KILLED && !jobCommandQueue.isEmpty()) {
+        while (state != JobState.KILLED && !jobCommandQueue.isEmpty()) {
           try {
             Thread.sleep(millisToSleep);
           } catch (InterruptedException e) {
-            jobControl.logJobException(e);
+            logJobException(e);
           }
         }
         if (exitCode != 0) {
@@ -422,76 +422,76 @@ public class MinescriptMod {
       }
       return String.format("[%d] %s:  %s", jobId, state, displayCommand);
     }
+  }
 
-    private static int runExternalCommand(String[] command, JobControl jobControl) {
-      // TODO(maxuser): Support non-Python executables in general.
-      String scriptExtension = ".py";
-      String scriptName = MINESCRIPT_DIR + "/" + command[0] + scriptExtension;
+  private static int runExternalCommand(String[] command, JobControl jobControl) {
+    // TODO(maxuser): Support non-Python executables in general.
+    String scriptExtension = ".py";
+    String scriptName = MINESCRIPT_DIR + "/" + command[0] + scriptExtension;
 
-      String pythonInterpreterPath = findFirstFile("/usr/bin/python3", "/usr/local/bin/python3");
-      if (pythonInterpreterPath == null) {
-        jobControl.enqueueStderr("Cannot find Python3 interpreter at any of these locations:");
-        jobControl.enqueueStderr("  /usr/bin/python3");
-        jobControl.enqueueStderr("  /usr/local/bin/python3");
-        jobControl.enqueueStderr("See: https://www.python.org/downloads/");
-        return -1;
-      }
+    String pythonInterpreterPath = findFirstFile("/usr/bin/python3", "/usr/local/bin/python3");
+    if (pythonInterpreterPath == null) {
+      jobControl.enqueueStderr("Cannot find Python3 interpreter at any of these locations:");
+      jobControl.enqueueStderr("  /usr/bin/python3");
+      jobControl.enqueueStderr("  /usr/local/bin/python3");
+      jobControl.enqueueStderr("See: https://www.python.org/downloads/");
+      return -1;
+    }
 
-      String[] executableCommand = new String[command.length + 2];
-      executableCommand[0] = pythonInterpreterPath;
-      executableCommand[1] = "-u"; // `python3 -u` for unbuffered stdout and stderr.
-      executableCommand[2] = scriptName;
-      for (int i = 1; i < command.length; i++) {
-        executableCommand[i + 2] = command[i];
-      }
+    String[] executableCommand = new String[command.length + 2];
+    executableCommand[0] = pythonInterpreterPath;
+    executableCommand[1] = "-u"; // `python3 -u` for unbuffered stdout and stderr.
+    executableCommand[2] = scriptName;
+    for (int i = 1; i < command.length; i++) {
+      executableCommand[i + 2] = command[i];
+    }
 
-      final Process process;
-      try {
-        process = Runtime.getRuntime().exec(executableCommand);
-      } catch (IOException e) {
-        jobControl.logJobException(e);
-        return -2;
-      }
+    final Process process;
+    try {
+      process = Runtime.getRuntime().exec(executableCommand);
+    } catch (IOException e) {
+      jobControl.logJobException(e);
+      return -2;
+    }
 
-      // TODO(maxuser): Process stdout and stderr on different threads so they can be processed
-      // concurrently.
-      try (var stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-          var stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-        String line;
-        while ((line = stdoutReader.readLine()) != null) {
-          if (state == State.KILLED) {
-            process.destroy();
-            break;
-          }
-          jobControl.yield();
-          jobControl.enqueueStdout(line);
+    // TODO(maxuser): Process stdout and stderr on different threads so they can be processed
+    // concurrently.
+    try (var stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        var stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+      String line;
+      while ((line = stdoutReader.readLine()) != null) {
+        if (jobControl.state() == JobState.KILLED) {
+          process.destroy();
+          break;
         }
-        while ((line = stderrReader.readLine()) != null) {
-          if (state == State.KILLED) {
-            process.destroy();
-            break;
-          }
-          jobControl.yield();
-          jobControl.enqueueStderr(line);
+        jobControl.yield();
+        jobControl.enqueueStdout(line);
+      }
+      while ((line = stderrReader.readLine()) != null) {
+        if (jobControl.state() == JobState.KILLED) {
+          process.destroy();
+          break;
         }
-      } catch (IOException e) {
-        jobControl.logJobException(e);
-        jobControl.enqueueStderr(e.getMessage());
-        return -3;
+        jobControl.yield();
+        jobControl.enqueueStderr(line);
       }
-      if (process == null) {
-        return -4;
-      }
-      if (state == State.KILLED) {
-        process.destroy();
-        return -5;
-      }
-      try {
-        return process.waitFor();
-      } catch (InterruptedException e) {
-        jobControl.logJobException(e);
-        return -6;
-      }
+    } catch (IOException e) {
+      jobControl.logJobException(e);
+      jobControl.enqueueStderr(e.getMessage());
+      return -3;
+    }
+    if (process == null) {
+      return -4;
+    }
+    if (jobControl.state() == JobState.KILLED) {
+      process.destroy();
+      return -5;
+    }
+    try {
+      return process.waitFor();
+    } catch (InterruptedException e) {
+      jobControl.logJobException(e);
+      return -6;
     }
   }
 
@@ -1522,7 +1522,7 @@ public class MinescriptMod {
             player.chat(command);
           }
           for (var subprocess : subprocessMap.getMap().values()) {
-            if (subprocess.state() == Subprocess.State.RUNNING) {
+            if (subprocess.state() == JobState.RUNNING) {
               String jobCommand = subprocess.commandQueue().poll();
               if (jobCommand != null) {
                 player.chat(jobCommand);
