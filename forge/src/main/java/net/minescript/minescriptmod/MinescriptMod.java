@@ -230,7 +230,7 @@ public class MinescriptMod {
 
     Queue<String> commandQueue();
 
-    void respond(String commandRequest, String commandResponse);
+    boolean respond(long functionCallId, String returnValue, boolean finalReply);
 
     void enqueueStdout(String text);
 
@@ -356,7 +356,9 @@ public class MinescriptMod {
   interface Task {
     int run(String[] command, JobControl jobControl);
 
-    default void handleResponse(String commandRequest, String commandResponse) {}
+    default boolean handleResponse(long functionCallId, String returnValue, boolean finalReply) {
+      return false;
+    }
   }
 
   static class Job implements JobControl {
@@ -395,8 +397,8 @@ public class MinescriptMod {
     }
 
     @Override
-    public void respond(String commandRequest, String commandResponse) {
-      task.handleResponse(commandRequest, commandResponse);
+    public boolean respond(long functionCallId, String returnValue, boolean finalReply) {
+      return task.handleResponse(functionCallId, returnValue, finalReply);
     }
 
     @Override
@@ -502,7 +504,7 @@ public class MinescriptMod {
       return jobId;
     }
 
-    String jobSummary() {
+    public String jobSummary() {
       // Same as toString(), but omits state.
       String displayCommand = String.join(" ", command);
       if (displayCommand.length() > 61) {
@@ -518,6 +520,20 @@ public class MinescriptMod {
         displayCommand = displayCommand.substring(0, 61) + "...";
       }
       return String.format("[%d] %s:  %s", jobId, state, displayCommand);
+    }
+  }
+
+  static class ScriptFunctionCall {
+    private final JobControl jobControl;
+    private final long id;
+
+    public ScriptFunctionCall(JobControl jobControl, long id) {
+      this.jobControl = jobControl;
+      this.id = id;
+    }
+
+    public boolean respond(String returnValue, boolean finalReply) {
+      return jobControl.respond(id, returnValue, finalReply);
     }
   }
 
@@ -608,16 +624,28 @@ public class MinescriptMod {
     }
 
     @Override
-    public void handleResponse(String commandRequest, String commandResponse) {
-      if (process != null && process.isAlive() && stdinWriter != null) {
-        try {
-          // TODO(maxuser): Escape strings in commandResponse (or use JSON library).
-          stdinWriter.write(String.format("{\"response\": %s}", commandResponse));
-          stdinWriter.newLine();
-          stdinWriter.flush();
-        } catch (IOException e) {
-          // TODO(maxuser): Log the exception.
+    public boolean handleResponse(long functionCallId, String returnValue, boolean finalReply) {
+      if (process == null || !process.isAlive() || stdinWriter == null) {
+        return false;
+      }
+
+      try {
+        // TODO(maxuser): Escape strings in returnValue (or use JSON library).
+        if (finalReply) {
+          stdinWriter.write(
+              String.format(
+                  "{\"fcid\": %d, \"retval\": %s, \"conn\": \"close\"}",
+                  functionCallId, returnValue));
+        } else {
+          stdinWriter.write(
+              String.format("{\"fcid\": %d, \"retval\": %s}", functionCallId, returnValue));
         }
+        stdinWriter.newLine();
+        stdinWriter.flush();
+        return true;
+      } catch (IOException e) {
+        // TODO(maxuser): Log the exception.
+        return false;
       }
     }
   }
@@ -1438,17 +1466,15 @@ public class MinescriptMod {
     }
   }
 
-  private static String lastReceivedBackslashedChatMessage = "";
-  private static long lastReceivedBackslashedChatMessageTime = 0;
+  private static String lastReceivedChatMessage = "";
+  private static long lastReceivedChatMessageTime = 0;
   private static boolean enableMinescriptOnChatReceivedEvent = false;
 
   @SubscribeEvent
   public void onClientChatEvent(ClientChatReceivedEvent event) {
-    if (!enableMinescriptOnChatReceivedEvent) {
+    if (!enableMinescriptOnChatReceivedEvent && clientChatReceivedEventListeners.isEmpty()) {
       return;
     }
-
-    // TODO(maxuser): Try using event.getMessage().getUnformattedText() String instead.
 
     // Respond to messages like this one sent from a command block:
     //
@@ -1456,27 +1482,57 @@ public class MinescriptMod {
     //
     // TranslatableComponent.args[1]:TextComponent.text:String
 
+    LOGGER.info(
+        "(minescript) ClientChatReceivedEvent message: {}",
+        event.getMessage().getClass().getName());
+
     if (event.getMessage() instanceof TranslatableComponent) {
       var component = (TranslatableComponent) event.getMessage();
       for (var arg : component.getArgs()) {
-        if (arg instanceof TextComponent) {
-          var textComponent = (TextComponent) arg;
-          String text = textComponent.getText();
-          long currentTime = System.currentTimeMillis();
-          // Ignore duplicate consecutive backslashed messages less than 500 milliseconds apart.
-          if (text.startsWith("\\")
-              && (!text.equals(lastReceivedBackslashedChatMessage)
-                  || currentTime > lastReceivedBackslashedChatMessageTime + 500)) {
-            lastReceivedBackslashedChatMessage = text;
-            lastReceivedBackslashedChatMessageTime = currentTime;
+        LOGGER.info(
+            "(minescript) ClientChatReceivedEvent message arg: {}", arg.getClass().getName());
 
-            // TODO(maxuser): need to do single/double quote parsing etc.
-            String[] command = text.substring(1).split("\\s+");
-            LOGGER.info(
-                "(minescript) Processing command from received chat event: {}",
-                String.join(" ", command));
-            runCommand(command);
-            event.setCanceled(true);
+        String text = null;
+        if (arg instanceof String) {
+          text = (String) arg;
+        } else if (arg instanceof TextComponent) {
+          var textComponent = (TextComponent) arg;
+          text = textComponent.getText();
+        }
+
+        if (text != null && !text.isEmpty()) {
+          // Ignore duplicate consecutive messages less than 500 milliseconds apart.
+          long currentTime = System.currentTimeMillis();
+          if (!text.equals(lastReceivedChatMessage)
+              || currentTime > lastReceivedChatMessageTime + 500) {
+            lastReceivedChatMessage = text;
+            lastReceivedChatMessageTime = currentTime;
+
+            var iter = clientChatReceivedEventListeners.entrySet().iterator();
+            while (iter.hasNext()) {
+              var listener = iter.next();
+              LOGGER.info(
+                  "(minescript) Forwarding chat message to listener {}: \"{}\"",
+                  listener.getKey(),
+                  text);
+              // TODO(maxuser): Pass player name or uuid: event.getSenderUUID() -> java.util.UUID
+              // TODO(maxuser): need to do single/double quote parsing etc.
+              if (!listener.getValue().respond(String.format("\"%s\"", text), false)) {
+                iter.remove();
+              }
+            }
+
+            if (enableMinescriptOnChatReceivedEvent) {
+              if (text.startsWith("\\")) {
+                // TODO(maxuser): need to do single/double quote parsing etc.
+                String[] command = text.substring(1).split("\\s+");
+                LOGGER.info(
+                    "(minescript) Processing command from received chat event: {}",
+                    String.join(" ", command));
+                runCommand(command);
+                event.setCanceled(true);
+              }
+            }
           }
         }
       }
@@ -1555,6 +1611,9 @@ public class MinescriptMod {
 
   private static ServerBlockList serverBlockList = new ServerBlockList();
 
+  private static Map<Integer, ScriptFunctionCall> clientChatReceivedEventListeners =
+      new ConcurrentHashMap<>();
+
   @SubscribeEvent
   public void onPlayerTick(TickEvent.PlayerTickEvent event) {
     if (++playerTickEventCounter % minescriptTicksPerCycle == 0) {
@@ -1582,10 +1641,25 @@ public class MinescriptMod {
               String jobCommand = job.commandQueue().poll();
               if (jobCommand != null) {
                 jobs.getUndoForJob(job).ifPresent(u -> u.processCommandToUndo(level, jobCommand));
-                if (jobCommand.equals("?player_position")) {
-                  job.respond(
-                      jobCommand,
-                      String.format("[%f, %f, %f]", player.getX(), player.getY(), player.getZ()));
+                if (jobCommand.startsWith("?") && jobCommand.length() > 1) {
+                  String[] functionCall = jobCommand.substring(1).split("\\s+");
+                  long funcCallId = Long.valueOf(functionCall[0]);
+                  String functionName = functionCall[1];
+                  if (functionName.equals("player_position")) {
+                    job.respond(
+                        funcCallId,
+                        String.format("[%f, %f, %f]", player.getX(), player.getY(), player.getZ()),
+                        true);
+                  } else if (functionName.equals("get_client_chat_received_events")) {
+                    clientChatReceivedEventListeners.put(
+                        job.jobId(), new ScriptFunctionCall(job, funcCallId));
+                  } else if (functionName.equals("unregister_client_chat_received_events")) {
+                    clientChatReceivedEventListeners.remove(job.jobId());
+                    // TODO(maxuser): Respond with ok and closing connection.
+                  } else {
+                    logUserError(
+                        "Unknown function called from `{}`: {}", job.jobSummary(), functionName);
+                  }
                 } else {
                   player.chat(jobCommand);
                 }
