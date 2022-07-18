@@ -1,5 +1,7 @@
 package net.minescript.minescriptmod;
 
+// import net.minecraft.network.chat.TextComponent;
+// import net.minecraft.network.chat.TranslatableComponent;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -37,8 +39,7 @@ import java.util.regex.Pattern;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
-import net.minecraft.network.chat.TextComponent;
-import net.minecraft.network.chat.TranslatableComponent;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -1207,7 +1208,7 @@ public class MinescriptMod {
     return null;
   }
 
-  private static int minescriptTicksPerCycle = 1;
+  private static int minescriptTicksPerCycle = 3;
   private static int minescriptCommandsPerCycle = 15;
 
   private static int renderTickEventCounter = 0;
@@ -1513,8 +1514,15 @@ public class MinescriptMod {
         "(minescript) ClientChatReceivedEvent message: {}",
         event.getMessage().getClass().getName());
 
-    if (event.getMessage() instanceof TranslatableComponent) {
-      var component = (TranslatableComponent) event.getMessage();
+    /* TODO(maxuser)! replace with net.minecraft.network.chat.MutableComponent
+    // TranslatableComponent was used in 1.18, and replaced with MutableComponent in 1.19.
+    // But MutableComponent doesn't have a getArgs() method like TranslatableComponent did.
+    if (event.getMessage() instanceof MutableComponent) {
+      var component = (MutableComponent) event.getMessage();
+      LOGGER.info("(maxuser-debug) Declared methods of {}:", component.getClass().getName());
+      for (Method m : component.getClass().getMethods()) {
+        LOGGER.info("(maxuser-debug)   {}", m);
+      }
       for (var arg : component.getArgs()) {
         LOGGER.info(
             "(minescript) ClientChatReceivedEvent message arg: {}", arg.getClass().getName());
@@ -1564,6 +1572,7 @@ public class MinescriptMod {
         }
       }
     }
+    */
   }
 
   // Map from 2 packed ints representing x and z in chunk space to unused boolean.
@@ -1907,6 +1916,14 @@ public class MinescriptMod {
 
   private static String customNickname = null;
 
+  private static void sendPlayerChatOrCommand(LocalPlayer player, String message) {
+    if (message.startsWith("/")) {
+      player.command(message.substring(1));
+    } else {
+      player.chat(message);
+    }
+  }
+
   @SubscribeEvent
   public void onPlayerTick(TickEvent.PlayerTickEvent event) {
     if (++playerTickEventCounter % minescriptTicksPerCycle == 0) {
@@ -1927,7 +1944,7 @@ public class MinescriptMod {
         for (int i = 0; i < minescriptCommandsPerCycle; ++i) {
           String command = systemCommandQueue.poll();
           if (command != null) {
-            player.chat(command);
+            sendPlayerChatOrCommand(player, command);
           }
           for (var job : jobs.getMap().values()) {
             if (job.state() == JobState.RUNNING) {
@@ -2026,7 +2043,7 @@ public class MinescriptMod {
                         "Unknown function called from `{}`: {}", job.jobSummary(), functionName);
                   }
                 } else {
-                  player.chat(jobCommand);
+                  sendPlayerChatOrCommand(player, jobCommand);
                 }
               }
             }
