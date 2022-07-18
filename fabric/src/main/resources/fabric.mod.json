@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "modid",
+  "version": "${version}",
+
+  "name": "Minescript Mod",
+  "description": "Minescript mod for scripting Minecraft",
+  "authors": [
+    "dev@minescript.net"
+  ],
+  "contact": {
+    "homepage": "https://minescript.net/"
+  },
+
+  "license": "CC0-1.0",
+  "icon": "assets/modid/icon.png",
+
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "net.minescript.fabric.MinescriptFabricMod"
+    ]
+  },
+
+  "mixins": [
+    "modid.mixins.json"
+  ],
+
+  "depends": {
+    "fabricloader": ">=0.14.6",
+    "fabric": "*",
+    "fabric-screen-api-v1": "*",
+    "minecraft": "~1.19",
+    "java": ">=17"
+  },
+  "suggests": {
+    "another-mod": "*"
+  }
+}
