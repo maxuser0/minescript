@@ -214,65 +214,6 @@ public class MinescriptMod {
     return command;
   }
 
-  // TODO(maxuser): Spawn a new thread for each command.
-  private static int runExternalCommand(
-      String[] command,
-      Consumer<String> stdoutLineProcessor,
-      Consumer<String> stderrLineProcessor) {
-    // TODO(maxuser): Support non-Python executables in general.
-    String scriptExtension = ".py";
-    String scriptName = MINESCRIPT_DIR + "/" + command[0] + scriptExtension;
-
-    String pythonInterpreterPath = findFirstFile("/usr/bin/python3", "/usr/local/bin/python3");
-    if (pythonInterpreterPath == null) {
-      logUserError("Cannot find Python3 interpreter at any of these locations:");
-      logUserError("  /usr/bin/python3");
-      logUserError("  /usr/local/bin/python3");
-      logUserError("See: https://www.python.org/downloads/");
-      return -1;
-    }
-
-    String[] executableCommand = new String[command.length + 1];
-    executableCommand[0] = pythonInterpreterPath;
-    executableCommand[1] = scriptName;
-    for (int i = 1; i < command.length; i++) {
-      executableCommand[i + 1] = command[i];
-    }
-
-    final Process process;
-    try {
-      process = Runtime.getRuntime().exec(substituteMinecraftVars(executableCommand));
-    } catch (IOException e) {
-      logException(e);
-      stderrLineProcessor.accept(e.getMessage());
-      return -2;
-    }
-
-    try (var stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-        var stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-      String line;
-      while ((line = stdoutReader.readLine()) != null) {
-        stdoutLineProcessor.accept(line);
-      }
-      while ((line = stderrReader.readLine()) != null) {
-        stderrLineProcessor.accept(line);
-      }
-    } catch (IOException e) {
-      logException(e);
-      stderrLineProcessor.accept(e.getMessage());
-      return -3;
-    }
-    if (process == null) {
-      return -4;
-    }
-    try {
-      return process.waitFor();
-    } catch (InterruptedException e) {
-      logException(e);
-      return -5;
-    }
-  }
-
   static String tellrawFormat(String text, String color) {
     // Treat as plain text to write to the chat.
     return "/tellraw @s {\"text\":\""
@@ -284,8 +225,10 @@ public class MinescriptMod {
 
   static class Subprocess {
     public enum State {
+      NOT_STARTED("Not started"),
       RUNNING("Running"),
-      STOPPED("Stopped");
+      STOPPED("Stopped"),
+      DONE("Done");
 
       private final String displayName;
 
@@ -304,11 +247,30 @@ public class MinescriptMod {
     private final String[] command;
     private final Queue<String> stdoutQueue = new ConcurrentLinkedQueue<String>();
     private final Queue<String> stderrQueue = new ConcurrentLinkedQueue<String>();
+    private Thread thread;
     private State state = State.RUNNING;
+    private Consumer<Integer> doneCallback;
 
-    public Subprocess(String[] command) {
+    public Subprocess(String[] command, Consumer<Integer> doneCallback) {
       this.jobId = nextJobId.getAndIncrement();
       this.command = command;
+      this.doneCallback = doneCallback;
+    }
+
+    public void start() {
+      thread = new Thread(this::runOnJobThread, String.format("%s-%d", command[0], jobId));
+      thread.start();
+    }
+
+    private void runOnJobThread() {
+      try {
+        int exitCode = runExternalCommand(command);
+        if (exitCode != 0) {
+          logUserError("Command exit code: {}", exitCode);
+        }
+      } finally {
+        doneCallback.accept(jobId);
+      }
     }
 
     public int jobId() {
@@ -340,15 +302,84 @@ public class MinescriptMod {
     public Queue<String> stderrQueue() {
       return stderrQueue;
     }
+
+    private int runExternalCommand(String[] command) {
+      // TODO(maxuser): Support non-Python executables in general.
+      String scriptExtension = ".py";
+      String scriptName = MINESCRIPT_DIR + "/" + command[0] + scriptExtension;
+
+      String pythonInterpreterPath = findFirstFile("/usr/bin/python3", "/usr/local/bin/python3");
+      if (pythonInterpreterPath == null) {
+        logUserError("Cannot find Python3 interpreter at any of these locations:");
+        logUserError("  /usr/bin/python3");
+        logUserError("  /usr/local/bin/python3");
+        logUserError("See: https://www.python.org/downloads/");
+        return -1;
+      }
+
+      String[] executableCommand = new String[command.length + 2];
+      executableCommand[0] = pythonInterpreterPath;
+      executableCommand[1] = "-u"; // `python3 -u` for unbuffered stdout and stderr.
+      executableCommand[2] = scriptName;
+      for (int i = 1; i < command.length; i++) {
+        executableCommand[i + 2] = command[i];
+      }
+
+      final Process process;
+      try {
+        process = Runtime.getRuntime().exec(substituteMinecraftVars(executableCommand));
+      } catch (IOException e) {
+        logException(e);
+        logUserError(e.getMessage());
+        return -2;
+      }
+
+      // TODO(maxuser): Process stdout and stderr on different threads so they can be processed
+      // concurrently.
+      try (var stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+          var stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+        String line;
+        while ((line = stdoutReader.readLine()) != null) {
+          enqueueStdout(line);
+        }
+        while ((line = stderrReader.readLine()) != null) {
+          logUserError(line);
+        }
+      } catch (IOException e) {
+        logException(e);
+        logUserError(e.getMessage());
+        return -3;
+      }
+      if (process == null) {
+        return -4;
+      }
+      try {
+        return process.waitFor();
+      } catch (InterruptedException e) {
+        logException(e);
+        return -5;
+      }
+    }
+
+    private static void enqueueStdout(String text) {
+      if (text.matches("^/[a-zA-Z].*")) {
+        commandQueue.add(text);
+      } else if (text.startsWith("#")) {
+        commandQueue.add(text.substring(1).stripLeading());
+      } else {
+        // Treat as plain text to write to the chat.
+        commandQueue.add(tellrawFormat(text, "white"));
+      }
+    }
   }
 
   static class SubprocessMap {
     private final Map<Integer, Subprocess> map = new ConcurrentHashMap<Integer, Subprocess>();
 
-    public Subprocess addSubprocess(String[] command) {
-      var subprocess = new Subprocess(command);
+    public void createSubprocess(String[] command) {
+      var subprocess = new Subprocess(command, jobId -> map.remove(jobId));
       map.put(subprocess.jobId(), subprocess);
-      return subprocess;
+      subprocess.start();
     }
 
     public Map<Integer, Subprocess> getMap() {
@@ -360,17 +391,6 @@ public class MinescriptMod {
 
   // TODO(maxuser): remove commandQueue in favor of subprocessMap.
   private static Queue<String> commandQueue = new ConcurrentLinkedQueue<String>();
-
-  static void enqueueInterpretedScriptOutputLine(String text) {
-    if (text.matches("^/[a-zA-Z].*")) {
-      commandQueue.add(text);
-    } else if (text.startsWith("#")) {
-      commandQueue.add(text.substring(1).stripLeading());
-    } else {
-      // Treat as plain text to write to the chat.
-      commandQueue.add(tellrawFormat(text, "white"));
-    }
-  }
 
   private static boolean checkMinescriptDir() {
     String minescriptDir = System.getProperty("user.dir") + "/" + MINESCRIPT_DIR;
@@ -432,12 +452,17 @@ public class MinescriptMod {
   }
 
   private static void listJobs() {
+    logUserInfo("There are no jobs running.");
+    if (subprocessMap.getMap().isEmpty()) {
+      return;
+    }
     for (var subprocess : subprocessMap.getMap().values()) {
       logUserInfo(subprocess.toString());
     }
   }
 
   private static void killJob(int jobId) {
+    // TODO(maxuser): Don't just remove the job entry from the map, actually stop the subprocess.
     var subprocess = subprocessMap.getMap().remove(jobId);
     if (subprocess == null) {
       logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
@@ -672,15 +697,7 @@ public class MinescriptMod {
       return;
     }
 
-    var subprocess = subprocessMap.addSubprocess(command);
-    int exitCode =
-        runExternalCommand(
-            command,
-            MinescriptMod::enqueueInterpretedScriptOutputLine,
-            MinescriptMod::logUserError);
-    if (exitCode != 0) {
-      logUserError("Command exit code: {}", exitCode);
-    }
+    subprocessMap.createSubprocess(command);
   }
 
   private static String findFirstFile(String... filenames) {
