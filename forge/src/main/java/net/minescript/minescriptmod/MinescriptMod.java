@@ -542,26 +542,35 @@ public class MinescriptMod {
         return -2;
       }
 
-      // TODO(maxuser): Process stdout and stderr on different threads so they can be processed
-      // concurrently.
       try (var stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
           var stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+        final int millisToSleep = 1;
+        final long trailingReadTimeoutMillis = 5000;
+        long lastReadTime = System.currentTimeMillis();
         String line;
-        while ((line = stdoutReader.readLine()) != null) {
-          if (jobControl.state() == JobState.KILLED) {
-            process.destroy();
-            break;
+        while (jobControl.state() != JobState.KILLED
+            && (process.isAlive()
+                || System.currentTimeMillis() - lastReadTime < trailingReadTimeoutMillis)) {
+          if (stdoutReader.ready()) {
+            if ((line = stdoutReader.readLine()) == null) {
+              break;
+            }
+            lastReadTime = System.currentTimeMillis();
+            jobControl.enqueueStdout(line);
+          }
+          if (stderrReader.ready()) {
+            if ((line = stderrReader.readLine()) == null) {
+              break;
+            }
+            lastReadTime = System.currentTimeMillis();
+            jobControl.enqueueStderr(line);
+          }
+          try {
+            Thread.sleep(millisToSleep);
+          } catch (InterruptedException e) {
+            jobControl.logJobException(e);
           }
           jobControl.yield();
-          jobControl.enqueueStdout(line);
-        }
-        while ((line = stderrReader.readLine()) != null) {
-          if (jobControl.state() == JobState.KILLED) {
-            process.destroy();
-            break;
-          }
-          jobControl.yield();
-          jobControl.enqueueStderr(line);
         }
       } catch (IOException e) {
         jobControl.logJobException(e);
@@ -665,7 +674,8 @@ public class MinescriptMod {
   private static boolean checkMinescriptDir() {
     String minescriptDir = System.getProperty("user.dir") + "/" + MINESCRIPT_DIR;
     if (!Files.isDirectory(Paths.get(minescriptDir))) {
-      logUserError("Minescript folder is missing. It should have been created at: {}", minescriptDir);
+      logUserError(
+          "Minescript folder is missing. It should have been created at: {}", minescriptDir);
       return false;
     }
     return true;
