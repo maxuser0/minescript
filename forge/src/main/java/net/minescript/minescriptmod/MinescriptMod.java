@@ -40,12 +40,15 @@ import net.minecraft.network.chat.TextComponent;
 import net.minecraft.network.chat.TranslatableComponent;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraftforge.client.event.ClientChatEvent;
 import net.minecraftforge.client.event.ClientChatReceivedEvent;
 import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.world.ChunkEvent;
+import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.apache.logging.log4j.LogManager;
@@ -891,12 +894,15 @@ public class MinescriptMod {
     return true;
   }
 
+  private static int worldCoordToChunkCoord(int x) {
+    return (x >= 0) ? (x / 16) : (((x + 1) / 16) - 1);
+  }
+
   private static BlockState readBlockState(Level level, int x, int y, int z) {
-    int chunkX = (x >= 0) ? (x / 16) : (((x + 1) / 16) - 1);
-    int chunkZ = (z >= 0) ? (z / 16) : (((z + 1) / 16) - 1);
+    int chunkX = worldCoordToChunkCoord(x);
+    int chunkZ = worldCoordToChunkCoord(z);
     var chunk = level.getChunk(chunkX, chunkZ);
     var chunkPos = chunk.getPos();
-    var chunkWorldPos = chunkPos.getWorldPosition();
     return chunk.getBlockState(chunkPos.getBlockAt(x, y, z));
   }
 
@@ -1539,6 +1545,73 @@ public class MinescriptMod {
     }
   }
 
+  // Map from 2 packed ints representing x and z in chunk space to unused boolean.
+  private static Map<Long, Boolean> loadedChunks = new ConcurrentHashMap<>();
+
+  private static long packInts(int x, int z) {
+    return (((long) x) << 32) | (z & 0xffffffffL);
+  }
+
+  /** Unpack 64-bit long into two 32-bit ints written to returned 2-element int array. */
+  private static int[] unpackLong(long x) {
+    return new int[] {(int) (x >> 32), (int) x};
+  }
+
+  public static boolean booleanOrNull(Boolean bool) {
+    return (bool == null) ? false : bool;
+  }
+
+  @SubscribeEvent
+  public void onChunkLoadEvent(ChunkEvent.Load event) {
+    ChunkAccess chunkAccess = event.getChunk();
+    int chunkX = chunkAccess.getPos().x;
+    int chunkZ = chunkAccess.getPos().z;
+    Long packedChunkXZ = packInts(chunkX, chunkZ);
+    boolean wasLoaded = booleanOrNull(loadedChunks.put(packedChunkXZ, true));
+    if (!wasLoaded) {
+      LOGGER.info("(minescript) world chunk loaded: {} {}", chunkX, chunkZ);
+      var iter = chunkLoadEventListeners.keySet().iterator();
+      while (iter.hasNext()) {
+        var listener = iter.next();
+        if (listener.onChunkLoaded(packedChunkXZ)) {
+          iter.remove();
+        }
+      }
+    }
+  }
+
+  @SubscribeEvent
+  public void onChunkUnloadEvent(ChunkEvent.Unload event) {
+    ChunkAccess chunkAccess = event.getChunk();
+    int chunkX = chunkAccess.getPos().x;
+    int chunkZ = chunkAccess.getPos().z;
+    Long packedChunkXZ = packInts(chunkX, chunkZ);
+    boolean wasLoaded = booleanOrNull(loadedChunks.remove(packedChunkXZ));
+    if (wasLoaded) {
+      LOGGER.info("(minescript) world chunk unloaded: {} {}", chunkX, chunkZ);
+      for (var listener : chunkLoadEventListeners.keySet()) {
+        listener.onChunkUnloaded(packedChunkXZ);
+      }
+    }
+  }
+
+  @SubscribeEvent
+  public void onWorldUnloadEvent(WorldEvent.Unload event) {
+    var minecraft = Minecraft.getInstance();
+    var player = minecraft.player;
+    if (player != null) {
+      var playerWorld = player.getCommandSenderWorld();
+      var world = event.getWorld();
+      if (world == playerWorld) {
+        LOGGER.info(
+            "(minescript) World unloaded, clearing chunk map of {} entries: {}",
+            loadedChunks.size(),
+            playerWorld.dimension());
+        loadedChunks.clear();
+      }
+    }
+  }
+
   @SubscribeEvent
   public void onClientChatEvent(ClientChatEvent event) {
     String message = event.getMessage();
@@ -1709,6 +1782,83 @@ public class MinescriptMod {
     }
   }
 
+  public static class ChunkLoadEventListener {
+    // Map packed chunk (x, z) to boolean: true if chunk is loaded, false otherwise.
+    private final Map<Long, Boolean> chunksToLoad = new ConcurrentHashMap<>();
+
+    private final ScriptFunctionCall scriptFunction;
+
+    private int numUnloadedChunks = 0;
+
+    public ChunkLoadEventListener(
+        int x1, int z1, int x2, int z2, ScriptFunctionCall scriptFunction) {
+      LOGGER.info("(minescript) listener chunk region: {} {} {} {}", x1, z1, x2, z2);
+      int chunkX1 = worldCoordToChunkCoord(x1);
+      int chunkZ1 = worldCoordToChunkCoord(z1);
+      int chunkX2 = worldCoordToChunkCoord(x2);
+      int chunkZ2 = worldCoordToChunkCoord(z2);
+
+      int chunkXMin = Math.min(chunkX1, chunkX2);
+      int chunkXMax = Math.max(chunkX1, chunkX2);
+      int chunkZMin = Math.min(chunkZ1, chunkZ2);
+      int chunkZMax = Math.max(chunkZ1, chunkZ2);
+
+      for (int chunkX = chunkXMin; chunkX <= chunkXMax; chunkX++) {
+        for (int chunkZ = chunkZMin; chunkZ <= chunkZMax; chunkZ++) {
+          LOGGER.info("(minescript) listener chunk registered: {} {}", chunkX, chunkZ);
+          Long packedChunkXZ = packInts(chunkX, chunkZ);
+          boolean isLoaded = loadedChunks.containsKey(packedChunkXZ);
+          chunksToLoad.put(packedChunkXZ, isLoaded);
+          if (!isLoaded) {
+            numUnloadedChunks++;
+          }
+        }
+      }
+      this.scriptFunction = scriptFunction;
+    }
+
+    /** Returns true if the final outstanding chunk is loaded. */
+    public boolean onChunkLoaded(long packedChunkXZ) {
+      if (!chunksToLoad.containsKey(packedChunkXZ)) {
+        return false;
+      }
+      boolean wasLoaded = chunksToLoad.put(packedChunkXZ, true);
+      if (!wasLoaded) {
+        int[] chunkCoords = unpackLong(packedChunkXZ);
+        LOGGER.info("(minescript) listener chunk loaded: {} {}", chunkCoords[0], chunkCoords[1]);
+        numUnloadedChunks--;
+        if (numUnloadedChunks == 0) {
+          onFinished();
+          return true;
+        }
+      }
+      return false;
+    }
+
+    public void onChunkUnloaded(long packedChunkXZ) {
+      if (!chunksToLoad.containsKey(packedChunkXZ)) {
+        return;
+      }
+      boolean wasLoaded = chunksToLoad.put(packedChunkXZ, false);
+      if (wasLoaded) {
+        numUnloadedChunks++;
+      }
+    }
+
+    public boolean isFinished() {
+      return numUnloadedChunks == 0;
+    }
+
+    /** To be called when all requested chunks are loaded. */
+    public void onFinished() {
+      scriptFunction.respond("true", true);
+    }
+  }
+
+  // Boolean value unused.
+  private static Map<ChunkLoadEventListener, Boolean> chunkLoadEventListeners =
+      new ConcurrentHashMap<ChunkLoadEventListener, Boolean>();
+
   @SubscribeEvent
   public void onPlayerTick(TickEvent.PlayerTickEvent event) {
     if (++playerTickEventCounter % minescriptTicksPerCycle == 0) {
@@ -1775,6 +1925,39 @@ public class MinescriptMod {
                   } else if (functionName.equals("unregister_client_chat_received_events")) {
                     clientChatReceivedEventListeners.remove(job.jobId());
                     // TODO(maxuser): Respond with ok and closing connection.
+                  } else if (functionName.equals("await_loaded_region")) {
+                    var parser = new ParamParser(args);
+                    var params = new ArrayList<Integer>();
+                    if (parser.readOpenBracket()
+                        && parser.readIntParam(params)
+                        && parser.readComma()
+                        && parser.readIntParam(params)
+                        && parser.readComma()
+                        && parser.readIntParam(params)
+                        && parser.readComma()
+                        && parser.readIntParam(params)
+                        && parser.readCloseBracket()
+                        && parser.isDone()) {
+                      var listener =
+                          new ChunkLoadEventListener(
+                              params.get(0),
+                              params.get(1),
+                              params.get(2),
+                              params.get(3),
+                              new ScriptFunctionCall(job, funcCallId));
+                      if (listener.isFinished()) {
+                        listener.onFinished();
+                      } else {
+                        chunkLoadEventListeners.put(listener, true);
+                      }
+                    } else {
+                      // TODO(maxuser): Support raising exceptions through script functions, e.g.
+                      // {"fcid": ..., "exception": "error message...", "conn": "close"}
+                      logUserError(
+                          "Expected 4 params (x1, z1, x2, z2) to `await_loaded_region` but got: {}",
+                          args);
+                      job.respond(funcCallId, "null", true);
+                    }
                   } else {
                     logUserError(
                         "Unknown function called from `{}`: {}", job.jobSummary(), functionName);
