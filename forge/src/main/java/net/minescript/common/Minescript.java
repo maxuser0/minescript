@@ -1,4 +1,4 @@
-package net.minescript.core;
+package net.minescript.common;
 
 // import net.minecraft.network.chat.TextComponent;
 // import net.minecraft.network.chat.TranslatableComponent;

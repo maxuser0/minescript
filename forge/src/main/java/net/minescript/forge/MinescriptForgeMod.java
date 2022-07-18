@@ -11,15 +11,15 @@ import net.minecraftforge.event.world.ChunkEvent;
 import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minescript.core.Minescript;
+import net.minescript.common.Minescript;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 @Mod("minescript")
-public class MinescriptMod {
+public class MinescriptForgeMod {
   private static final Logger LOGGER = LogManager.getLogger();
 
-  public MinescriptMod() {
+  public MinescriptForgeMod() {
     LOGGER.info("(minescript) Minescript mod starting...");
     MinecraftForge.EVENT_BUS.register(this);
 
