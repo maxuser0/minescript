@@ -14,10 +14,13 @@ import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,6 +36,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.network.chat.TextComponent;
 import net.minecraft.network.chat.TranslatableComponent;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.client.event.ClientChatEvent;
@@ -101,6 +105,7 @@ public class MinescriptMod {
         "suspend",
         "resume",
         "killjob",
+        "undo",
         "minescript_commands_per_cycle",
         "minescript_ticks_per_cycle",
         "enable_minescript_on_chat_received_event"
@@ -255,11 +260,91 @@ public class MinescriptMod {
 
     void yield();
 
+    Queue<String> commandQueue();
+
     void enqueueStdout(String text);
 
     void enqueueStderr(String messagePattern, Object... arguments);
 
     void logJobException(Exception e);
+  }
+
+  static class UndoableAction {
+    private volatile int originalJobId; // ID of the job that this undoes.
+    private String[] originalCommand;
+    private final Queue<String> commands = new ArrayDeque<>();
+    private int[] coords = new int[6]; // Reuse array to avoid lots of small object instantiations.
+    private boolean undone = false;
+
+    public UndoableAction(int originalJobId, String[] originalCommand) {
+      this.originalJobId = originalJobId;
+      this.originalCommand = originalCommand;
+    }
+
+    public int originalJobId() {
+      return originalJobId;
+    }
+
+    public void onOriginalJobDone() {
+      originalJobId = -1;
+    }
+
+    public String[] originalCommand() {
+      return originalCommand;
+    }
+
+    public String[] derivativeCommand() {
+      String[] derivative = new String[2];
+      derivative[0] = "\\undo";
+      derivative[1] = "(" + String.join(" ", originalCommand) + ")";
+      return derivative;
+    }
+
+    public synchronized void processCommandToUndo(Level level, String command) {
+      if (command.startsWith("/setblock ") && getSetblockCoords(command, coords)) {
+        Optional<String> block =
+            blockStateToString(readBlockState(level, coords[0], coords[1], coords[2]));
+        if (block.isPresent()) {
+          addBlockToUndoQueue(coords[0], coords[1], coords[2], block.get());
+        }
+      } else if (command.startsWith("/fill ") && getFillCoords(command, coords)) {
+        int x0 = coords[0];
+        int y0 = coords[1];
+        int z0 = coords[2];
+        int x1 = coords[3];
+        int y1 = coords[4];
+        int z1 = coords[5];
+        for (int x = x0; x <= x1; x++) {
+          for (int y = y0; y <= y1; y++) {
+            for (int z = z0; z <= z1; z++) {
+              Optional<String> block = blockStateToString(readBlockState(level, x, y, z));
+              if (block.isPresent()) {
+                addBlockToUndoQueue(x, y, z, block.get());
+              }
+            }
+          }
+        }
+      }
+    }
+
+    private void addBlockToUndoQueue(int x, int y, int z, String block) {
+      addCommand(String.format("/setblock %d %d %d %s", x, y, z, block));
+    }
+
+    private void addCommand(String command) {
+      if (undone) {
+        LOGGER.error(
+            "(minescript) Adding command to undoable action after already undone: {}", command);
+        return;
+      }
+      commands.add(command);
+    }
+
+    public synchronized void enqueueCommands(Queue<String> commandQueue) {
+      undone = true;
+      commandQueue.addAll(commands);
+      commands.clear();
+    }
   }
 
   interface Task {
@@ -294,6 +379,11 @@ public class MinescriptMod {
       // Lock and immediately unlock to respect job suspension which holds this lock.
       lock.lock();
       lock.unlock();
+    }
+
+    @Override
+    public Queue<String> commandQueue() {
+      return jobCommandQueue;
     }
 
     @Override
@@ -378,10 +468,6 @@ public class MinescriptMod {
       if (prevState == JobState.SUSPENDED) {
         resume();
       }
-    }
-
-    public Queue<String> commandQueue() {
-      return jobCommandQueue;
     }
 
     private void runOnJobThread() {
@@ -503,6 +589,20 @@ public class MinescriptMod {
     }
   }
 
+  static class UndoTask implements Task {
+    private final UndoableAction undo;
+
+    public UndoTask(UndoableAction undo) {
+      this.undo = undo;
+    }
+
+    @Override
+    public int run(String[] command, JobControl jobControl) {
+      undo.enqueueCommands(jobControl.commandQueue());
+      return 0;
+    }
+  }
+
   static class RecordingTask implements Task {
     @Override
     public int run(String[] command, JobControl jobControl) {
@@ -514,13 +614,56 @@ public class MinescriptMod {
   }
 
   static class JobManager {
-    private final Map<Integer, Job> map = new ConcurrentHashMap<Integer, Job>();
+    private final Map<Integer, Job> jobMap = new ConcurrentHashMap<Integer, Job>();
+    private final Map<Integer, UndoableAction> jobUndoMap =
+        new ConcurrentHashMap<Integer, UndoableAction>();
+    private final Deque<UndoableAction> undoStack = new ArrayDeque<>();
     private RecordingTask recordingTask;
 
     public void createSubprocess(String[] command) {
-      var job = new Job(command, new SubprocessTask(), jobId -> map.remove(jobId));
-      map.put(job.jobId(), job);
+      var job = new Job(command, new SubprocessTask(), this::removeJob);
+      var undo = new UndoableAction(job.jobId(), command);
+      jobUndoMap.put(job.jobId(), undo);
+      undoStack.addFirst(undo);
+      jobMap.put(job.jobId(), job);
       job.start();
+    }
+
+    public Optional<UndoableAction> getUndoForJob(Job job) {
+      var undo = jobUndoMap.get(job.jobId());
+      if (undo == null) {
+        return Optional.empty();
+      }
+      return Optional.of(undo);
+    }
+
+    public void startUndo() {
+      var undo = undoStack.pollFirst();
+      if (undo == null) {
+        logUserError("The undo stack is empty.");
+        return;
+      }
+
+      // If the job being undone is still alive, kill it.
+      int originalJobId = undo.originalJobId();
+      if (originalJobId != -1) {
+        var job = jobMap.get(undo.originalJobId());
+        if (job != null) {
+          job.kill();
+        }
+      }
+
+      var undoJob = new Job(undo.derivativeCommand(), new UndoTask(undo), this::removeJob);
+      jobMap.put(undoJob.jobId(), undoJob);
+      undoJob.start();
+    }
+
+    private void removeJob(int jobId) {
+      var undo = jobUndoMap.remove(jobId);
+      if (undo != null) {
+        undo.onOriginalJobDone();
+      }
+      jobMap.remove(jobId);
     }
 
     public void startRecording(String[] command) {
@@ -534,15 +677,15 @@ public class MinescriptMod {
               command,
               recordingTask,
               jobId -> {
-                map.remove(jobId);
+                removeJob(jobId);
                 recordingTask = null;
               });
-      map.put(job.jobId(), job);
+      jobMap.put(job.jobId(), job);
       job.start();
     }
 
     public Map<Integer, Job> getMap() {
-      return map;
+      return jobMap;
     }
   }
 
@@ -671,12 +814,62 @@ public class MinescriptMod {
     logUserInfo("Removed job: {}", job.jobSummary());
   }
 
+  private static Pattern SETBLOCK_COMMAND_RE =
+      Pattern.compile("/setblock ([^ ]+) ([^ ]+) ([^ ]+).*");
+
+  private static boolean getSetblockCoords(String setblockCommand, int[] coords) {
+    var match = SETBLOCK_COMMAND_RE.matcher(setblockCommand);
+    if (!match.find()) {
+      return false;
+    }
+    coords[0] = Integer.valueOf(match.group(1));
+    coords[1] = Integer.valueOf(match.group(2));
+    coords[2] = Integer.valueOf(match.group(3));
+    return true;
+  }
+
+  private static Pattern FILL_COMMAND_RE =
+      Pattern.compile("/fill ([^ ]+) ([^ ]+) ([^ ]+) ([^ ]+) ([^ ]+) ([^ ]+).*");
+
+  private static boolean getFillCoords(String fillCommand, int[] coords) {
+    var match = FILL_COMMAND_RE.matcher(fillCommand);
+    if (!match.find()) {
+      return false;
+    }
+    coords[0] = Integer.valueOf(match.group(1));
+    coords[1] = Integer.valueOf(match.group(2));
+    coords[2] = Integer.valueOf(match.group(3));
+    coords[3] = Integer.valueOf(match.group(4));
+    coords[4] = Integer.valueOf(match.group(5));
+    coords[5] = Integer.valueOf(match.group(6));
+    return true;
+  }
+
+  private static BlockState readBlockState(Level level, int x, int y, int z) {
+    int chunkX = (x >= 0) ? (x / 16) : (((x + 1) / 16) - 1);
+    int chunkZ = (z >= 0) ? (z / 16) : (((z + 1) / 16) - 1);
+    var chunk = level.getChunk(chunkX, chunkZ);
+    var chunkPos = chunk.getPos();
+    var chunkWorldPos = chunkPos.getWorldPosition();
+    return chunk.getBlockState(chunkPos.getBlockAt(x, y, z));
+  }
+
   // BlockState#toString() returns a string formatted as:
   // "Block{minecraft:acacia_button}[face=floor,facing=west,powered=false]"
   //
   // BLOCK_STATE_RE helps transform this to:
   // "minecraft:acacia_button[face=floor,facing=west,powered=false]"
   private static Pattern BLOCK_STATE_RE = Pattern.compile("^Block\\{([^}]*)\\}(\\[.*\\])?$");
+
+  private static Optional<String> blockStateToString(BlockState blockState) {
+    var match = BLOCK_STATE_RE.matcher(blockState.toString());
+    if (!match.find()) {
+      return Optional.empty();
+    }
+    String blockType = match.group(1);
+    String blockAttrs = match.group(2) == null ? "" : match.group(2);
+    return Optional.of(blockType + blockAttrs);
+  }
 
   private static void copyBlocks(int x0, int y0, int z0, int x1, int y1, int z1) {
     var minecraft = Minecraft.getInstance();
@@ -708,7 +901,7 @@ public class MinescriptMod {
     int yMax = Math.min(Math.max(y0, y1), 320);
     int zMax = Math.max(z0, z1);
 
-    var level = player.getCommandSenderWorld();
+    Level level = player.getCommandSenderWorld();
 
     try (var writer = new PrintWriter(new FileWriter(MINESCRIPT_DIR + "/paste.py"))) {
       writer.print("# Generated by Minescript from this `copy` command:\n");
@@ -761,23 +954,16 @@ public class MinescriptMod {
             // TODO(maxuser): Need to check chunkPos.get{Min,Max}Block{X,Z}()?
             // TODO(maxuser): Listen to ChunkEvent.Load and .Unload events to determine if the chunk
             // we're trying to read here is loaded. If it's not, load it and try again later.
-            int chunkX = (x >= 0) ? (x / 16) : (((x + 1) / 16) - 1);
-            int chunkZ = (z >= 0) ? (z / 16) : (((z + 1) / 16) - 1);
-            var chunk = level.getChunk(chunkX, chunkZ);
-            var chunkPos = chunk.getPos();
-            var chunkWorldPos = chunkPos.getWorldPosition();
-            BlockState blockState = chunk.getBlockState(chunkPos.getBlockAt(x, y, z));
+            BlockState blockState = readBlockState(level, x, y, z);
             if (!blockState.isAir()) {
-              var match = BLOCK_STATE_RE.matcher(blockState.toString());
-              if (match.find()) {
-                int xOffset = x - x0;
-                int yOffset = y - y0;
-                int zOffset = z - z0;
-                String blockType = match.group(1);
-                String blockAttrs = match.group(2) == null ? "" : match.group(2);
+              int xOffset = x - x0;
+              int yOffset = y - y0;
+              int zOffset = z - z0;
+              Optional<String> block = blockStateToString(blockState);
+              if (block.isPresent()) {
                 writer.printf(
-                    "print(f'/setblock {x_start + %d} {y_start + %d} {z_start + %d} %s%s')\n",
-                    xOffset, yOffset, zOffset, blockType, blockAttrs);
+                    "print(f'/setblock {x_start + %d} {y_start + %d} {z_start + %d} %s')\n",
+                    xOffset, yOffset, zOffset, block.get());
                 numBlocks++;
               } else {
                 logUserError("Unexpected BlockState format: {}", blockState.toString());
@@ -840,6 +1026,17 @@ public class MinescriptMod {
       } else {
         logUserError(
             "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
+      }
+      return;
+    }
+
+    if (command[0].equals("undo")) {
+      if (checkParamTypes(command)) {
+        jobs.startUndo();
+      } else {
+        logUserError(
+            "Expected no params or 1 param of type integer, instead got `{}`",
+            getParamsAsString(command));
       }
       return;
     }
@@ -1434,7 +1631,7 @@ public class MinescriptMod {
   }
 
   /*
-  private static long lastChunkEvent = 0; // TODO(maxuser):
+  private static long lastChunkEvent = 0; // TODO(maxuser)
   @SubscribeEvent
   public void onChunkEvent(ChunkEvent chunkEvent) {
     // TODO(maxuser): to prevent log spam, rate-limit the logging of chunk events
@@ -1592,6 +1789,7 @@ public class MinescriptMod {
 
       var player = minecraft.player;
       if (player != null && (!systemCommandQueue.isEmpty() || !jobs.getMap().isEmpty())) {
+        Level level = player.getCommandSenderWorld();
         for (int i = 0; i < minescriptCommandsPerCycle; ++i) {
           String command = systemCommandQueue.poll();
           if (command != null) {
@@ -1601,6 +1799,7 @@ public class MinescriptMod {
             if (job.state() == JobState.RUNNING) {
               String jobCommand = job.commandQueue().poll();
               if (jobCommand != null) {
+                jobs.getUndoForJob(job).ifPresent(u -> u.processCommandToUndo(level, jobCommand));
                 player.chat(jobCommand);
               }
             }
