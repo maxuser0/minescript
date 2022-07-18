@@ -936,7 +936,8 @@ public class Minescript {
     return Optional.of(blockType + blockAttrs);
   }
 
-  private static void copyBlocks(int x0, int y0, int z0, int x1, int y1, int z1) {
+  private static void copyBlocks(
+      int x0, int y0, int z0, int x1, int y1, int z1, Optional<String> label) {
     var minecraft = Minecraft.getInstance();
     var player = minecraft.player;
     if (player == null) {
@@ -968,48 +969,17 @@ public class Minescript {
 
     Level level = player.getCommandSenderWorld();
 
-    try (var writer = new PrintWriter(new FileWriter(MINESCRIPT_DIR + "/paste.py"))) {
+    final String copiesDir = Paths.get(MINESCRIPT_DIR, "copies").toString();
+    if (new File(copiesDir).mkdir()) {
+      LOGGER.info("(minescript) Created minescript copies dir");
+    }
+
+    try (var writer =
+        new PrintWriter(
+            new FileWriter(
+                Paths.get(copiesDir, label.orElse("__default__") + ".txt").toString()))) {
       writer.print("# Generated from Minescript `copy` command:\n");
-      writer.printf("# \\copy %d %d %d %d %d %d\n", x0, y0, z0, x1, y1, z1);
-      writer.print("\n");
-      writer.print("import math\n");
-      writer.print("import sys\n");
-      writer.print("\n");
-      writer.print("x_start = int(sys.argv[1])\n");
-      writer.print("y_start = int(sys.argv[2])\n");
-      writer.print("z_start = int(sys.argv[3])\n");
-      writer.print("fill_block = sys.argv[4] if len(sys.argv) > 4 else None\n");
-      writer.print("\n");
-      writer.printf("x_end = x_start + %d\n", x1 - x0);
-      writer.printf("y_end = y_start + %d\n", y1 - y0);
-      writer.printf("z_end = z_start + %d\n", z1 - z0);
-      writer.print("\n");
-      writer.print("x_min = min(x_start, x_end)\n");
-      writer.print("y_min = min(y_start, y_end)\n");
-      writer.print("z_min = min(z_start, z_end)\n");
-      writer.print("\n");
-      writer.print("x_max = max(x_start, x_end)\n");
-      writer.print("y_max = max(y_start, y_end)\n");
-      writer.print("z_max = max(z_start, z_end)\n");
-      writer.print("\n");
-      writer.print("delta_x = x_max - x_min\n");
-      writer.print("delta_y = y_max - y_min\n");
-      writer.print("delta_z = z_max - z_min\n");
-      writer.print("\n");
-      writer.print("if fill_block:\n");
-      writer.print("  for chunk_x in range(math.ceil(delta_x / 32)):\n");
-      writer.print("    fill_x_min = x_min + chunk_x * 32\n");
-      writer.print("    fill_x_max = x_min + min(chunk_x * 32 + 31, delta_x)\n");
-      writer.print("    for chunk_y in range(math.ceil(delta_y / 32)):\n");
-      writer.print("      fill_y_min = y_min + chunk_y * 32\n");
-      writer.print("      fill_y_max = y_min + min(chunk_y * 32 + 31, delta_y)\n");
-      writer.print("      for chunk_z in range(math.ceil(delta_z / 32)):\n");
-      writer.print("        fill_z_min = z_min + chunk_z * 32\n");
-      writer.print("        fill_z_max = z_min + min(chunk_z * 32 + 31, delta_z)\n");
-      writer.print(
-          "        print(f'/fill {fill_x_min} {fill_y_min} {fill_z_min} {fill_x_max} {fill_y_max}"
-              + " {fill_z_max} {fill_block}')\n");
-      writer.print("\n");
+      writer.printf("# copy %d %d %d %d %d %d\n", x0, y0, z0, x1, y1, z1);
 
       int numBlocks = 0;
 
@@ -1026,9 +996,7 @@ public class Minescript {
               int zOffset = z - z0;
               Optional<String> block = blockStateToString(blockState);
               if (block.isPresent()) {
-                writer.printf(
-                    "print(f'/setblock {x_start + %d} {y_start + %d} {z_start + %d} %s')\n",
-                    xOffset, yOffset, zOffset, block.get());
+                writer.printf("/setblock %d %d %d %s\n", xOffset, yOffset, zOffset, block.get());
                 numBlocks++;
               } else {
                 logUserError("Unexpected BlockState format: {}", blockState.toString());
@@ -1121,10 +1089,27 @@ public class Minescript {
         int x1 = Integer.valueOf(command[4]);
         int y1 = Integer.valueOf(command[5]);
         int z1 = Integer.valueOf(command[6]);
-        copyBlocks(x0, y0, z0, x1, y1, z1);
+        copyBlocks(x0, y0, z0, x1, y1, z1, Optional.empty());
+      } else if (checkParamTypes(
+          command,
+          ParamType.INT,
+          ParamType.INT,
+          ParamType.INT,
+          ParamType.INT,
+          ParamType.INT,
+          ParamType.INT,
+          ParamType.STRING)) {
+        int x0 = Integer.valueOf(command[1]);
+        int y0 = Integer.valueOf(command[2]);
+        int z0 = Integer.valueOf(command[3]);
+        int x1 = Integer.valueOf(command[4]);
+        int y1 = Integer.valueOf(command[5]);
+        int z1 = Integer.valueOf(command[6]);
+        copyBlocks(x0, y0, z0, x1, y1, z1, Optional.of(command[7]));
       } else {
         logUserError(
-            "Expected 6 params of type integer, instead got `{}`", getParamsAsString(command));
+            "Expected 6 params of type integer (optional 7th for label), instead got `{}`",
+            getParamsAsString(command));
       }
       return;
     }
