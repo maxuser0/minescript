@@ -1924,6 +1924,13 @@ public class Minescript {
 
   private static String customNickname = null;
 
+  private static boolean areCommandsAllowed() {
+    var minecraft = Minecraft.getInstance();
+    var serverData = minecraft.getCurrentServer();
+    return serverData == null
+        || serverBlockList.areCommandsAllowedForServer(serverData.name, serverData.ip);
+  }
+
   private static void sendPlayerChatOrCommand(LocalPlayer player, String message) {
     if (message.startsWith("\\")) {
       LOGGER.info("(minescript) Processing command from message queue: {}", message);
@@ -1934,6 +1941,11 @@ public class Minescript {
       // isn't established.
       runMinescriptCommand(message.substring(1));
     } else if (message.startsWith("/")) {
+      if (!areCommandsAllowed()) {
+        LOGGER.info(
+            "(minescript) Minecraft command blocked for server: {}", message); // [norewrite]
+        return;
+      }
       player.command(message.substring(1));
     } else {
       player.chat(message);
@@ -1943,16 +1955,6 @@ public class Minescript {
   public static void onPlayerTick() {
     if (++playerTickEventCounter % minescriptTicksPerCycle == 0) {
       var minecraft = Minecraft.getInstance();
-      var serverData = minecraft.getCurrentServer();
-
-      if (!systemCommandQueue.isEmpty()
-          && serverData != null
-          && !serverBlockList.areCommandsAllowedForServer(serverData.name, serverData.ip)) {
-        systemCommandQueue.clear();
-        LOGGER.info("(minescript) Commands disabled, clearing command queue");
-        return;
-      }
-
       var player = minecraft.player;
       if (player != null && (!systemCommandQueue.isEmpty() || !jobs.getMap().isEmpty())) {
         Level level = player.getCommandSenderWorld();
