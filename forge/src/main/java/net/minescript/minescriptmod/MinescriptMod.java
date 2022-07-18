@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -613,42 +614,61 @@ public class MinescriptMod {
       logUserInfo("There are no jobs running.");
       return;
     }
-    for (var subprocess : jobs.getMap().values()) {
-      logUserInfo(subprocess.toString());
+    for (var job : jobs.getMap().values()) {
+      logUserInfo(job.toString());
     }
   }
 
-  private static void suspendJob(int jobId) {
-    var subprocess = jobs.getMap().get(jobId);
-    if (subprocess == null) {
-      logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
-      return;
-    }
-    if (subprocess.suspend()) {
-      logUserInfo("Job suspended: {}", subprocess.jobSummary());
+  private static void suspendJob(OptionalInt jobId) {
+    if (jobId.isPresent()) {
+      // Suspend specified job.
+      var job = jobs.getMap().get(jobId);
+      if (job == null) {
+        logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
+        return;
+      }
+      if (job.suspend()) {
+        logUserInfo("Job suspended: {}", job.jobSummary());
+      }
+    } else {
+      // Suspend all jobs.
+      for (var job : jobs.getMap().values()) {
+        if (job.suspend()) {
+          logUserInfo("Job suspended: {}", job.jobSummary());
+        }
+      }
     }
   }
 
-  private static void resumeJob(int jobId) {
-    var subprocess = jobs.getMap().get(jobId);
-    if (subprocess == null) {
-      logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
-      return;
-    }
-    if (subprocess.resume()) {
-      logUserInfo("Job resumed: {}", subprocess.jobSummary());
+  private static void resumeJob(OptionalInt jobId) {
+    if (jobId.isPresent()) {
+      // Resume specified job.
+      var job = jobs.getMap().get(jobId);
+      if (job == null) {
+        logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
+        return;
+      }
+      if (job.resume()) {
+        logUserInfo("Job resumed: {}", job.jobSummary());
+      }
+    } else {
+      // Resume all jobs.
+      for (var job : jobs.getMap().values()) {
+        if (job.resume()) {
+          logUserInfo("Job resumed: {}", job.jobSummary());
+        }
+      }
     }
   }
 
-  private static void killJob(int jobId) {
-    // TODO(maxuser): Don't just remove the job entry from the map, actually stop the subprocess.
-    var subprocess = jobs.getMap().get(jobId);
-    if (subprocess == null) {
+  private static void killJob(OptionalInt jobId) {
+    var job = jobs.getMap().get(jobId);
+    if (job == null) {
       logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
       return;
     }
-    subprocess.kill();
-    logUserInfo("Removed job: {}", subprocess.jobSummary());
+    job.kill();
+    logUserInfo("Removed job: {}", job.jobSummary());
   }
 
   // BlockState#toString() returns a string formatted as:
@@ -785,21 +805,27 @@ public class MinescriptMod {
     }
 
     if (command[0].equals("suspend")) {
-      if (checkParamTypes(command, ParamType.INT)) {
-        suspendJob(Integer.valueOf(command[1]));
+      if (checkParamTypes(command)) {
+        suspendJob(OptionalInt.empty());
+      } else if (checkParamTypes(command, ParamType.INT)) {
+        suspendJob(OptionalInt.of(Integer.valueOf(command[1])));
       } else {
         logUserError(
-            "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
+            "Expected no params or 1 param of type integer, instead got `{}`",
+            getParamsAsString(command));
       }
       return;
     }
 
     if (command[0].equals("resume")) {
-      if (checkParamTypes(command, ParamType.INT)) {
-        resumeJob(Integer.valueOf(command[1]));
+      if (checkParamTypes(command)) {
+        resumeJob(OptionalInt.empty());
+      } else if (checkParamTypes(command, ParamType.INT)) {
+        resumeJob(OptionalInt.of(Integer.valueOf(command[1])));
       } else {
         logUserError(
-            "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
+            "Expected no params or 1 param of type integer, instead got `{}`",
+            getParamsAsString(command));
       }
       return;
     }
@@ -1567,9 +1593,9 @@ public class MinescriptMod {
           if (command != null) {
             player.chat(command);
           }
-          for (var subprocess : jobs.getMap().values()) {
-            if (subprocess.state() == JobState.RUNNING) {
-              String jobCommand = subprocess.commandQueue().poll();
+          for (var job : jobs.getMap().values()) {
+            if (job.state() == JobState.RUNNING) {
+              String jobCommand = job.commandQueue().poll();
               if (jobCommand != null) {
                 player.chat(jobCommand);
               }
