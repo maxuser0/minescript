@@ -37,23 +37,15 @@ import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.network.chat.TextComponent;
 import net.minecraft.network.chat.TranslatableComponent;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.client.event.ClientChatEvent;
 import net.minecraftforge.client.event.ClientChatReceivedEvent;
 import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.CommandEvent;
-import net.minecraftforge.event.RegistryEvent;
 import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
-import net.minecraftforge.fml.event.lifecycle.InterModEnqueueEvent;
-import net.minecraftforge.fml.event.lifecycle.InterModProcessEvent;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
@@ -63,44 +55,14 @@ public class MinescriptMod {
   private static final Logger LOGGER = LogManager.getLogger();
 
   public MinescriptMod() {
-    // Register the setup method for modloading
-    FMLJavaModLoadingContext.get().getModEventBus().addListener(this::setup);
-    // Register the enqueueIMC method for modloading
-    FMLJavaModLoadingContext.get().getModEventBus().addListener(this::enqueueIMC);
-    // Register the processIMC method for modloading
-    FMLJavaModLoadingContext.get().getModEventBus().addListener(this::processIMC);
-
-    // Register ourselves for server and other game events we are interested in
     MinecraftForge.EVENT_BUS.register(this);
   }
-
-  private void setup(final FMLCommonSetupEvent event) {
-    // some preinit code
-  }
-
-  private void enqueueIMC(final InterModEnqueueEvent event) {
-    // dispatch IMC to another mod
-  }
-
-  private void processIMC(final InterModProcessEvent event) {
-    // receive and process InterModComms from other mods
-  }
-
-  // You can use SubscribeEvent and let the Event Bus discover methods to call
-  @SubscribeEvent
-  public void onServerStarting(ServerStartingEvent event) {
-    // do something when the server starts
-  }
-
-  @SubscribeEvent
-  public void onCommandEvent(CommandEvent event) {}
 
   // TODO(maxuser): replace with ImmutableList
   private static final String[] BUILTIN_COMMANDS =
       new String[] {
         "ls",
         "copy",
-        "record",
         "jobs",
         "suspend",
         "z", // alias for suspend
@@ -133,7 +95,6 @@ public class MinescriptMod {
   private static List<String> getScriptCommandNames() {
     List<String> scriptNames = new ArrayList<>();
     String minescriptDir = System.getProperty("user.dir") + "/" + MINESCRIPT_DIR;
-    // LOGGER.info("### MODS DIR: " + minescriptDir);
     try {
       Files.list(new File(minescriptDir).toPath())
           .filter(path -> path.toString().endsWith(".py"))
@@ -141,8 +102,6 @@ public class MinescriptMod {
               path -> {
                 String commandName =
                     path.toString().replace(minescriptDir + "/", "").replaceFirst("\\.py$", "");
-                // LOGGER.info("### SCRIPT: " + path);
-                // LOGGER.info("### COMMAND: " + commandName);
                 scriptNames.add(commandName);
               });
     } catch (IOException e) {
@@ -633,16 +592,6 @@ public class MinescriptMod {
     }
   }
 
-  static class RecordingTask implements Task {
-    @Override
-    public int run(String[] command, JobControl jobControl) {
-      // TODO(maxuser): implement; reading world blocks needs to happen on the main thread, but this
-      // method is run on a job thread. Maybe distinguish between single-threaded tasks like this
-      // one and multi-threaded tasks like SubprocessTask.
-      return 1;
-    }
-  }
-
   static class JobManager {
     private final Map<Integer, Job> jobMap = new ConcurrentHashMap<Integer, Job>();
 
@@ -651,7 +600,6 @@ public class MinescriptMod {
         new ConcurrentHashMap<Integer, UndoableAction>();
 
     private final Deque<UndoableAction> undoStack = new ArrayDeque<>();
-    private RecordingTask recordingTask;
 
     public void createSubprocess(String[] command) {
       var job = new Job(command, new SubprocessTask(), this::removeJob);
@@ -697,24 +645,6 @@ public class MinescriptMod {
         undo.onOriginalJobDone();
       }
       jobMap.remove(jobId);
-    }
-
-    public void startRecording(String[] command) {
-      if (recordingTask != null) {
-        logUserError("Recording is already in progress.");
-        return;
-      }
-      recordingTask = new RecordingTask();
-      var job =
-          new Job(
-              command,
-              recordingTask,
-              jobId -> {
-                removeJob(jobId);
-                recordingTask = null;
-              });
-      jobMap.put(job.jobId(), job);
-      job.start();
     }
 
     public Map<Integer, Job> getMap() {
@@ -927,11 +857,11 @@ public class MinescriptMod {
     }
 
     int xMin = Math.min(x0, x1);
-    int yMin = Math.max(Math.min(y0, y1), -64);
+    int yMin = Math.max(Math.min(y0, y1), -64); // TODO(maxuser): Use an API for min build height.
     int zMin = Math.min(z0, z1);
 
     int xMax = Math.max(x0, x1);
-    int yMax = Math.min(Math.max(y0, y1), 320);
+    int yMax = Math.min(Math.max(y0, y1), 320); // TODO(maxuser): Use an API for max build height.
     int zMax = Math.max(z0, z1);
 
     Level level = player.getCommandSenderWorld();
@@ -1097,15 +1027,6 @@ public class MinescriptMod {
       return;
     }
 
-    if (command[0].equals("record")) {
-      if (checkParamTypes(command)) {
-        jobs.startRecording(command);
-      } else {
-        logUserError("Expected no params, instead got `{}`", getParamsAsString(command));
-      }
-      return;
-    }
-
     if (command[0].equals("minescript_commands_per_cycle")) {
       if (checkParamTypes(command, ParamType.INT)) {
         int numCommands = Integer.valueOf(command[1]);
@@ -1178,283 +1099,6 @@ public class MinescriptMod {
 
   private static int minescriptTicksPerCycle = 1;
   private static int minescriptCommandsPerCycle = 15;
-
-  /* This is the old way of registering commands. This works only with single-person worlds where
-     * server is local:
-
-  import static com.mojang.brigadier.arguments.IntegerArgumentType.getInteger;
-  import static com.mojang.brigadier.arguments.IntegerArgumentType.integer;
-  import static com.mojang.brigadier.arguments.StringArgumentType.getString;
-  import static com.mojang.brigadier.arguments.StringArgumentType.string;
-
-  import com.mojang.brigadier.CommandDispatcher;
-  import net.minecraft.commands.CommandSourceStack;
-  import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-  import com.mojang.brigadier.builder.RequiredArgumentBuilder;
-
-    private static LiteralArgumentBuilder<CommandSourceStack> literal(String name) {
-      return LiteralArgumentBuilder.<CommandSourceStack>literal(name);
-    }
-
-    private static <T> RequiredArgumentBuilder<CommandSourceStack, T> argument(
-        String name, ArgumentType<T> type) {
-      return RequiredArgumentBuilder.<CommandSourceStack, T>argument(name, type);
-    }
-
-    private static void registerCommand(
-        CommandDispatcher<CommandSourceStack> dispatcher, String commandName) {
-      LOGGER.info("Registering script command: " + commandName);
-
-      dispatcher.register(
-          literal(commandName)
-              .then(
-                  argument("param1", string())
-                      .then(
-                          argument("param2", string())
-                              .then(
-                                  argument("param3", string())
-                                      .then(
-                                          argument("param4", string())
-                                              .then(
-                                                  argument("param5", string())
-                                                      .then(
-                                                          argument("param6", string())
-                                                              .then(
-                                                                  argument("param7", string())
-                                                                      .then(
-                                                                          argument("param8", string())
-                                                                              .executes(
-                                                                                  context -> {
-                                                                                    String param1 =
-                                                                                        getString(
-                                                                                            context,
-                                                                                            "param1");
-                                                                                    String param2 =
-                                                                                        getString(
-                                                                                            context,
-                                                                                            "param2");
-                                                                                    String param3 =
-                                                                                        getString(
-                                                                                            context,
-                                                                                            "param3");
-                                                                                    String param4 =
-                                                                                        getString(
-                                                                                            context,
-                                                                                            "param4");
-                                                                                    String param5 =
-                                                                                        getString(
-                                                                                            context,
-                                                                                            "param5");
-                                                                                    String param6 =
-                                                                                        getString(
-                                                                                            context,
-                                                                                            "param6");
-                                                                                    String param7 =
-                                                                                        getString(
-                                                                                            context,
-                                                                                            "param7");
-                                                                                    String param8 =
-                                                                                        getString(
-                                                                                            context,
-                                                                                            "param8");
-                                                                                    runCommand(
-                                                                                        new String[] {
-                                                                                          commandName,
-                                                                                          param1,
-                                                                                          param2,
-                                                                                          param3,
-                                                                                          param4,
-                                                                                          param5,
-                                                                                          param6,
-                                                                                          param7,
-                                                                                          param8
-                                                                                        });
-                                                                                    return 1;
-                                                                                  }))
-                                                                      .executes(
-                                                                          context -> {
-                                                                            String param1 =
-                                                                                getString(
-                                                                                    context,
-                                                                                    "param1");
-                                                                            String param2 =
-                                                                                getString(
-                                                                                    context,
-                                                                                    "param2");
-                                                                            String param3 =
-                                                                                getString(
-                                                                                    context,
-                                                                                    "param3");
-                                                                            String param4 =
-                                                                                getString(
-                                                                                    context,
-                                                                                    "param4");
-                                                                            String param5 =
-                                                                                getString(
-                                                                                    context,
-                                                                                    "param5");
-                                                                            String param6 =
-                                                                                getString(
-                                                                                    context,
-                                                                                    "param6");
-                                                                            String param7 =
-                                                                                getString(
-                                                                                    context,
-                                                                                    "param7");
-                                                                            runCommand(
-                                                                                new String[] {
-                                                                                  commandName,
-                                                                                  param1,
-                                                                                  param2,
-                                                                                  param3,
-                                                                                  param4,
-                                                                                  param5,
-                                                                                  param6,
-                                                                                  param7
-                                                                                });
-                                                                            return 1;
-                                                                          }))
-                                                              .executes(
-                                                                  context -> {
-                                                                    String param1 =
-                                                                        getString(context, "param1");
-                                                                    String param2 =
-                                                                        getString(context, "param2");
-                                                                    String param3 =
-                                                                        getString(context, "param3");
-                                                                    String param4 =
-                                                                        getString(context, "param4");
-                                                                    String param5 =
-                                                                        getString(context, "param5");
-                                                                    String param6 =
-                                                                        getString(context, "param6");
-                                                                    runCommand(
-                                                                        new String[] {
-                                                                          commandName,
-                                                                          param1,
-                                                                          param2,
-                                                                          param3,
-                                                                          param4,
-                                                                          param5,
-                                                                          param6
-                                                                        });
-                                                                    return 1;
-                                                                  }))
-                                                      .executes(
-                                                          context -> {
-                                                            String param1 =
-                                                                getString(context, "param1");
-                                                            String param2 =
-                                                                getString(context, "param2");
-                                                            String param3 =
-                                                                getString(context, "param3");
-                                                            String param4 =
-                                                                getString(context, "param4");
-                                                            String param5 =
-                                                                getString(context, "param5");
-                                                            runCommand(
-                                                                new String[] {
-                                                                  commandName,
-                                                                  param1,
-                                                                  param2,
-                                                                  param3,
-                                                                  param4,
-                                                                  param5
-                                                                });
-                                                            return 1;
-                                                          }))
-                                              .executes(
-                                                  context -> {
-                                                    String param1 = getString(context, "param1");
-                                                    String param2 = getString(context, "param2");
-                                                    String param3 = getString(context, "param3");
-                                                    String param4 = getString(context, "param4");
-                                                    runCommand(
-                                                        new String[] {
-                                                          commandName, param1, param2, param3, param4
-                                                        });
-                                                    return 1;
-                                                  }))
-                                      .executes(
-                                          context -> {
-                                            String param1 = getString(context, "param1");
-                                            String param2 = getString(context, "param2");
-                                            String param3 = getString(context, "param3");
-                                            runCommand(
-                                                new String[] {commandName, param1, param2, param3});
-                                            return 1;
-                                          }))
-                              .executes(
-                                  context -> {
-                                    String param1 = getString(context, "param1");
-                                    String param2 = getString(context, "param2");
-                                    runCommand(new String[] {commandName, param1, param2});
-                                    return 1;
-                                  }))
-                      .executes(
-                          context -> {
-                            String param1 = getString(context, "param1");
-                            runCommand(new String[] {commandName, param1});
-                            return 1;
-                          }))
-              .executes(
-                  context -> {
-                    runCommand(new String[] {commandName});
-                    return 1;
-                  }));
-    }
-
-    @SubscribeEvent
-    public void onRegisterCommandEvent(RegisterCommandsEvent event) {
-      CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
-      dispatcher.register(
-          literal("run")
-              .then(
-                  argument("command", string())
-                      .executes(
-                          context -> {
-                            String command = getString(context, "command");
-                            LOGGER.info("Command is " + command);
-                            runCommand(command.split("\\s+"));
-                            return 1;
-                          })));
-      dispatcher.register(
-          literal("minescript_ticks_per_cycle")
-              .then(
-                  argument("ticks", integer())
-                      .executes(
-                          context -> {
-                            int ticks = getInteger(context, "ticks");
-                            if (ticks < 1) ticks = 1;
-                            minescriptTicksPerCycle = ticks;
-                            systemCommandQueue.add(
-                                tellrawFormat(
-                                    "Minescript execution set to " + ticks + " tick(s) per cycle.",
-                                    "green"));
-                            return 1;
-                          })));
-      dispatcher.register(
-          literal("minescript_commands_per_cycle")
-              .then(
-                  argument("commands", integer())
-                      .executes(
-                          context -> {
-                            int commands = getInteger(context, "commands");
-                            if (commands < 1) commands = 1;
-                            minescriptCommandsPerCycle = commands;
-                            systemCommandQueue.add(
-                                tellrawFormat(
-                                    "Minescript execution set to "
-                                        + commands
-                                        + " command(s) per cycle.",
-                                    "green"));
-                            return 1;
-                          })));
-      for (String scriptCommand : getScriptCommandNames()) {
-        registerCommand(dispatcher, scriptCommand);
-      }
-    }
-    */
 
   private static int renderTickEventCounter = 0;
   private static int playerTickEventCounter = 0;
@@ -1739,37 +1383,6 @@ public class MinescriptMod {
     }
   }
 
-  /*
-  private static long lastChunkEvent = 0; // TODO(maxuser)
-  @SubscribeEvent
-  public void onChunkEvent(ChunkEvent chunkEvent) {
-    // TODO(maxuser): to prevent log spam, rate-limit the logging of chunk events
-    long currentTime = System.currentTimeMillis();
-    if (currentTime < lastChunkEvent + 1000) {
-      return;
-    }
-    lastChunkEvent = currentTime;
-
-    var chunk = chunkEvent.getChunk();
-    var chunkPos = chunk.getPos();
-    Map<String, Integer> blockCounts = new HashMap<>();
-    for (int x = chunkPos.getMinBlockX(); x < chunkPos.getMaxBlockX(); x++) {
-      for (int z = chunkPos.getMinBlockZ(); z < chunkPos.getMaxBlockZ(); z++) {
-        for (int y = -64; y < 320; y++) {
-          BlockState blockState = chunk.getBlockState(chunkPos.getBlockAt(x, y, z));
-          String blockString = blockState.toString();
-          blockCounts.put(blockString, blockCounts.getOrDefault(blockString, 0) + 1);
-        }
-      }
-    }
-    var chunkWorldPos = chunkPos.getWorldPosition();
-    LOGGER.info("(minescript) Chunk load at ({}, y,{})", chunkWorldPos.getX(), chunkWorldPos.getZ());
-    for (var entry : blockCounts.entrySet()) {
-      LOGGER.info("  [{}x] {}", entry.getValue(), entry.getKey());
-    }
-  }
-  */
-
   private static String lastReceivedBackslashedChatMessage = "";
   private static long lastReceivedBackslashedChatMessageTime = 0;
   private static boolean enableMinescriptOnChatReceivedEvent = false;
@@ -1918,17 +1531,6 @@ public class MinescriptMod {
           }
         }
       }
-    }
-  }
-
-  // You can use EventBusSubscriber to automatically subscribe events on the contained class (this
-  // is subscribing to the MOD
-  // Event bus for receiving Registry Events)
-  @Mod.EventBusSubscriber(bus = Mod.EventBusSubscriber.Bus.MOD)
-  public static class RegistryEvents {
-    @SubscribeEvent
-    public static void onBlocksRegistry(final RegistryEvent.Register<Block> blockRegistryEvent) {
-      // register a new block here
     }
   }
 }
