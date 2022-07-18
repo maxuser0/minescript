@@ -260,22 +260,25 @@ public class MinescriptMod {
     void logJobException(Exception e);
   }
 
-  // TODO(maxuser): Split Subprocess into Job interface with JobHandler impls SubprocessJobHandler
-  // and
-  // BuiltinJobHandler.
-  static class Subprocess implements JobControl {
+  interface Task {
+    int run(String[] command, JobControl jobControl);
+  }
+
+  static class Job implements JobControl {
     private static AtomicInteger nextJobId = new AtomicInteger(1);
     private final int jobId;
     private final String[] command;
+    private final Task task;
     private Thread thread;
     private volatile JobState state = JobState.NOT_STARTED;
     private Consumer<Integer> doneCallback;
     private Queue<String> jobCommandQueue = new ConcurrentLinkedQueue<String>();
     private Lock lock = new ReentrantLock(true); // true indicates a fair lock to avoid starvation
 
-    public Subprocess(String[] command, Consumer<Integer> doneCallback) {
+    public Job(String[] command, Task task, Consumer<Integer> doneCallback) {
       this.jobId = nextJobId.getAndIncrement();
       this.command = Arrays.copyOf(command, command.length);
+      this.task = task;
       this.doneCallback = doneCallback;
     }
 
@@ -384,7 +387,7 @@ public class MinescriptMod {
         state = JobState.RUNNING;
       }
       try {
-        int exitCode = runExternalCommand(command, this);
+        int exitCode = task.run(command, this);
         final int millisToSleep = 1000;
         while (state != JobState.KILLED && !jobCommandQueue.isEmpty()) {
           try {
@@ -424,92 +427,95 @@ public class MinescriptMod {
     }
   }
 
-  private static int runExternalCommand(String[] command, JobControl jobControl) {
-    // TODO(maxuser): Support non-Python executables in general.
-    String scriptExtension = ".py";
-    String scriptName = MINESCRIPT_DIR + "/" + command[0] + scriptExtension;
+  static class SubprocessTask implements Task {
+    @Override
+    public int run(String[] command, JobControl jobControl) {
+      // TODO(maxuser): Support non-Python executables in general.
+      String scriptExtension = ".py";
+      String scriptName = MINESCRIPT_DIR + "/" + command[0] + scriptExtension;
 
-    String pythonInterpreterPath = findFirstFile("/usr/bin/python3", "/usr/local/bin/python3");
-    if (pythonInterpreterPath == null) {
-      jobControl.enqueueStderr("Cannot find Python3 interpreter at any of these locations:");
-      jobControl.enqueueStderr("  /usr/bin/python3");
-      jobControl.enqueueStderr("  /usr/local/bin/python3");
-      jobControl.enqueueStderr("See: https://www.python.org/downloads/");
-      return -1;
-    }
-
-    String[] executableCommand = new String[command.length + 2];
-    executableCommand[0] = pythonInterpreterPath;
-    executableCommand[1] = "-u"; // `python3 -u` for unbuffered stdout and stderr.
-    executableCommand[2] = scriptName;
-    for (int i = 1; i < command.length; i++) {
-      executableCommand[i + 2] = command[i];
-    }
-
-    final Process process;
-    try {
-      process = Runtime.getRuntime().exec(executableCommand);
-    } catch (IOException e) {
-      jobControl.logJobException(e);
-      return -2;
-    }
-
-    // TODO(maxuser): Process stdout and stderr on different threads so they can be processed
-    // concurrently.
-    try (var stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-        var stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-      String line;
-      while ((line = stdoutReader.readLine()) != null) {
-        if (jobControl.state() == JobState.KILLED) {
-          process.destroy();
-          break;
-        }
-        jobControl.yield();
-        jobControl.enqueueStdout(line);
+      String pythonInterpreterPath = findFirstFile("/usr/bin/python3", "/usr/local/bin/python3");
+      if (pythonInterpreterPath == null) {
+        jobControl.enqueueStderr("Cannot find Python3 interpreter at any of these locations:");
+        jobControl.enqueueStderr("  /usr/bin/python3");
+        jobControl.enqueueStderr("  /usr/local/bin/python3");
+        jobControl.enqueueStderr("See: https://www.python.org/downloads/");
+        return -1;
       }
-      while ((line = stderrReader.readLine()) != null) {
-        if (jobControl.state() == JobState.KILLED) {
-          process.destroy();
-          break;
-        }
-        jobControl.yield();
-        jobControl.enqueueStderr(line);
+
+      String[] executableCommand = new String[command.length + 2];
+      executableCommand[0] = pythonInterpreterPath;
+      executableCommand[1] = "-u"; // `python3 -u` for unbuffered stdout and stderr.
+      executableCommand[2] = scriptName;
+      for (int i = 1; i < command.length; i++) {
+        executableCommand[i + 2] = command[i];
       }
-    } catch (IOException e) {
-      jobControl.logJobException(e);
-      jobControl.enqueueStderr(e.getMessage());
-      return -3;
-    }
-    if (process == null) {
-      return -4;
-    }
-    if (jobControl.state() == JobState.KILLED) {
-      process.destroy();
-      return -5;
-    }
-    try {
-      return process.waitFor();
-    } catch (InterruptedException e) {
-      jobControl.logJobException(e);
-      return -6;
+
+      final Process process;
+      try {
+        process = Runtime.getRuntime().exec(executableCommand);
+      } catch (IOException e) {
+        jobControl.logJobException(e);
+        return -2;
+      }
+
+      // TODO(maxuser): Process stdout and stderr on different threads so they can be processed
+      // concurrently.
+      try (var stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+          var stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+        String line;
+        while ((line = stdoutReader.readLine()) != null) {
+          if (jobControl.state() == JobState.KILLED) {
+            process.destroy();
+            break;
+          }
+          jobControl.yield();
+          jobControl.enqueueStdout(line);
+        }
+        while ((line = stderrReader.readLine()) != null) {
+          if (jobControl.state() == JobState.KILLED) {
+            process.destroy();
+            break;
+          }
+          jobControl.yield();
+          jobControl.enqueueStderr(line);
+        }
+      } catch (IOException e) {
+        jobControl.logJobException(e);
+        jobControl.enqueueStderr(e.getMessage());
+        return -3;
+      }
+      if (process == null) {
+        return -4;
+      }
+      if (jobControl.state() == JobState.KILLED) {
+        process.destroy();
+        return -5;
+      }
+      try {
+        return process.waitFor();
+      } catch (InterruptedException e) {
+        jobControl.logJobException(e);
+        return -6;
+      }
     }
   }
 
-  static class SubprocessMap {
-    private final Map<Integer, Subprocess> map = new ConcurrentHashMap<Integer, Subprocess>();
+  static class JobMap {
+    private final Map<Integer, Job> map = new ConcurrentHashMap<Integer, Job>();
 
     public void createSubprocess(String[] command) {
-      var subprocess = new Subprocess(command, jobId -> map.remove(jobId));
+      var subprocess = new Job(command, new SubprocessTask(), jobId -> map.remove(jobId));
       map.put(subprocess.jobId(), subprocess);
       subprocess.start();
     }
 
-    public Map<Integer, Subprocess> getMap() {
+    public Map<Integer, Job> getMap() {
       return map;
     }
   }
 
-  private static SubprocessMap subprocessMap = new SubprocessMap();
+  private static JobMap jobs = new JobMap();
 
   private static Queue<String> systemCommandQueue = new ConcurrentLinkedQueue<String>();
 
@@ -573,17 +579,17 @@ public class MinescriptMod {
   }
 
   private static void listJobs() {
-    if (subprocessMap.getMap().isEmpty()) {
+    if (jobs.getMap().isEmpty()) {
       logUserInfo("There are no jobs running.");
       return;
     }
-    for (var subprocess : subprocessMap.getMap().values()) {
+    for (var subprocess : jobs.getMap().values()) {
       logUserInfo(subprocess.toString());
     }
   }
 
   private static void suspendJob(int jobId) {
-    var subprocess = subprocessMap.getMap().get(jobId);
+    var subprocess = jobs.getMap().get(jobId);
     if (subprocess == null) {
       logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
       return;
@@ -594,7 +600,7 @@ public class MinescriptMod {
   }
 
   private static void resumeJob(int jobId) {
-    var subprocess = subprocessMap.getMap().get(jobId);
+    var subprocess = jobs.getMap().get(jobId);
     if (subprocess == null) {
       logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
       return;
@@ -606,7 +612,7 @@ public class MinescriptMod {
 
   private static void killJob(int jobId) {
     // TODO(maxuser): Don't just remove the job entry from the map, actually stop the subprocess.
-    var subprocess = subprocessMap.getMap().get(jobId);
+    var subprocess = jobs.getMap().get(jobId);
     if (subprocess == null) {
       logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
       return;
@@ -859,7 +865,7 @@ public class MinescriptMod {
       return;
     }
 
-    subprocessMap.createSubprocess(command);
+    jobs.createSubprocess(command);
   }
 
   private static String findFirstFile(String... filenames) {
@@ -1515,13 +1521,13 @@ public class MinescriptMod {
       }
 
       var player = minecraft.player;
-      if (player != null && (!systemCommandQueue.isEmpty() || !subprocessMap.getMap().isEmpty())) {
+      if (player != null && (!systemCommandQueue.isEmpty() || !jobs.getMap().isEmpty())) {
         for (int i = 0; i < minescriptCommandsPerCycle; ++i) {
           String command = systemCommandQueue.poll();
           if (command != null) {
             player.chat(command);
           }
-          for (var subprocess : subprocessMap.getMap().values()) {
+          for (var subprocess : jobs.getMap().values()) {
             if (subprocess.state() == JobState.RUNNING) {
               String jobCommand = subprocess.commandQueue().poll();
               if (jobCommand != null) {
