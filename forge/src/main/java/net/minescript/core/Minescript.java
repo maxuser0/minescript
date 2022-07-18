@@ -1011,11 +1011,13 @@ public class Minescript {
     }
   }
 
-  private static void runCommand(String[] command) {
+  private static void runMinescriptCommand(String commandLine) {
     if (!checkMinescriptDir()) {
       return;
     }
 
+    // TODO(maxuser): need to do single/double quote parsing etc.
+    String[] command = commandLine.split("\\s+");
     command = substituteMinecraftVars(command);
 
     if (command[0].equals("jobs")) {
@@ -1559,12 +1561,9 @@ public class Minescript {
     //
     //         if (enableMinescriptOnChatReceivedEvent) {
     //           if (text.startsWith("\\")) {
-    //             // TODO(maxuser): need to do single/double quote parsing etc.
-    //             String[] command = text.substring(1).split("\\s+");
     //             LOGGER.info(
-    //                 "(minescript) Processing command from received chat event: {}",
-    //                 String.join(" ", command));
-    //             runCommand(command);
+    //                 "(minescript) Processing command from received chat event: {}", text);
+    //             runMinescriptCommand(text.substring(1));
     //             cancel = true;
     //           }
     //         }
@@ -1617,10 +1616,8 @@ public class Minescript {
     if (message.startsWith("\\")) {
       minescriptCommandHistory.addCommand(message);
 
-      // TODO(maxuser): need to do single/double quote parsing etc.
-      String[] command = message.substring(1).split("\\s+");
-      LOGGER.info("(minescript) Processing command from chat event: {}", String.join(" ", command));
-      runCommand(command);
+      LOGGER.info("(minescript) Processing command from chat event: {}", message);
+      runMinescriptCommand(message.substring(1));
       cancel = true;
     } else if (customNickname != null && !message.startsWith("/")) {
       systemCommandQueue.add("/tellraw @a " + String.format(customNickname, message));
@@ -1921,7 +1918,15 @@ public class Minescript {
   private static String customNickname = null;
 
   private static void sendPlayerChatOrCommand(LocalPlayer player, String message) {
-    if (message.startsWith("/")) {
+    if (message.startsWith("\\")) {
+      LOGGER.info("(minescript) Processing command from message queue: {}", message);
+      // TODO(maxuser): If there's a parent job that spawned this command, pass along the parent job
+      // so that suspending or killing the parent job also suspends or kills the child job. Also,
+      // child jobs are listed from `jobs` command and increment the job counter, but should they?
+      // This speaks to the conceptual distinction between "shell job" and "process" which currently
+      // isn't established.
+      runMinescriptCommand(message.substring(1));
+    } else if (message.startsWith("/")) {
       player.command(message.substring(1));
     } else {
       player.chat(message);
