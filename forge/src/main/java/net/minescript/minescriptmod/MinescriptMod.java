@@ -94,7 +94,7 @@ public class MinescriptMod {
     var sw = new StringWriter();
     var pw = new PrintWriter(sw);
     e.printStackTrace(pw);
-    logUserError("Exception: {}", e.getMessage());
+    logUserError("{}: {}", e.getClass().getSimpleName(), e.getMessage());
     LOGGER.error("(minescript) exception stack trace: {}", sw.toString());
   }
 
