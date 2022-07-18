@@ -84,6 +84,7 @@ public class MinescriptMod {
         "resume",
         "killjob",
         "undo",
+        "minescript_copy_size_limit",
         "minescript_commands_per_cycle",
         "minescript_ticks_per_cycle",
         "enable_minescript_on_chat_received_event"
@@ -935,6 +936,8 @@ public class MinescriptMod {
   // "minecraft:acacia_button[face=floor,facing=west,powered=false]"
   private static Pattern BLOCK_STATE_RE = Pattern.compile("^Block\\{([^}]*)\\}(\\[.*\\])?$");
 
+  private static int copySizeLimit = 200;
+
   private static Optional<String> blockStateToString(BlockState blockState) {
     var match = BLOCK_STATE_RE.matcher(blockState.toString());
     if (!match.find()) {
@@ -957,13 +960,13 @@ public class MinescriptMod {
     int playerY = (int) player.getY();
     int playerZ = (int) player.getZ();
 
-    if (Math.abs(x0 - playerX) > 200
-        || Math.abs(y0 - playerY) > 200
-        || Math.abs(z0 - playerZ) > 200
-        || Math.abs(x1 - playerX) > 200
-        || Math.abs(y1 - playerY) > 200
-        || Math.abs(z1 - playerZ) > 200) {
-      logUserError("Player is more than 200 blocks from `copy` coordinate.");
+    if (Math.abs(x0 - playerX) > copySizeLimit
+        || Math.abs(y0 - playerY) > copySizeLimit
+        || Math.abs(z0 - playerZ) > copySizeLimit
+        || Math.abs(x1 - playerX) > copySizeLimit
+        || Math.abs(y1 - playerY) > copySizeLimit
+        || Math.abs(z1 - playerZ) > copySizeLimit) {
+      logUserError("Player is more than {} blocks from `copy` coordinate.", copySizeLimit);
       return;
     }
 
@@ -1157,6 +1160,21 @@ public class MinescriptMod {
         if (ticks < 1) ticks = 1;
         minescriptTicksPerCycle = ticks;
         logUserError("Minescript execution set to {} tick(s) per cycle.", ticks);
+      } else {
+        logUserError(
+            "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
+      }
+      return;
+    }
+
+    if (command[0].equals("minescript_copy_size_limit")) {
+      if (checkParamTypes(command)) {
+        logUserInfo("Minescript copy size limit is {} blocks.", copySizeLimit);
+      } else if (checkParamTypes(command, ParamType.INT)) {
+        int limit = Integer.valueOf(command[1]);
+        if (limit < 1) limit = 1;
+        copySizeLimit = limit;
+        logUserInfo("Minescript copy size limit set to {} blocks.", limit);
       } else {
         logUserError(
             "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
