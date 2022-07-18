@@ -734,9 +734,9 @@ public class MinescriptMod {
   private static void suspendJob(OptionalInt jobId) {
     if (jobId.isPresent()) {
       // Suspend specified job.
-      var job = jobs.getMap().get(jobId);
+      var job = jobs.getMap().get(jobId.getAsInt());
       if (job == null) {
-        logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
+        logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId.getAsInt());
         return;
       }
       if (job.suspend()) {
@@ -755,9 +755,9 @@ public class MinescriptMod {
   private static void resumeJob(OptionalInt jobId) {
     if (jobId.isPresent()) {
       // Resume specified job.
-      var job = jobs.getMap().get(jobId);
+      var job = jobs.getMap().get(jobId.getAsInt());
       if (job == null) {
-        logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
+        logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId.getAsInt());
         return;
       }
       if (job.resume()) {
