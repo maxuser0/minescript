@@ -1223,6 +1223,7 @@ public class Minescript {
 
   private static int BACKSLASH_KEY = 92;
   private static int ESCAPE_KEY = 256;
+  public static int ENTER_KEY = 257;
   private static int TAB_KEY = 258;
   private static int BACKSPACE_KEY = 259;
   private static int UP_ARROW_KEY = 265;
@@ -1382,6 +1383,14 @@ public class Minescript {
             input.setCursorPosition(value.length());
           }
           cancel = true;
+        } else if (key == ENTER_KEY) {
+          // This branch is unnecessary on Forge because it supports ClientChatEvent.
+          cancel = true;
+          String text = input.getValue();
+          input.setValue("");
+          onClientChat(text);
+          screen.onClose();
+          return cancel;
         } else {
           minescriptCommandHistory.moveToEnd();
         }
