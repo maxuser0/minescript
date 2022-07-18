@@ -78,6 +78,13 @@ def _ScriptServiceLoop():
       continue
     func_call_id = reply["fcid"]
 
+    # fcid zero is reserved for system management like exiting the program.
+    if func_call_id == 0:
+      if "retval" in reply:
+        retval = reply["retval"]
+        if retval == "exit!":
+          break  # Break out of the service loop so that the process can exit.
+
     if func_call_id not in _script_function_calls:
       print(
           f"minescriptapi.py: fcid={func_call_id} not found in _script_function_calls",
@@ -97,7 +104,19 @@ def _ScriptServiceLoop():
           f"minescriptapi.py: script function response has neither 'conn' nor 'retval': {reply}",
           file=sys.stderr)
 
+  print(f"minescriptapi.py: Script finished: `{sys.argv[0]}`", file=sys.stderr);
+
+
+def _WatchdogLoop():
+  while threading.main_thread().isAlive():
+    time.sleep(0.2)
+
+  print(f"?0 exit!")  # special pseudo-function for requesting script termination
+
 
 _script_service_thread = threading.Thread(target=_ScriptServiceLoop,
-                                          daemon=True)
+                                          daemon=False)
 _script_service_thread.start()
+
+_watchdog_thread = threading.Thread(target=_WatchdogLoop, daemon=False)
+_watchdog_thread.start()

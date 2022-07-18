@@ -2056,6 +2056,8 @@ public class Minescript {
                       customNickname = null;
                     }
                     job.respond(funcCallId, "null", true);
+                  } else if (funcCallId == 0 && functionName.equals("exit!")) {
+                    job.respond(0, "\"exit!\"", true);
                   } else {
                     logUserError(
                         "Unknown function called from `{}`: {}", job.jobSummary(), functionName);
