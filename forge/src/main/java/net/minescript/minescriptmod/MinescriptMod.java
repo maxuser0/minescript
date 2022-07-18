@@ -1644,6 +1644,9 @@ public class MinescriptMod {
       LOGGER.info("(minescript) Processing command from chat event: {}", String.join(" ", command));
       runCommand(command);
       event.setCanceled(true);
+    } else if (customNickname != null && !message.startsWith("/")) {
+      systemCommandQueue.add("/tellraw @a " + String.format(customNickname, message));
+      event.setCanceled(true);
     }
   }
 
@@ -1902,6 +1905,8 @@ public class MinescriptMod {
   private static Map<ChunkLoadEventListener, Integer> chunkLoadEventListeners =
       new ConcurrentHashMap<ChunkLoadEventListener, Integer>();
 
+  private static String customNickname = null;
+
   @SubscribeEvent
   public void onPlayerTick(TickEvent.PlayerTickEvent event) {
     if (++playerTickEventCounter % minescriptTicksPerCycle == 0) {
@@ -2002,6 +2007,20 @@ public class MinescriptMod {
                           args);
                       job.respond(funcCallId, "null", true);
                     }
+                  } else if (functionName.equals("set_nickname")) {
+                    var parser = new ParamParser(args);
+                    var params = new ArrayList<String>();
+                    if (parser.readOpenBracket()
+                        && parser.readStringParam(params)
+                        && parser.readCloseBracket()
+                        && parser.isDone()) {
+                      logUserInfo("Chat nickname set to \"{}\".", args);
+                      customNickname = params.get(0);
+                    } else {
+                      logUserInfo("Chat nickname reset to default.", args);
+                      customNickname = null;
+                    }
+                    job.respond(funcCallId, "null", true);
                   } else {
                     logUserError(
                         "Unknown function called from `{}`: {}", job.jobSummary(), functionName);
