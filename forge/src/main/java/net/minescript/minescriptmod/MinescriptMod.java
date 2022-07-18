@@ -1,11 +1,13 @@
 package net.minescript.minescriptmod;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.reflect.Field;
@@ -31,6 +33,9 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
+import javax.json.Json;
+import javax.json.JsonObjectBuilder;
+import javax.json.JsonValue;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
@@ -228,6 +233,8 @@ public class MinescriptMod {
 
     Queue<String> commandQueue();
 
+    void respond(String commandRequest, JsonValue commandResponse);
+
     void enqueueStdout(String text);
 
     void enqueueStderr(String messagePattern, Object... arguments);
@@ -351,6 +358,8 @@ public class MinescriptMod {
 
   interface Task {
     int run(String[] command, JobControl jobControl);
+
+    default void handleResponse(String commandRequest, JsonValue commandResponse) {}
   }
 
   static class Job implements JobControl {
@@ -386,6 +395,11 @@ public class MinescriptMod {
     @Override
     public Queue<String> commandQueue() {
       return jobCommandQueue;
+    }
+
+    @Override
+    public void respond(String commandRequest, JsonValue commandResponse) {
+      task.handleResponse(commandRequest, commandResponse);
     }
 
     @Override
@@ -511,6 +525,9 @@ public class MinescriptMod {
   }
 
   static class SubprocessTask implements Task {
+    private Process process;
+    private BufferedWriter stdinWriter;
+
     @Override
     public int run(String[] command, JobControl jobControl) {
       // TODO(maxuser): Support non-Python executables in general.
@@ -534,13 +551,14 @@ public class MinescriptMod {
         executableCommand[i + 2] = command[i];
       }
 
-      final Process process;
       try {
         process = Runtime.getRuntime().exec(executableCommand);
       } catch (IOException e) {
         jobControl.logJobException(e);
         return -2;
       }
+
+      stdinWriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
 
       try (var stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
           var stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
@@ -591,6 +609,31 @@ public class MinescriptMod {
         return -6;
       }
     }
+
+    @Override
+    public void handleResponse(String commandRequest, JsonValue commandResponse) {
+      if (process != null && process.isAlive() && stdinWriter != null) {
+        try {
+          stdinWriter.write(
+              jsonToString(
+                  Json.createObjectBuilder()
+                      .add("request", commandRequest)
+                      .add("response", commandResponse)));
+          stdinWriter.newLine();
+          stdinWriter.flush();
+        } catch (IOException e) {
+          // TODO(maxuser): Log the exception.
+        }
+      }
+    }
+  }
+
+  static String jsonToString(JsonObjectBuilder builder) {
+    var stringWriter = new StringWriter();
+    try (var jsonWriter = Json.createWriter(stringWriter)) {
+      jsonWriter.write(builder.build());
+    }
+    return stringWriter.toString();
   }
 
   static class UndoTask implements Task {
@@ -1541,7 +1584,17 @@ public class MinescriptMod {
               String jobCommand = job.commandQueue().poll();
               if (jobCommand != null) {
                 jobs.getUndoForJob(job).ifPresent(u -> u.processCommandToUndo(level, jobCommand));
-                player.chat(jobCommand);
+                if (jobCommand.equals("?player_position")) {
+                  job.respond(
+                      jobCommand,
+                      Json.createArrayBuilder()
+                          .add(player.getX())
+                          .add(player.getY())
+                          .add(player.getZ())
+                          .build());
+                } else {
+                  player.chat(jobCommand);
+                }
               }
             }
           }
