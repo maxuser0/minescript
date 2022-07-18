@@ -865,6 +865,13 @@ public class Minescript {
   }
 
   private static void killJob(int jobId) {
+    if (jobId == -1) {
+      // Special pseudo job ID -1 kills all jobs.
+      for (var job : jobs.getMap().values()) {
+        job.kill();
+      }
+      return;
+    }
     var job = jobs.getMap().get(jobId);
     if (job == null) {
       logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
