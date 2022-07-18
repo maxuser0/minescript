@@ -271,23 +271,42 @@ public class MinescriptMod {
   }
 
   static class UndoableAction {
+    private static String UNDO_DIR = MINESCRIPT_DIR + "/undo/";
+
     private volatile int originalJobId; // ID of the job that this undoes.
     private String[] originalCommand;
+    private final long startTimeMillis;
     private final Queue<String> commands = new ArrayDeque<>();
+    private String commandsFilename;
     private int[] coords = new int[6]; // Reuse array to avoid lots of small object instantiations.
     private boolean undone = false;
 
     public UndoableAction(int originalJobId, String[] originalCommand) {
       this.originalJobId = originalJobId;
       this.originalCommand = originalCommand;
+      this.startTimeMillis = System.currentTimeMillis();
     }
 
     public int originalJobId() {
       return originalJobId;
     }
 
-    public void onOriginalJobDone() {
+    public synchronized void onOriginalJobDone() {
       originalJobId = -1;
+
+      // Write undo commands to a file and clear in-memory commands queue.
+      new File(UNDO_DIR).mkdirs();
+      commandsFilename = UNDO_DIR + startTimeMillis + ".txt";
+      try (var writer = new PrintWriter(new FileWriter(commandsFilename))) {
+        writer.printf(
+            "# Generated from Minescript command `%s`:\n", String.join(" ", originalCommand));
+        for (String command : commands) {
+          writer.println(command);
+        }
+      } catch (IOException e) {
+        logException(e);
+      }
+      commands.clear();
     }
 
     public String[] originalCommand() {
@@ -306,7 +325,9 @@ public class MinescriptMod {
         Optional<String> block =
             blockStateToString(readBlockState(level, coords[0], coords[1], coords[2]));
         if (block.isPresent()) {
-          addBlockToUndoQueue(coords[0], coords[1], coords[2], block.get());
+          if (!addBlockToUndoQueue(coords[0], coords[1], coords[2], block.get())) {
+            return;
+          }
         }
       } else if (command.startsWith("/fill ") && getFillCoords(command, coords)) {
         int x0 = coords[0];
@@ -320,7 +341,9 @@ public class MinescriptMod {
             for (int z = z0; z <= z1; z++) {
               Optional<String> block = blockStateToString(readBlockState(level, x, y, z));
               if (block.isPresent()) {
-                addBlockToUndoQueue(x, y, z, block.get());
+                if (!addBlockToUndoQueue(x, y, z, block.get())) {
+                  return;
+                }
               }
             }
           }
@@ -328,23 +351,36 @@ public class MinescriptMod {
       }
     }
 
-    private void addBlockToUndoQueue(int x, int y, int z, String block) {
-      addCommand(String.format("/setblock %d %d %d %s", x, y, z, block));
-    }
-
-    private void addCommand(String command) {
+    private boolean addBlockToUndoQueue(int x, int y, int z, String block) {
       if (undone) {
         LOGGER.error(
-            "(minescript) Adding command to undoable action after already undone: {}", command);
-        return;
+            "(minescript) Cannot add command to undoable action after already undone: {}",
+            String.join(" ", originalCommand));
+        return false;
       }
-      commands.add(command);
+      commands.add(String.format("/setblock %d %d %d %s", x, y, z, block));
+      return true;
     }
 
     public synchronized void enqueueCommands(Queue<String> commandQueue) {
       undone = true;
-      commandQueue.addAll(commands);
-      commands.clear();
+      if (commandsFilename == null) {
+        commandQueue.addAll(commands);
+        commands.clear();
+      } else {
+        try (var reader = new BufferedReader(new FileReader(commandsFilename))) {
+          String line;
+          while ((line = reader.readLine()) != null) {
+            line = line.strip();
+            if (line.startsWith("#")) {
+              continue;
+            }
+            commandQueue.add(line);
+          }
+        } catch (IOException e) {
+          logException(e);
+        }
+      }
     }
   }
 
@@ -616,8 +652,11 @@ public class MinescriptMod {
 
   static class JobManager {
     private final Map<Integer, Job> jobMap = new ConcurrentHashMap<Integer, Job>();
+
+    // Map from ID of original job (not an undo) to its corresponding undo, if applicable.
     private final Map<Integer, UndoableAction> jobUndoMap =
         new ConcurrentHashMap<Integer, UndoableAction>();
+
     private final Deque<UndoableAction> undoStack = new ArrayDeque<>();
     private RecordingTask recordingTask;
 
