@@ -54,8 +54,16 @@ import org.apache.logging.log4j.message.ParameterizedMessage;
 public class MinescriptMod {
   private static final Logger LOGGER = LogManager.getLogger();
 
+  // MINESCRIPT_DIR is relative to the Minecraft directory which is the working directory.
+  private static final String MINESCRIPT_DIR = "minescript";
+
   public MinescriptMod() {
+    LOGGER.info("(minescript) Minescript mod starting...");
     MinecraftForge.EVENT_BUS.register(this);
+
+    if (new File(MINESCRIPT_DIR).mkdir()) {
+      LOGGER.info("(minescript) Created minescript dir");
+    }
   }
 
   // TODO(maxuser): replace with ImmutableList
@@ -89,8 +97,6 @@ public class MinescriptMod {
     logUserError("Exception: {}", e.getMessage());
     LOGGER.error("(minescript) exception stack trace: {}", sw.toString());
   }
-
-  private static final String MINESCRIPT_DIR = "mods/minescript";
 
   private static List<String> getScriptCommandNames() {
     List<String> scriptNames = new ArrayList<>();
@@ -659,7 +665,7 @@ public class MinescriptMod {
   private static boolean checkMinescriptDir() {
     String minescriptDir = System.getProperty("user.dir") + "/" + MINESCRIPT_DIR;
     if (!Files.isDirectory(Paths.get(minescriptDir))) {
-      logUserError("Minescript folder is missing. Please create it at: {}", minescriptDir);
+      logUserError("Minescript folder is missing. It should have been created at: {}", minescriptDir);
       return false;
     }
     return true;
