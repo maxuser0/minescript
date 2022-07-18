@@ -1360,8 +1360,8 @@ public class Minescript {
     if (screen != null && screen instanceof ChatScreen) {
       var scriptCommandNames = getScriptCommandNamesWithBuiltins();
       try {
-        var input = (EditBox) getField(screen, ChatScreen.class, "input", "f_95573_");
-        String value = input.getValue();
+        var chatEditBox = (EditBox) getField(screen, ChatScreen.class, "input", "f_95573_");
+        String value = chatEditBox.getValue();
         if (!value.startsWith("\\")) {
           minescriptCommandHistory.moveToEnd();
           return cancel;
@@ -1371,32 +1371,32 @@ public class Minescript {
           Optional<String> previousCommand = minescriptCommandHistory.moveBackwardAndGet(value);
           if (previousCommand.isPresent()) {
             value = previousCommand.get();
-            input.setValue(value);
-            input.setCursorPosition(value.length());
+            chatEditBox.setValue(value);
+            chatEditBox.setCursorPosition(value.length());
           }
           cancel = true;
         } else if (key == DOWN_ARROW_KEY) {
           Optional<String> nextCommand = minescriptCommandHistory.moveForwardAndGet();
           if (nextCommand.isPresent()) {
             value = nextCommand.get();
-            input.setValue(value);
-            input.setCursorPosition(value.length());
+            chatEditBox.setValue(value);
+            chatEditBox.setCursorPosition(value.length());
           }
           cancel = true;
         } else if (key == ENTER_KEY) {
           // This branch is unnecessary on Forge because it supports ClientChatEvent.
           cancel = true;
-          String text = input.getValue();
-          input.setValue("");
+          String text = chatEditBox.getValue();
+          chatEditBox.setValue("");
           onClientChat(text);
           screen.onClose();
           return cancel;
         } else {
           minescriptCommandHistory.moveToEnd();
         }
-        int cursorPos = input.getCursorPosition();
+        int cursorPos = chatEditBox.getCursorPosition();
         if (key >= 32 && key < 127) {
-          // TODO(maxuser): use input.setSuggestion(String) to set suggestion?
+          // TODO(maxuser): use chatEditBox.setSuggestion(String) to set suggestion?
           // TODO(maxuser): detect upper vs lower case properly
           String extraChar = Character.toString((char) key).toLowerCase();
           value = insertSubstring(value, cursorPos, extraChar);
@@ -1413,20 +1413,20 @@ public class Minescript {
                           || commandSuggestions.size() > 1)
                       ? ""
                       : " ";
-              input.insertText(
+              chatEditBox.insertText(
                   longestCommonPrefix(commandSuggestions).substring(command.length())
                       + maybeTrailingSpace);
               if (commandSuggestions.size() > 1) {
-                input.setTextColor(0x5ee8e8); // cyan for partial completion
+                chatEditBox.setTextColor(0x5ee8e8); // cyan for partial completion
               } else {
-                input.setTextColor(0x5ee85e); // green for full completion
+                chatEditBox.setTextColor(0x5ee85e); // green for full completion
               }
               commandSuggestions = new ArrayList<>();
               return cancel;
             }
           }
           if (scriptCommandNames.contains(command)) {
-            input.setTextColor(0x5ee85e); // green
+            chatEditBox.setTextColor(0x5ee85e); // green
             commandSuggestions = new ArrayList<>();
           } else {
             List<String> newCommandSuggestions = new ArrayList<>();
@@ -1445,9 +1445,9 @@ public class Minescript {
                 }
                 commandSuggestions = newCommandSuggestions;
               }
-              input.setTextColor(0x5ee8e8); // cyan
+              chatEditBox.setTextColor(0x5ee8e8); // cyan
             } else {
-              input.setTextColor(0xe85e5e); // red
+              chatEditBox.setTextColor(0xe85e5e); // red
               commandSuggestions = new ArrayList<>();
             }
           }
