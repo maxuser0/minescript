@@ -26,8 +26,7 @@ StringConsumer = Callable[[str], None]
 _script_function_calls: Dict[int, Tuple[str, StringConsumer]] = dict()
 
 
-# TODO(maxuser): Support func params.
-def CallAsyncScriptFunction(func_name: str,
+def CallAsyncScriptFunction(func_name: str, args: Tuple[Any, ...],
                             retval_handler: StringConsumer) -> None:
   """Calls a script function, asynchronously streaming return value(s).
 
@@ -37,11 +36,10 @@ def CallAsyncScriptFunction(func_name: str,
   """
   func_call_id = time.time_ns()
   _script_function_calls[func_call_id] = (func_name, retval_handler)
-  print(f"?{func_call_id} {func_name}")
+  print(f"?{func_call_id} {func_name} {json.dumps(args)}")
 
 
-# TODO(maxuser): Support func params.
-def CallScriptFunction(func_name: str) -> Any:
+def CallScriptFunction(func_name: str, *args: Any) -> Any:
   """Calls a script function and returns the function's return value.
 
   Args:
@@ -58,7 +56,7 @@ def CallScriptFunction(func_name: str) -> Any:
     retval_holder.append(retval)
     lock.release()
 
-  CallAsyncScriptFunction(func_name, WaitForReturnValue)
+  CallAsyncScriptFunction(func_name, args, WaitForReturnValue)
   lock.acquire()
   return retval_holder[0]
 
@@ -66,7 +64,9 @@ def CallScriptFunction(func_name: str) -> Any:
 def _ScriptServiceLoop():
   while True:
     try:
-      reply = json.loads(input())
+      json_input = input()
+      #print(f"json_input: {json_input}", file=sys.stderr)
+      reply = json.loads(json_input)
     except json.decoder.JSONDecodeError as e:
       traceback.print_exc(file=sys.stderr)
       continue

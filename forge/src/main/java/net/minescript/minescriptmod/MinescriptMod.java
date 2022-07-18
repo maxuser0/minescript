@@ -1614,6 +1614,101 @@ public class MinescriptMod {
   private static Map<Integer, ScriptFunctionCall> clientChatReceivedEventListeners =
       new ConcurrentHashMap<>();
 
+  public static class ParamParser {
+    private static Pattern OPEN_BRACKET_RE = Pattern.compile("\\s*\\[\\s*");
+    private static Pattern CLOSE_BRACKET_RE = Pattern.compile("\\s*\\]\\s*");
+    private static Pattern COMMA_RE = Pattern.compile("\\s*,\\s*");
+    private static Pattern SPACE_DELIMITED_STRING_RE = Pattern.compile("[^\" ]+");
+    private static Pattern INTEGER_RE = Pattern.compile("-?[0-9]+");
+
+    // See:
+    // https://stackoverflow.com/questions/5695240/php-regex-to-ignore-escaped-quotes-within-quotes
+    private static Pattern DOUBLE_QUOTED_STRING_RE =
+        Pattern.compile("\"[^\"\\\\]*(?:\\\\.[^\"\\\\]*)*\"");
+
+    private String remainingParams;
+
+    public ParamParser(String params) {
+      this.remainingParams = params.strip();
+    }
+
+    public boolean readOpenBracket() {
+      if (remainingParams.isEmpty()) {
+        return false;
+      }
+      var matcher = OPEN_BRACKET_RE.matcher(remainingParams);
+      if (matcher.find()) {
+        remainingParams = remainingParams.substring(matcher.group().length());
+        return true;
+      }
+      return false;
+    }
+
+    public boolean readCloseBracket() {
+      if (remainingParams.isEmpty()) {
+        return false;
+      }
+      var matcher = CLOSE_BRACKET_RE.matcher(remainingParams);
+      if (matcher.find()) {
+        remainingParams = remainingParams.substring(matcher.group().length());
+        return true;
+      }
+      return false;
+    }
+
+    public boolean readComma() {
+      if (remainingParams.isEmpty()) {
+        return false;
+      }
+      var matcher = COMMA_RE.matcher(remainingParams);
+      if (matcher.find()) {
+        remainingParams = remainingParams.substring(matcher.group().length());
+        return true;
+      }
+      return false;
+    }
+
+    public boolean readIntParam(List<Integer> outParams) {
+      if (remainingParams.isEmpty()) {
+        return false;
+      }
+      var matcher = INTEGER_RE.matcher(remainingParams);
+      if (matcher.find()) {
+        String match = matcher.group();
+        remainingParams = remainingParams.substring(match.length()).stripLeading();
+        outParams.add(Integer.valueOf(match));
+        return true;
+      }
+      return false;
+    }
+
+    public boolean readStringParam(List<String> outParams) {
+      if (remainingParams.isEmpty()) {
+        return false;
+      }
+      var matcher = DOUBLE_QUOTED_STRING_RE.matcher(remainingParams);
+      if (matcher.find()) {
+        String match = matcher.group();
+        remainingParams = remainingParams.substring(match.length()).stripLeading();
+        match = match.substring(1, match.length() - 1); // strip leading and trailing double quotes
+        outParams.add(match.replace("\\\"", "\"").replace("\\n", "\n").replace("\\t", "\t"));
+        return true;
+      }
+      matcher = SPACE_DELIMITED_STRING_RE.matcher(remainingParams);
+      if (matcher.find()) {
+        String match = matcher.group();
+        remainingParams = remainingParams.substring(match.length()).stripLeading();
+        outParams.add(match);
+        return true;
+      }
+      return false;
+    }
+
+    public boolean isDone() {
+      return remainingParams.isEmpty();
+    }
+  }
+
   @SubscribeEvent
   public void onPlayerTick(TickEvent.PlayerTickEvent event) {
     if (++playerTickEventCounter % minescriptTicksPerCycle == 0) {
@@ -1642,14 +1737,38 @@ public class MinescriptMod {
               if (jobCommand != null) {
                 jobs.getUndoForJob(job).ifPresent(u -> u.processCommandToUndo(level, jobCommand));
                 if (jobCommand.startsWith("?") && jobCommand.length() > 1) {
-                  String[] functionCall = jobCommand.substring(1).split("\\s+");
+                  String[] functionCall = jobCommand.substring(1).split("\\s+", 3);
                   long funcCallId = Long.valueOf(functionCall[0]);
                   String functionName = functionCall[1];
+                  String args = functionCall.length == 3 ? functionCall[2] : "";
+                  // TODO(maxuser): Check number of args for each function and report errors.
                   if (functionName.equals("player_position")) {
                     job.respond(
                         funcCallId,
                         String.format("[%f, %f, %f]", player.getX(), player.getY(), player.getZ()),
                         true);
+                  } else if (functionName.equals("getblock")) {
+                    var parser = new ParamParser(args);
+                    var params = new ArrayList<Integer>();
+                    if (parser.readOpenBracket()
+                        && parser.readIntParam(params)
+                        && parser.readComma()
+                        && parser.readIntParam(params)
+                        && parser.readComma()
+                        && parser.readIntParam(params)
+                        && parser.readCloseBracket()
+                        && parser.isDone()) {
+                      Optional<String> block =
+                          blockStateToString(
+                              readBlockState(level, params.get(0), params.get(1), params.get(2)));
+                      job.respond(
+                          funcCallId, block.map(str -> '"' + str + '"').orElse("null"), true);
+                    } else {
+                      // TODO(maxuser): Support raising exceptions through script functions, e.g.
+                      // {"fcid": ..., "exception": "error message...", "conn": "close"}
+                      logUserError("Expected 3 params (x, y, z) to `getblock` but got: {}", args);
+                      job.respond(funcCallId, "null", true);
+                    }
                   } else if (functionName.equals("get_client_chat_received_events")) {
                     clientChatReceivedEventListeners.put(
                         job.jobId(), new ScriptFunctionCall(job, funcCallId));
