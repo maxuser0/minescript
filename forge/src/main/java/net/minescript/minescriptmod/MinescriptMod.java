@@ -95,6 +95,7 @@ public class MinescriptMod {
       new String[] {
         "ls",
         "copy",
+        "record",
         "jobs",
         "suspend",
         "resume",
@@ -501,13 +502,42 @@ public class MinescriptMod {
     }
   }
 
-  static class JobMap {
+  static class RecordingTask implements Task {
+    @Override
+    public int run(String[] command, JobControl jobControl) {
+      // TODO(maxuser): implement; reading world blocks needs to happen on the main thread, but this
+      // method is run on a job thread. Maybe distinguish between single-threaded tasks like this
+      // one and multi-threaded tasks like SubprocessTask.
+      return 1;
+    }
+  }
+
+  static class JobManager {
     private final Map<Integer, Job> map = new ConcurrentHashMap<Integer, Job>();
+    private RecordingTask recordingTask;
 
     public void createSubprocess(String[] command) {
-      var subprocess = new Job(command, new SubprocessTask(), jobId -> map.remove(jobId));
-      map.put(subprocess.jobId(), subprocess);
-      subprocess.start();
+      var job = new Job(command, new SubprocessTask(), jobId -> map.remove(jobId));
+      map.put(job.jobId(), job);
+      job.start();
+    }
+
+    public void startRecording(String[] command) {
+      if (recordingTask != null) {
+        logUserError("Recording is already in progress.");
+        return;
+      }
+      recordingTask = new RecordingTask();
+      var job =
+          new Job(
+              command,
+              recordingTask,
+              jobId -> {
+                map.remove(jobId);
+                recordingTask = null;
+              });
+      map.put(job.jobId(), job);
+      job.start();
     }
 
     public Map<Integer, Job> getMap() {
@@ -515,7 +545,7 @@ public class MinescriptMod {
     }
   }
 
-  private static JobMap jobs = new JobMap();
+  private static JobManager jobs = new JobManager();
 
   private static Queue<String> systemCommandQueue = new ConcurrentLinkedQueue<String>();
 
@@ -803,6 +833,15 @@ public class MinescriptMod {
       } else {
         logUserError(
             "Expected 6 params of type integer, instead got `{}`", getParamsAsString(command));
+      }
+      return;
+    }
+
+    if (command[0].equals("record")) {
+      if (checkParamTypes(command)) {
+        jobs.startRecording(command);
+      } else {
+        logUserError("Expected no params, instead got `{}`", getParamsAsString(command));
       }
       return;
     }
@@ -1205,11 +1244,12 @@ public class MinescriptMod {
 
   private static boolean loggedFieldNameFallback = false;
 
-  private static Object getField(Object object, String unobfuscatedName, String obfuscatedName)
+  private static Object getField(
+      Object object, Class<?> klass, String unobfuscatedName, String obfuscatedName)
       throws IllegalAccessException, NoSuchFieldException, SecurityException {
     Field field;
     try {
-      field = object.getClass().getDeclaredField(obfuscatedName);
+      field = klass.getDeclaredField(obfuscatedName);
     } catch (NoSuchFieldException e) {
       if (!loggedFieldNameFallback) {
         LOGGER.info(
@@ -1220,16 +1260,16 @@ public class MinescriptMod {
         loggedFieldNameFallback = true;
       }
       try {
-        field = object.getClass().getDeclaredField(unobfuscatedName);
+        field = klass.getDeclaredField(unobfuscatedName);
       } catch (NoSuchFieldException e2) {
         logUserError(
             "Internal Minescript error: cannot find field {}/{} in class {}. See log file for"
                 + " details.",
             unobfuscatedName,
             obfuscatedName,
-            object.getClass().getSimpleName());
-        LOGGER.info("(minescript) Declared fields of {}:", object.getClass().getName());
-        for (Field f : object.getClass().getDeclaredFields()) {
+            klass.getSimpleName());
+        LOGGER.info("(minescript) Declared fields of {}:", klass.getName());
+        for (Field f : klass.getDeclaredFields()) {
           LOGGER.info("(minescript)   {}", f);
         }
         throw e2;
@@ -1245,7 +1285,7 @@ public class MinescriptMod {
     if (screen != null && screen instanceof ChatScreen) {
       var scriptCommandNames = getScriptCommandNamesWithBuiltins();
       try {
-        var input = (EditBox) getField(screen, "input", "f_95573_");
+        var input = (EditBox) getField(screen, ChatScreen.class, "input", "f_95573_");
         String value = input.getValue();
         if (value.startsWith("\\") && value.length() > 1) {
           var key = event.getKeyCode();
