@@ -1,16 +1,9 @@
 package net.minescript.minescriptmod;
 
-import static com.mojang.brigadier.arguments.IntegerArgumentType.getInteger;
-import static com.mojang.brigadier.arguments.IntegerArgumentType.integer;
-import static com.mojang.brigadier.arguments.StringArgumentType.getString;
-import static com.mojang.brigadier.arguments.StringArgumentType.string;
-
-import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.ArgumentType;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
@@ -22,24 +15,28 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
-import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.network.chat.TextComponent;
+import net.minecraft.network.chat.TranslatableComponent;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.client.event.ClientChatEvent;
+import net.minecraftforge.client.event.ClientChatReceivedEvent;
 import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.CommandEvent;
-import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.RegistryEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
@@ -51,6 +48,7 @@ import net.minecraftforge.fml.event.lifecycle.InterModProcessEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.message.ParameterizedMessage;
 
 @Mod("minescript")
 public class MinescriptMod {
@@ -73,11 +71,11 @@ public class MinescriptMod {
   }
 
   private void enqueueIMC(final InterModEnqueueEvent event) {
-    // some example code to dispatch IMC to another mod
+    // dispatch IMC to another mod
   }
 
   private void processIMC(final InterModProcessEvent event) {
-    // some example code to receive and process InterModComms from other mods
+    // receive and process InterModComms from other mods
   }
 
   // You can use SubscribeEvent and let the Event Bus discover methods to call
@@ -89,17 +87,17 @@ public class MinescriptMod {
   @SubscribeEvent
   public void onCommandEvent(CommandEvent event) {}
 
-  private static LiteralArgumentBuilder<CommandSourceStack> literal(String name) {
-    return LiteralArgumentBuilder.<CommandSourceStack>literal(name);
-  }
-
-  private static <T> RequiredArgumentBuilder<CommandSourceStack, T> argument(
-      String name, ArgumentType<T> type) {
-    return RequiredArgumentBuilder.<CommandSourceStack, T>argument(name, type);
-  }
-
+  // TODO(maxuser): replace with ImmutableList
   private static final String[] BUILTIN_COMMANDS =
-      new String[] {"ls", "minescript_commands_per_cycle", "minescript_ticks_per_cycle"};
+      new String[] {
+        "ls",
+        "copy",
+        "jobs",
+        "killjob",
+        "minescript_commands_per_cycle",
+        "minescript_ticks_per_cycle",
+        "enable_minescript_on_chat_received_event"
+      };
 
   private static List<String> getScriptCommandNamesWithBuiltins() {
     var names = getScriptCommandNames();
@@ -109,7 +107,7 @@ public class MinescriptMod {
     return names;
   }
 
-  private static void logStackTrace(Exception e) {
+  private static void logException(Exception e) {
     var sw = new StringWriter();
     var pw = new PrintWriter(sw);
     e.printStackTrace(pw);
@@ -134,7 +132,7 @@ public class MinescriptMod {
                 scriptNames.add(commandName);
               });
     } catch (IOException e) {
-      logStackTrace(e);
+      logException(e);
     }
     return scriptNames;
   }
@@ -224,11 +222,10 @@ public class MinescriptMod {
     if (pythonInterpreterPath == null) {
       LOGGER.error("Cannot find Python3 interpreter");
       commandQueue.add(
-          wrapLineWithTellrawColor(
-              "Cannot find Python3 interpreter at any of these locations:", "red"));
-      commandQueue.add(wrapLineWithTellrawColor("  /usr/bin/python3", "red"));
-      commandQueue.add(wrapLineWithTellrawColor("  /usr/local/bin/python3", "red"));
-      commandQueue.add(wrapLineWithTellrawColor("See: https://www.python.org/downloads/", "red"));
+          tellrawFormat("Cannot find Python3 interpreter at any of these locations:", "red"));
+      commandQueue.add(tellrawFormat("  /usr/bin/python3", "red"));
+      commandQueue.add(tellrawFormat("  /usr/local/bin/python3", "red"));
+      commandQueue.add(tellrawFormat("See: https://www.python.org/downloads/", "red"));
       return -1;
     }
 
@@ -243,7 +240,7 @@ public class MinescriptMod {
     try {
       process = Runtime.getRuntime().exec(substituteMinecraftVars(executableCommand));
     } catch (IOException e) {
-      logStackTrace(e);
+      logException(e);
       stderrLineProcessor.accept(e.getMessage());
       return -2;
     }
@@ -258,7 +255,7 @@ public class MinescriptMod {
         stderrLineProcessor.accept(line);
       }
     } catch (IOException e) {
-      logStackTrace(e);
+      logException(e);
       stderrLineProcessor.accept(e.getMessage());
       return -3;
     }
@@ -268,12 +265,12 @@ public class MinescriptMod {
     try {
       return process.waitFor();
     } catch (InterruptedException e) {
-      logStackTrace(e);
+      logException(e);
       return -5;
     }
   }
 
-  static String wrapLineWithTellrawColor(String text, String color) {
+  static String tellrawFormat(String text, String color) {
     // Treat as plain text to write to the chat.
     return "/tellraw @s {\"text\":\""
         + text.replace("\\", "\\\\").replace("\"", "\\\"")
@@ -283,19 +280,36 @@ public class MinescriptMod {
   }
 
   static class Subprocess {
-    private static int nextCommandId = 1;
-    private final int commandId;
+    public enum State {
+      RUNNING("Running"),
+      STOPPED("Stopped");
+
+      private final String displayName;
+
+      State(String displayName) {
+        this.displayName = displayName;
+      }
+
+      @Override
+      public String toString() {
+        return displayName;
+      }
+    };
+
+    private static AtomicInteger nextJobId = new AtomicInteger(1);
+    private final int jobId;
     private final String[] command;
     private final Queue<String> stdoutQueue = new ConcurrentLinkedQueue<String>();
     private final Queue<String> stderrQueue = new ConcurrentLinkedQueue<String>();
+    private State state = State.RUNNING;
 
     public Subprocess(String[] command) {
-      this.commandId = nextCommandId++;
+      this.jobId = nextJobId.getAndIncrement();
       this.command = command;
     }
 
-    public int commandId() {
-      return commandId;
+    public int jobId() {
+      return jobId;
     }
 
     @Override
@@ -304,7 +318,7 @@ public class MinescriptMod {
       if (displayCommand.length() > 24) {
         displayCommand = displayCommand.substring(0, 24);
       }
-      return String.format("[%d] %s", commandId, displayCommand);
+      return String.format("[%d] %s   %s", jobId, state, displayCommand);
     }
 
     public Queue<String> stdoutQueue() {
@@ -321,11 +335,11 @@ public class MinescriptMod {
 
     public Subprocess addSubprocess(String[] command) {
       var subprocess = new Subprocess(command);
-      map.put(subprocess.commandId(), subprocess);
+      map.put(subprocess.jobId(), subprocess);
       return subprocess;
     }
 
-    public Map<Integer, Subprocess> map() {
+    public Map<Integer, Subprocess> getMap() {
       return map;
     }
   }
@@ -342,19 +356,202 @@ public class MinescriptMod {
       commandQueue.add(text.substring(1).stripLeading());
     } else {
       // Treat as plain text to write to the chat.
-      commandQueue.add(wrapLineWithTellrawColor(text, "white"));
+      commandQueue.add(tellrawFormat(text, "white"));
     }
   }
 
   private static boolean checkMinescriptDir() {
     String minescriptDir = System.getProperty("user.dir") + "/" + MINESCRIPT_DIR;
     if (!Files.isDirectory(Paths.get(minescriptDir))) {
-      commandQueue.add(
-          wrapLineWithTellrawColor("Minescript folder is missing. Please create it at:", "red"));
-      commandQueue.add(wrapLineWithTellrawColor(minescriptDir, "red"));
+      commandQueue.add(tellrawFormat("Minescript folder is missing. Please create it at:", "red"));
+      commandQueue.add(tellrawFormat(minescriptDir, "red"));
       return false;
     }
     return true;
+  }
+
+  public enum ParamType {
+    INT,
+    BOOL,
+    STRING
+  }
+
+  private static boolean checkParamTypes(String[] command, ParamType... types) {
+    if (command.length != 1 + types.length) {
+      return false;
+    }
+    for (int i = 0; i < types.length; i++) {
+      String param = command[i + 1];
+      switch (types[i]) {
+        case INT:
+          try {
+            Integer.valueOf(param);
+          } catch (NumberFormatException e) {
+            return false;
+          }
+          break;
+        case BOOL:
+          if (!param.equals("true") && !param.equals("false")) {
+            return false;
+          }
+          break;
+        case STRING:
+          // Do nothing. String params are always valid.
+          break;
+      }
+    }
+    return true;
+  }
+
+  // TODO(maxuser): Do proper quoting of params with spaces.
+  private static String getParamsAsString(String[] command) {
+    return String.join(" ", Arrays.copyOfRange(command, 1, command.length));
+  }
+
+  private static void listJobs() {
+    for (var subprocess : subprocessMap.getMap().values()) {
+      commandQueue.add(tellrawFormat(subprocess.toString(), "yellow"));
+    }
+  }
+
+  private static void killJob(int jobId) {
+    var subprocess = subprocessMap.getMap().remove(jobId);
+    if (subprocess == null) {
+      commandQueue.add(
+          tellrawFormat("No job with ID " + jobId + ". Use \\jobs to list jobs.", "red"));
+      return;
+    }
+    commandQueue.add(tellrawFormat("Removed job: " + subprocess.toString(), "yellow"));
+  }
+
+  // BlockState#toString() returns a string formatted as:
+  // "Block{minecraft:acacia_button}[face=floor,facing=west,powered=false]"
+  //
+  // BLOCK_STATE_RE helps transform this to:
+  // "minecraft:acacia_button[face=floor,facing=west,powered=false]"
+  private static Pattern BLOCK_STATE_RE = Pattern.compile("^Block\\{([^}]*)\\}(\\[.*\\])?$");
+
+  public static void logUserInfo(String messagePattern, Object... arguments) {
+    String logMessage = ParameterizedMessage.format(messagePattern, arguments);
+    LOGGER.info("(minescript) {}", logMessage);
+    commandQueue.add(tellrawFormat(logMessage, "yellow"));
+  }
+
+  public static void logUserError(String messagePattern, Object... arguments) {
+    String logMessage = ParameterizedMessage.format(messagePattern, arguments);
+    LOGGER.error("(minescript) {}", logMessage);
+    commandQueue.add(tellrawFormat(logMessage, "red"));
+  }
+
+  private static void copyBlocks(int x0, int y0, int z0, int x1, int y1, int z1) {
+    var minecraft = Minecraft.getInstance();
+    var player = minecraft.player;
+    if (player == null) {
+      logUserError("Unable to copy blocks because player is null.");
+      return;
+    }
+
+    int playerX = (int) player.getX();
+    int playerY = (int) player.getY();
+    int playerZ = (int) player.getZ();
+
+    if (Math.abs(x0 - playerX) > 100
+        || Math.abs(y0 - playerY) > 100
+        || Math.abs(z0 - playerZ) > 100
+        || Math.abs(x1 - playerX) > 100
+        || Math.abs(y1 - playerY) > 100
+        || Math.abs(z1 - playerZ) > 100) {
+      logUserError("Player is more than 100 blocks from `copy` coordinate.");
+      return;
+    }
+
+    int xMin = Math.min(x0, x1);
+    int yMin = Math.max(Math.min(y0, y1), -64);
+    int zMin = Math.min(z0, z1);
+
+    int xMax = Math.max(x0, x1);
+    int yMax = Math.min(Math.max(y0, y1), 320);
+    int zMax = Math.max(z0, z1);
+
+    int xLength = xMax - xMin;
+    int yLength = yMax - yMin;
+    int zLength = zMax - zMin;
+
+    var level = player.getCommandSenderWorld();
+
+    try (var writer = new PrintWriter(new FileWriter(MINESCRIPT_DIR + "/paste.py"))) {
+      writer.print("# Generated by Minescript from the following `copy` command:\n");
+      writer.printf("# \\copy %d %d %d %d %d %d\n", x0, y0, z0, x1, y1, z1);
+      writer.print("\n");
+      writer.print("import sys\n");
+      writer.print("\n");
+      writer.print("x = int(sys.argv[1])\n");
+      writer.print("y = int(sys.argv[2])\n");
+      writer.print("z = int(sys.argv[3])\n");
+      writer.print("force = len(sys.argv) > 4 and sys.argv[4] == 'force'\n");
+      writer.print("\n");
+      writer.printf("x_start = %d\n", x0);
+      writer.printf("y_start = %d\n", y0);
+      writer.printf("z_start = %d\n", z0);
+      writer.print("\n");
+      writer.printf("x_length = %d\n", xLength);
+      writer.printf("y_length = %d\n", yLength);
+      writer.printf("z_length = %d\n", zLength);
+      writer.print("\n");
+      writer.print(
+          "# TODO(maxuser): Track world name to allow overlapping coordinates in different worlds"
+              + " without requiring 'force' param.\n");
+      writer.print(
+          "if not force and abs(x - x_start) < x_length and abs(y - y_start) < y_length and abs(z -"
+              + " z_start) < z_length:\n");
+      writer.print(
+          "  print('Cannot paste blocks because pasted volume overlaps with original. (Override"
+              + " with additional param \"force\".)', file=sys.stderr)\n");
+      writer.print("  sys.exit(1)\n");
+      writer.print("\n");
+
+      int numBlocks = 0;
+
+      for (int x = xMin; x <= xMax; ++x) {
+        for (int y = yMin; y <= yMax; ++y) {
+          for (int z = zMin; z <= zMax; ++z) {
+            // TODO(maxuser): Move in-loop logic to another method so that it can be called twice:
+            // once for blocks without "face" or "facing" in their attributes, and once for blocks
+            // with those attributes.
+
+            // TODO(maxuser): Need to check chunkPos.get{Min,Max}Block{X,Z}()?
+            // TODO(maxuser): Listen to ChunkEvent.Load and .Unload events to determine if the chunk
+            // we're trying to read here is loaded. If it's not, load it and try again later.
+            int chunkX = (x >= 0) ? (x / 16) : (((x + 1) / 16) - 1);
+            int chunkZ = (z >= 0) ? (z / 16) : (((z + 1) / 16) - 1);
+            var chunk = level.getChunk(chunkX, chunkZ);
+            var chunkPos = chunk.getPos();
+            var chunkWorldPos = chunkPos.getWorldPosition();
+            BlockState blockState = chunk.getBlockState(chunkPos.getBlockAt(x, y, z));
+            if (!blockState.isAir()) {
+              var match = BLOCK_STATE_RE.matcher(blockState.toString());
+              if (match.find()) {
+                int xOffset = x - x0;
+                int yOffset = y - y0;
+                int zOffset = z - z0;
+                String blockType = match.group(1);
+                String blockAttrs = match.group(2) == null ? "" : match.group(2);
+                writer.printf(
+                    "print(f'/setblock {x + %d} {y + %d} {z + %d} %s%s')\n",
+                    xOffset, yOffset, zOffset, blockType, blockAttrs);
+                numBlocks++;
+              } else {
+                LOGGER.info("(minescript) Unexpected BlockState format: {}", blockState.toString());
+              }
+            }
+          }
+        }
+      }
+      commandQueue.add(tellrawFormat("Copied " + numBlocks + " blocks.", "yellow"));
+    } catch (IOException e) {
+      commandQueue.add(tellrawFormat("Error writing paste.py script.", "red"));
+      logException(e);
+    }
   }
 
   private static void runCommand(String[] command) {
@@ -368,37 +565,131 @@ public class MinescriptMod {
     // `resumejob ID`: resume job with ID
     // `killjob ID`: kill job with ID
 
+    if (command[0].equals("jobs")) {
+      if (checkParamTypes(command)) {
+        listJobs();
+      } else {
+        commandQueue.add(
+            tellrawFormat(
+                "Expected no params, instead got `" + getParamsAsString(command) + "`", "red"));
+      }
+      return;
+    }
+
+    if (command[0].equals("killjob")) {
+      if (checkParamTypes(command, ParamType.INT)) {
+        killJob(Integer.valueOf(command[1]));
+      } else {
+        commandQueue.add(
+            tellrawFormat(
+                "Expected 1 param of type integer, instead got `"
+                    + getParamsAsString(command)
+                    + "`",
+                "red"));
+      }
+      return;
+    }
+
+    if (command[0].equals("copy")) {
+      if (checkParamTypes(
+          substituteMinecraftVars(command),
+          ParamType.INT,
+          ParamType.INT,
+          ParamType.INT,
+          ParamType.INT,
+          ParamType.INT,
+          ParamType.INT)) {
+        int x0 = Integer.valueOf(command[1]);
+        int y0 = Integer.valueOf(command[2]);
+        int z0 = Integer.valueOf(command[3]);
+        int x1 = Integer.valueOf(command[4]);
+        int y1 = Integer.valueOf(command[5]);
+        int z1 = Integer.valueOf(command[6]);
+        copyBlocks(x0, y0, z0, x1, y1, z1);
+      } else {
+        commandQueue.add(
+            tellrawFormat(
+                "Expected 6 params of type integer, instead got `"
+                    + getParamsAsString(command)
+                    + "`",
+                "red"));
+      }
+      return;
+    }
+
     if (command[0].equals("minescript_commands_per_cycle")) {
-      int numCommands = Integer.valueOf(command[1]);
-      if (numCommands < 1) numCommands = 1;
-      minescriptCommandsPerCycle = numCommands;
-      commandQueue.add(
-          wrapLineWithTellrawColor(
-              "Minescript execution set to " + numCommands + " command(s) per cycle.", "green"));
+      if (checkParamTypes(substituteMinecraftVars(command), ParamType.INT)) {
+        int numCommands = Integer.valueOf(command[1]);
+        if (numCommands < 1) numCommands = 1;
+        minescriptCommandsPerCycle = numCommands;
+        commandQueue.add(
+            tellrawFormat(
+                "Minescript execution set to " + numCommands + " command(s) per cycle.", "green"));
+      } else {
+        commandQueue.add(
+            tellrawFormat(
+                "Expected 1 param of type integer, instead got `"
+                    + getParamsAsString(command)
+                    + "`",
+                "red"));
+      }
       return;
     }
 
     if (command[0].equals("minescript_ticks_per_cycle")) {
-      int ticks = Integer.valueOf(command[1]);
-      if (ticks < 1) ticks = 1;
-      minescriptTicksPerCycle = ticks;
-      commandQueue.add(
-          wrapLineWithTellrawColor(
-              "Minescript execution set to " + ticks + " tick(s) per cycle.", "green"));
+      if (checkParamTypes(substituteMinecraftVars(command), ParamType.INT)) {
+        int ticks = Integer.valueOf(command[1]);
+        if (ticks < 1) ticks = 1;
+        minescriptTicksPerCycle = ticks;
+        commandQueue.add(
+            tellrawFormat("Minescript execution set to " + ticks + " tick(s) per cycle.", "green"));
+      } else {
+        commandQueue.add(
+            tellrawFormat(
+                "Expected 1 param of type integer, instead got `"
+                    + getParamsAsString(command)
+                    + "`",
+                "red"));
+      }
+      return;
+    }
+
+    if (command[0].equals("enable_minescript_on_chat_received_event")) {
+      if (checkParamTypes(substituteMinecraftVars(command), ParamType.BOOL)) {
+        boolean enable = command[1].equals("true");
+        enableMinescriptOnChatReceivedEvent = enable;
+        commandQueue.add(
+            tellrawFormat(
+                "Minescript execution on ClientChatReceivedEvent "
+                    + (enable ? "enabled" : "disabled")
+                    + "."
+                    + (enable
+                        ? " e.g. add command to command block: [execute as Dev run tell Dev \\hello"
+                            + " ~ ~ ~]"
+                        : ""),
+                "green"));
+      } else {
+        commandQueue.add(
+            tellrawFormat(
+                "Expected 1 param of type boolean, instead got `"
+                    + getParamsAsString(command)
+                    + "`",
+                "red"));
+      }
       return;
     }
 
     if (!getScriptCommandNames().contains(command[0])) {
-      commandQueue.add(wrapLineWithTellrawColor("Minescript commands:", "yellow"));
+      commandQueue.add(tellrawFormat("Minescript commands:", "yellow"));
       for (String builtin : BUILTIN_COMMANDS) {
-        commandQueue.add(wrapLineWithTellrawColor("  " + builtin + " [builtin]", "yellow"));
+        commandQueue.add(tellrawFormat("  " + builtin + " [builtin]", "yellow"));
       }
       for (String script : getScriptCommandNames()) {
-        commandQueue.add(wrapLineWithTellrawColor("  " + script, "yellow"));
+        commandQueue.add(tellrawFormat("  " + script, "yellow"));
       }
       if (!command[0].equals("ls")) {
         commandQueue.add(
-            wrapLineWithTellrawColor("No Minescript command named \"" + command[0] + "\"", "red"));
+            tellrawFormat("No Minescript command named \"" + command[0] + "\"", "red"));
       }
       return;
     }
@@ -408,279 +699,300 @@ public class MinescriptMod {
         runExternalCommand(
             command,
             MinescriptMod::enqueueInterpretedScriptOutputLine,
-            line -> commandQueue.add(wrapLineWithTellrawColor(line, "red")));
+            line -> commandQueue.add(tellrawFormat(line, "red")));
     if (exitCode != 0) {
-      commandQueue.add(wrapLineWithTellrawColor("command exit code: " + exitCode, "red"));
+      commandQueue.add(tellrawFormat("command exit code: " + exitCode, "red"));
     }
   }
 
   private static String findFirstFile(String... filenames) {
     for (String filename : filenames) {
-      Path path = Paths.get(filename);
-      if (Files.exists(path)) {
+      if (Files.exists(Paths.get(filename))) {
         return filename;
       }
     }
     return null;
   }
 
-  private static void registerCommand(
-      CommandDispatcher<CommandSourceStack> dispatcher, String commandName) {
-    LOGGER.info("Registering script command: " + commandName);
-
-    dispatcher.register(
-        literal(commandName)
-            .then(
-                argument("param1", string())
-                    .then(
-                        argument("param2", string())
-                            .then(
-                                argument("param3", string())
-                                    .then(
-                                        argument("param4", string())
-                                            .then(
-                                                argument("param5", string())
-                                                    .then(
-                                                        argument("param6", string())
-                                                            .then(
-                                                                argument("param7", string())
-                                                                    .then(
-                                                                        argument("param8", string())
-                                                                            .executes(
-                                                                                context -> {
-                                                                                  String param1 =
-                                                                                      getString(
-                                                                                          context,
-                                                                                          "param1");
-                                                                                  String param2 =
-                                                                                      getString(
-                                                                                          context,
-                                                                                          "param2");
-                                                                                  String param3 =
-                                                                                      getString(
-                                                                                          context,
-                                                                                          "param3");
-                                                                                  String param4 =
-                                                                                      getString(
-                                                                                          context,
-                                                                                          "param4");
-                                                                                  String param5 =
-                                                                                      getString(
-                                                                                          context,
-                                                                                          "param5");
-                                                                                  String param6 =
-                                                                                      getString(
-                                                                                          context,
-                                                                                          "param6");
-                                                                                  String param7 =
-                                                                                      getString(
-                                                                                          context,
-                                                                                          "param7");
-                                                                                  String param8 =
-                                                                                      getString(
-                                                                                          context,
-                                                                                          "param8");
-                                                                                  runCommand(
-                                                                                      new String[] {
-                                                                                        commandName,
-                                                                                        param1,
-                                                                                        param2,
-                                                                                        param3,
-                                                                                        param4,
-                                                                                        param5,
-                                                                                        param6,
-                                                                                        param7,
-                                                                                        param8
-                                                                                      });
-                                                                                  return 1;
-                                                                                }))
-                                                                    .executes(
-                                                                        context -> {
-                                                                          String param1 =
-                                                                              getString(
-                                                                                  context,
-                                                                                  "param1");
-                                                                          String param2 =
-                                                                              getString(
-                                                                                  context,
-                                                                                  "param2");
-                                                                          String param3 =
-                                                                              getString(
-                                                                                  context,
-                                                                                  "param3");
-                                                                          String param4 =
-                                                                              getString(
-                                                                                  context,
-                                                                                  "param4");
-                                                                          String param5 =
-                                                                              getString(
-                                                                                  context,
-                                                                                  "param5");
-                                                                          String param6 =
-                                                                              getString(
-                                                                                  context,
-                                                                                  "param6");
-                                                                          String param7 =
-                                                                              getString(
-                                                                                  context,
-                                                                                  "param7");
-                                                                          runCommand(
-                                                                              new String[] {
-                                                                                commandName,
-                                                                                param1,
-                                                                                param2,
-                                                                                param3,
-                                                                                param4,
-                                                                                param5,
-                                                                                param6,
-                                                                                param7
-                                                                              });
-                                                                          return 1;
-                                                                        }))
-                                                            .executes(
-                                                                context -> {
-                                                                  String param1 =
-                                                                      getString(context, "param1");
-                                                                  String param2 =
-                                                                      getString(context, "param2");
-                                                                  String param3 =
-                                                                      getString(context, "param3");
-                                                                  String param4 =
-                                                                      getString(context, "param4");
-                                                                  String param5 =
-                                                                      getString(context, "param5");
-                                                                  String param6 =
-                                                                      getString(context, "param6");
-                                                                  runCommand(
-                                                                      new String[] {
-                                                                        commandName,
-                                                                        param1,
-                                                                        param2,
-                                                                        param3,
-                                                                        param4,
-                                                                        param5,
-                                                                        param6
-                                                                      });
-                                                                  return 1;
-                                                                }))
-                                                    .executes(
-                                                        context -> {
-                                                          String param1 =
-                                                              getString(context, "param1");
-                                                          String param2 =
-                                                              getString(context, "param2");
-                                                          String param3 =
-                                                              getString(context, "param3");
-                                                          String param4 =
-                                                              getString(context, "param4");
-                                                          String param5 =
-                                                              getString(context, "param5");
-                                                          runCommand(
-                                                              new String[] {
-                                                                commandName,
-                                                                param1,
-                                                                param2,
-                                                                param3,
-                                                                param4,
-                                                                param5
-                                                              });
-                                                          return 1;
-                                                        }))
-                                            .executes(
-                                                context -> {
-                                                  String param1 = getString(context, "param1");
-                                                  String param2 = getString(context, "param2");
-                                                  String param3 = getString(context, "param3");
-                                                  String param4 = getString(context, "param4");
-                                                  runCommand(
-                                                      new String[] {
-                                                        commandName, param1, param2, param3, param4
-                                                      });
-                                                  return 1;
-                                                }))
-                                    .executes(
-                                        context -> {
-                                          String param1 = getString(context, "param1");
-                                          String param2 = getString(context, "param2");
-                                          String param3 = getString(context, "param3");
-                                          runCommand(
-                                              new String[] {commandName, param1, param2, param3});
-                                          return 1;
-                                        }))
-                            .executes(
-                                context -> {
-                                  String param1 = getString(context, "param1");
-                                  String param2 = getString(context, "param2");
-                                  runCommand(new String[] {commandName, param1, param2});
-                                  return 1;
-                                }))
-                    .executes(
-                        context -> {
-                          String param1 = getString(context, "param1");
-                          runCommand(new String[] {commandName, param1});
-                          return 1;
-                        }))
-            .executes(
-                context -> {
-                  runCommand(new String[] {commandName});
-                  return 1;
-                }));
-  }
-
   private static int minescriptTicksPerCycle = 1;
   private static int minescriptCommandsPerCycle = 5;
 
-  @SubscribeEvent
-  public void onRegisterCommandEvent(RegisterCommandsEvent event) {
-    LOGGER.info("host OS: \"" + System.getProperty("os.name") + "\"");
-    CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
-    dispatcher.register(
-        literal("run")
-            .then(
-                argument("command", string())
-                    .executes(
-                        context -> {
-                          String command = getString(context, "command");
-                          LOGGER.info("Command is " + command);
-                          runCommand(command.split("\\s+"));
-                          return 1;
-                        })));
-    dispatcher.register(
-        literal("minescript_ticks_per_cycle")
-            .then(
-                argument("ticks", integer())
-                    .executes(
-                        context -> {
-                          int ticks = getInteger(context, "ticks");
-                          if (ticks < 1) ticks = 1;
-                          minescriptTicksPerCycle = ticks;
-                          commandQueue.add(
-                              wrapLineWithTellrawColor(
-                                  "Minescript execution set to " + ticks + " tick(s) per cycle.",
-                                  "green"));
-                          return 1;
-                        })));
-    dispatcher.register(
-        literal("minescript_commands_per_cycle")
-            .then(
-                argument("commands", integer())
-                    .executes(
-                        context -> {
-                          int commands = getInteger(context, "commands");
-                          if (commands < 1) commands = 1;
-                          minescriptCommandsPerCycle = commands;
-                          commandQueue.add(
-                              wrapLineWithTellrawColor(
-                                  "Minescript execution set to "
-                                      + commands
-                                      + " command(s) per cycle.",
-                                  "green"));
-                          return 1;
-                        })));
-    for (String scriptCommand : getScriptCommandNames()) {
-      registerCommand(dispatcher, scriptCommand);
+  /* This is the old way of registering commands. This works only with single-person worlds where
+     * server is local:
+
+  import static com.mojang.brigadier.arguments.IntegerArgumentType.getInteger;
+  import static com.mojang.brigadier.arguments.IntegerArgumentType.integer;
+  import static com.mojang.brigadier.arguments.StringArgumentType.getString;
+  import static com.mojang.brigadier.arguments.StringArgumentType.string;
+
+  import com.mojang.brigadier.CommandDispatcher;
+  import net.minecraft.commands.CommandSourceStack;
+  import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+  import com.mojang.brigadier.builder.RequiredArgumentBuilder;
+
+    private static LiteralArgumentBuilder<CommandSourceStack> literal(String name) {
+      return LiteralArgumentBuilder.<CommandSourceStack>literal(name);
     }
-  }
+
+    private static <T> RequiredArgumentBuilder<CommandSourceStack, T> argument(
+        String name, ArgumentType<T> type) {
+      return RequiredArgumentBuilder.<CommandSourceStack, T>argument(name, type);
+    }
+
+    private static void registerCommand(
+        CommandDispatcher<CommandSourceStack> dispatcher, String commandName) {
+      LOGGER.info("Registering script command: " + commandName);
+
+      dispatcher.register(
+          literal(commandName)
+              .then(
+                  argument("param1", string())
+                      .then(
+                          argument("param2", string())
+                              .then(
+                                  argument("param3", string())
+                                      .then(
+                                          argument("param4", string())
+                                              .then(
+                                                  argument("param5", string())
+                                                      .then(
+                                                          argument("param6", string())
+                                                              .then(
+                                                                  argument("param7", string())
+                                                                      .then(
+                                                                          argument("param8", string())
+                                                                              .executes(
+                                                                                  context -> {
+                                                                                    String param1 =
+                                                                                        getString(
+                                                                                            context,
+                                                                                            "param1");
+                                                                                    String param2 =
+                                                                                        getString(
+                                                                                            context,
+                                                                                            "param2");
+                                                                                    String param3 =
+                                                                                        getString(
+                                                                                            context,
+                                                                                            "param3");
+                                                                                    String param4 =
+                                                                                        getString(
+                                                                                            context,
+                                                                                            "param4");
+                                                                                    String param5 =
+                                                                                        getString(
+                                                                                            context,
+                                                                                            "param5");
+                                                                                    String param6 =
+                                                                                        getString(
+                                                                                            context,
+                                                                                            "param6");
+                                                                                    String param7 =
+                                                                                        getString(
+                                                                                            context,
+                                                                                            "param7");
+                                                                                    String param8 =
+                                                                                        getString(
+                                                                                            context,
+                                                                                            "param8");
+                                                                                    runCommand(
+                                                                                        new String[] {
+                                                                                          commandName,
+                                                                                          param1,
+                                                                                          param2,
+                                                                                          param3,
+                                                                                          param4,
+                                                                                          param5,
+                                                                                          param6,
+                                                                                          param7,
+                                                                                          param8
+                                                                                        });
+                                                                                    return 1;
+                                                                                  }))
+                                                                      .executes(
+                                                                          context -> {
+                                                                            String param1 =
+                                                                                getString(
+                                                                                    context,
+                                                                                    "param1");
+                                                                            String param2 =
+                                                                                getString(
+                                                                                    context,
+                                                                                    "param2");
+                                                                            String param3 =
+                                                                                getString(
+                                                                                    context,
+                                                                                    "param3");
+                                                                            String param4 =
+                                                                                getString(
+                                                                                    context,
+                                                                                    "param4");
+                                                                            String param5 =
+                                                                                getString(
+                                                                                    context,
+                                                                                    "param5");
+                                                                            String param6 =
+                                                                                getString(
+                                                                                    context,
+                                                                                    "param6");
+                                                                            String param7 =
+                                                                                getString(
+                                                                                    context,
+                                                                                    "param7");
+                                                                            runCommand(
+                                                                                new String[] {
+                                                                                  commandName,
+                                                                                  param1,
+                                                                                  param2,
+                                                                                  param3,
+                                                                                  param4,
+                                                                                  param5,
+                                                                                  param6,
+                                                                                  param7
+                                                                                });
+                                                                            return 1;
+                                                                          }))
+                                                              .executes(
+                                                                  context -> {
+                                                                    String param1 =
+                                                                        getString(context, "param1");
+                                                                    String param2 =
+                                                                        getString(context, "param2");
+                                                                    String param3 =
+                                                                        getString(context, "param3");
+                                                                    String param4 =
+                                                                        getString(context, "param4");
+                                                                    String param5 =
+                                                                        getString(context, "param5");
+                                                                    String param6 =
+                                                                        getString(context, "param6");
+                                                                    runCommand(
+                                                                        new String[] {
+                                                                          commandName,
+                                                                          param1,
+                                                                          param2,
+                                                                          param3,
+                                                                          param4,
+                                                                          param5,
+                                                                          param6
+                                                                        });
+                                                                    return 1;
+                                                                  }))
+                                                      .executes(
+                                                          context -> {
+                                                            String param1 =
+                                                                getString(context, "param1");
+                                                            String param2 =
+                                                                getString(context, "param2");
+                                                            String param3 =
+                                                                getString(context, "param3");
+                                                            String param4 =
+                                                                getString(context, "param4");
+                                                            String param5 =
+                                                                getString(context, "param5");
+                                                            runCommand(
+                                                                new String[] {
+                                                                  commandName,
+                                                                  param1,
+                                                                  param2,
+                                                                  param3,
+                                                                  param4,
+                                                                  param5
+                                                                });
+                                                            return 1;
+                                                          }))
+                                              .executes(
+                                                  context -> {
+                                                    String param1 = getString(context, "param1");
+                                                    String param2 = getString(context, "param2");
+                                                    String param3 = getString(context, "param3");
+                                                    String param4 = getString(context, "param4");
+                                                    runCommand(
+                                                        new String[] {
+                                                          commandName, param1, param2, param3, param4
+                                                        });
+                                                    return 1;
+                                                  }))
+                                      .executes(
+                                          context -> {
+                                            String param1 = getString(context, "param1");
+                                            String param2 = getString(context, "param2");
+                                            String param3 = getString(context, "param3");
+                                            runCommand(
+                                                new String[] {commandName, param1, param2, param3});
+                                            return 1;
+                                          }))
+                              .executes(
+                                  context -> {
+                                    String param1 = getString(context, "param1");
+                                    String param2 = getString(context, "param2");
+                                    runCommand(new String[] {commandName, param1, param2});
+                                    return 1;
+                                  }))
+                      .executes(
+                          context -> {
+                            String param1 = getString(context, "param1");
+                            runCommand(new String[] {commandName, param1});
+                            return 1;
+                          }))
+              .executes(
+                  context -> {
+                    runCommand(new String[] {commandName});
+                    return 1;
+                  }));
+    }
+
+    @SubscribeEvent
+    public void onRegisterCommandEvent(RegisterCommandsEvent event) {
+      CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
+      dispatcher.register(
+          literal("run")
+              .then(
+                  argument("command", string())
+                      .executes(
+                          context -> {
+                            String command = getString(context, "command");
+                            LOGGER.info("Command is " + command);
+                            runCommand(command.split("\\s+"));
+                            return 1;
+                          })));
+      dispatcher.register(
+          literal("minescript_ticks_per_cycle")
+              .then(
+                  argument("ticks", integer())
+                      .executes(
+                          context -> {
+                            int ticks = getInteger(context, "ticks");
+                            if (ticks < 1) ticks = 1;
+                            minescriptTicksPerCycle = ticks;
+                            commandQueue.add(
+                                tellrawFormat(
+                                    "Minescript execution set to " + ticks + " tick(s) per cycle.",
+                                    "green"));
+                            return 1;
+                          })));
+      dispatcher.register(
+          literal("minescript_commands_per_cycle")
+              .then(
+                  argument("commands", integer())
+                      .executes(
+                          context -> {
+                            int commands = getInteger(context, "commands");
+                            if (commands < 1) commands = 1;
+                            minescriptCommandsPerCycle = commands;
+                            commandQueue.add(
+                                tellrawFormat(
+                                    "Minescript execution set to "
+                                        + commands
+                                        + " command(s) per cycle.",
+                                    "green"));
+                            return 1;
+                          })));
+      for (String scriptCommand : getScriptCommandNames()) {
+        registerCommand(dispatcher, scriptCommand);
+      }
+    }
+    */
 
   private static int renderTickEventCounter = 0;
   private static int playerTickEventCounter = 0;
@@ -807,9 +1119,9 @@ public class MinescriptMod {
             }
             if (!newCommandSuggestions.isEmpty()) {
               if (!newCommandSuggestions.equals(commandSuggestions)) {
-                commandQueue.add(wrapLineWithTellrawColor("completions:", "aqua"));
+                commandQueue.add(tellrawFormat("completions:", "aqua"));
                 for (String suggestion : newCommandSuggestions) {
-                  commandQueue.add(wrapLineWithTellrawColor("  " + suggestion, "aqua"));
+                  commandQueue.add(tellrawFormat("  " + suggestion, "aqua"));
                 }
                 commandSuggestions = newCommandSuggestions;
               }
@@ -821,7 +1133,7 @@ public class MinescriptMod {
           }
         }
       } catch (IllegalAccessException | NoSuchFieldException | SecurityException e) {
-        logStackTrace(e);
+        logException(e);
       }
     }
   }
@@ -861,7 +1173,81 @@ public class MinescriptMod {
         var method = getMethod(minecraft, "openChatScreen", "m_91326_", String.class);
         method.invoke(minecraft, "");
       } catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
-        logStackTrace(e);
+        logException(e);
+      }
+    }
+  }
+
+  /*
+  private static long lastChunkEvent = 0; // TODO(maxuser):
+  @SubscribeEvent
+  public void onChunkEvent(ChunkEvent chunkEvent) {
+    // TODO(maxuser): to prevent log spam, rate-limit the logging of chunk events
+    long currentTime = System.currentTimeMillis();
+    if (currentTime < lastChunkEvent + 1000) {
+      return;
+    }
+    lastChunkEvent = currentTime;
+
+    var chunk = chunkEvent.getChunk();
+    var chunkPos = chunk.getPos();
+    Map<String, Integer> blockCounts = new HashMap<>();
+    for (int x = chunkPos.getMinBlockX(); x < chunkPos.getMaxBlockX(); x++) {
+      for (int z = chunkPos.getMinBlockZ(); z < chunkPos.getMaxBlockZ(); z++) {
+        for (int y = -64; y < 320; y++) {
+          BlockState blockState = chunk.getBlockState(chunkPos.getBlockAt(x, y, z));
+          String blockString = blockState.toString();
+          blockCounts.put(blockString, blockCounts.getOrDefault(blockString, 0) + 1);
+        }
+      }
+    }
+    var chunkWorldPos = chunkPos.getWorldPosition();
+    LOGGER.info("(minescript) Chunk load at ({}, y,{})", chunkWorldPos.getX(), chunkWorldPos.getZ());
+    for (var entry : blockCounts.entrySet()) {
+      LOGGER.info("  [{}x] {}", entry.getValue(), entry.getKey());
+    }
+  }
+  */
+
+  private static String lastReceivedBackslashedChatMessage = "";
+  private static long lastReceivedBackslashedChatMessageTime = 0;
+  private static boolean enableMinescriptOnChatReceivedEvent = false;
+
+  @SubscribeEvent
+  public void onClientChatEvent(ClientChatReceivedEvent event) {
+    if (!enableMinescriptOnChatReceivedEvent) {
+      return;
+    }
+
+    // Respond to messages like this one sent from a command block:
+    //
+    // [execute as Dev run tell Dev \hello ~ ~ ~]
+    //
+    // TranslatableComponent.args[1]:TextComponent.text:String
+
+    if (event.getMessage() instanceof TranslatableComponent) {
+      var component = (TranslatableComponent) event.getMessage();
+      for (var arg : component.getArgs()) {
+        if (arg instanceof TextComponent) {
+          var textComponent = (TextComponent) arg;
+          String text = textComponent.getText();
+          long currentTime = System.currentTimeMillis();
+          // Ignore duplicate consecutive backslashed messages less than 500 milliseconds apart.
+          if (text.startsWith("\\")
+              && (!text.equals(lastReceivedBackslashedChatMessage)
+                  || currentTime > lastReceivedBackslashedChatMessageTime + 500)) {
+            lastReceivedBackslashedChatMessage = text;
+            lastReceivedBackslashedChatMessageTime = currentTime;
+
+            // TODO(maxuser): need to do single/double quote parsing etc.
+            String[] command = text.substring(1).split("\\s+");
+            LOGGER.info(
+                "(minescript) Processing command from received chat event: {}",
+                String.join(", ", command));
+            runCommand(command);
+            event.setCanceled(true);
+          }
+        }
       }
     }
   }
@@ -878,12 +1264,80 @@ public class MinescriptMod {
     }
   }
 
+  private static class ServerBlockList {
+    private final Path serverBlockListPath;
+    private boolean lastCheckedValue = true;
+    private String lastCheckedServerName = "";
+    private String lastCheckedServerIp = "";
+    private long lastCheckedTime = 0;
+
+    public ServerBlockList() {
+      serverBlockListPath = Paths.get(MINESCRIPT_DIR + "/server_block_list.txt");
+    }
+
+    public boolean areCommandsAllowedForServer(String serverName, String serverIp) {
+      if (!Files.exists(serverBlockListPath)) {
+        return true;
+      }
+
+      if (serverName.equals(lastCheckedServerName)
+          && serverIp.equals(lastCheckedServerIp)
+          && new File(serverBlockListPath.toString()).lastModified() < lastCheckedTime) {
+        return lastCheckedValue;
+      }
+
+      lastCheckedServerName = serverName;
+      lastCheckedServerIp = serverIp;
+      lastCheckedTime = System.currentTimeMillis();
+
+      LOGGER.info(
+          "(minescript) {} modified since last checked; refreshing...",
+          serverBlockListPath.toString());
+      try (var reader = new BufferedReader(new FileReader(serverBlockListPath.toString()))) {
+        var line = reader.readLine();
+        while (line != null) {
+          line = line.replaceAll("#.*$", "").strip();
+          if (line.equals(serverName) || line.equals(serverIp)) {
+            LOGGER.info(
+                "(minescript) Found server match in {}, commands disabled: {}",
+                serverBlockListPath.toString(),
+                line);
+            lastCheckedValue = false;
+            return lastCheckedValue;
+          }
+          line = reader.readLine();
+        }
+      } catch (IOException e) {
+        logException(e);
+      }
+      LOGGER.info(
+          "(minescript) No server match in {}, commands enabled: {} / {}",
+          serverBlockListPath.toString(),
+          serverName,
+          serverIp);
+      lastCheckedValue = true;
+      return lastCheckedValue;
+    }
+  }
+
+  private static ServerBlockList serverBlockList = new ServerBlockList();
+
   @SubscribeEvent
   public void onPlayerTick(TickEvent.PlayerTickEvent event) {
     if (++playerTickEventCounter % minescriptTicksPerCycle == 0) {
       var minecraft = Minecraft.getInstance();
+      var serverData = minecraft.getCurrentServer();
+
+      if (!commandQueue.isEmpty()
+          && serverData != null
+          && !serverBlockList.areCommandsAllowedForServer(serverData.name, serverData.ip)) {
+        commandQueue.clear();
+        LOGGER.info("(minescript) Commands disabled, clearing command queue");
+        return;
+      }
+
       var player = minecraft.player;
-      if (player != null) {
+      if (player != null && !commandQueue.isEmpty()) {
         for (int i = 0; i < minescriptCommandsPerCycle; ++i) {
           String command = commandQueue.poll();
           if (command == null) {
