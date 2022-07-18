@@ -111,7 +111,8 @@ public class MinescriptMod {
     var sw = new StringWriter();
     var pw = new PrintWriter(sw);
     e.printStackTrace(pw);
-    LOGGER.error("(minescript) Exception thrown: {} {}", e.getMessage(), sw.toString());
+    logUserError("Exception: {}", e.getMessage());
+    LOGGER.error("(minescript) exception stack trace: {}", sw.toString());
   }
 
   private static final String MINESCRIPT_DIR = "mods/minescript";
@@ -147,7 +148,7 @@ public class MinescriptMod {
               + (match.group(1).equals("-") ? -1 : 1)
                   * (match.group(2).isEmpty() ? 0 : Integer.valueOf(match.group(2))));
     } else {
-      LOGGER.error("(minescript) Canont parse tilde-param: \"{}\"", param);
+      logUserError("Canont parse tilde-param: \"{}\"", param);
       return String.valueOf((int) playerPosition);
     }
   }
@@ -162,7 +163,9 @@ public class MinescriptMod {
         tildeParamPositions.add(i);
       } else {
         if (consecutiveTildes % 3 != 0) {
-          // TODO(maxuser): Report error to user in chat, or color chat input red.
+          logUserError(
+              "Expected number of consecutive tildes to be a multple of 3, but got {}.",
+              consecutiveTildes);
           break;
         }
         consecutiveTildes = 0;
@@ -186,7 +189,9 @@ public class MinescriptMod {
     }
 
     if (consecutiveTildes % 3 != 0) {
-      // TODO(maxuser): log error?
+      logUserError(
+          "Expected number of consecutive tildes to be a multple of 3, but got {}.",
+          consecutiveTildes);
       return command;
     }
 
@@ -220,12 +225,10 @@ public class MinescriptMod {
 
     String pythonInterpreterPath = findFirstFile("/usr/bin/python3", "/usr/local/bin/python3");
     if (pythonInterpreterPath == null) {
-      LOGGER.error("Cannot find Python3 interpreter");
-      commandQueue.add(
-          tellrawFormat("Cannot find Python3 interpreter at any of these locations:", "red"));
-      commandQueue.add(tellrawFormat("  /usr/bin/python3", "red"));
-      commandQueue.add(tellrawFormat("  /usr/local/bin/python3", "red"));
-      commandQueue.add(tellrawFormat("See: https://www.python.org/downloads/", "red"));
+      logUserError("Cannot find Python3 interpreter at any of these locations:");
+      logUserError("  /usr/bin/python3");
+      logUserError("  /usr/local/bin/python3");
+      logUserError("See: https://www.python.org/downloads/");
       return -1;
     }
 
@@ -312,13 +315,22 @@ public class MinescriptMod {
       return jobId;
     }
 
+    String jobSummary() {
+      // Same as toString(), but omits state.
+      String displayCommand = String.join(" ", command);
+      if (displayCommand.length() > 24) {
+        displayCommand = displayCommand.substring(0, 24);
+      }
+      return String.format("[%d] %s", jobId, displayCommand);
+    }
+
     @Override
     public String toString() {
       String displayCommand = String.join(" ", command);
       if (displayCommand.length() > 24) {
         displayCommand = displayCommand.substring(0, 24);
       }
-      return String.format("[%d] %s   %s", jobId, state, displayCommand);
+      return String.format("[%d] %s:  %s", jobId, state, displayCommand);
     }
 
     public Queue<String> stdoutQueue() {
@@ -363,8 +375,7 @@ public class MinescriptMod {
   private static boolean checkMinescriptDir() {
     String minescriptDir = System.getProperty("user.dir") + "/" + MINESCRIPT_DIR;
     if (!Files.isDirectory(Paths.get(minescriptDir))) {
-      commandQueue.add(tellrawFormat("Minescript folder is missing. Please create it at:", "red"));
-      commandQueue.add(tellrawFormat(minescriptDir, "red"));
+      logUserError("Minescript folder is missing. Please create it at: {}", minescriptDir);
       return false;
     }
     return true;
@@ -408,29 +419,6 @@ public class MinescriptMod {
     return String.join(" ", Arrays.copyOfRange(command, 1, command.length));
   }
 
-  private static void listJobs() {
-    for (var subprocess : subprocessMap.getMap().values()) {
-      commandQueue.add(tellrawFormat(subprocess.toString(), "yellow"));
-    }
-  }
-
-  private static void killJob(int jobId) {
-    var subprocess = subprocessMap.getMap().remove(jobId);
-    if (subprocess == null) {
-      commandQueue.add(
-          tellrawFormat("No job with ID " + jobId + ". Use \\jobs to list jobs.", "red"));
-      return;
-    }
-    commandQueue.add(tellrawFormat("Removed job: " + subprocess.toString(), "yellow"));
-  }
-
-  // BlockState#toString() returns a string formatted as:
-  // "Block{minecraft:acacia_button}[face=floor,facing=west,powered=false]"
-  //
-  // BLOCK_STATE_RE helps transform this to:
-  // "minecraft:acacia_button[face=floor,facing=west,powered=false]"
-  private static Pattern BLOCK_STATE_RE = Pattern.compile("^Block\\{([^}]*)\\}(\\[.*\\])?$");
-
   public static void logUserInfo(String messagePattern, Object... arguments) {
     String logMessage = ParameterizedMessage.format(messagePattern, arguments);
     LOGGER.info("(minescript) {}", logMessage);
@@ -442,6 +430,28 @@ public class MinescriptMod {
     LOGGER.error("(minescript) {}", logMessage);
     commandQueue.add(tellrawFormat(logMessage, "red"));
   }
+
+  private static void listJobs() {
+    for (var subprocess : subprocessMap.getMap().values()) {
+      logUserInfo(subprocess.toString());
+    }
+  }
+
+  private static void killJob(int jobId) {
+    var subprocess = subprocessMap.getMap().remove(jobId);
+    if (subprocess == null) {
+      logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
+      return;
+    }
+    logUserInfo("Removed job: {}", subprocess.jobSummary());
+  }
+
+  // BlockState#toString() returns a string formatted as:
+  // "Block{minecraft:acacia_button}[face=floor,facing=west,powered=false]"
+  //
+  // BLOCK_STATE_RE helps transform this to:
+  // "minecraft:acacia_button[face=floor,facing=west,powered=false]"
+  private static Pattern BLOCK_STATE_RE = Pattern.compile("^Block\\{([^}]*)\\}(\\[.*\\])?$");
 
   private static void copyBlocks(int x0, int y0, int z0, int x1, int y1, int z1) {
     var minecraft = Minecraft.getInstance();
@@ -541,15 +551,14 @@ public class MinescriptMod {
                     xOffset, yOffset, zOffset, blockType, blockAttrs);
                 numBlocks++;
               } else {
-                LOGGER.info("(minescript) Unexpected BlockState format: {}", blockState.toString());
+                logUserError("Unexpected BlockState format: {}", blockState.toString());
               }
             }
           }
         }
       }
-      commandQueue.add(tellrawFormat("Copied " + numBlocks + " blocks.", "yellow"));
+      logUserInfo("Copied {} blocks.", numBlocks);
     } catch (IOException e) {
-      commandQueue.add(tellrawFormat("Error writing paste.py script.", "red"));
       logException(e);
     }
   }
@@ -560,18 +569,14 @@ public class MinescriptMod {
     }
 
     // TODO(maxuser): Add commands for:
-    // `jobs`: list currently running jobs from external commands, with an int id for each
     // `suspendjob ID`: suspend job with ID
     // `resumejob ID`: resume job with ID
-    // `killjob ID`: kill job with ID
 
     if (command[0].equals("jobs")) {
       if (checkParamTypes(command)) {
         listJobs();
       } else {
-        commandQueue.add(
-            tellrawFormat(
-                "Expected no params, instead got `" + getParamsAsString(command) + "`", "red"));
+        logUserError("Expected no params, instead got `{}`", getParamsAsString(command));
       }
       return;
     }
@@ -580,12 +585,8 @@ public class MinescriptMod {
       if (checkParamTypes(command, ParamType.INT)) {
         killJob(Integer.valueOf(command[1]));
       } else {
-        commandQueue.add(
-            tellrawFormat(
-                "Expected 1 param of type integer, instead got `"
-                    + getParamsAsString(command)
-                    + "`",
-                "red"));
+        logUserError(
+            "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
       }
       return;
     }
@@ -607,12 +608,8 @@ public class MinescriptMod {
         int z1 = Integer.valueOf(command[6]);
         copyBlocks(x0, y0, z0, x1, y1, z1);
       } else {
-        commandQueue.add(
-            tellrawFormat(
-                "Expected 6 params of type integer, instead got `"
-                    + getParamsAsString(command)
-                    + "`",
-                "red"));
+        logUserError(
+            "Expected 6 params of type integer, instead got `{}`", getParamsAsString(command));
       }
       return;
     }
@@ -622,16 +619,10 @@ public class MinescriptMod {
         int numCommands = Integer.valueOf(command[1]);
         if (numCommands < 1) numCommands = 1;
         minescriptCommandsPerCycle = numCommands;
-        commandQueue.add(
-            tellrawFormat(
-                "Minescript execution set to " + numCommands + " command(s) per cycle.", "green"));
+        logUserError("Minescript execution set to {} command(s) per cycle.", numCommands);
       } else {
-        commandQueue.add(
-            tellrawFormat(
-                "Expected 1 param of type integer, instead got `"
-                    + getParamsAsString(command)
-                    + "`",
-                "red"));
+        logUserError(
+            "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
       }
       return;
     }
@@ -641,15 +632,10 @@ public class MinescriptMod {
         int ticks = Integer.valueOf(command[1]);
         if (ticks < 1) ticks = 1;
         minescriptTicksPerCycle = ticks;
-        commandQueue.add(
-            tellrawFormat("Minescript execution set to " + ticks + " tick(s) per cycle.", "green"));
+        logUserError("Minescript execution set to {} tick(s) per cycle.", ticks);
       } else {
-        commandQueue.add(
-            tellrawFormat(
-                "Expected 1 param of type integer, instead got `"
-                    + getParamsAsString(command)
-                    + "`",
-                "red"));
+        logUserError(
+            "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
       }
       return;
     }
@@ -658,38 +644,30 @@ public class MinescriptMod {
       if (checkParamTypes(substituteMinecraftVars(command), ParamType.BOOL)) {
         boolean enable = command[1].equals("true");
         enableMinescriptOnChatReceivedEvent = enable;
-        commandQueue.add(
-            tellrawFormat(
-                "Minescript execution on ClientChatReceivedEvent "
-                    + (enable ? "enabled" : "disabled")
-                    + "."
-                    + (enable
-                        ? " e.g. add command to command block: [execute as Dev run tell Dev \\hello"
-                            + " ~ ~ ~]"
-                        : ""),
-                "green"));
+        logUserInfo(
+            "Minescript execution on ClientChatReceivedEvent {}.{}",
+            (enable ? "enabled" : "disabled"),
+            (enable
+                ? " e.g. add command to command block: [execute as Dev run tell Dev \\hello"
+                    + " ~ ~ ~]"
+                : ""));
       } else {
-        commandQueue.add(
-            tellrawFormat(
-                "Expected 1 param of type boolean, instead got `"
-                    + getParamsAsString(command)
-                    + "`",
-                "red"));
+        logUserError(
+            "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
       }
       return;
     }
 
     if (!getScriptCommandNames().contains(command[0])) {
-      commandQueue.add(tellrawFormat("Minescript commands:", "yellow"));
+      logUserInfo("Minescript commands:");
       for (String builtin : BUILTIN_COMMANDS) {
-        commandQueue.add(tellrawFormat("  " + builtin + " [builtin]", "yellow"));
+        logUserInfo("  {} [builtin]", builtin);
       }
       for (String script : getScriptCommandNames()) {
-        commandQueue.add(tellrawFormat("  " + script, "yellow"));
+        logUserInfo("  {}", script);
       }
       if (!command[0].equals("ls")) {
-        commandQueue.add(
-            tellrawFormat("No Minescript command named \"" + command[0] + "\"", "red"));
+        logUserError("No Minescript command named \"{}\"", command[0]);
       }
       return;
     }
@@ -699,9 +677,9 @@ public class MinescriptMod {
         runExternalCommand(
             command,
             MinescriptMod::enqueueInterpretedScriptOutputLine,
-            line -> commandQueue.add(tellrawFormat(line, "red")));
+            MinescriptMod::logUserError);
     if (exitCode != 0) {
-      commandQueue.add(tellrawFormat("command exit code: " + exitCode, "red"));
+      logUserError("Command exit code: {}", exitCode);
     }
   }
 
@@ -1040,20 +1018,31 @@ public class MinescriptMod {
 
   private static List<String> commandSuggestions = new ArrayList<>();
 
+  private static boolean loggedFieldNameFallback = false;
+
   private static Object getField(Object object, String unobfuscatedName, String obfuscatedName)
       throws IllegalAccessException, NoSuchFieldException, SecurityException {
     Field field;
     try {
       field = object.getClass().getDeclaredField(obfuscatedName);
     } catch (NoSuchFieldException e) {
-      LOGGER.info(
-          "(minescript) Cannot find field with obfuscated name \"{}\", falling back to unobfuscated"
-              + " name \"{}\"",
-          obfuscatedName,
-          unobfuscatedName);
+      if (!loggedFieldNameFallback) {
+        LOGGER.info(
+            "(minescript) Cannot find field with obfuscated name \"{}\", falling back to"
+                + " unobfuscated name \"{}\"",
+            obfuscatedName,
+            unobfuscatedName);
+        loggedFieldNameFallback = true;
+      }
       try {
         field = object.getClass().getDeclaredField(unobfuscatedName);
       } catch (NoSuchFieldException e2) {
+        logUserError(
+            "Internal Minescript error: cannot find field {}/{} in class {}. See log file for"
+                + " details.",
+            unobfuscatedName,
+            obfuscatedName,
+            object.getClass().getSimpleName());
         LOGGER.info("(minescript) Declared fields of {}:", object.getClass().getName());
         for (Field f : object.getClass().getDeclaredFields()) {
           LOGGER.info("(minescript)   {}", f);
@@ -1138,6 +1127,8 @@ public class MinescriptMod {
     }
   }
 
+  private static boolean loggedMethodNameFallback = false;
+
   private static Method getMethod(
       Object object, String unobfuscatedName, String obfuscatedName, Class<?>... paramTypes)
       throws IllegalAccessException, NoSuchMethodException {
@@ -1145,14 +1136,23 @@ public class MinescriptMod {
     try {
       method = object.getClass().getDeclaredMethod(obfuscatedName, paramTypes);
     } catch (NoSuchMethodException e) {
-      LOGGER.info(
-          "(minescript) Cannot find method with obfuscated name \"{}\", falling back to"
-              + " unobfuscated name \"{}\"",
-          obfuscatedName,
-          unobfuscatedName);
+      if (!loggedMethodNameFallback) {
+        LOGGER.info(
+            "(minescript) Cannot find method with obfuscated name \"{}\", falling back to"
+                + " unobfuscated name \"{}\"",
+            obfuscatedName,
+            unobfuscatedName);
+        loggedMethodNameFallback = true;
+      }
       try {
         method = object.getClass().getDeclaredMethod(unobfuscatedName, paramTypes);
       } catch (NoSuchMethodException e2) {
+        logUserError(
+            "Internal Minescript error: cannot find method {}/{} in class {}. See log file for"
+                + " details.",
+            unobfuscatedName,
+            obfuscatedName,
+            object.getClass().getSimpleName());
         LOGGER.info("(minescript) Declared methods of {}:", object.getClass().getName());
         for (Method m : object.getClass().getDeclaredMethods()) {
           LOGGER.info("(minescript)   {}", m);
@@ -1243,7 +1243,7 @@ public class MinescriptMod {
             String[] command = text.substring(1).split("\\s+");
             LOGGER.info(
                 "(minescript) Processing command from received chat event: {}",
-                String.join(", ", command));
+                String.join(" ", command));
             runCommand(command);
             event.setCanceled(true);
           }
@@ -1257,8 +1257,7 @@ public class MinescriptMod {
     if (event.getMessage().startsWith("\\")) {
       // TODO(maxuser): need to do single/double quote parsing etc.
       String[] command = event.getMessage().substring(1).split("\\s+");
-      LOGGER.info(
-          "(minescript) Processing command from chat event: {}", String.join(", ", command));
+      LOGGER.info("(minescript) Processing command from chat event: {}", String.join(" ", command));
       runCommand(command);
       event.setCanceled(true);
     }
