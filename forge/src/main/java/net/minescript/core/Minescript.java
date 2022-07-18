@@ -41,11 +41,11 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Component; // Forge only
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.level.LevelAccessor; // Forge only
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.ChunkAccess; // Forge only
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
@@ -53,7 +53,7 @@ import org.apache.logging.log4j.message.ParameterizedMessage;
 public class Minescript {
   private static final Logger LOGGER = LogManager.getLogger();
 
-  // MINESCRIPT_DIR is relative to the Minecraft directory which is the working directory.
+  // MINESCRIPT_DIR is relative to the minecraft directory which is the working directory.
   private static final String MINESCRIPT_DIR = "minescript";
 
   public static void init() {
@@ -967,6 +967,7 @@ public class Minescript {
     int yMax = Math.min(Math.max(y0, y1), 320); // TODO(maxuser): Use an API for max build height.
     int zMax = Math.max(z0, z1);
 
+    // Fabric: player.getEntityWorld() or player.getWorld()? Both return this.world. [norewrite]
     Level level = player.getCommandSenderWorld();
 
     try (var writer = new PrintWriter(new FileWriter(MINESCRIPT_DIR + "/paste.py"))) {
@@ -1514,6 +1515,7 @@ public class Minescript {
   private static long lastReceivedChatMessageTime = 0;
   private static boolean enableMinescriptOnChatReceivedEvent = false;
 
+  /* Begin Forge only */
   public static boolean onClientChatReceived(Component message) {
     boolean cancel = false;
 
@@ -1529,67 +1531,67 @@ public class Minescript {
 
     LOGGER.info("(minescript) ClientChatReceivedEvent message: {}", message.getClass().getName());
 
-    /* TODO(maxuser)! replace with net.minecraft.network.chat.MutableComponent
-    // TranslatableComponent was used in 1.18, and replaced with MutableComponent in 1.19.
-    // But MutableComponent doesn't have a getArgs() method like TranslatableComponent did.
-    if (message instanceof MutableComponent) {
-      var component = (MutableComponent) message;
-      LOGGER.info("(maxuser-debug) Declared methods of {}:", component.getClass().getName());
-      for (Method m : component.getClass().getMethods()) {
-        LOGGER.info("(maxuser-debug)   {}", m);
-      }
-      for (var arg : component.getArgs()) {
-        LOGGER.info(
-            "(minescript) ClientChatReceivedEvent message arg: {}", arg.getClass().getName());
-
-        String text = null;
-        if (arg instanceof String) {
-          text = (String) arg;
-        } else if (arg instanceof TextComponent) {
-          var textComponent = (TextComponent) arg;
-          text = textComponent.getText();
-        }
-
-        if (text != null && !text.isEmpty()) {
-          // Ignore duplicate consecutive messages less than 500 milliseconds apart.
-          long currentTime = System.currentTimeMillis();
-          if (!text.equals(lastReceivedChatMessage)
-              || currentTime > lastReceivedChatMessageTime + 500) {
-            lastReceivedChatMessage = text;
-            lastReceivedChatMessageTime = currentTime;
-
-            var iter = clientChatReceivedEventListeners.entrySet().iterator();
-            while (iter.hasNext()) {
-              var listener = iter.next();
-              LOGGER.info(
-                  "(minescript) Forwarding chat message to listener {}: \"{}\"",
-                  listener.getKey(),
-                  text);
-              // TODO(maxuser): Pass player name or uuid: event.getSenderUUID() -> java.util.UUID
-              // TODO(maxuser): need to do single/double quote parsing etc.
-              if (!listener.getValue().respond(String.format("\"%s\"", text), false)) {
-                iter.remove();
-              }
-            }
-
-            if (enableMinescriptOnChatReceivedEvent) {
-              if (text.startsWith("\\")) {
-                // TODO(maxuser): need to do single/double quote parsing etc.
-                String[] command = text.substring(1).split("\\s+");
-                LOGGER.info(
-                    "(minescript) Processing command from received chat event: {}",
-                    String.join(" ", command));
-                runCommand(command);
-                cancel = true;
-              }
-            }
-          }
-        }
-      }
-    }
-    */
+    // TODO(maxuser)! replace with net.minecraft.network.chat.MutableComponent
+    // // TranslatableComponent was used in 1.18, and replaced with MutableComponent in 1.19.
+    // // But MutableComponent doesn't have a getArgs() method like TranslatableComponent did.
+    // if (message instanceof MutableComponent) {
+    //   var component = (MutableComponent) message;
+    //   LOGGER.info("(maxuser-debug) Declared methods of {}:", component.getClass().getName());
+    //   for (Method m : component.getClass().getMethods()) {
+    //     LOGGER.info("(maxuser-debug)   {}", m);
+    //   }
+    //   for (var arg : component.getArgs()) {
+    //     LOGGER.info(
+    //         "(minescript) ClientChatReceivedEvent message arg: {}", arg.getClass().getName());
+    //
+    //     String text = null;
+    //     if (arg instanceof String) {
+    //       text = (String) arg;
+    //     } else if (arg instanceof TextComponent) {
+    //       var textComponent = (TextComponent) arg;
+    //       text = textComponent.getText();
+    //     }
+    //
+    //     if (text != null && !text.isEmpty()) {
+    //       // Ignore duplicate consecutive messages less than 500 milliseconds apart.
+    //       long currentTime = System.currentTimeMillis();
+    //       if (!text.equals(lastReceivedChatMessage)
+    //           || currentTime > lastReceivedChatMessageTime + 500) {
+    //         lastReceivedChatMessage = text;
+    //         lastReceivedChatMessageTime = currentTime;
+    //
+    //         var iter = clientChatReceivedEventListeners.entrySet().iterator();
+    //         while (iter.hasNext()) {
+    //           var listener = iter.next();
+    //           LOGGER.info(
+    //               "(minescript) Forwarding chat message to listener {}: \"{}\"",
+    //               listener.getKey(),
+    //               text);
+    //           // TODO(maxuser): Pass player name or uuid: event.getSenderUUID() -> java.util.UUID
+    //           // TODO(maxuser): need to do single/double quote parsing etc.
+    //           if (!listener.getValue().respond(String.format("\"%s\"", text), false)) {
+    //             iter.remove();
+    //           }
+    //         }
+    //
+    //         if (enableMinescriptOnChatReceivedEvent) {
+    //           if (text.startsWith("\\")) {
+    //             // TODO(maxuser): need to do single/double quote parsing etc.
+    //             String[] command = text.substring(1).split("\\s+");
+    //             LOGGER.info(
+    //                 "(minescript) Processing command from received chat event: {}",
+    //                 String.join(" ", command));
+    //             runCommand(command);
+    //             cancel = true;
+    //           }
+    //         }
+    //       }
+    //     }
+    //   }
+    // }
     return cancel;
   }
+  /* End Forge only */
 
   // Map from 2 packed ints representing x and z in chunk space to unused boolean.
   private static Map<Long, Boolean> loadedChunks = new ConcurrentHashMap<>();
@@ -1607,6 +1609,7 @@ public class Minescript {
     return (bool == null) ? false : bool;
   }
 
+  /* Begin Forge only */
   public static void onChunkLoad(ChunkAccess chunkAccess) {
     int chunkX = chunkAccess.getPos().x;
     int chunkZ = chunkAccess.getPos().z;
@@ -1641,16 +1644,18 @@ public class Minescript {
     var minecraft = Minecraft.getInstance();
     var player = minecraft.player;
     if (player != null) {
+      // Fabric: player.getEntityWorld() or player.getWorld()? Both return this.world. [norewrite]
       var playerWorld = player.getCommandSenderWorld();
       if (world == playerWorld) {
         LOGGER.info(
-            "(minescript) World unloaded, clearing chunk map of {} entries: {}",
+            "(minescript) World unloaded, clearing chunk map of {} entries: {}", // [norewrite]
             loadedChunks.size(),
             playerWorld.dimension());
         loadedChunks.clear();
       }
     }
   }
+  /* End Forge only */
 
   public static boolean onClientChat(String message) {
     boolean cancel = false;
@@ -1949,6 +1954,7 @@ public class Minescript {
 
       var player = minecraft.player;
       if (player != null && (!systemCommandQueue.isEmpty() || !jobs.getMap().isEmpty())) {
+        // Fabric: player.getEntityWorld() or player.getWorld()? Both return this.world. [norewrite]
         Level level = player.getCommandSenderWorld();
         for (int i = 0; i < minescriptCommandsPerCycle; ++i) {
           String command = systemCommandQueue.poll();
