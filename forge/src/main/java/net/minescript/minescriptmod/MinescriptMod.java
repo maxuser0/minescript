@@ -33,9 +33,6 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
-import javax.json.Json;
-import javax.json.JsonObjectBuilder;
-import javax.json.JsonValue;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
@@ -233,7 +230,7 @@ public class MinescriptMod {
 
     Queue<String> commandQueue();
 
-    void respond(String commandRequest, JsonValue commandResponse);
+    void respond(String commandRequest, String commandResponse);
 
     void enqueueStdout(String text);
 
@@ -359,7 +356,7 @@ public class MinescriptMod {
   interface Task {
     int run(String[] command, JobControl jobControl);
 
-    default void handleResponse(String commandRequest, JsonValue commandResponse) {}
+    default void handleResponse(String commandRequest, String commandResponse) {}
   }
 
   static class Job implements JobControl {
@@ -398,7 +395,7 @@ public class MinescriptMod {
     }
 
     @Override
-    public void respond(String commandRequest, JsonValue commandResponse) {
+    public void respond(String commandRequest, String commandResponse) {
       task.handleResponse(commandRequest, commandResponse);
     }
 
@@ -611,14 +608,11 @@ public class MinescriptMod {
     }
 
     @Override
-    public void handleResponse(String commandRequest, JsonValue commandResponse) {
+    public void handleResponse(String commandRequest, String commandResponse) {
       if (process != null && process.isAlive() && stdinWriter != null) {
         try {
-          stdinWriter.write(
-              jsonToString(
-                  Json.createObjectBuilder()
-                      .add("request", commandRequest)
-                      .add("response", commandResponse)));
+          // TODO(maxuser): Escape strings in commandResponse (or use JSON library).
+          stdinWriter.write(String.format("{\"response\": %s}", commandResponse));
           stdinWriter.newLine();
           stdinWriter.flush();
         } catch (IOException e) {
@@ -628,6 +622,7 @@ public class MinescriptMod {
     }
   }
 
+  /*
   static String jsonToString(JsonObjectBuilder builder) {
     var stringWriter = new StringWriter();
     try (var jsonWriter = Json.createWriter(stringWriter)) {
@@ -635,6 +630,7 @@ public class MinescriptMod {
     }
     return stringWriter.toString();
   }
+  */
 
   static class UndoTask implements Task {
     private final UndoableAction undo;
@@ -1452,6 +1448,8 @@ public class MinescriptMod {
       return;
     }
 
+    // TODO(maxuser): Try using event.getMessage().getUnformattedText() String instead.
+
     // Respond to messages like this one sent from a command block:
     //
     // [execute as Dev run tell Dev \hello ~ ~ ~]
@@ -1587,11 +1585,7 @@ public class MinescriptMod {
                 if (jobCommand.equals("?player_position")) {
                   job.respond(
                       jobCommand,
-                      Json.createArrayBuilder()
-                          .add(player.getX())
-                          .add(player.getY())
-                          .add(player.getZ())
-                          .build());
+                      String.format("[%f, %f, %f]", player.getX(), player.getY(), player.getZ()));
                 } else {
                   player.chat(jobCommand);
                 }
