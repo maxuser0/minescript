@@ -1,4 +1,4 @@
-package net.minescript.minescriptmod;
+package net.minescript.core;
 
 // import net.minecraft.network.chat.TextComponent;
 // import net.minecraft.network.chat.TranslatableComponent;
@@ -39,35 +39,24 @@ import java.util.regex.Pattern;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraftforge.client.event.ClientChatEvent;
-import net.minecraftforge.client.event.ClientChatReceivedEvent;
-import net.minecraftforge.client.event.InputEvent;
-import net.minecraftforge.client.event.ScreenEvent;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.event.world.ChunkEvent;
-import net.minecraftforge.event.world.WorldEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 
-@Mod("minescript")
-public class MinescriptMod {
+public class Minescript {
   private static final Logger LOGGER = LogManager.getLogger();
 
   // MINESCRIPT_DIR is relative to the Minecraft directory which is the working directory.
   private static final String MINESCRIPT_DIR = "minescript";
 
-  public MinescriptMod() {
-    LOGGER.info("(minescript) Minescript mod starting...");
-    MinecraftForge.EVENT_BUS.register(this);
-
+  public static void init() {
     if (new File(MINESCRIPT_DIR).mkdir()) {
       LOGGER.info("(minescript) Created minescript dir");
     }
@@ -1365,9 +1354,8 @@ public class MinescriptMod {
 
   private static MinescriptCommandHistory minescriptCommandHistory = new MinescriptCommandHistory();
 
-  @SubscribeEvent
-  public void onKeyboardKeyPressedEvent(ScreenEvent.KeyboardKeyPressedEvent event) {
-    var screen = event.getScreen();
+  public static boolean onKeyboardKeyPressed(Screen screen, int keyCode) {
+    boolean cancel = false;
     if (screen != null && screen instanceof ChatScreen) {
       var scriptCommandNames = getScriptCommandNamesWithBuiltins();
       try {
@@ -1375,9 +1363,9 @@ public class MinescriptMod {
         String value = input.getValue();
         if (!value.startsWith("\\")) {
           minescriptCommandHistory.moveToEnd();
-          return;
+          return cancel;
         }
-        var key = event.getKeyCode();
+        var key = keyCode;
         if (key == UP_ARROW_KEY) {
           Optional<String> previousCommand = minescriptCommandHistory.moveBackwardAndGet(value);
           if (previousCommand.isPresent()) {
@@ -1385,7 +1373,7 @@ public class MinescriptMod {
             input.setValue(value);
             input.setCursorPosition(value.length());
           }
-          event.setCanceled(true);
+          cancel = true;
         } else if (key == DOWN_ARROW_KEY) {
           Optional<String> nextCommand = minescriptCommandHistory.moveForwardAndGet();
           if (nextCommand.isPresent()) {
@@ -1393,7 +1381,7 @@ public class MinescriptMod {
             input.setValue(value);
             input.setCursorPosition(value.length());
           }
-          event.setCanceled(true);
+          cancel = true;
         } else {
           minescriptCommandHistory.moveToEnd();
         }
@@ -1425,7 +1413,7 @@ public class MinescriptMod {
                 input.setTextColor(0x5ee85e); // green for full completion
               }
               commandSuggestions = new ArrayList<>();
-              return;
+              return cancel;
             }
           }
           if (scriptCommandNames.contains(command)) {
@@ -1457,8 +1445,10 @@ public class MinescriptMod {
         }
       } catch (IllegalAccessException | NoSuchFieldException | SecurityException e) {
         logException(e);
+        return cancel;
       }
     }
+    return cancel;
   }
 
   private static boolean loggedMethodNameFallback = false;
@@ -1498,11 +1488,10 @@ public class MinescriptMod {
     return method;
   }
 
-  @SubscribeEvent
-  public void onKeyInputEvent(InputEvent.KeyInputEvent event) {
+  public static void onKeyInput(int key) {
     var minecraft = Minecraft.getInstance();
     var screen = minecraft.screen;
-    if (screen == null && event.getKey() == BACKSLASH_KEY) {
+    if (screen == null && key == BACKSLASH_KEY) {
       try {
         var method = getMethod(minecraft, "openChatScreen", "m_91326_", String.class);
         method.invoke(minecraft, "");
@@ -1516,10 +1505,11 @@ public class MinescriptMod {
   private static long lastReceivedChatMessageTime = 0;
   private static boolean enableMinescriptOnChatReceivedEvent = false;
 
-  @SubscribeEvent
-  public void onClientChatEvent(ClientChatReceivedEvent event) {
+  public static boolean onClientChatReceived(Component message) {
+    boolean cancel = false;
+
     if (!enableMinescriptOnChatReceivedEvent && clientChatReceivedEventListeners.isEmpty()) {
-      return;
+      return cancel;
     }
 
     // Respond to messages like this one sent from a command block:
@@ -1528,15 +1518,13 @@ public class MinescriptMod {
     //
     // TranslatableComponent.args[1]:TextComponent.text:String
 
-    LOGGER.info(
-        "(minescript) ClientChatReceivedEvent message: {}",
-        event.getMessage().getClass().getName());
+    LOGGER.info("(minescript) ClientChatReceivedEvent message: {}", message.getClass().getName());
 
     /* TODO(maxuser)! replace with net.minecraft.network.chat.MutableComponent
     // TranslatableComponent was used in 1.18, and replaced with MutableComponent in 1.19.
     // But MutableComponent doesn't have a getArgs() method like TranslatableComponent did.
-    if (event.getMessage() instanceof MutableComponent) {
-      var component = (MutableComponent) event.getMessage();
+    if (message instanceof MutableComponent) {
+      var component = (MutableComponent) message;
       LOGGER.info("(maxuser-debug) Declared methods of {}:", component.getClass().getName());
       for (Method m : component.getClass().getMethods()) {
         LOGGER.info("(maxuser-debug)   {}", m);
@@ -1583,7 +1571,7 @@ public class MinescriptMod {
                     "(minescript) Processing command from received chat event: {}",
                     String.join(" ", command));
                 runCommand(command);
-                event.setCanceled(true);
+                cancel = true;
               }
             }
           }
@@ -1591,6 +1579,7 @@ public class MinescriptMod {
       }
     }
     */
+    return cancel;
   }
 
   // Map from 2 packed ints representing x and z in chunk space to unused boolean.
@@ -1609,9 +1598,7 @@ public class MinescriptMod {
     return (bool == null) ? false : bool;
   }
 
-  @SubscribeEvent
-  public void onChunkLoadEvent(ChunkEvent.Load event) {
-    ChunkAccess chunkAccess = event.getChunk();
+  public static void onChunkLoad(ChunkAccess chunkAccess) {
     int chunkX = chunkAccess.getPos().x;
     int chunkZ = chunkAccess.getPos().z;
     long packedChunkXZ = packInts(chunkX, chunkZ);
@@ -1628,9 +1615,7 @@ public class MinescriptMod {
     }
   }
 
-  @SubscribeEvent
-  public void onChunkUnloadEvent(ChunkEvent.Unload event) {
-    ChunkAccess chunkAccess = event.getChunk();
+  public static void onChunkUnload(ChunkAccess chunkAccess) {
     int chunkX = chunkAccess.getPos().x;
     int chunkZ = chunkAccess.getPos().z;
     long packedChunkXZ = packInts(chunkX, chunkZ);
@@ -1643,13 +1628,11 @@ public class MinescriptMod {
     }
   }
 
-  @SubscribeEvent
-  public void onWorldUnloadEvent(WorldEvent.Unload event) {
+  public static void onWorldUnload(LevelAccessor world) {
     var minecraft = Minecraft.getInstance();
     var player = minecraft.player;
     if (player != null) {
       var playerWorld = player.getCommandSenderWorld();
-      var world = event.getWorld();
       if (world == playerWorld) {
         LOGGER.info(
             "(minescript) World unloaded, clearing chunk map of {} entries: {}",
@@ -1660,9 +1643,8 @@ public class MinescriptMod {
     }
   }
 
-  @SubscribeEvent
-  public void onClientChatEvent(ClientChatEvent event) {
-    String message = event.getMessage();
+  public static boolean onClientChat(String message) {
+    boolean cancel = false;
     if (message.startsWith("\\")) {
       minescriptCommandHistory.addCommand(message);
 
@@ -1670,11 +1652,12 @@ public class MinescriptMod {
       String[] command = message.substring(1).split("\\s+");
       LOGGER.info("(minescript) Processing command from chat event: {}", String.join(" ", command));
       runCommand(command);
-      event.setCanceled(true);
+      cancel = true;
     } else if (customNickname != null && !message.startsWith("/")) {
       systemCommandQueue.add("/tellraw @a " + String.format(customNickname, message));
-      event.setCanceled(true);
+      cancel = true;
     }
+    return cancel;
   }
 
   private static class ServerBlockList {
@@ -1942,8 +1925,7 @@ public class MinescriptMod {
     }
   }
 
-  @SubscribeEvent
-  public void onPlayerTick(TickEvent.PlayerTickEvent event) {
+  public static void onPlayerTick() {
     if (++playerTickEventCounter % minescriptTicksPerCycle == 0) {
       var minecraft = Minecraft.getInstance();
       var serverData = minecraft.getCurrentServer();
