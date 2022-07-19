@@ -60,6 +60,21 @@ public class Minescript {
     if (new File(MINESCRIPT_DIR).mkdir()) {
       LOGGER.info("(minescript) Created minescript dir");
     }
+
+    Path minescriptapiPySource = Paths.get(MINESCRIPT_DIR, "minescriptapi.py");
+    if (!Files.exists(minescriptapiPySource)) {
+      try (var in = Minescript.class.getResourceAsStream("/minescriptapi.py");
+          var reader = new BufferedReader(new InputStreamReader(in));
+          var writer = new FileWriter(minescriptapiPySource.toString())) {
+        reader.transferTo(writer);
+        LOGGER.info(
+            "(minescript) Copied {} from jar resource to minescript dir", minescriptapiPySource);
+      } catch (IOException e) {
+        LOGGER.error(
+            "(minescript) Failed to copy {} from jar resource to minescript dir",
+            minescriptapiPySource);
+      }
+    }
   }
 
   // TODO(maxuser): replace with ImmutableList
