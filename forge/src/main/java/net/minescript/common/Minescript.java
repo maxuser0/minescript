@@ -61,19 +61,62 @@ public class Minescript {
       LOGGER.info("(minescript) Created minescript dir");
     }
 
-    Path minescriptapiPySource = Paths.get(MINESCRIPT_DIR, "minescriptapi.py");
-    if (!Files.exists(minescriptapiPySource)) {
-      try (var in = Minescript.class.getResourceAsStream("/minescriptapi.py");
+    maybeCopyJarResourceToMinescriptDir("config.txt");
+    maybeCopyJarResourceToMinescriptDir("minescriptapi.py");
+    loadConfig();
+  }
+
+  /** Copies resource from jar to a same-named file if that file doesn't already exist. */
+  private static void maybeCopyJarResourceToMinescriptDir(String resourceName) {
+    Path filePath = Paths.get(MINESCRIPT_DIR, resourceName);
+    if (!Files.exists(filePath)) {
+      try (var in = Minescript.class.getResourceAsStream("/" + resourceName);
           var reader = new BufferedReader(new InputStreamReader(in));
-          var writer = new FileWriter(minescriptapiPySource.toString())) {
+          var writer = new FileWriter(filePath.toString())) {
         reader.transferTo(writer);
-        LOGGER.info(
-            "(minescript) Copied {} from jar resource to minescript dir", minescriptapiPySource);
+        LOGGER.info("(minescript) Copied {} from jar resource to minescript dir", resourceName);
       } catch (IOException e) {
         LOGGER.error(
-            "(minescript) Failed to copy {} from jar resource to minescript dir",
-            minescriptapiPySource);
+            "(minescript) Failed to copy {} from jar resource to minescript dir", resourceName);
       }
+    }
+  }
+
+  private static String pythonLocation = null;
+
+  private static final Pattern CONFIG_LINE_RE =
+      Pattern.compile("^([a-zA-Z0-9_]+) *= *\"?([^\"]*)\"?");
+
+  /** Loads config from {@code minescript/config.txt}. */
+  private static void loadConfig() {
+    Path configPath = Paths.get(MINESCRIPT_DIR, "config.txt");
+    if (!Files.exists(configPath)) {
+      LOGGER.warn("(minescript) Config file not found: {}", configPath);
+      return;
+    }
+    try (var reader = new BufferedReader(new FileReader(configPath.toString()))) {
+      String line;
+      while ((line = reader.readLine()) != null) {
+        line = line.strip();
+        if (line.isEmpty() || line.startsWith("#")) {
+          continue;
+        }
+        var match = CONFIG_LINE_RE.matcher(line);
+        if (match.find()) {
+          String name = match.group(1);
+          String value = match.group(2);
+          LOGGER.info("(maxuser-debug) config var: {} = \"{}\"", name, value);
+          switch (name) {
+            case "python":
+              pythonLocation = value;
+              break;
+          }
+        } else {
+          LOGGER.warn("(minescript) config.txt: unable parse config line: {}", line);
+        }
+      }
+    } catch (IOException e) {
+      LOGGER.error("(minescript) Exception loading config file: {}", e);
     }
   }
 
@@ -592,7 +635,8 @@ public class Minescript {
                 "/usr/bin/python",
                 "/usr/local/bin/python"
               };
-      String pythonInterpreter = findFirstFile(pythonInterpreterPath);
+      String pythonInterpreter =
+          pythonLocation == null ? findFirstFile(pythonInterpreterPath) : pythonLocation;
       if (pythonInterpreter == null) {
         jobControl.enqueueStderr("Cannot find Python3 interpreter at any of these locations:");
         for (String pathname : pythonInterpreterPath) {
@@ -600,6 +644,12 @@ public class Minescript {
         }
         jobControl.enqueueStderr("See: https://www.python.org/downloads/");
         return -1;
+      }
+      if (!Files.exists(Paths.get(pythonInterpreter))) {
+        jobControl.enqueueStderr("Cannot find Python3 interpreter at:");
+        jobControl.enqueueStderr("  {}", pythonInterpreter);
+        jobControl.enqueueStderr("See minescript/config.txt for setting python location.");
+        return -7;
       }
 
       String[] executableCommand = new String[command.length + 2];
