@@ -620,36 +620,40 @@ public class Minescript {
     public int run(String[] command, JobControl jobControl) {
       String scriptName = Paths.get(MINESCRIPT_DIR, command[0] + ".py").toString();
 
-      String homeDir = System.getProperty("user.home");
-      String[] pythonInterpreterPath =
-          System.getProperty("os.name").startsWith("Windows")
-              ? new String[] {
-                Paths.get(homeDir, "AppData", "Local", "Microsoft", "WindowsApps", "Python.exe")
-                    .toString(),
-                Paths.get(homeDir, "AppData", "Local", "Programs", "Python.exe").toString(),
-                Paths.get("C:", "Program Files", "Python.exe").toString()
-              }
-              : new String[] {
-                "/usr/bin/python3",
-                "/usr/local/bin/python3",
-                "/usr/bin/python",
-                "/usr/local/bin/python"
-              };
-      String pythonInterpreter =
-          pythonLocation == null ? findFirstFile(pythonInterpreterPath) : pythonLocation;
-      if (pythonInterpreter == null) {
-        jobControl.enqueueStderr("Cannot find Python3 interpreter at any of these locations:");
-        for (String pathname : pythonInterpreterPath) {
-          jobControl.enqueueStderr("  " + pathname);
+      final String pythonInterpreter;
+      if (pythonLocation == null) {
+        String homeDir = System.getProperty("user.home");
+        String[] pythonInterpreterPath =
+            System.getProperty("os.name").startsWith("Windows")
+                ? new String[] {
+                  Paths.get(homeDir, "AppData", "Local", "Microsoft", "WindowsApps", "Python.exe")
+                      .toString(),
+                  Paths.get(homeDir, "AppData", "Local", "Programs", "Python.exe").toString(),
+                  Paths.get("C:", "Program Files", "Python.exe").toString()
+                }
+                : new String[] {
+                  "/usr/bin/python3",
+                  "/usr/local/bin/python3",
+                  "/usr/bin/python",
+                  "/usr/local/bin/python"
+                };
+        pythonInterpreter = findFirstFile(pythonInterpreterPath);
+        if (pythonInterpreter == null) {
+          jobControl.enqueueStderr("Cannot find Python3 interpreter at any of these locations:");
+          for (String pathname : pythonInterpreterPath) {
+            jobControl.enqueueStderr("  " + pathname);
+          }
+          jobControl.enqueueStderr("See: https://www.python.org/downloads/");
+          return -1;
         }
-        jobControl.enqueueStderr("See: https://www.python.org/downloads/");
-        return -1;
-      }
-      if (!Files.exists(Paths.get(pythonInterpreter))) {
-        jobControl.enqueueStderr("Cannot find Python3 interpreter at:");
-        jobControl.enqueueStderr("  {}", pythonInterpreter);
-        jobControl.enqueueStderr("See minescript/config.txt for setting python location.");
-        return -7;
+      } else {
+        if (!Files.exists(Paths.get(pythonLocation))) {
+          jobControl.enqueueStderr("Cannot find Python3 interpreter at:");
+          jobControl.enqueueStderr("  {}", pythonLocation);
+          jobControl.enqueueStderr("See minescript/config.txt for setting python location.");
+          return -7;
+        }
+        pythonInterpreter = pythonLocation;
       }
 
       String[] executableCommand = new String[command.length + 2];
