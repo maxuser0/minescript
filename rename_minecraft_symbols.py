@@ -14,6 +14,7 @@ forge_to_fabric_class_names = (
   ('net.minecraft.world.level.block.state.BlockState', 'net.minecraft.block.BlockState'),
   ('net.minecraft.world.level.chunk.ChunkAccess', 'net.minecraft.world.chunk.Chunk'),
   ('net.minecraft.world.level.chunk.ChunkSource', 'net.minecraft.world.chunk.ChunkManager'),
+  ('net.minecraft.network.chat.Component', 'net.minecraft.text.Text'),
 )
 
 forge_to_fabric_member_names = (
@@ -36,9 +37,11 @@ forge_to_fabric_member_names = (
   ('player.chat', 'player.sendChatMessage'),
   ('minecraft.getCurrentServer', 'minecraft.getCurrentServerEntry'),
   ('serverData.ip', 'serverData.address'),
-  ('minecraft.level', 'minecraft.world'),
   ('level.getChunkSource', 'level.getChunkManager'),
   ('chunkManager.getChunkNow', 'chunkManager.getWorldChunk'),
+  ('minecraft.level', 'minecraft.world'),
+  ('minecraft.gui.getChat', 'minecraft.inGameHud.getChatHud'),
+  ('Component.nullToEmpty', 'Text.of'),
 )
 
 def Usage():
@@ -61,6 +64,9 @@ def CreateSimpleNameRewrite(before, after):
 def RenameForgeToFabric():
   rewrites = []  # List of rewrite functions that take a string to rewrite.
 
+  for forge_name, fabric_name in forge_to_fabric_member_names:
+    rewrites.append(CreateSimpleNameRewrite(forge_name, fabric_name))
+
   for forge_name, fabric_name in forge_to_fabric_class_names:
     rewrites.append(CreateFullNameRewrite(forge_name, fabric_name))
 
@@ -68,9 +74,6 @@ def RenameForgeToFabric():
     fabric_simple_name = fabric_name.split('.')[-1]
     if forge_simple_name != fabric_simple_name:
       rewrites.append(CreateSimpleNameRewrite(forge_simple_name, fabric_simple_name))
-
-  for forge_name, fabric_name in forge_to_fabric_member_names:
-    rewrites.append(CreateSimpleNameRewrite(forge_name, fabric_name))
 
   rewrites.append(lambda s: s.replace('/* Begin Forge only */', '/* Begin Forge only'))
   rewrites.append(lambda s: s.replace('/* End Forge only */', 'End Forge only */'))
@@ -83,6 +86,9 @@ def RenameForgeToFabric():
 def RenameFabricToForge():
   rewrites = []  # List of rewrite functions that take a string to rewrite.
 
+  for forge_name, fabric_name in forge_to_fabric_member_names:
+    rewrites.append(CreateSimpleNameRewrite(fabric_name, forge_name))
+
   for forge_name, fabric_name in forge_to_fabric_class_names:
     rewrites.append(CreateFullNameRewrite(fabric_name, forge_name))
 
@@ -90,9 +96,6 @@ def RenameFabricToForge():
     fabric_simple_name = fabric_name.split('.')[-1]
     if forge_simple_name != fabric_simple_name:
       rewrites.append(CreateSimpleNameRewrite(fabric_simple_name, forge_simple_name))
-
-  for forge_name, fabric_name in forge_to_fabric_member_names:
-    rewrites.append(CreateSimpleNameRewrite(fabric_name, forge_name))
 
   rewrites.append(lambda s: s.replace('/* Begin Forge only', '/* Begin Forge only */'))
   rewrites.append(lambda s: s.replace('End Forge only */', '/* End Forge only */'))

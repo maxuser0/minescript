@@ -39,8 +39,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.network.chat.Component; // Forge only
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
@@ -251,8 +250,10 @@ public class Minescript {
   }
 
   static String tellrawFormat(String text, String color) {
-    // Treat as plain text to write to the chat.
-    return "/tellraw @s {\"text\":\""
+    // Treat as plain text to write to the chat. The leading ":" signals to
+    // processMessage to echo the text directly to the chat HUD without going
+    // through the server.
+    return ":{\"text\":\""
         + text.replace("\\", "\\\\").replace("\"", "\\\"")
         + "\",\"color\":\""
         + color
@@ -2017,7 +2018,7 @@ public class Minescript {
         || serverBlockList.areCommandsAllowedForServer(serverData.name, serverData.ip);
   }
 
-  private static void sendPlayerChatOrCommand(LocalPlayer player, String message) {
+  private static void processMessage(String message) {
     if (message.startsWith("\\")) {
       LOGGER.info("(minescript) Processing command from message queue: {}", message);
       // TODO(maxuser): If there's a parent job that spawned this command, pass along the parent job
@@ -2026,7 +2027,23 @@ public class Minescript {
       // This speaks to the conceptual distinction between "shell job" and "process" which currently
       // isn't established.
       runMinescriptCommand(message.substring(1));
-    } else if (message.startsWith("/")) {
+      return;
+    }
+
+    if (message.startsWith(":")) {
+      var minecraft = Minecraft.getInstance();
+      var chatHud = minecraft.gui.getChat();
+      if (message.startsWith(":{\"")) {
+        chatHud.addMessage(Component.Serializer.fromJson(message.substring(1)));
+      } else {
+        chatHud.addMessage(Component.nullToEmpty(message.substring(1)));
+      }
+      return;
+    }
+
+    var minecraft = Minecraft.getInstance();
+    var player = minecraft.player;
+    if (message.startsWith("/")) {
       if (!areCommandsAllowed()) {
         LOGGER.info(
             "(minescript) Minecraft command blocked for server: {}", message); // [norewrite]
@@ -2047,7 +2064,7 @@ public class Minescript {
         for (int i = 0; i < minescriptCommandsPerCycle; ++i) {
           String command = systemCommandQueue.poll();
           if (command != null) {
-            sendPlayerChatOrCommand(player, command);
+            processMessage(command);
           }
           for (var job : jobs.getMap().values()) {
             if (job.state() == JobState.RUNNING) {
@@ -2148,7 +2165,7 @@ public class Minescript {
                         "Unknown function called from `{}`: {}", job.jobSummary(), functionName);
                   }
                 } else {
-                  sendPlayerChatOrCommand(player, jobCommand);
+                  processMessage(jobCommand);
                 }
               }
             }
