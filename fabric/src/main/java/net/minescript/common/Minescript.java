@@ -249,7 +249,7 @@ public class Minescript {
     return command;
   }
 
-  static String tellrawFormat(String text, String color) {
+  static String formatAsJsonText(String text, String color) {
     // Treat as plain text to write to the chat. The leading ":" signals to
     // processMessage to echo the text directly to the chat HUD without going
     // through the server.
@@ -466,7 +466,7 @@ public class Minescript {
     public void enqueueStderr(String messagePattern, Object... arguments) {
       String logMessage = ParameterizedMessage.format(messagePattern, arguments);
       LOGGER.error("(minescript) {}", logMessage);
-      jobCommandQueue.add(tellrawFormat(logMessage, "red"));
+      jobCommandQueue.add(formatAsJsonText(logMessage, "red"));
     }
 
     @Override
@@ -890,13 +890,13 @@ public class Minescript {
   public static void logUserInfo(String messagePattern, Object... arguments) {
     String logMessage = ParameterizedMessage.format(messagePattern, arguments);
     LOGGER.info("(minescript) {}", logMessage);
-    systemCommandQueue.add(tellrawFormat(logMessage, "yellow"));
+    systemCommandQueue.add(formatAsJsonText(logMessage, "yellow"));
   }
 
   public static void logUserError(String messagePattern, Object... arguments) {
     String logMessage = ParameterizedMessage.format(messagePattern, arguments);
     LOGGER.error("(minescript) {}", logMessage);
-    systemCommandQueue.add(tellrawFormat(logMessage, "red"));
+    systemCommandQueue.add(formatAsJsonText(logMessage, "red"));
   }
 
   private static void listJobs() {
@@ -1520,9 +1520,9 @@ public class Minescript {
             }
             if (!newCommandSuggestions.isEmpty()) {
               if (!newCommandSuggestions.equals(commandSuggestions)) {
-                systemCommandQueue.add(tellrawFormat("completions:", "aqua"));
+                systemCommandQueue.add(formatAsJsonText("completions:", "aqua"));
                 for (String suggestion : newCommandSuggestions) {
-                  systemCommandQueue.add(tellrawFormat("  " + suggestion, "aqua"));
+                  systemCommandQueue.add(formatAsJsonText("  " + suggestion, "aqua"));
                 }
                 commandSuggestions = newCommandSuggestions;
               }
