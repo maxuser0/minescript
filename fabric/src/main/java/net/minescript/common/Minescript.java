@@ -250,10 +250,10 @@ public class Minescript {
   }
 
   static String formatAsJsonText(String text, String color) {
-    // Treat as plain text to write to the chat. The leading ":" signals to
+    // Treat as plain text to write to the chat. The leading "|" signals to
     // processMessage to echo the text directly to the chat HUD without going
     // through the server.
-    return ":{\"text\":\""
+    return "|{\"text\":\""
         + text.replace("\\", "\\\\").replace("\"", "\\\"")
         + "\",\"color\":\""
         + color
@@ -2031,10 +2031,10 @@ public class Minescript {
       return;
     }
 
-    if (message.startsWith(":")) {
+    if (message.startsWith("|")) {
       var minecraft = MinecraftClient.getInstance();
       var chatHud = minecraft.inGameHud.getChatHud();
-      if (message.startsWith(":{\"")) {
+      if (message.startsWith("|{\"")) {
         chatHud.addMessage(Text.Serializer.fromJson(message.substring(1)));
       } else {
         chatHud.addMessage(Text.of(message.substring(1)));
