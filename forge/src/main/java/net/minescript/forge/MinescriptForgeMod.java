@@ -8,7 +8,6 @@ import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.world.ChunkEvent;
-import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minescript.common.Minescript;
@@ -57,11 +56,6 @@ public class MinescriptForgeMod {
     if (event.getWorld() instanceof ClientLevel) {
       Minescript.onChunkUnload(event.getWorld(), event.getChunk());
     }
-  }
-
-  @SubscribeEvent
-  public void onWorldLoadEvent(WorldEvent.Load event) {
-    Minescript.onWorldLoad(event.getWorld());
   }
 
   @SubscribeEvent

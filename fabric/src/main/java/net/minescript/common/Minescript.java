@@ -104,11 +104,13 @@ public class Minescript {
         if (match.find()) {
           String name = match.group(1);
           String value = match.group(2);
-          LOGGER.info("(maxuser-debug) config var: {} = \"{}\"", name, value);
           switch (name) {
             case "python":
               pythonLocation = value;
+              LOGGER.info("(minescript) Setting config var: {} = \"{}\"", name, value);
               break;
+            default:
+              LOGGER.warn("(minescript) Unrecognized config var: {} = \"{}\"", name, value);
           }
         } else {
           LOGGER.warn("(minescript) config.txt: unable parse config line: {}", line);
@@ -1616,9 +1618,9 @@ public class Minescript {
     // // But MutableComponent doesn't have a getArgs() method like TranslatableComponent did.
     // if (message instanceof MutableComponent) {
     //   var component = (MutableComponent) message;
-    //   LOGGER.info("(maxuser-debug) Declared methods of {}:", component.getClass().getName());
+    //   LOGGER.info("(minescript) Declared methods of {}:", component.getClass().getName());
     //   for (Method m : component.getClass().getMethods()) {
-    //     LOGGER.info("(maxuser-debug)   {}", m);
+    //     LOGGER.info("(minescript)   {}", m);
     //   }
     //   for (var arg : component.getArgs()) {
     //     LOGGER.info(
@@ -1700,10 +1702,6 @@ public class Minescript {
     for (var listener : chunkLoadEventListeners.keySet()) {
       listener.onChunkUnloaded(chunkLevel, chunkX, chunkZ);
     }
-  }
-
-  public static void onWorldLoad(WorldAccess level) {
-    LOGGER.info("(maxuser-debug) onWorldLoad {}: {}", level.hashCode(), level);
   }
 
   public static boolean onClientChat(String message) {

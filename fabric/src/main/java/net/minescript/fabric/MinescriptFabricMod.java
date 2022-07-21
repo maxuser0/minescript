@@ -8,7 +8,6 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ChatScreen;
 import net.minecraft.client.gui.screen.Screen;
@@ -41,7 +40,6 @@ public final class MinescriptFabricMod implements ClientModInitializer {
     ClientChunkEvents.CHUNK_LOAD.register((world, chunk) -> Minescript.onChunkLoad(world, chunk));
     ClientChunkEvents.CHUNK_UNLOAD.register(
         (world, chunk) -> Minescript.onChunkUnload(world, chunk));
-    ServerWorldEvents.LOAD.register((server, world) -> Minescript.onWorldLoad(world));
 
     Minescript.init();
     ClientTickEvents.START_WORLD_TICK.register(world -> Minescript.onPlayerTick());
