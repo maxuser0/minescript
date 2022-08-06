@@ -2050,7 +2050,7 @@ public class Minescript {
       }
       player.sendCommand(message.substring(1));
     } else {
-      player.sendChatMessage(message);
+      player.sendChatMessage(message, null /* preview */);
     }
   }
 

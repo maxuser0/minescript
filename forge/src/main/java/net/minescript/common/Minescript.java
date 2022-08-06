@@ -2047,9 +2047,9 @@ public class Minescript {
             "(minescript) Minecraft command blocked for server: {}", message); // [norewrite]
         return;
       }
-      player.command(message.substring(1));
+      player.commandUnsigned(message.substring(1));
     } else {
-      player.chat(message);
+      player.chatSigned(message, null /* preview */);
     }
   }
 

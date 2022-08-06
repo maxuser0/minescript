@@ -7,7 +7,7 @@ import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.event.world.ChunkEvent;
+import net.minecraftforge.event.level.ChunkEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minescript.common.Minescript;
@@ -26,14 +26,14 @@ public class MinescriptForgeMod {
   }
 
   @SubscribeEvent
-  public void onKeyboardKeyPressedEvent(ScreenEvent.KeyboardKeyPressedEvent event) {
+  public void onKeyboardKeyPressedEvent(ScreenEvent.KeyPressed event) {
     if (Minescript.onKeyboardKeyPressed(event.getScreen(), event.getKeyCode())) {
       event.setCanceled(true);
     }
   }
 
   @SubscribeEvent
-  public void onKeyInputEvent(InputEvent.KeyInputEvent event) {
+  public void onKeyInputEvent(InputEvent.Key event) {
     Minescript.onKeyInput(event.getKey());
   }
 
@@ -46,15 +46,15 @@ public class MinescriptForgeMod {
 
   @SubscribeEvent
   public void onChunkLoadEvent(ChunkEvent.Load event) {
-    if (event.getWorld() instanceof ClientLevel) {
-      Minescript.onChunkLoad(event.getWorld(), event.getChunk());
+    if (event.getLevel() instanceof ClientLevel) {
+      Minescript.onChunkLoad(event.getLevel(), event.getChunk());
     }
   }
 
   @SubscribeEvent
   public void onChunkUnloadEvent(ChunkEvent.Unload event) {
-    if (event.getWorld() instanceof ClientLevel) {
-      Minescript.onChunkUnload(event.getWorld(), event.getChunk());
+    if (event.getLevel() instanceof ClientLevel) {
+      Minescript.onChunkUnload(event.getLevel(), event.getChunk());
     }
   }
 
