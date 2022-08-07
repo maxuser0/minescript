@@ -108,7 +108,17 @@ def _ScriptServiceLoop():
 
 
 def _WatchdogLoop():
-  while threading.main_thread().isAlive():
+  # Thread.isAlive() was renamed to Thread.is_alive() in Python 3.9.
+  major, minor = sys.version_info[:2]
+  if major != 3:
+    print(f"Expected Python 3.x but got {major}.{minor}", file=sys.stderr)
+    return
+  if minor >= 9:
+    is_alive = threading.main_thread().is_alive
+  else:
+    is_alive = threading.main_thread().isAlive
+
+  while is_alive():
     time.sleep(0.2)
 
   print(f"?0 exit!")  # special pseudo-function for requesting script termination
