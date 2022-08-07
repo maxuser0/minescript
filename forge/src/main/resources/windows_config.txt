@@ -1,0 +1,3 @@
+# Lines starting with "#" are ignored.
+
+python="%userprofile%\AppData\Local\Microsoft\WindowsApps\python3.exe"

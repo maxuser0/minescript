@@ -1,5 +1,0 @@
-# Lines starting with "#" are ignored.
-
-# To specify the location of your Python installation, uncomment the following
-# line by deleting the "#" and change the text within the double quotes.
-#python="/usr/bin/python3"

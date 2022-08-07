@@ -34,6 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
@@ -60,23 +61,37 @@ public class Minescript {
       LOGGER.info("(minescript) Created minescript dir");
     }
 
-    maybeCopyJarResourceToMinescriptDir("config.txt");
-    maybeCopyJarResourceToMinescriptDir("minescriptapi.py");
+    if (System.getProperty("os.name").startsWith("Windows")) {
+      maybeCopyJarResourceToMinescriptDir("windows_config.txt", "config.txt");
+    } else {
+      maybeCopyJarResourceToMinescriptDir("posix_config.txt", "config.txt");
+    }
+    // TODO(maxuser): How to handle new versions of minescriptapi.py that should overwrite the one
+    // that was installed by a previous version of Minescript?
+    maybeCopyJarResourceToMinescriptDir("minescriptapi.py", null);
     loadConfig();
   }
 
   /** Copies resource from jar to a same-named file if that file doesn't already exist. */
-  private static void maybeCopyJarResourceToMinescriptDir(String resourceName) {
-    Path filePath = Paths.get(MINESCRIPT_DIR, resourceName);
+  private static void maybeCopyJarResourceToMinescriptDir(String resourceName, String fileName) {
+    if (fileName == null) {
+      fileName = resourceName;
+    }
+    Path filePath = Paths.get(MINESCRIPT_DIR, fileName);
     if (!Files.exists(filePath)) {
       try (var in = Minescript.class.getResourceAsStream("/" + resourceName);
           var reader = new BufferedReader(new InputStreamReader(in));
           var writer = new FileWriter(filePath.toString())) {
         reader.transferTo(writer);
-        LOGGER.info("(minescript) Copied {} from jar resource to minescript dir", resourceName);
+        LOGGER.info(
+            "(minescript) Copied jar resource \"{}\" to minescript dir as \"{}\"",
+            resourceName,
+            fileName);
       } catch (IOException e) {
         LOGGER.error(
-            "(minescript) Failed to copy {} from jar resource to minescript dir", resourceName);
+            "(minescript) Failed to copy jar resource \"{}\" to minescript dir as \"{}\"",
+            resourceName,
+            fileName);
       }
     }
   }
@@ -86,14 +101,22 @@ public class Minescript {
   private static final Pattern CONFIG_LINE_RE =
       Pattern.compile("^([a-zA-Z0-9_]+) *= *\"?([^\"]*)\"?");
 
-  /** Loads config from {@code minescript/config.txt}. */
+  private static final File configFile =
+      new File(Paths.get(MINESCRIPT_DIR, "config.txt").toString());
+  private static long lastConfigLoadTime = 0;
+
+  /** Loads config from {@code minescript/config.txt} if the file has changed since last loaded. */
   private static void loadConfig() {
-    Path configPath = Paths.get(MINESCRIPT_DIR, "config.txt");
-    if (!Files.exists(configPath)) {
-      LOGGER.warn("(minescript) Config file not found: {}", configPath);
+    if (!configFile.exists()) {
+      LOGGER.warn("(minescript) Config file not found: {}", configFile.getAbsolutePath());
       return;
     }
-    try (var reader = new BufferedReader(new FileReader(configPath.toString()))) {
+    if (configFile.lastModified() < lastConfigLoadTime) {
+      return;
+    }
+    lastConfigLoadTime = System.currentTimeMillis();
+
+    try (var reader = new BufferedReader(new FileReader(configFile.getPath()))) {
       String line;
       while ((line = reader.readLine()) != null) {
         line = line.strip();
@@ -106,11 +129,31 @@ public class Minescript {
           String value = match.group(2);
           switch (name) {
             case "python":
-              pythonLocation = value;
-              LOGGER.info("(minescript) Setting config var: {} = \"{}\"", name, value);
+              if (System.getProperty("os.name").startsWith("Windows")) {
+                pythonLocation =
+                    value.startsWith("%userprofile%\\")
+                        ? value.replace("%userprofile%", System.getProperty("user.home"))
+                        : value;
+              } else {
+                // This does not support "~otheruser/..." syntax. But that would be odd anyway.
+                pythonLocation =
+                    value.startsWith("~/")
+                        ? value.replaceFirst(
+                            "~", Matcher.quoteReplacement(System.getProperty("user.home")))
+                        : value;
+              }
+              LOGGER.info(
+                  "(minescript) Setting config var: {} = \"{}\" (\"{}\")",
+                  name,
+                  value,
+                  pythonLocation);
               break;
             default:
-              LOGGER.warn("(minescript) Unrecognized config var: {} = \"{}\"", name, value);
+              LOGGER.warn(
+                  "(minescript) Unrecognized config var: {} = \"{}\" (\"{}\")",
+                  name,
+                  value,
+                  pythonLocation);
           }
         } else {
           LOGGER.warn("(minescript) config.txt: unable parse config line: {}", line);
@@ -621,46 +664,12 @@ public class Minescript {
 
     @Override
     public int run(String[] command, JobControl jobControl) {
+      // Check if config needs to be reloaded in case python location has changed.
+      loadConfig();
+
       String scriptName = Paths.get(MINESCRIPT_DIR, command[0] + ".py").toString();
-
-      final String pythonInterpreter;
-      if (pythonLocation == null) {
-        String homeDir = System.getProperty("user.home");
-        String[] pythonInterpreterPath =
-            System.getProperty("os.name").startsWith("Windows")
-                ? new String[] {
-                  Paths.get(homeDir, "AppData", "Local", "Microsoft", "WindowsApps", "Python.exe")
-                      .toString(),
-                  Paths.get(homeDir, "AppData", "Local", "Programs", "Python.exe").toString(),
-                  Paths.get("C:", "Program Files", "Python.exe").toString()
-                }
-                : new String[] {
-                  "/usr/bin/python3",
-                  "/usr/local/bin/python3",
-                  "/usr/bin/python",
-                  "/usr/local/bin/python"
-                };
-        pythonInterpreter = findFirstFile(pythonInterpreterPath);
-        if (pythonInterpreter == null) {
-          jobControl.enqueueStderr("Cannot find Python3 interpreter at any of these locations:");
-          for (String pathname : pythonInterpreterPath) {
-            jobControl.enqueueStderr("  " + pathname);
-          }
-          jobControl.enqueueStderr("See: https://www.python.org/downloads/");
-          return -1;
-        }
-      } else {
-        if (!Files.exists(Paths.get(pythonLocation))) {
-          jobControl.enqueueStderr("Cannot find Python3 interpreter at:");
-          jobControl.enqueueStderr("  {}", pythonLocation);
-          jobControl.enqueueStderr("See minescript/config.txt for setting python location.");
-          return -7;
-        }
-        pythonInterpreter = pythonLocation;
-      }
-
       String[] executableCommand = new String[command.length + 2];
-      executableCommand[0] = pythonInterpreter;
+      executableCommand[0] = pythonLocation;
       executableCommand[1] = "-u"; // `python3 -u` for unbuffered stdout and stderr.
       executableCommand[2] = scriptName;
       for (int i = 1; i < command.length; i++) {
@@ -1286,15 +1295,6 @@ public class Minescript {
     }
 
     jobs.createSubprocess(command);
-  }
-
-  private static String findFirstFile(String[] filenames) {
-    for (String filename : filenames) {
-      if (Files.exists(Paths.get(filename))) {
-        return filename;
-      }
-    }
-    return null;
   }
 
   private static int minescriptTicksPerCycle = 3;
