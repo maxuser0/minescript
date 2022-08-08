@@ -75,6 +75,7 @@ public class Minescript {
           lastRunVersion);
       copyJarResourceToMinescriptDir("version.txt", FileOverwritePolicy.OVERWRITTE);
       copyJarResourceToMinescriptDir("minescriptapi.py", FileOverwritePolicy.OVERWRITTE);
+      copyJarResourceToMinescriptDir("paste.py", FileOverwritePolicy.OVERWRITTE);
     }
 
     loadConfig();
