@@ -61,11 +61,6 @@ public class Minescript {
       LOGGER.info("(minescript) Created minescript dir");
     }
 
-    if (System.getProperty("os.name").startsWith("Windows")) {
-      maybeCopyJarResourceToMinescriptDir("windows_config.txt", "config.txt");
-    } else {
-      maybeCopyJarResourceToMinescriptDir("posix_config.txt", "config.txt");
-    }
     // TODO(maxuser): How to handle new versions of minescriptapi.py that should overwrite the one
     // that was installed by a previous version of Minescript?
     maybeCopyJarResourceToMinescriptDir("minescriptapi.py", null);
@@ -107,9 +102,10 @@ public class Minescript {
 
   /** Loads config from {@code minescript/config.txt} if the file has changed since last loaded. */
   private static void loadConfig() {
-    if (!configFile.exists()) {
-      LOGGER.warn("(minescript) Config file not found: {}", configFile.getAbsolutePath());
-      return;
+    if (System.getProperty("os.name").startsWith("Windows")) {
+      maybeCopyJarResourceToMinescriptDir("windows_config.txt", "config.txt");
+    } else {
+      maybeCopyJarResourceToMinescriptDir("posix_config.txt", "config.txt");
     }
     if (configFile.lastModified() < lastConfigLoadTime) {
       return;
@@ -666,6 +662,12 @@ public class Minescript {
     public int run(String[] command, JobControl jobControl) {
       // Check if config needs to be reloaded in case python location has changed.
       loadConfig();
+      if (pythonLocation == null) {
+        jobControl.enqueueStderr(
+            "Python location not specified. Set `python` variable at: {}",
+            configFile.getAbsolutePath());
+        return -1;
+      }
 
       String scriptName = Paths.get(MINESCRIPT_DIR, command[0] + ".py").toString();
       String[] executableCommand = new String[command.length + 2];
