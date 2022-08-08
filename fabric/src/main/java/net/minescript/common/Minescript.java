@@ -55,39 +55,92 @@ public class Minescript {
   // MINESCRIPT_DIR is relative to the minecraft directory which is the working directory.
   private static final String MINESCRIPT_DIR = "minescript";
 
+  private enum FileOverwritePolicy {
+    DO_NOT_OVERWRITE,
+    OVERWRITTE
+  }
+
   public static void init() {
     LOGGER.info("(minescript) Starting Minescript on OS: {}", System.getProperty("os.name"));
     if (new File(MINESCRIPT_DIR).mkdir()) {
       LOGGER.info("(minescript) Created minescript dir");
     }
 
-    // TODO(maxuser): How to handle new versions of minescriptapi.py that should overwrite the one
-    // that was installed by a previous version of Minescript?
-    maybeCopyJarResourceToMinescriptDir("minescriptapi.py", null);
+    String currentVersion = getCurrentVersion();
+    String lastRunVersion = getLastRunVersion();
+    if (!currentVersion.equals(lastRunVersion)) {
+      LOGGER.info(
+          "(minescript) Current version ({}) does not match last run version ({})",
+          currentVersion,
+          lastRunVersion);
+      copyJarResourceToMinescriptDir("version.txt", FileOverwritePolicy.OVERWRITTE);
+      copyJarResourceToMinescriptDir("minescriptapi.py", FileOverwritePolicy.OVERWRITTE);
+    }
+
     loadConfig();
   }
 
-  /** Copies resource from jar to a same-named file if that file doesn't already exist. */
-  private static void maybeCopyJarResourceToMinescriptDir(String resourceName, String fileName) {
-    if (fileName == null) {
-      fileName = resourceName;
+  private static String getCurrentVersion() {
+    try (var in = Minescript.class.getResourceAsStream("/version.txt");
+        var reader = new BufferedReader(new InputStreamReader(in))) {
+      return reader.readLine().strip();
+    } catch (IOException e) {
+      LOGGER.error("(minescript) Exception loading version resource: {}", e);
+      return "";
     }
+  }
+
+  private static String getLastRunVersion() {
+    Path versionPath = Paths.get(MINESCRIPT_DIR, "version.txt");
+    if (!Files.exists(versionPath)) {
+      return "";
+    }
+    try {
+      return Files.readString(versionPath).strip();
+    } catch (IOException e) {
+      LOGGER.error("(minescript) Exception loading version file: {}", e);
+      return "";
+    }
+  }
+
+  /** Copies resource from jar to a same-named file in the minescript dir.. */
+  private static void copyJarResourceToMinescriptDir(
+      String resourceName, FileOverwritePolicy overwritePolicy) {
+    copyJarResourceToMinescriptDir(resourceName, resourceName, overwritePolicy);
+  }
+
+  /** Copies resource from jar to a file in the minescript dir. */
+  private static void copyJarResourceToMinescriptDir(
+      String resourceName, String fileName, FileOverwritePolicy overwritePolicy) {
     Path filePath = Paths.get(MINESCRIPT_DIR, fileName);
-    if (!Files.exists(filePath)) {
-      try (var in = Minescript.class.getResourceAsStream("/" + resourceName);
-          var reader = new BufferedReader(new InputStreamReader(in));
-          var writer = new FileWriter(filePath.toString())) {
-        reader.transferTo(writer);
-        LOGGER.info(
-            "(minescript) Copied jar resource \"{}\" to minescript dir as \"{}\"",
-            resourceName,
-            fileName);
-      } catch (IOException e) {
-        LOGGER.error(
-            "(minescript) Failed to copy jar resource \"{}\" to minescript dir as \"{}\"",
-            resourceName,
-            fileName);
+    if (Files.exists(filePath)) {
+      switch (overwritePolicy) {
+        case OVERWRITTE:
+          try {
+            Files.delete(filePath);
+          } catch (IOException e) {
+            LOGGER.error("(minescript) Failed to delete file to be overwritten: {}", filePath);
+            return;
+          }
+          LOGGER.info("(minescript) Deleted outdated file: {}", filePath);
+          break;
+        case DO_NOT_OVERWRITE:
+          return;
       }
+    }
+    try (var in = Minescript.class.getResourceAsStream("/" + resourceName);
+        var reader = new BufferedReader(new InputStreamReader(in));
+        var writer = new FileWriter(filePath.toString())) {
+      reader.transferTo(writer);
+      LOGGER.info(
+          "(minescript) Copied jar resource \"{}\" to minescript dir as \"{}\"",
+          resourceName,
+          fileName);
+    } catch (IOException e) {
+      LOGGER.error(
+          "(minescript) Failed to copy jar resource \"{}\" to minescript dir as \"{}\"",
+          resourceName,
+          fileName);
     }
   }
 
@@ -103,9 +156,11 @@ public class Minescript {
   /** Loads config from {@code minescript/config.txt} if the file has changed since last loaded. */
   private static void loadConfig() {
     if (System.getProperty("os.name").startsWith("Windows")) {
-      maybeCopyJarResourceToMinescriptDir("windows_config.txt", "config.txt");
+      copyJarResourceToMinescriptDir(
+          "windows_config.txt", "config.txt", FileOverwritePolicy.DO_NOT_OVERWRITE);
     } else {
-      maybeCopyJarResourceToMinescriptDir("posix_config.txt", "config.txt");
+      copyJarResourceToMinescriptDir(
+          "posix_config.txt", "config.txt", FileOverwritePolicy.DO_NOT_OVERWRITE);
     }
     if (configFile.lastModified() < lastConfigLoadTime) {
       return;
