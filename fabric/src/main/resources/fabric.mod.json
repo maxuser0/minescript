@@ -4,15 +4,15 @@
   "version": "${version}",
 
   "name": "Minescript Mod",
-  "description": "Minescript mod for scripting Minecraft",
+  "description": "Mod for scripting Minecraft using Python",
   "authors": [
-    "dev@minescript.net"
+    "maxuser@minescript.net"
   ],
   "contact": {
     "homepage": "https://minescript.net/"
   },
 
-  "license": "CC0-1.0",
+  "license": "All rights reserved",
   "icon": "assets/modid/minescript-logo.png",
 
   "environment": "client",
