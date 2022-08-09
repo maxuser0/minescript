@@ -74,7 +74,8 @@ public class Minescript {
           currentVersion,
           lastRunVersion);
       copyJarResourceToMinescriptDir("version.txt", FileOverwritePolicy.OVERWRITTE);
-      copyJarResourceToMinescriptDir("minescriptapi.py", FileOverwritePolicy.OVERWRITTE);
+      copyJarResourceToMinescriptDir("minescript.py", FileOverwritePolicy.OVERWRITTE);
+      copyJarResourceToMinescriptDir("minescript_runtime.py", FileOverwritePolicy.OVERWRITTE);
       copyJarResourceToMinescriptDir("paste.py", FileOverwritePolicy.OVERWRITTE);
     }
 
@@ -254,7 +255,10 @@ public class Minescript {
     String minescriptDir = Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR).toString();
     try {
       Files.list(new File(minescriptDir).toPath())
-          .filter(path -> path.toString().endsWith(".py"))
+          .filter(
+              path ->
+                  !path.getFileName().toString().startsWith("minescript")
+                      && path.toString().endsWith(".py"))
           .forEach(
               path -> {
                 String commandName =
@@ -563,7 +567,7 @@ public class Minescript {
     public void enqueueStderr(String messagePattern, Object... arguments) {
       String logMessage = ParameterizedMessage.format(messagePattern, arguments);
       LOGGER.error("(minescript) {}", logMessage);
-      jobCommandQueue.add(formatAsJsonText(logMessage, "red"));
+      jobCommandQueue.add(formatAsJsonText(logMessage, "yellow"));
     }
 
     @Override

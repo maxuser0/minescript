@@ -78,7 +78,7 @@ def _ScriptServiceLoop():
 
     if "fcid" not in reply:
       print(
-          "minescriptapi.py: 'fcid' field missing in script function response",
+          "minescript_runtime.py: 'fcid' field missing in script function response",
           file=sys.stderr)
       continue
     func_call_id = reply["fcid"]
@@ -92,7 +92,7 @@ def _ScriptServiceLoop():
 
     if func_call_id not in _script_function_calls:
       print(
-          f"minescriptapi.py: fcid={func_call_id} not found in _script_function_calls",
+          f"minescript_runtime.py: fcid={func_call_id} not found in _script_function_calls",
           file=sys.stderr)
       continue
     func_name, retval_handler = _script_function_calls[func_call_id]
@@ -106,10 +106,10 @@ def _ScriptServiceLoop():
 
     if "conn" not in reply and "retval" not in reply:
       print(
-          f"minescriptapi.py: script function response has neither 'conn' nor 'retval': {reply}",
+          f"minescript_runtime.py: script function response has neither 'conn' nor 'retval': {reply}",
           file=sys.stderr)
 
-  print(f"minescriptapi.py: Script finished: `{sys.argv[0]}`", file=sys.stderr);
+  print(f"minescript_runtime.py: Script finished: `{sys.argv[0]}`", file=sys.stderr);
 
 
 def _WatchdogLoop():
