@@ -1,3 +1,8 @@
+# WARNING: This file is generated from the Minescript jar file. This file will
+# be overwritten automatically when Minescript updates to a new version. If you
+# make edits to this file, make sure to save a backup copy when upgrading to a
+# new version of Minescript.
+
 import os
 import sys
 
