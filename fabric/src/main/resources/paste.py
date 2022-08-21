@@ -1,7 +1,21 @@
+# SPDX-FileCopyrightText: © 2022 Greg Christiana <maxuser@minescript.net>
+# SPDX-License-Identifier: MIT
+
 # WARNING: This file is generated from the Minescript jar file. This file will
 # be overwritten automatically when Minescript updates to a new version. If you
 # make edits to this file, make sure to save a backup copy when upgrading to a
 # new version of Minescript.
+
+r"""paste v1.19.2 distributed via Minescript jar file
+
+Usage: \paste X Y Z [LABEL]
+
+Pastes blocks at location (X, Y, Z) that were previously copied
+via \copy.  When the optional param LABEL is given, blocks are
+pasted from the most recent copy command with the same
+LABEL given, otherwise blocks are pasted from the most
+recent copy command with no label given.
+"""
 
 import os
 import sys

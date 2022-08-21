@@ -1,7 +1,19 @@
+# SPDX-FileCopyrightText: © 2022 Greg Christiana <maxuser@minescript.net>
+# SPDX-License-Identifier: MIT
+
 # WARNING: This file is generated from the Minescript jar file. This file will
 # be overwritten automatically when Minescript updates to a new version. If you
 # make edits to this file, make sure to save a backup copy when upgrading to a
 # new version of Minescript.
+
+"""minescript v1.19.2 distributed via Minescript jar file
+
+Usage: import minescript  # from Python script
+
+User-friendly API for scripts to make function calls into the
+Minescript mod.  This module should be imported by other
+scripts and not run directly.
+"""
 
 from minescript_runtime import CallScriptFunction, CallAsyncScriptFunction
 

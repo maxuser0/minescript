@@ -1,20 +1,31 @@
+# SPDX-FileCopyrightText: © 2022 Greg Christiana <maxuser@minescript.net>
+# SPDX-License-Identifier: MIT
+
 # WARNING: This file is generated from the Minescript jar file. This file will
 # be overwritten automatically when Minescript updates to a new version. If you
 # make edits to this file, make sure to save a backup copy when upgrading to a
 # new version of Minescript.
 
-"""Interface for scripts to make function calls into the Minescript runtime.
+"""minescript_runtime v1.19.2 distributed via Minescript jar file
+
+Usage: import minescript_runtime  # from Python script
+
+Low-level interface and runtime for scripts to make function
+calls into the Minescript mod. Most users should import
+minescript.py instead for an API that is more user friendly.
 
 CallScriptFunction(func_name):
-  Makes a function call into the Minescript runtime, blocking execution until
-  returning a value. The return value may be a string, numeric, or composite
-  data such as a JSON array or structure.
+  Makes a function call into the Minescript runtime, blocking
+  execution until returning a value. The return value may be a
+  string, numeric, or composite data such as a JSON array or
+  structure.
 
 CallAsyncScriptFunction(func_name, retval_handler):
-  Makes a function call into the Minescript runtime, returning a value or
-  stream of values asynchronously by invoking retval_handler(value),
-  potentially multiple times. The number of times that the Minescript runtime
-  calls retval_handler(value) is specific to each function.
+  Makes a function call into the Minescript runtime, returning a
+  value or stream of values asynchronously by invoking
+  retval_handler(value), potentially multiple times. The number
+  of times that the Minescript runtime calls
+  retval_handler(value) is specific to each function.
 """
 
 import json

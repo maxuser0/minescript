@@ -76,6 +76,7 @@ public class Minescript {
       copyJarResourceToMinescriptDir("version.txt", FileOverwritePolicy.OVERWRITTE);
       copyJarResourceToMinescriptDir("minescript.py", FileOverwritePolicy.OVERWRITTE);
       copyJarResourceToMinescriptDir("minescript_runtime.py", FileOverwritePolicy.OVERWRITTE);
+      copyJarResourceToMinescriptDir("help.py", FileOverwritePolicy.OVERWRITTE);
       copyJarResourceToMinescriptDir("paste.py", FileOverwritePolicy.OVERWRITTE);
     }
 
