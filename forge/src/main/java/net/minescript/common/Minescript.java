@@ -232,6 +232,7 @@ public class Minescript {
         "minescript_copy_size_limit",
         "minescript_commands_per_cycle",
         "minescript_ticks_per_cycle",
+        "minescript_incremental_command_suggestions",
         "enable_minescript_on_chat_received_event"
       };
 
@@ -1325,6 +1326,18 @@ public class Minescript {
       return;
     }
 
+    if (command[0].equals("minescript_incremental_command_suggestions")) {
+      if (checkParamTypes(command, ParamType.BOOL)) {
+        boolean value = Boolean.valueOf(command[1]);
+        incrementalCommandSuggestions = value;
+        logUserInfo("Minescript incremental command suggestions set to {}", value);
+      } else {
+        logUserError(
+            "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
+      }
+      return;
+    }
+
     if (command[0].equals("enable_minescript_on_chat_received_event")) {
       if (checkParamTypes(command, ParamType.BOOL)) {
         boolean enable = command[1].equals("true");
@@ -1499,6 +1512,7 @@ public class Minescript {
   }
 
   private static MinescriptCommandHistory minescriptCommandHistory = new MinescriptCommandHistory();
+  private static boolean incrementalCommandSuggestions = false;
 
   public static boolean onKeyboardKeyPressed(Screen screen, int keyCode) {
     boolean cancel = false;
@@ -1584,9 +1598,11 @@ public class Minescript {
             }
             if (!newCommandSuggestions.isEmpty()) {
               if (!newCommandSuggestions.equals(commandSuggestions)) {
-                systemCommandQueue.add(formatAsJsonText("completions:", "aqua"));
-                for (String suggestion : newCommandSuggestions) {
-                  systemCommandQueue.add(formatAsJsonText("  " + suggestion, "aqua"));
+                if (key == TAB_KEY || incrementalCommandSuggestions) {
+                  systemCommandQueue.add(formatAsJsonText("completions:", "aqua"));
+                  for (String suggestion : newCommandSuggestions) {
+                    systemCommandQueue.add(formatAsJsonText("  " + suggestion, "aqua"));
+                  }
                 }
                 commandSuggestions = newCommandSuggestions;
               }
