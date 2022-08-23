@@ -202,6 +202,36 @@ public class Minescript {
                   value,
                   pythonLocation);
               break;
+            case "minescript_commands_per_cycle":
+              try {
+                minescriptCommandsPerCycle = Integer.valueOf(value);
+                LOGGER.info(
+                    "(minescript) Setting minescript_commands_per_cycle to {}",
+                    minescriptCommandsPerCycle);
+              } catch (NumberFormatException e) {
+                LOGGER.error(
+                    "(minescript) Unable to parse minescript_commands_per_cycle as integer: {}",
+                    value);
+              }
+              break;
+            case "minescript_ticks_per_cycle":
+              try {
+                minescriptTicksPerCycle = Integer.valueOf(value);
+                LOGGER.info(
+                    "(minescript) Setting minescript_ticks_per_cycle to {}",
+                    minescriptTicksPerCycle);
+              } catch (NumberFormatException e) {
+                LOGGER.error(
+                    "(minescript) Unable to parse minescript_ticks_per_cycle as integer: {}",
+                    value);
+              }
+              break;
+            case "minescript_incremental_command_suggestions":
+              incrementalCommandSuggestions = Boolean.valueOf(value);
+              LOGGER.info(
+                  "(minescript) Setting minescript_incremental_command_suggestions to {}",
+                  incrementalCommandSuggestions);
+              break;
             default:
               LOGGER.warn(
                   "(minescript) Unrecognized config var: {} = \"{}\" (\"{}\")",
@@ -722,8 +752,6 @@ public class Minescript {
 
     @Override
     public int run(String[] command, JobControl jobControl) {
-      // Check if config needs to be reloaded in case python location has changed.
-      loadConfig();
       if (pythonLocation == null) {
         jobControl.enqueueStderr(
             "Python location not specified. Set `python` variable at: {}",
@@ -1185,6 +1213,9 @@ public class Minescript {
       return;
     }
 
+    // Check if config needs to be reloaded.
+    loadConfig();
+
     // TODO(maxuser): need to do single/double quote parsing etc.
     String[] command = commandLine.split("\\s+");
     command = substituteMinecraftVars(command);
@@ -1286,11 +1317,13 @@ public class Minescript {
     }
 
     if (command[0].equals("minescript_commands_per_cycle")) {
-      if (checkParamTypes(command, ParamType.INT)) {
+      if (checkParamTypes(command)) {
+        logUserInfo("Minescript executing {} command(s) per cycle.", minescriptCommandsPerCycle);
+      } else if (checkParamTypes(command, ParamType.INT)) {
         int numCommands = Integer.valueOf(command[1]);
         if (numCommands < 1) numCommands = 1;
         minescriptCommandsPerCycle = numCommands;
-        logUserError("Minescript execution set to {} command(s) per cycle.", numCommands);
+        logUserInfo("Minescript execution set to {} command(s) per cycle.", numCommands);
       } else {
         logUserError(
             "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
@@ -1299,11 +1332,13 @@ public class Minescript {
     }
 
     if (command[0].equals("minescript_ticks_per_cycle")) {
-      if (checkParamTypes(command, ParamType.INT)) {
+      if (checkParamTypes(command)) {
+        logUserInfo("Minescript executing {} tick(s) per cycle.", minescriptTicksPerCycle);
+      } else if (checkParamTypes(command, ParamType.INT)) {
         int ticks = Integer.valueOf(command[1]);
         if (ticks < 1) ticks = 1;
         minescriptTicksPerCycle = ticks;
-        logUserError("Minescript execution set to {} tick(s) per cycle.", ticks);
+        logUserInfo("Minescript execution set to {} tick(s) per cycle.", ticks);
       } else {
         logUserError(
             "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
