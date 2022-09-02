@@ -1089,6 +1089,11 @@ public class Minescript {
     if (!match.find()) {
       return false;
     }
+    if (setblockCommand.contains("~")) {
+      logUserError("Warning: /setblock commands with ~ syntax cannot be undone.");
+      logUserError("           Use minescript.player_position() instead.");
+      return false;
+    }
     coords[0] = Integer.valueOf(match.group(1));
     coords[1] = Integer.valueOf(match.group(2));
     coords[2] = Integer.valueOf(match.group(3));
@@ -1101,6 +1106,11 @@ public class Minescript {
   private static boolean getFillCoords(String fillCommand, int[] coords) {
     var match = FILL_COMMAND_RE.matcher(fillCommand);
     if (!match.find()) {
+      return false;
+    }
+    if (fillCommand.contains("~")) {
+      logUserError("Warning: /fill commands with ~ syntax cannot be undone.");
+      logUserError("           Use minescript.player_position() instead.");
       return false;
     }
     coords[0] = Integer.valueOf(match.group(1));
