@@ -233,6 +233,12 @@ public class Minescript {
                   "(minescript) Setting minescript_incremental_command_suggestions to {}",
                   incrementalCommandSuggestions);
               break;
+            case "minescript_log_chunk_load_events":
+              logChunkLoadEvents = Boolean.valueOf(value);
+              LOGGER.info(
+                  "(minescript) Setting minescript_log_chunk_load_events to {}",
+                  logChunkLoadEvents);
+              break;
             default:
               LOGGER.warn(
                   "(minescript) Unrecognized config var: {} = \"{}\" (\"{}\")",
@@ -264,6 +270,7 @@ public class Minescript {
         "minescript_commands_per_cycle",
         "minescript_ticks_per_cycle",
         "minescript_incremental_command_suggestions",
+        "minescript_log_chunk_load_events",
         "enable_minescript_on_chat_received_event"
       };
 
@@ -1374,6 +1381,18 @@ public class Minescript {
       return;
     }
 
+    if (command[0].equals("minescript_log_chunk_load_events")) {
+      if (checkParamTypes(command, ParamType.BOOL)) {
+        boolean value = Boolean.valueOf(command[1]);
+        logChunkLoadEvents = value;
+        logUserInfo("Minescript logging of chunk load events set to {}", value);
+      } else {
+        logUserError(
+            "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
+      }
+      return;
+    }
+
     if (command[0].equals("enable_minescript_on_chat_received_event")) {
       if (checkParamTypes(command, ParamType.BOOL)) {
         boolean enable = command[1].equals("true");
@@ -1795,10 +1814,15 @@ public class Minescript {
     return new int[] {(int) (x >> 32), (int) x};
   }
 
+  private static boolean logChunkLoadEvents = false;
+
   public static void onChunkLoad(LevelAccessor chunkLevel, ChunkAccess chunk) {
     int chunkX = chunk.getPos().x;
     int chunkZ = chunk.getPos().z;
-    LOGGER.info("(minescript) world {} chunk loaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
+    if (logChunkLoadEvents) {
+      LOGGER.info(
+          "(minescript) world {} chunk loaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
+    }
     var iter = chunkLoadEventListeners.keySet().iterator();
     while (iter.hasNext()) {
       var listener = iter.next();
@@ -1811,8 +1835,10 @@ public class Minescript {
   public static void onChunkUnload(LevelAccessor chunkLevel, ChunkAccess chunk) {
     int chunkX = chunk.getPos().x;
     int chunkZ = chunk.getPos().z;
-    LOGGER.info(
-        "(minescript) world {} chunk unloaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
+    if (logChunkLoadEvents) {
+      LOGGER.info(
+          "(minescript) world {} chunk unloaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
+    }
     for (var listener : chunkLoadEventListeners.keySet()) {
       listener.onChunkUnloaded(chunkLevel, chunkX, chunkZ);
     }
