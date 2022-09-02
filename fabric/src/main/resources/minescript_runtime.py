@@ -78,6 +78,7 @@ def CallScriptFunction(func_name: str, *args: Any) -> Any:
 
 
 def _ScriptServiceLoop():
+  start_time = time.time()
   while True:
     try:
       json_input = input()
@@ -120,7 +121,10 @@ def _ScriptServiceLoop():
           f"minescript_runtime.py: script function response has neither 'conn' nor 'retval': {reply}",
           file=sys.stderr)
 
-  print(f"minescript_runtime.py: Script finished: `{sys.argv[0]}`", file=sys.stderr);
+  # Print that script has finished only if it's been running for more than 3 seconds.
+  end_time = time.time()
+  if end_time - start_time > 3:
+    print(f"minescript_runtime.py: Script finished: `{sys.argv[0]}`", file=sys.stderr);
 
 
 def _WatchdogLoop():

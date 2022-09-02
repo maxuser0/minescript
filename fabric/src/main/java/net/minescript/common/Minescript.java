@@ -597,7 +597,11 @@ public class Minescript {
 
     @Override
     public boolean respond(long functionCallId, String returnValue, boolean finalReply) {
-      return task.handleResponse(functionCallId, returnValue, finalReply);
+      boolean result = task.handleResponse(functionCallId, returnValue, finalReply);
+      if (functionCallId == 0 && "\"exit!\"".equals(returnValue)) {
+        state = JobState.DONE;
+      }
+      return result;
     }
 
     @Override
@@ -704,7 +708,7 @@ public class Minescript {
       try {
         int exitCode = task.run(command, this);
         final int millisToSleep = 1000;
-        while (state != JobState.KILLED && !jobCommandQueue.isEmpty()) {
+        while (state != JobState.KILLED && state != JobState.DONE && !jobCommandQueue.isEmpty()) {
           try {
             Thread.sleep(millisToSleep);
           } catch (InterruptedException e) {
@@ -794,6 +798,7 @@ public class Minescript {
         long lastReadTime = System.currentTimeMillis();
         String line;
         while (jobControl.state() != JobState.KILLED
+            && jobControl.state() != JobState.DONE
             && (process.isAlive()
                 || System.currentTimeMillis() - lastReadTime < trailingReadTimeoutMillis)) {
           if (stdoutReader.ready()) {
