@@ -460,19 +460,21 @@ public class Minescript {
     public synchronized void onOriginalJobDone() {
       originalJobId = -1;
 
-      // Write undo commands to a file and clear in-memory commands queue.
-      new File(UNDO_DIR).mkdirs();
-      commandsFilename = Paths.get(UNDO_DIR, startTimeMillis + ".txt").toString();
-      try (var writer = new PrintWriter(new FileWriter(commandsFilename))) {
-        writer.printf(
-            "# Generated from Minescript command `%s`:\n", String.join(" ", originalCommand));
-        for (String command : commands) {
-          writer.println(command);
+      if (!commands.isEmpty()) {
+        // Write undo commands to a file and clear in-memory commands queue.
+        new File(UNDO_DIR).mkdirs();
+        commandsFilename = Paths.get(UNDO_DIR, startTimeMillis + ".txt").toString();
+        try (var writer = new PrintWriter(new FileWriter(commandsFilename))) {
+          writer.printf(
+              "# Generated from Minescript command `%s`:\n", String.join(" ", originalCommand));
+          for (String command : commands) {
+            writer.println(command);
+          }
+        } catch (IOException e) {
+          logException(e);
         }
-      } catch (IOException e) {
-        logException(e);
+        commands.clear();
       }
-      commands.clear();
     }
 
     public String[] originalCommand() {
