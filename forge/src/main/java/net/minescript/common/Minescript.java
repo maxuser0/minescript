@@ -30,7 +30,6 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -561,7 +560,6 @@ public class Minescript {
   }
 
   static class Job implements JobControl {
-    private static AtomicInteger nextJobId = new AtomicInteger(1);
     private final int jobId;
     private final String[] command;
     private final Task task;
@@ -571,8 +569,8 @@ public class Minescript {
     private Queue<String> jobCommandQueue = new ConcurrentLinkedQueue<String>();
     private Lock lock = new ReentrantLock(true); // true indicates a fair lock to avoid starvation
 
-    public Job(String[] command, Task task, Consumer<Integer> doneCallback) {
-      this.jobId = nextJobId.getAndIncrement();
+    public Job(int jobId, String[] command, Task task, Consumer<Integer> doneCallback) {
+      this.jobId = jobId;
       this.command = Arrays.copyOf(command, command.length);
       this.task = task;
       this.doneCallback = doneCallback;
@@ -895,6 +893,7 @@ public class Minescript {
 
   static class JobManager {
     private final Map<Integer, Job> jobMap = new ConcurrentHashMap<Integer, Job>();
+    private int nextJobId = 1;
 
     // Map from ID of original job (not an undo) to its corresponding undo, if applicable.
     private final Map<Integer, UndoableAction> jobUndoMap =
@@ -903,7 +902,7 @@ public class Minescript {
     private final Deque<UndoableAction> undoStack = new ArrayDeque<>();
 
     public void createSubprocess(String[] command) {
-      var job = new Job(command, new SubprocessTask(), this::removeJob);
+      var job = new Job(allocateJobId(), command, new SubprocessTask(), this::removeJob);
       var undo = new UndoableAction(job.jobId(), command);
       jobUndoMap.put(job.jobId(), undo);
       undoStack.addFirst(undo);
@@ -935,9 +934,17 @@ public class Minescript {
         }
       }
 
-      var undoJob = new Job(undo.derivativeCommand(), new UndoTask(undo), this::removeJob);
+      var undoJob =
+          new Job(allocateJobId(), undo.derivativeCommand(), new UndoTask(undo), this::removeJob);
       jobMap.put(undoJob.jobId(), undoJob);
       undoJob.start();
+    }
+
+    private synchronized int allocateJobId() {
+      if (jobMap.isEmpty()) {
+        nextJobId = 1;
+      }
+      return nextJobId++;
     }
 
     private void removeJob(int jobId) {
