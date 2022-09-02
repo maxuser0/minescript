@@ -41,6 +41,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
@@ -2167,13 +2168,30 @@ public class Minescript {
     }
   }
 
+  private static String itemStackToJsonString(ItemStack itemStack) {
+    if (itemStack.getCount() == 0) {
+      return "null";
+    } else {
+      var nbt = itemStack.getTag();
+      return String.format(
+          "{\"item\": \"%s\", \"count\": %d, \"nbt\": %s}",
+          itemStack.getItem(),
+          itemStack.getCount(),
+          nbt == null
+              ? "null"
+              : '"'
+                  + nbt.toString().replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+                  + '"');
+    }
+  }
+
   public static void onPlayerTick() {
     if (++playerTickEventCounter % minescriptTicksPerCycle == 0) {
       var minecraft = Minecraft.getInstance();
       var player = minecraft.player;
       if (player != null && (!systemCommandQueue.isEmpty() || !jobs.getMap().isEmpty())) {
         Level level = player.getCommandSenderWorld();
-        for (int i = 0; i < minescriptCommandsPerCycle; ++i) {
+        for (int commandCount = 0; commandCount < minescriptCommandsPerCycle; ++commandCount) {
           String command = systemCommandQueue.poll();
           if (command != null) {
             processMessage(command);
@@ -2270,6 +2288,30 @@ public class Minescript {
                       customNickname = null;
                     }
                     job.respond(funcCallId, "null", true);
+                  } else if (functionName.equals("player_hand_items")) {
+                    StringBuffer result = new StringBuffer("[");
+                    for (var itemStack : player.getHandSlots()) {
+                      if (result.length() > 1) {
+                        result.append(",");
+                      }
+                      result.append(itemStackToJsonString(itemStack));
+                    }
+                    result.append("]");
+                    job.respond(funcCallId, result.toString(), true);
+                  } else if (functionName.equals("player_inventory")) {
+                    var inventory = player.getInventory();
+                    StringBuffer result = new StringBuffer("[");
+                    for (int i = 0; i < inventory.getContainerSize(); i++) {
+                      var itemStack = inventory.getItem(i);
+                      if (itemStack.getCount() > 0) {
+                        if (result.length() > 1) {
+                          result.append(",");
+                        }
+                        result.append(itemStackToJsonString(itemStack));
+                      }
+                    }
+                    result.append("]");
+                    job.respond(funcCallId, result.toString(), true);
                   } else if (funcCallId == 0 && functionName.equals("exit!")) {
                     job.respond(0, "\"exit!\"", true);
                   } else {

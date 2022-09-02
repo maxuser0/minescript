@@ -81,10 +81,10 @@ def _ScriptServiceLoop():
   while True:
     try:
       json_input = input()
-      #print(f"json_input: {json_input}", file=sys.stderr)
       reply = json.loads(json_input)
     except json.decoder.JSONDecodeError as e:
       traceback.print_exc(file=sys.stderr)
+      print(f"JSON error in: {json_input}", file=sys.stderr)
       continue
 
     if "fcid" not in reply:

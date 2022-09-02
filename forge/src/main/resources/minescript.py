@@ -34,6 +34,40 @@ def player_position(done_callback=None):
     CallAsyncScriptFunction("player_position", done_callback)
 
 
+def player_hand_items(done_callback=None):
+  """Gets the items in the local player's hands.
+
+  Args:
+    done_callback: if given, return immediately and call done_callback(return_value)
+        asynchronously when return_value is ready
+
+  Returns:
+    If done_callback is None, returns items in player's inventory as list of
+    items where each item is a dict: {"item": str, "count": int, "nbt": str}
+  """
+  if done_callback is None:
+    return CallScriptFunction("player_hand_items")
+  else:
+    CallAsyncScriptFunction("player_hand_items", done_callback)
+
+
+def player_inventory(done_callback=None):
+  """Gets the items in the local player's inventory.
+
+  Args:
+    done_callback: if given, return immediately and call done_callback(return_value)
+        asynchronously when return_value is ready
+
+  Returns:
+    If done_callback is None, returns items in player's inventory as list of
+    items where each item is a dict: {"item": str, "count": int, "nbt": str}
+  """
+  if done_callback is None:
+    return CallScriptFunction("player_inventory")
+  else:
+    CallAsyncScriptFunction("player_inventory", done_callback)
+
+
 def getblock(x: int, y: int, z: int, done_callback=None):
   """Gets the type of block as position (x, y, z).
 
