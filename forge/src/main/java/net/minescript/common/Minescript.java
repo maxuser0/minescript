@@ -704,7 +704,10 @@ public class Minescript {
         state = JobState.RUNNING;
       }
       try {
+        final long startTimeMillis = System.currentTimeMillis();
+        final long longRunningJobThreshold = 3000L;
         int exitCode = task.run(command, this);
+
         final int millisToSleep = 1000;
         while (state != JobState.KILLED && state != JobState.DONE && !jobCommandQueue.isEmpty()) {
           try {
@@ -713,8 +716,14 @@ public class Minescript {
             logJobException(e);
           }
         }
+        final long endTimeMillis = System.currentTimeMillis();
         if (exitCode != 0) {
-          logUserError("Command exit code: {}", exitCode);
+          logUserError(jobSummaryWithStatus("Exited with code " + exitCode));
+        } else if (endTimeMillis - startTimeMillis > longRunningJobThreshold) {
+          if (state != JobState.KILLED) {
+            state = JobState.DONE;
+          }
+          logUserInfo(toString());
         }
       } finally {
         doneCallback.accept(jobId);
@@ -726,21 +735,22 @@ public class Minescript {
     }
 
     public String jobSummary() {
-      // Same as toString(), but omits state.
+      return jobSummaryWithStatus("");
+    }
+
+    private String jobSummaryWithStatus(String status) {
+      // TODO(maxuser): Quote args containing spaces.
       String displayCommand = String.join(" ", command);
       if (displayCommand.length() > 61) {
         displayCommand = displayCommand.substring(0, 61) + "...";
       }
-      return String.format("[%d] %s", jobId, displayCommand);
+      return String.format(
+          "[%d] %s%s%s", jobId, status, status.isEmpty() ? "" : ": ", displayCommand);
     }
 
     @Override
     public String toString() {
-      String displayCommand = String.join(" ", command);
-      if (displayCommand.length() > 61) {
-        displayCommand = displayCommand.substring(0, 61) + "...";
-      }
-      return String.format("[%d] %s:  %s", jobId, state, displayCommand);
+      return jobSummaryWithStatus(state.toString());
     }
   }
 
