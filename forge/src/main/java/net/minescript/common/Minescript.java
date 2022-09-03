@@ -61,15 +61,15 @@ public class Minescript {
   }
 
   public static void init() {
-    LOGGER.info("(minescript) Starting Minescript on OS: {}", System.getProperty("os.name"));
+    LOGGER.info("Starting Minescript on OS: {}", System.getProperty("os.name"));
     if (new File(MINESCRIPT_DIR).mkdir()) {
-      LOGGER.info("(minescript) Created minescript dir");
+      LOGGER.info("Created minescript dir");
     }
 
     var undoDir = new File(Paths.get(MINESCRIPT_DIR, "undo").toString());
     if (undoDir.exists()) {
       int numDeletedFiles = 0;
-      LOGGER.info("(minescript) Deleting undo files from previous run...");
+      LOGGER.info("Deleting undo files from previous run...");
       for (var undoFile : undoDir.listFiles()) {
         if (undoFile.getName().endsWith(".txt")) {
           if (undoFile.delete()) {
@@ -84,7 +84,7 @@ public class Minescript {
     String lastRunVersion = getLastRunVersion();
     if (!currentVersion.equals(lastRunVersion)) {
       LOGGER.info(
-          "(minescript) Current version ({}) does not match last run version ({})",
+          "Current version ({}) does not match last run version ({})",
           currentVersion,
           lastRunVersion);
       copyJarResourceToMinescriptDir("version.txt", FileOverwritePolicy.OVERWRITTE);
@@ -102,7 +102,7 @@ public class Minescript {
         var reader = new BufferedReader(new InputStreamReader(in))) {
       return reader.readLine().strip();
     } catch (IOException e) {
-      LOGGER.error("(minescript) Exception loading version resource: {}", e);
+      LOGGER.error("Exception loading version resource: {}", e);
       return "";
     }
   }
@@ -115,7 +115,7 @@ public class Minescript {
     try {
       return Files.readString(versionPath).strip();
     } catch (IOException e) {
-      LOGGER.error("(minescript) Exception loading version file: {}", e);
+      LOGGER.error("Exception loading version file: {}", e);
       return "";
     }
   }
@@ -136,10 +136,10 @@ public class Minescript {
           try {
             Files.delete(filePath);
           } catch (IOException e) {
-            LOGGER.error("(minescript) Failed to delete file to be overwritten: {}", filePath);
+            LOGGER.error("Failed to delete file to be overwritten: {}", filePath);
             return;
           }
-          LOGGER.info("(minescript) Deleted outdated file: {}", filePath);
+          LOGGER.info("Deleted outdated file: {}", filePath);
           break;
         case DO_NOT_OVERWRITE:
           return;
@@ -149,15 +149,10 @@ public class Minescript {
         var reader = new BufferedReader(new InputStreamReader(in));
         var writer = new FileWriter(filePath.toString())) {
       reader.transferTo(writer);
-      LOGGER.info(
-          "(minescript) Copied jar resource \"{}\" to minescript dir as \"{}\"",
-          resourceName,
-          fileName);
+      LOGGER.info("Copied jar resource \"{}\" to minescript dir as \"{}\"", resourceName, fileName);
     } catch (IOException e) {
       LOGGER.error(
-          "(minescript) Failed to copy jar resource \"{}\" to minescript dir as \"{}\"",
-          resourceName,
-          fileName);
+          "Failed to copy jar resource \"{}\" to minescript dir as \"{}\"", resourceName, fileName);
     }
   }
 
@@ -210,61 +205,45 @@ public class Minescript {
                             "~", Matcher.quoteReplacement(System.getProperty("user.home")))
                         : value;
               }
-              LOGGER.info(
-                  "(minescript) Setting config var: {} = \"{}\" (\"{}\")",
-                  name,
-                  value,
-                  pythonLocation);
+              LOGGER.info("Setting config var: {} = \"{}\" (\"{}\")", name, value, pythonLocation);
               break;
             case "minescript_commands_per_cycle":
               try {
                 minescriptCommandsPerCycle = Integer.valueOf(value);
                 LOGGER.info(
-                    "(minescript) Setting minescript_commands_per_cycle to {}",
-                    minescriptCommandsPerCycle);
+                    "Setting minescript_commands_per_cycle to {}", minescriptCommandsPerCycle);
               } catch (NumberFormatException e) {
-                LOGGER.error(
-                    "(minescript) Unable to parse minescript_commands_per_cycle as integer: {}",
-                    value);
+                LOGGER.error("Unable to parse minescript_commands_per_cycle as integer: {}", value);
               }
               break;
             case "minescript_ticks_per_cycle":
               try {
                 minescriptTicksPerCycle = Integer.valueOf(value);
-                LOGGER.info(
-                    "(minescript) Setting minescript_ticks_per_cycle to {}",
-                    minescriptTicksPerCycle);
+                LOGGER.info("Setting minescript_ticks_per_cycle to {}", minescriptTicksPerCycle);
               } catch (NumberFormatException e) {
-                LOGGER.error(
-                    "(minescript) Unable to parse minescript_ticks_per_cycle as integer: {}",
-                    value);
+                LOGGER.error("Unable to parse minescript_ticks_per_cycle as integer: {}", value);
               }
               break;
             case "minescript_incremental_command_suggestions":
               incrementalCommandSuggestions = Boolean.valueOf(value);
               LOGGER.info(
-                  "(minescript) Setting minescript_incremental_command_suggestions to {}",
+                  "Setting minescript_incremental_command_suggestions to {}",
                   incrementalCommandSuggestions);
               break;
             case "minescript_log_chunk_load_events":
               logChunkLoadEvents = Boolean.valueOf(value);
-              LOGGER.info(
-                  "(minescript) Setting minescript_log_chunk_load_events to {}",
-                  logChunkLoadEvents);
+              LOGGER.info("Setting minescript_log_chunk_load_events to {}", logChunkLoadEvents);
               break;
             default:
               LOGGER.warn(
-                  "(minescript) Unrecognized config var: {} = \"{}\" (\"{}\")",
-                  name,
-                  value,
-                  pythonLocation);
+                  "Unrecognized config var: {} = \"{}\" (\"{}\")", name, value, pythonLocation);
           }
         } else {
-          LOGGER.warn("(minescript) config.txt: unable parse config line: {}", line);
+          LOGGER.warn("config.txt: unable parse config line: {}", line);
         }
       }
     } catch (IOException e) {
-      LOGGER.error("(minescript) Exception loading config file: {}", e);
+      LOGGER.error("Exception loading config file: {}", e);
     }
   }
 
@@ -300,7 +279,7 @@ public class Minescript {
     var pw = new PrintWriter(sw);
     e.printStackTrace(pw);
     logUserError("{}: {}", e.getClass().getSimpleName(), e.getMessage());
-    LOGGER.error("(minescript) exception stack trace: {}", sw.toString());
+    LOGGER.error("exception stack trace: {}", sw.toString());
   }
 
   private static List<String> getScriptCommandNames() {
@@ -535,7 +514,7 @@ public class Minescript {
     private boolean addBlockToUndoQueue(int x, int y, int z, String block) {
       if (undone) {
         LOGGER.error(
-            "(minescript) Cannot add command to undoable action after already undone: {}",
+            "Cannot add command to undoable action after already undone: {}",
             String.join(" ", originalCommand));
         return false;
       }
@@ -624,7 +603,7 @@ public class Minescript {
     @Override
     public void enqueueStderr(String messagePattern, Object... arguments) {
       String logMessage = ParameterizedMessage.format(messagePattern, arguments);
-      LOGGER.error("(minescript) {}", logMessage);
+      LOGGER.error("{}", logMessage);
       jobCommandQueue.add(formatAsJsonText(logMessage, "yellow"));
     }
 
@@ -634,8 +613,7 @@ public class Minescript {
       var pw = new PrintWriter(sw);
       e.printStackTrace(pw);
       logUserError("Exception in job \"{}\": {}", jobSummary(), e.getMessage());
-      LOGGER.error(
-          "(minescript) exception stack trace in job \"{}\": {}", jobSummary(), sw.toString());
+      LOGGER.error("exception stack trace in job \"{}\": {}", jobSummary(), sw.toString());
     }
 
     public void start() {
@@ -1038,13 +1016,13 @@ public class Minescript {
 
   public static void logUserInfo(String messagePattern, Object... arguments) {
     String logMessage = ParameterizedMessage.format(messagePattern, arguments);
-    LOGGER.info("(minescript) {}", logMessage);
+    LOGGER.info("{}", logMessage);
     systemCommandQueue.add(formatAsJsonText(logMessage, "yellow"));
   }
 
   public static void logUserError(String messagePattern, Object... arguments) {
     String logMessage = ParameterizedMessage.format(messagePattern, arguments);
-    LOGGER.error("(minescript) {}", logMessage);
+    LOGGER.error("{}", logMessage);
     systemCommandQueue.add(formatAsJsonText(logMessage, "red"));
   }
 
@@ -1224,7 +1202,7 @@ public class Minescript {
 
     final String copiesDir = Paths.get(MINESCRIPT_DIR, "copies").toString();
     if (new File(copiesDir).mkdir()) {
-      LOGGER.info("(minescript) Created minescript copies dir");
+      LOGGER.info("Created minescript copies dir");
     }
 
     try (var writer =
@@ -1539,7 +1517,7 @@ public class Minescript {
     } catch (NoSuchFieldException e) {
       if (!loggedFieldNameFallback) {
         LOGGER.info(
-            "(minescript) Cannot find field with obfuscated name \"{}\", falling back to"
+            "Cannot find field with obfuscated name \"{}\", falling back to"
                 + " unobfuscated name \"{}\"",
             obfuscatedName,
             unobfuscatedName);
@@ -1554,9 +1532,9 @@ public class Minescript {
             unobfuscatedName,
             obfuscatedName,
             klass.getSimpleName());
-        LOGGER.info("(minescript) Declared fields of {}:", klass.getName());
+        LOGGER.info("Declared fields of {}:", klass.getName());
         for (Field f : klass.getDeclaredFields()) {
-          LOGGER.info("(minescript)   {}", f);
+          LOGGER.info("  {}", f);
         }
         throw e2;
       }
@@ -1735,7 +1713,7 @@ public class Minescript {
     } catch (NoSuchMethodException e) {
       if (!loggedMethodNameFallback) {
         LOGGER.info(
-            "(minescript) Cannot find method with obfuscated name \"{}\", falling back to"
+            "Cannot find method with obfuscated name \"{}\", falling back to"
                 + " unobfuscated name \"{}\"",
             obfuscatedName,
             unobfuscatedName);
@@ -1750,9 +1728,9 @@ public class Minescript {
             unobfuscatedName,
             obfuscatedName,
             object.getClass().getSimpleName());
-        LOGGER.info("(minescript) Declared methods of {}:", object.getClass().getName());
+        LOGGER.info("Declared methods of {}:", object.getClass().getName());
         for (Method m : object.getClass().getDeclaredMethods()) {
-          LOGGER.info("(minescript)   {}", m);
+          LOGGER.info("  {}", m);
         }
         throw e2;
       }
@@ -1792,20 +1770,20 @@ public class Minescript {
     //
     // TranslatableComponent.args[1]:TextComponent.text:String
 
-    LOGGER.info("(minescript) ClientChatReceivedEvent message: {}", message.getClass().getName());
+    LOGGER.info("ClientChatReceivedEvent message: {}", message.getClass().getName());
 
     // TODO(maxuser)! replace with net.minecraft.network.chat.MutableComponent
     // // TranslatableComponent was used in 1.18, and replaced with MutableComponent in 1.19.
     // // But MutableComponent doesn't have a getArgs() method like TranslatableComponent did.
     // if (message instanceof MutableComponent) {
     //   var component = (MutableComponent) message;
-    //   LOGGER.info("(minescript) Declared methods of {}:", component.getClass().getName());
+    //   LOGGER.info("Declared methods of {}:", component.getClass().getName());
     //   for (Method m : component.getClass().getMethods()) {
-    //     LOGGER.info("(minescript)   {}", m);
+    //     LOGGER.info("  {}", m);
     //   }
     //   for (var arg : component.getArgs()) {
     //     LOGGER.info(
-    //         "(minescript) ClientChatReceivedEvent message arg: {}", arg.getClass().getName());
+    //         "ClientChatReceivedEvent message arg: {}", arg.getClass().getName());
     //
     //     String text = null;
     //     if (arg instanceof String) {
@@ -1827,7 +1805,7 @@ public class Minescript {
     //         while (iter.hasNext()) {
     //           var listener = iter.next();
     //           LOGGER.info(
-    //               "(minescript) Forwarding chat message to listener {}: \"{}\"",
+    //               "Forwarding chat message to listener {}: \"{}\"",
     //               listener.getKey(),
     //               text);
     //           // TODO(maxuser): Pass player name or uuid: event.getSenderUUID() -> java.util.UUID
@@ -1840,7 +1818,7 @@ public class Minescript {
     //         if (enableMinescriptOnChatReceivedEvent) {
     //           if (text.startsWith("\\")) {
     //             LOGGER.info(
-    //                 "(minescript) Processing command from received chat event: {}", text);
+    //                 "Processing command from received chat event: {}", text);
     //             runMinescriptCommand(text.substring(1));
     //             cancel = true;
     //           }
@@ -1868,8 +1846,7 @@ public class Minescript {
     int chunkX = chunk.getPos().x;
     int chunkZ = chunk.getPos().z;
     if (logChunkLoadEvents) {
-      LOGGER.info(
-          "(minescript) world {} chunk loaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
+      LOGGER.info("world {} chunk loaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
     }
     var iter = chunkLoadEventListeners.keySet().iterator();
     while (iter.hasNext()) {
@@ -1884,8 +1861,7 @@ public class Minescript {
     int chunkX = chunk.getPos().x;
     int chunkZ = chunk.getPos().z;
     if (logChunkLoadEvents) {
-      LOGGER.info(
-          "(minescript) world {} chunk unloaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
+      LOGGER.info("world {} chunk unloaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
     }
     for (var listener : chunkLoadEventListeners.keySet()) {
       listener.onChunkUnloaded(chunkLevel, chunkX, chunkZ);
@@ -1897,7 +1873,7 @@ public class Minescript {
     if (message.startsWith("\\")) {
       minescriptCommandHistory.addCommand(message);
 
-      LOGGER.info("(minescript) Processing command from chat event: {}", message);
+      LOGGER.info("Processing command from chat event: {}", message);
       runMinescriptCommand(message.substring(1));
       cancel = true;
     } else if (customNickname != null && !message.startsWith("/")) {
@@ -1933,16 +1909,14 @@ public class Minescript {
       lastCheckedServerIp = serverIp;
       lastCheckedTime = System.currentTimeMillis();
 
-      LOGGER.info(
-          "(minescript) {} modified since last checked; refreshing...",
-          serverBlockListPath.toString());
+      LOGGER.info("{} modified since last checked; refreshing...", serverBlockListPath.toString());
       try (var reader = new BufferedReader(new FileReader(serverBlockListPath.toString()))) {
         var line = reader.readLine();
         while (line != null) {
           line = line.replaceAll("#.*$", "").strip();
           if (line.equals(serverName) || line.equals(serverIp)) {
             LOGGER.info(
-                "(minescript) Found server match in {}, commands disabled: {}",
+                "Found server match in {}, commands disabled: {}",
                 serverBlockListPath.toString(),
                 line);
             lastCheckedValue = false;
@@ -1954,7 +1928,7 @@ public class Minescript {
         logException(e);
       }
       LOGGER.info(
-          "(minescript) No server match in {}, commands enabled: {} / {}",
+          "No server match in {}, commands enabled: {} / {}",
           serverBlockListPath.toString(),
           serverName,
           serverIp);
@@ -2078,13 +2052,7 @@ public class Minescript {
         int x1, int z1, int x2, int z2, ScriptFunctionCall scriptFunction) {
       var minecraft = Minecraft.getInstance();
       this.levelHashCode = minecraft.level.hashCode();
-      LOGGER.info(
-          "(minescript) listener chunk region in level {}: {} {} {} {}",
-          levelHashCode,
-          x1,
-          z1,
-          x2,
-          z2);
+      LOGGER.info("listener chunk region in level {}: {} {} {} {}", levelHashCode, x1, z1, x2, z2);
       int chunkX1 = worldCoordToChunkCoord(x1);
       int chunkZ1 = worldCoordToChunkCoord(z1);
       int chunkX2 = worldCoordToChunkCoord(x2);
@@ -2097,7 +2065,7 @@ public class Minescript {
 
       for (int chunkX = chunkXMin; chunkX <= chunkXMax; chunkX++) {
         for (int chunkZ = chunkZMin; chunkZ <= chunkZMax; chunkZ++) {
-          LOGGER.info("(minescript) listener chunk registered: {} {}", chunkX, chunkZ);
+          LOGGER.info("listener chunk registered: {} {}", chunkX, chunkZ);
           long packedChunkXZ = packInts(chunkX, chunkZ);
           chunksToLoad.put(packedChunkXZ, false);
         }
@@ -2117,8 +2085,7 @@ public class Minescript {
       var minecraft = Minecraft.getInstance();
       var level = minecraft.level;
       if (level.hashCode() != this.levelHashCode) {
-        LOGGER.info(
-            "(minescript) chunk listener's world doesn't match current world; clearing listener");
+        LOGGER.info("chunk listener's world doesn't match current world; clearing listener");
         chunksToLoad.clear();
         numUnloadedChunks = 0;
         return;
@@ -2134,7 +2101,7 @@ public class Minescript {
           numUnloadedChunks++;
         }
       }
-      LOGGER.info("(minescript) Unloaded chunks after updateChunkStatuses: {}", numUnloadedChunks);
+      LOGGER.info("Unloaded chunks after updateChunkStatuses: {}", numUnloadedChunks);
     }
 
     /** Returns true if the final outstanding chunk is loaded. */
@@ -2151,11 +2118,7 @@ public class Minescript {
       }
       boolean wasLoaded = chunksToLoad.put(packedChunkXZ, true);
       if (!wasLoaded) {
-        LOGGER.info(
-            "(minescript) listener chunk loaded for level {}: {} {}",
-            levelHashCode,
-            chunkX,
-            chunkZ);
+        LOGGER.info("listener chunk loaded for level {}: {} {}", levelHashCode, chunkX, chunkZ);
         numUnloadedChunks--;
         if (numUnloadedChunks == 0) {
           onFinished();
@@ -2207,7 +2170,7 @@ public class Minescript {
 
   private static void processMessage(String message) {
     if (message.startsWith("\\")) {
-      LOGGER.info("(minescript) Processing command from message queue: {}", message);
+      LOGGER.info("Processing command from message queue: {}", message);
       // TODO(maxuser): If there's a parent job that spawned this command, pass along the parent job
       // so that suspending or killing the parent job also suspends or kills the child job. Also,
       // child jobs are listed from `jobs` command and increment the job counter, but should they?
@@ -2232,8 +2195,7 @@ public class Minescript {
     var player = minecraft.player;
     if (message.startsWith("/")) {
       if (!areCommandsAllowed()) {
-        LOGGER.info(
-            "(minescript) Minecraft command blocked for server: {}", message); // [norewrite]
+        LOGGER.info("Minecraft command blocked for server: {}", message); // [norewrite]
         return;
       }
       player.commandUnsigned(message.substring(1));
