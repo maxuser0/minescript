@@ -2349,7 +2349,7 @@ public class Minescript {
                     }
                     job.respond(funcCallId, "null", true);
                   } else if (functionName.equals("player_hand_items")) {
-                    StringBuffer result = new StringBuffer("[");
+                    var result = new StringBuilder("[");
                     for (var itemStack : player.getHandSlots()) {
                       if (result.length() > 1) {
                         result.append(",");
@@ -2360,7 +2360,7 @@ public class Minescript {
                     job.respond(funcCallId, result.toString(), true);
                   } else if (functionName.equals("player_inventory")) {
                     var inventory = player.getInventory();
-                    StringBuffer result = new StringBuffer("[");
+                    var result = new StringBuilder("[");
                     for (int i = 0; i < inventory.getContainerSize(); i++) {
                       var itemStack = inventory.getItem(i);
                       if (itemStack.getCount() > 0) {
