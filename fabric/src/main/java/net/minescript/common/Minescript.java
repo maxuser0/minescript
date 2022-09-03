@@ -66,6 +66,20 @@ public class Minescript {
       LOGGER.info("(minescript) Created minescript dir");
     }
 
+    var undoDir = new File(Paths.get(MINESCRIPT_DIR, "undo").toString());
+    if (undoDir.exists()) {
+      int numDeletedFiles = 0;
+      LOGGER.info("(minescript) Deleting undo files from previous run...");
+      for (var undoFile : undoDir.listFiles()) {
+        if (undoFile.getName().endsWith(".txt")) {
+          if (undoFile.delete()) {
+            ++numDeletedFiles;
+          }
+        }
+      }
+      LOGGER.info("{} undo file(s) deleted.", numDeletedFiles);
+    }
+
     String currentVersion = getCurrentVersion();
     String lastRunVersion = getLastRunVersion();
     if (!currentVersion.equals(lastRunVersion)) {
