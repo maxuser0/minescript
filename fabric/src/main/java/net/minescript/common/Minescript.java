@@ -1144,13 +1144,22 @@ public class Minescript {
       return false;
     }
     if (setblockCommand.contains("~")) {
-      logUserError("Warning: /setblock commands with ~ syntax cannot be undone.");
-      logUserError("           Use minescript.player_position() instead.");
+      logUserInfo("Warning: /setblock commands with ~ syntax cannot be undone.");
+      logUserInfo("           Use minescript.player_position() instead.");
       return false;
     }
-    coords[0] = Integer.valueOf(match.group(1));
-    coords[1] = Integer.valueOf(match.group(2));
-    coords[2] = Integer.valueOf(match.group(3));
+    try {
+      coords[0] = Integer.valueOf(match.group(1));
+      coords[1] = Integer.valueOf(match.group(2));
+      coords[2] = Integer.valueOf(match.group(3));
+    } catch (NumberFormatException e) {
+      logUserError(
+          "Error: invalid number format for /setblock coordinates: {} {} {}",
+          match.group(1),
+          match.group(2),
+          match.group(3));
+      return false;
+    }
     return true;
   }
 
