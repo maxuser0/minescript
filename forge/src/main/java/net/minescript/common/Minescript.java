@@ -713,7 +713,7 @@ public class Minescript {
         }
         final long endTimeMillis = System.currentTimeMillis();
         if (exitCode != 0) {
-          logUserError(jobSummaryWithStatus("Exited with code " + exitCode));
+          logUserError(jobSummaryWithStatus("Exited with error code " + exitCode));
         } else if (endTimeMillis - startTimeMillis > longRunningJobThreshold) {
           if (state != JobState.KILLED) {
             state = JobState.DONE;
