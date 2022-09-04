@@ -1,7 +1,10 @@
 package net.minescript.common;
 
+import static net.minescript.common.CommandSyntax.parseCommand;
+import static net.minescript.common.CommandSyntax.quoteCommand;
 // import net.minecraft.network.chat.TextComponent;
 // import net.minecraft.network.chat.TranslatableComponent;
+
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -731,8 +734,7 @@ public class Minescript {
     }
 
     private String jobSummaryWithStatus(String status) {
-      // TODO(maxuser): Quote args containing spaces.
-      String displayCommand = String.join(" ", command);
+      String displayCommand = quoteCommand(command);
       if (displayCommand.length() > 61) {
         displayCommand = displayCommand.substring(0, 61) + "...";
       }
@@ -1250,8 +1252,7 @@ public class Minescript {
     // Check if config needs to be reloaded.
     loadConfig();
 
-    // TODO(maxuser): need to do single/double quote parsing etc.
-    String[] command = commandLine.split("\\s+");
+    String[] command = parseCommand(commandLine);
     command = substituteMinecraftVars(command);
 
     if (command[0].equals("jobs")) {
