@@ -25,11 +25,14 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
@@ -437,10 +440,40 @@ public class Minescript {
     private volatile int originalJobId; // ID of the job that this undoes.
     private String[] originalCommand;
     private final long startTimeMillis;
-    private final Queue<String> commands = new ArrayDeque<>();
+    private final Deque<String> commands = new ArrayDeque<>();
+    private final Set<Position> blocks = new HashSet<>();
     private String commandsFilename;
     private int[] coords = new int[6]; // Reuse array to avoid lots of small object instantiations.
     private boolean undone = false;
+
+    private static class Position {
+      public final int x;
+      public final int y;
+      public final int z;
+
+      public Position(int x, int y, int z) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+      }
+
+      @Override
+      public int hashCode() {
+        return Objects.hash(x, y, z);
+      }
+
+      @Override
+      public boolean equals(Object o) {
+        if (this == o) {
+          return true;
+        }
+        if (!(o instanceof Position)) {
+          return false;
+        }
+        Position other = (Position) o;
+        return x == other.x && y == other.y && z == other.z;
+      }
+    }
 
     public UndoableAction(int originalJobId, String[] originalCommand) {
       this.originalJobId = originalJobId;
@@ -460,8 +493,7 @@ public class Minescript {
         new File(UNDO_DIR).mkdirs();
         commandsFilename = Paths.get(UNDO_DIR, startTimeMillis + ".txt").toString();
         try (var writer = new PrintWriter(new FileWriter(commandsFilename))) {
-          writer.printf(
-              "# Generated from Minescript command `%s`:\n", String.join(" ", originalCommand));
+          writer.printf("# Generated from Minescript command: %s\n", quoteCommand(originalCommand));
           for (String command : commands) {
             writer.println(command);
           }
@@ -469,6 +501,7 @@ public class Minescript {
           logException(e);
         }
         commands.clear();
+        blocks.clear();
       }
     }
 
@@ -521,7 +554,11 @@ public class Minescript {
             String.join(" ", originalCommand));
         return false;
       }
-      commands.add(String.format("/setblock %d %d %d %s", x, y, z, block));
+      // For a given position, add only the first block, because that's the
+      // block that needs to be restored at that position during an undo operation.
+      if (blocks.add(new Position(x, y, z))) {
+        commands.addFirst(String.format("/setblock %d %d %d %s", x, y, z, block));
+      }
       return true;
     }
 
@@ -530,6 +567,7 @@ public class Minescript {
       if (commandsFilename == null) {
         commandQueue.addAll(commands);
         commands.clear();
+        blocks.clear();
       } else {
         try (var reader = new BufferedReader(new FileReader(commandsFilename))) {
           String line;
