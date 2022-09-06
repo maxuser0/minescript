@@ -2,8 +2,7 @@ package net.minescript.common;
 
 import static net.minescript.common.CommandSyntax.parseCommand;
 import static net.minescript.common.CommandSyntax.quoteCommand;
-// import net.minecraft.network.chat.TextComponent;
-// import net.minecraft.network.chat.TranslatableComponent;
+import static net.minescript.common.CommandSyntax.quoteString;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -1472,11 +1471,10 @@ public class Minescript {
         boolean enable = command[1].equals("true");
         enableMinescriptOnChatReceivedEvent = enable;
         logUserInfo(
-            "Minescript execution on ClientChatReceivedEvent {}.{}",
+            "Minescript execution on client chat events {}.{}",
             (enable ? "enabled" : "disabled"),
             (enable
-                ? " e.g. add command to command block: [execute as Dev run tell Dev \\hello"
-                    + " ~ ~ ~]"
+                ? " e.g. add command to command block: [execute as Player run tell Player \\help]"
                 : ""));
       } else {
         logUserError(
@@ -1804,8 +1802,8 @@ public class Minescript {
   private static String lastReceivedChatMessage = "";
   private static long lastReceivedChatMessageTime = 0;
   private static boolean enableMinescriptOnChatReceivedEvent = false;
+  private static Pattern CHAT_WHISPER_MESSAGE_RE = Pattern.compile("You whisper to [^ :]+: (.*)");
 
-  /* Begin Forge only
   public static boolean onClientChatReceived(Text message) {
     boolean cancel = false;
 
@@ -1813,72 +1811,32 @@ public class Minescript {
       return cancel;
     }
 
-    // Respond to messages like this one sent from a command block:
-    //
-    // [execute as Dev run tell Dev \hello ~ ~ ~]
-    //
-    // TranslatableComponent.args[1]:TextComponent.text:String
+    String text = message.getString();
 
-    LOGGER.info("ClientChatReceivedEvent message: {}", message.getClass().getName());
+    var iter = clientChatReceivedEventListeners.entrySet().iterator();
+    while (iter.hasNext()) {
+      var listener = iter.next();
+      LOGGER.info(
+          "Forwarding chat message to listener {}: {}", listener.getKey(), quoteString(text));
+      if (!listener.getValue().respond(quoteString(text), false)) {
+        iter.remove();
+      }
+    }
 
-    // TODO(maxuser)! replace with net.minecraft.network.chat.MutableComponent
-    // // TranslatableComponent was used in 1.18, and replaced with MutableComponent in 1.19.
-    // // But MutableComponent doesn't have a getArgs() method like TranslatableComponent did.
-    // if (message instanceof MutableComponent) {
-    //   var component = (MutableComponent) message;
-    //   LOGGER.info("Declared methods of {}:", component.getClass().getName());
-    //   for (Method m : component.getClass().getMethods()) {
-    //     LOGGER.info("  {}", m);
-    //   }
-    //   for (var arg : component.getArgs()) {
-    //     LOGGER.info(
-    //         "ClientChatReceivedEvent message arg: {}", arg.getClass().getName());
-    //
-    //     String text = null;
-    //     if (arg instanceof String) {
-    //       text = (String) arg;
-    //     } else if (arg instanceof TextComponent) {
-    //       var textComponent = (TextComponent) arg;
-    //       text = textComponent.getText();
-    //     }
-    //
-    //     if (text != null && !text.isEmpty()) {
-    //       // Ignore duplicate consecutive messages less than 500 milliseconds apart.
-    //       long currentTime = System.currentTimeMillis();
-    //       if (!text.equals(lastReceivedChatMessage)
-    //           || currentTime > lastReceivedChatMessageTime + 500) {
-    //         lastReceivedChatMessage = text;
-    //         lastReceivedChatMessageTime = currentTime;
-    //
-    //         var iter = clientChatReceivedEventListeners.entrySet().iterator();
-    //         while (iter.hasNext()) {
-    //           var listener = iter.next();
-    //           LOGGER.info(
-    //               "Forwarding chat message to listener {}: \"{}\"",
-    //               listener.getKey(),
-    //               text);
-    //           // TODO(maxuser): Pass player name or uuid: event.getSenderUUID() -> java.util.UUID
-    //           // TODO(maxuser): need to do single/double quote parsing etc.
-    //           if (!listener.getValue().respond(String.format("\"%s\"", text), false)) {
-    //             iter.remove();
-    //           }
-    //         }
-    //
-    //         if (enableMinescriptOnChatReceivedEvent) {
-    //           if (text.startsWith("\\")) {
-    //             LOGGER.info(
-    //                 "Processing command from received chat event: {}", text);
-    //             runMinescriptCommand(text.substring(1));
-    //             cancel = true;
-    //           }
-    //         }
-    //       }
-    //     }
-    //   }
-    // }
+    if (enableMinescriptOnChatReceivedEvent) {
+      // Respond to messages like this one sent from a command block:
+      // [execute as Dev run tell Dev \eval 1+2]
+      var matcher = CHAT_WHISPER_MESSAGE_RE.matcher(text);
+      if (matcher.find() && matcher.group(1).startsWith("\\")) {
+        var command = matcher.group(1);
+        LOGGER.info("Processing command from received chat event: {}", command);
+        runMinescriptCommand(command.substring(1));
+        cancel = true;
+      }
+    }
+
     return cancel;
   }
-  End Forge only */
 
   private static long packInts(int x, int z) {
     return (((long) x) << 32) | (z & 0xffffffffL);

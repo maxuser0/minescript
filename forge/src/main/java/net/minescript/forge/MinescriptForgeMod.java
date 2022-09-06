@@ -2,7 +2,6 @@ package net.minescript.forge;
 
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraftforge.client.event.ClientChatEvent;
-import net.minecraftforge.client.event.ClientChatReceivedEvent;
 import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
@@ -35,13 +34,6 @@ public class MinescriptForgeMod {
   @SubscribeEvent
   public void onKeyInputEvent(InputEvent.Key event) {
     Minescript.onKeyInput(event.getKey());
-  }
-
-  @SubscribeEvent
-  public void onClientChatReceivedEvent(ClientChatReceivedEvent event) {
-    if (Minescript.onClientChatReceived(event.getMessage())) {
-      event.setCanceled(true);
-    }
   }
 
   @SubscribeEvent
