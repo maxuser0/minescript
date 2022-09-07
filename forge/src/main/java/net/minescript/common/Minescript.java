@@ -4,6 +4,7 @@ import static net.minescript.common.CommandSyntax.parseCommand;
 import static net.minescript.common.CommandSyntax.quoteCommand;
 import static net.minescript.common.CommandSyntax.quoteString;
 
+import com.google.gson.Gson;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -235,6 +236,12 @@ public class Minescript {
                   "Setting minescript_incremental_command_suggestions to {}",
                   incrementalCommandSuggestions);
               break;
+            case "minescript_script_function_debug_outptut":
+              scriptFunctionDebugOutptut = Boolean.valueOf(value);
+              LOGGER.info(
+                  "Setting minescript_script_function_debug_outptut to {}",
+                  scriptFunctionDebugOutptut);
+              break;
             case "minescript_log_chunk_load_events":
               logChunkLoadEvents = Boolean.valueOf(value);
               LOGGER.info("Setting minescript_log_chunk_load_events to {}", logChunkLoadEvents);
@@ -267,6 +274,7 @@ public class Minescript {
         "minescript_commands_per_cycle",
         "minescript_ticks_per_cycle",
         "minescript_incremental_command_suggestions",
+        "minescript_script_function_debug_outptut",
         "minescript_log_chunk_load_events",
         "enable_minescript_on_chat_received_event"
       };
@@ -1454,6 +1462,18 @@ public class Minescript {
       return;
     }
 
+    if (command[0].equals("minescript_script_function_debug_outptut")) {
+      if (checkParamTypes(command, ParamType.BOOL)) {
+        boolean value = Boolean.valueOf(command[1]);
+        scriptFunctionDebugOutptut = value;
+        logUserInfo("Minescript script function debug output set to {}", value);
+      } else {
+        logUserError(
+            "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
+      }
+      return;
+    }
+
     if (command[0].equals("minescript_log_chunk_load_events")) {
       if (checkParamTypes(command, ParamType.BOOL)) {
         boolean value = Boolean.valueOf(command[1]);
@@ -1886,6 +1906,10 @@ public class Minescript {
       systemCommandQueue.add(tellrawCommand);
       var minecraft = Minecraft.getInstance();
       var chatHud = minecraft.gui.getChat();
+      // TODO(maxuser): There appears to be a bug truncating the chat HUD command history. It might
+      // be that onClientChat(...) can get called on a different thread from what other callers are
+      // expecting, thereby corrupting the history. Verify whether this gets called on the same
+      // thread as onPlayerTick() or other events.
       chatHud.addRecentChat(message);
       cancel = true;
     }
@@ -1950,101 +1974,6 @@ public class Minescript {
 
   private static Map<Integer, ScriptFunctionCall> clientChatReceivedEventListeners =
       new ConcurrentHashMap<>();
-
-  public static class ParamParser {
-    private static Pattern OPEN_BRACKET_RE = Pattern.compile("\\s*\\[\\s*");
-    private static Pattern CLOSE_BRACKET_RE = Pattern.compile("\\s*\\]\\s*");
-    private static Pattern COMMA_RE = Pattern.compile("\\s*,\\s*");
-    private static Pattern SPACE_DELIMITED_STRING_RE = Pattern.compile("[^\" ]+");
-    private static Pattern INTEGER_RE = Pattern.compile("-?[0-9]+");
-
-    // See:
-    // https://stackoverflow.com/questions/5695240/php-regex-to-ignore-escaped-quotes-within-quotes
-    private static Pattern DOUBLE_QUOTED_STRING_RE =
-        Pattern.compile("\"[^\"\\\\]*(?:\\\\.[^\"\\\\]*)*\"");
-
-    private String remainingParams;
-
-    public ParamParser(String params) {
-      this.remainingParams = params.strip();
-    }
-
-    public boolean readOpenBracket() {
-      if (remainingParams.isEmpty()) {
-        return false;
-      }
-      var matcher = OPEN_BRACKET_RE.matcher(remainingParams);
-      if (matcher.find()) {
-        remainingParams = remainingParams.substring(matcher.group().length());
-        return true;
-      }
-      return false;
-    }
-
-    public boolean readCloseBracket() {
-      if (remainingParams.isEmpty()) {
-        return false;
-      }
-      var matcher = CLOSE_BRACKET_RE.matcher(remainingParams);
-      if (matcher.find()) {
-        remainingParams = remainingParams.substring(matcher.group().length());
-        return true;
-      }
-      return false;
-    }
-
-    public boolean readComma() {
-      if (remainingParams.isEmpty()) {
-        return false;
-      }
-      var matcher = COMMA_RE.matcher(remainingParams);
-      if (matcher.find()) {
-        remainingParams = remainingParams.substring(matcher.group().length());
-        return true;
-      }
-      return false;
-    }
-
-    public boolean readIntParam(List<Integer> outParams) {
-      if (remainingParams.isEmpty()) {
-        return false;
-      }
-      var matcher = INTEGER_RE.matcher(remainingParams);
-      if (matcher.find()) {
-        String match = matcher.group();
-        remainingParams = remainingParams.substring(match.length()).stripLeading();
-        outParams.add(Integer.valueOf(match));
-        return true;
-      }
-      return false;
-    }
-
-    public boolean readStringParam(List<String> outParams) {
-      if (remainingParams.isEmpty()) {
-        return false;
-      }
-      var matcher = DOUBLE_QUOTED_STRING_RE.matcher(remainingParams);
-      if (matcher.find()) {
-        String match = matcher.group();
-        remainingParams = remainingParams.substring(match.length()).stripLeading();
-        match = match.substring(1, match.length() - 1); // strip leading and trailing double quotes
-        outParams.add(match.replace("\\\"", "\"").replace("\\n", "\n").replace("\\t", "\t"));
-        return true;
-      }
-      matcher = SPACE_DELIMITED_STRING_RE.matcher(remainingParams);
-      if (matcher.find()) {
-        String match = matcher.group();
-        remainingParams = remainingParams.substring(match.length()).stripLeading();
-        outParams.add(match);
-        return true;
-      }
-      return false;
-    }
-
-    public boolean isDone() {
-      return remainingParams.isEmpty();
-    }
-  }
 
   public static class ChunkLoadEventListener {
     // Map packed chunk (x, z) to boolean: true if chunk is loaded, false otherwise.
@@ -2230,6 +2159,8 @@ public class Minescript {
     }
   }
 
+  private static boolean scriptFunctionDebugOutptut = false;
+
   public static void onPlayerTick() {
     if (++playerTickEventCounter % minescriptTicksPerCycle == 0) {
       var minecraft = Minecraft.getInstance();
@@ -2250,60 +2181,101 @@ public class Minescript {
                   String[] functionCall = jobCommand.substring(1).split("\\s+", 3);
                   long funcCallId = Long.valueOf(functionCall[0]);
                   String functionName = functionCall[1];
-                  String args = functionCall.length == 3 ? functionCall[2] : "";
-                  // TODO(maxuser): Check number of args for each function and report errors.
+                  String argsString = functionCall.length == 3 ? functionCall[2] : "";
+                  var gson = new Gson();
+                  List<?> args = gson.fromJson(argsString, ArrayList.class);
+
+                  // TODO(maxuser): This is poor form for a number of reasons. First, some branches
+                  // (namely async-only functions) have no immediate response, but we have to assign
+                  // a value to `response` anyway because it's `final`.  This is arguably better
+                  // than removing `final` from the variable because that would allow multiple
+                  // assignments.  Second, the long if-else-if chain is cumbersome.
+                  //
+                  // Refactor this so that each script function becomes an instance of a
+                  // ScriptFunction class with a call(...) method.
+
+                  final String response;
+
+                  // TODO(maxuser): Support raising exceptions from script functions, e.g.
+                  // {"fcid": ..., "exception": "error message...", "conn": "close"}
+
                   if (functionName.equals("player_position")) {
-                    job.respond(
-                        funcCallId,
-                        String.format("[%f, %f, %f]", player.getX(), player.getY(), player.getZ()),
-                        true);
+                    if (args.isEmpty()) {
+                      response =
+                          String.format(
+                              "[%f, %f, %f]", player.getX(), player.getY(), player.getZ());
+                      job.respond(funcCallId, response, true);
+                    } else {
+                      logUserError(
+                          "Error: `{}` expected no params but got: {}", functionName, argsString);
+                      response = "null";
+                      job.respond(funcCallId, response, true);
+                    }
                   } else if (functionName.equals("getblock")) {
-                    var parser = new ParamParser(args);
-                    var params = new ArrayList<Integer>();
-                    if (parser.readOpenBracket()
-                        && parser.readIntParam(params)
-                        && parser.readComma()
-                        && parser.readIntParam(params)
-                        && parser.readComma()
-                        && parser.readIntParam(params)
-                        && parser.readCloseBracket()
-                        && parser.isDone()) {
+                    if (args.size() == 3
+                        && args.get(0) instanceof Number
+                        && args.get(1) instanceof Number
+                        && args.get(2) instanceof Number) {
+                      Number arg0 = (Number) args.get(0);
+                      Number arg1 = (Number) args.get(1);
+                      Number arg2 = (Number) args.get(2);
                       Optional<String> block =
                           blockStateToString(
-                              readBlockState(level, params.get(0), params.get(1), params.get(2)));
-                      job.respond(
-                          funcCallId, block.map(str -> '"' + str + '"').orElse("null"), true);
+                              readBlockState(
+                                  level, arg0.intValue(), arg1.intValue(), arg2.intValue()));
+                      response = block.map(str -> quoteString(str, true)).orElse("null");
+                      job.respond(funcCallId, response, true);
                     } else {
-                      // TODO(maxuser): Support raising exceptions through script functions, e.g.
-                      // {"fcid": ..., "exception": "error message...", "conn": "close"}
-                      logUserError("Expected 3 params (x, y, z) to `getblock` but got: {}", args);
-                      job.respond(funcCallId, "null", true);
+                      logUserError(
+                          "Error: `{}` expected 3 params (x, y, z) but got: {}",
+                          functionName,
+                          argsString);
+                      response = "null";
+                      job.respond(funcCallId, response, true);
                     }
                   } else if (functionName.equals("get_client_chat_received_events")) {
-                    clientChatReceivedEventListeners.put(
-                        job.jobId(), new ScriptFunctionCall(job, funcCallId));
+                    if (args.isEmpty()) {
+                      clientChatReceivedEventListeners.put(
+                          job.jobId(), new ScriptFunctionCall(job, funcCallId));
+                      response = "<unused>";
+                    } else {
+                      logUserError(
+                          "Error: `{}` expected no params but got: {}", functionName, argsString);
+                      response = "null";
+                      job.respond(funcCallId, response, true);
+                    }
                   } else if (functionName.equals("unregister_client_chat_received_events")) {
-                    clientChatReceivedEventListeners.remove(job.jobId());
-                    // TODO(maxuser): Respond with ok and closing connection.
+                    if (!args.isEmpty()) {
+                      logUserError(
+                          "Error: `{}` expected no params but got: {}", functionName, argsString);
+                      response = "false";
+                    } else if (!clientChatReceivedEventListeners.containsKey(job.jobId())) {
+                      logUserError(
+                          "Error: `{}` has no listeners to unregister for job: {}",
+                          functionName,
+                          job.jobSummary());
+                      response = "false";
+                    } else {
+                      clientChatReceivedEventListeners.remove(job.jobId());
+                      response = "true";
+                    }
+                    job.respond(funcCallId, response, true);
                   } else if (functionName.equals("await_loaded_region")) {
-                    var parser = new ParamParser(args);
-                    var params = new ArrayList<Integer>();
-                    if (parser.readOpenBracket()
-                        && parser.readIntParam(params)
-                        && parser.readComma()
-                        && parser.readIntParam(params)
-                        && parser.readComma()
-                        && parser.readIntParam(params)
-                        && parser.readComma()
-                        && parser.readIntParam(params)
-                        && parser.readCloseBracket()
-                        && parser.isDone()) {
+                    if (args.size() == 4
+                        && args.get(0) instanceof Number
+                        && args.get(1) instanceof Number
+                        && args.get(2) instanceof Number
+                        && args.get(3) instanceof Number) {
+                      Number arg0 = (Number) args.get(0);
+                      Number arg1 = (Number) args.get(1);
+                      Number arg2 = (Number) args.get(2);
+                      Number arg3 = (Number) args.get(3);
                       var listener =
                           new ChunkLoadEventListener(
-                              params.get(0),
-                              params.get(1),
-                              params.get(2),
-                              params.get(3),
+                              arg0.intValue(),
+                              arg1.intValue(),
+                              arg2.intValue(),
+                              arg3.intValue(),
                               new ScriptFunctionCall(job, funcCallId));
                       listener.updateChunkStatuses();
                       if (listener.isFinished()) {
@@ -2311,65 +2283,101 @@ public class Minescript {
                       } else {
                         chunkLoadEventListeners.put(listener, job.jobId());
                       }
+                      response = "<unused>";
                     } else {
                       // TODO(maxuser): Support raising exceptions through script functions, e.g.
                       // {"fcid": ..., "exception": "error message...", "conn": "close"}
                       logUserError(
-                          "Expected 4 params (x1, z1, x2, z2) to `await_loaded_region` but got: {}",
-                          args);
-                      job.respond(funcCallId, "null", true);
+                          "Error: `{}` expected 4 number params (x1, z1, x2, z2) but got: {}",
+                          functionName,
+                          argsString);
+                      response = "false";
+                      job.respond(funcCallId, response, true);
                     }
                   } else if (functionName.equals("set_nickname")) {
-                    var parser = new ParamParser(args);
-                    var params = new ArrayList<String>();
-                    if (parser.readOpenBracket()
-                        && parser.readStringParam(params)
-                        && parser.readCloseBracket()
-                        && parser.isDone()) {
-                      if (args.contains("%s")) {
-                        logUserInfo("Chat nickname set to {}.", quoteString(params.get(0), true));
-                        customNickname = params.get(0);
-                      } else {
-                        logUserError(
-                            "Chat nickname is required to contain \"%s\" as a placeholder for"
-                                + " message text.");
-                      }
-                    } else {
+                    if (args.isEmpty()) {
                       logUserInfo(
-                          "Chat nickname reset to default. (was {})",
+                          "Chat nickname reset to default; was {}",
                           customNickname == null ? "default already" : quoteString(customNickname));
                       customNickname = null;
-                    }
-                    job.respond(funcCallId, "null", true);
-                  } else if (functionName.equals("player_hand_items")) {
-                    var result = new StringBuilder("[");
-                    for (var itemStack : player.getHandSlots()) {
-                      if (result.length() > 1) {
-                        result.append(",");
+                      response = "true";
+                    } else if (args.size() == 1) {
+                      String arg = args.get(0).toString();
+                      if (arg.contains("%s")) {
+                        logUserInfo("Chat nickname set to {}.", quoteString(arg, true));
+                        customNickname = arg;
+                        response = "true";
+                      } else {
+                        logUserError(
+                            "Error: `{}` expects nickname to contain %s as a placeholder for"
+                                + " message text.",
+                            functionName);
+                        response = "false";
                       }
-                      result.append(itemStackToJsonString(itemStack));
+                    } else {
+                      logUserError(
+                          "Error: `{}` expected 0 or 1 param but got: {}",
+                          functionName,
+                          argsString);
+                      response = "false";
                     }
-                    result.append("]");
-                    job.respond(funcCallId, result.toString(), true);
-                  } else if (functionName.equals("player_inventory")) {
-                    var inventory = player.getInventory();
-                    var result = new StringBuilder("[");
-                    for (int i = 0; i < inventory.getContainerSize(); i++) {
-                      var itemStack = inventory.getItem(i);
-                      if (itemStack.getCount() > 0) {
+                    job.respond(funcCallId, response, true);
+                  } else if (functionName.equals("player_hand_items")) {
+                    if (args.isEmpty()) {
+                      var result = new StringBuilder("[");
+                      for (var itemStack : player.getHandSlots()) {
                         if (result.length() > 1) {
                           result.append(",");
                         }
                         result.append(itemStackToJsonString(itemStack));
                       }
+                      result.append("]");
+                      response = result.toString();
+                    } else {
+                      logUserError(
+                          "Error: `{}` expected no params but got: {}", functionName, argsString);
+                      response = "null";
                     }
-                    result.append("]");
-                    job.respond(funcCallId, result.toString(), true);
+                    job.respond(funcCallId, response, true);
+                  } else if (functionName.equals("player_inventory")) {
+                    if (args.isEmpty()) {
+                      var inventory = player.getInventory();
+                      var result = new StringBuilder("[");
+                      for (int i = 0; i < inventory.getContainerSize(); i++) {
+                        var itemStack = inventory.getItem(i);
+                        if (itemStack.getCount() > 0) {
+                          if (result.length() > 1) {
+                            result.append(",");
+                          }
+                          result.append(itemStackToJsonString(itemStack));
+                        }
+                      }
+                      result.append("]");
+                      response = result.toString();
+                    } else {
+                      logUserError(
+                          "Error: `{}` expected no params but got: {}", functionName, argsString);
+                      response = "null";
+                    }
+                    job.respond(funcCallId, response, true);
                   } else if (funcCallId == 0 && functionName.equals("exit!")) {
-                    job.respond(0, "\"exit!\"", true);
+                    response = "\"exit!\"";
+                    job.respond(0, response, true);
                   } else {
                     logUserError(
-                        "Unknown function called from `{}`: {}", job.jobSummary(), functionName);
+                        "Error: unknown function `{}` called from job: {}",
+                        functionName,
+                        job.jobSummary());
+                    response = "false";
+                    job.respond(funcCallId, response, true);
+                  }
+                  if (scriptFunctionDebugOutptut) {
+                    LOGGER.info(
+                        "(debug) Script function `{}`: {} / {}  ->  {}",
+                        functionName,
+                        quoteString(argsString, true),
+                        args,
+                        response);
                   }
                 } else {
                   processMessage(jobCommand);
