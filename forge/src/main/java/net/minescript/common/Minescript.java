@@ -1641,7 +1641,7 @@ public class Minescript {
   private static MinescriptCommandHistory minescriptCommandHistory = new MinescriptCommandHistory();
   private static boolean incrementalCommandSuggestions = false;
 
-  public static boolean onKeyboardKeyPressed(Screen screen, int keyCode) {
+  public static boolean onKeyboardKeyPressed(Screen screen, int key) {
     boolean cancel = false;
     if (screen != null && screen instanceof ChatScreen) {
       var scriptCommandNames = getScriptCommandNamesWithBuiltins();
@@ -1650,9 +1650,15 @@ public class Minescript {
         String value = chatEditBox.getValue();
         if (!value.startsWith("\\")) {
           minescriptCommandHistory.moveToEnd();
+          if (key == ENTER_KEY && customNickname != null && !value.startsWith("/")) {
+            // This branch is unnecessary on Forge because it supports ClientChatEvent.
+            cancel = true;
+            chatEditBox.setValue("");
+            onClientChat(value);
+            screen.onClose();
+          }
           return cancel;
         }
-        var key = keyCode;
         if (key == UP_ARROW_KEY) {
           Optional<String> previousCommand = minescriptCommandHistory.moveBackwardAndGet(value);
           if (previousCommand.isPresent()) {
@@ -1876,7 +1882,11 @@ public class Minescript {
       runMinescriptCommand(message.substring(1));
       cancel = true;
     } else if (customNickname != null && !message.startsWith("/")) {
-      systemCommandQueue.add("/tellraw @a " + String.format(customNickname, message));
+      String tellrawCommand = "/tellraw @a " + String.format(customNickname, message);
+      systemCommandQueue.add(tellrawCommand);
+      var minecraft = Minecraft.getInstance();
+      var chatHud = minecraft.gui.getChat();
+      chatHud.addRecentChat(message);
       cancel = true;
     }
     return cancel;
@@ -2316,10 +2326,18 @@ public class Minescript {
                         && parser.readStringParam(params)
                         && parser.readCloseBracket()
                         && parser.isDone()) {
-                      logUserInfo("Chat nickname set to \"{}\".", args);
-                      customNickname = params.get(0);
+                      if (args.contains("%s")) {
+                        logUserInfo("Chat nickname set to {}.", quoteString(params.get(0), true));
+                        customNickname = params.get(0);
+                      } else {
+                        logUserError(
+                            "Chat nickname is required to contain \"%s\" as a placeholder for"
+                                + " message text.");
+                      }
                     } else {
-                      logUserInfo("Chat nickname reset to default.", args);
+                      logUserInfo(
+                          "Chat nickname reset to default. (was {})",
+                          customNickname == null ? "default already" : quoteString(customNickname));
                       customNickname = null;
                     }
                     job.respond(funcCallId, "null", true);

@@ -16,6 +16,10 @@ public class CommandSyntax {
   }
 
   public static String quoteString(String value) {
+    return quoteString(value, false);
+  }
+
+  public static String quoteString(String value, boolean alwaysQuote) {
     if (value.isEmpty()) {
       return "\"\"";
     }
@@ -26,7 +30,11 @@ public class CommandSyntax {
     long numDoubleQuotes = value.chars().filter(ch -> ch == '"').count();
 
     if (numWhitespace == 0 && numBackslashes == 0 && numSingleQuotes == 0 && numDoubleQuotes == 0) {
-      return value;
+      if (alwaysQuote) {
+        return '"' + value + '"';
+      } else {
+        return value;
+      }
     }
 
     var buffer = new StringBuilder();

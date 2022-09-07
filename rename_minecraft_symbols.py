@@ -46,6 +46,7 @@ forge_to_fabric_member_names = (
   ('chunkManager.getChunkNow', 'chunkManager.getWorldChunk'),
   ('minecraft.level', 'minecraft.world'),
   ('minecraft.gui.getChat', 'minecraft.inGameHud.getChatHud'),
+  ('chatHud.addRecentChat', 'chatHud.addToMessageHistory'),
   ('Component.nullToEmpty', 'Text.of'),
 )
 
