@@ -1799,18 +1799,11 @@ public class Minescript {
     }
   }
 
-  private static String lastReceivedChatMessage = "";
-  private static long lastReceivedChatMessageTime = 0;
   private static boolean enableMinescriptOnChatReceivedEvent = false;
   private static Pattern CHAT_WHISPER_MESSAGE_RE = Pattern.compile("You whisper to [^ :]+: (.*)");
 
   public static boolean onClientChatReceived(Text message) {
     boolean cancel = false;
-
-    if (!enableMinescriptOnChatReceivedEvent && clientChatReceivedEventListeners.isEmpty()) {
-      return cancel;
-    }
-
     String text = message.getString();
 
     var iter = clientChatReceivedEventListeners.entrySet().iterator();
