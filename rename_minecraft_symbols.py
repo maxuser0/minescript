@@ -1,5 +1,17 @@
 #!/usr/bin/python3
 
+"""Tool for renaming Java symbols between Forge and Fabric mappings.
+
+Usage:
+# Translate source with Fabric mappings to Forge mappings:
+$ ./rename_minecraft_symbols.py --to_forge <$fabric_src |java-format - > $forge_src
+
+# Translate source with Forge mappings to Fabric mappings:
+$ ./rename_minecraft_symbols.py --to_fabric <$forge_src |java-format - > $fabric_src
+
+For an implementation of java-format, see: https://github.com/google/google-java-format
+"""
+
 import re
 import sys
 
