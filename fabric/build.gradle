@@ -39,6 +39,13 @@ processResources {
   filesMatching("fabric.mod.json") {
     expand "version": project.version
   }
+  filesMatching("version.txt") {
+    expand "version": project.version
+  }
+
+  // It's dangerous to apply filesMatching() to Python sources because the
+  // template expansion does not faithfully preserve backslashes and escape
+  // sequences.
 }
 
 tasks.withType(JavaCompile).configureEach {

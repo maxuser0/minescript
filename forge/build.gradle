@@ -195,6 +195,18 @@ publishing {
   }
 }
 
+processResources {
+  inputs.property "version", project.version
+
+  filesMatching("version.txt") {
+    expand "version": project.version
+  }
+
+  // It's dangerous to apply filesMatching() to Python sources because the
+  // template expansion does not faithfully preserve backslashes and escape
+  // sequences.
+}
+
 tasks.withType(JavaCompile).configureEach {
   options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
 }
