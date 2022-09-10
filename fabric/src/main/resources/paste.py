@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: © 2022 Greg Christiana <maxuser@minescript.net>
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: GPL-3.0-only
 
 # WARNING: This file is generated from the Minescript jar file. This file will
 # be overwritten automatically when Minescript updates to a new version. If you
