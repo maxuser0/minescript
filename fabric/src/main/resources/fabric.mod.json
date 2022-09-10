@@ -9,7 +9,9 @@
     "maxuser@minescript.net"
   ],
   "contact": {
-    "homepage": "https://minescript.net/"
+    "homepage": "https://minescript.net/",
+    "sources": "https://github.com/maxuser0/minescript",
+    "issues": "https://github.com/maxuser0/minescript/issues"
   },
 
   "license": "GPL-3.0-only",
