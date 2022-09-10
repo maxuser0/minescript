@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: © 2022 Greg Christiana <maxuser@minescript.net>
+// SPDX-License-Identifier: GPL-3.0-only
+
 package net.minescript.fabric.mixin;
 
 import static net.minescript.common.Minescript.ENTER_KEY;
