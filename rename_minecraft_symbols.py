@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 # SPDX-FileCopyrightText: © 2022 Greg Christiana <maxuser@minescript.net>
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: MIT
 
 """Tool for renaming Java symbols between Forge and Fabric mappings.
 
