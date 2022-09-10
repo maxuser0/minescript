@@ -29,6 +29,8 @@ CallAsyncScriptFunction(func_name, retval_handler):
 """
 
 import json
+import os
+import re
 import sys
 import time
 import threading
@@ -144,3 +146,180 @@ _script_service_thread.start()
 
 _watchdog_thread = threading.Thread(target=_WatchdogLoop, daemon=False)
 _watchdog_thread.start()
+
+
+def ReadDocString(filename):
+  try:
+    script = open(filename)
+  except FileNotFoundError as e:
+    print(f'Script "{filename}" not found.', file=sys.stderr)
+    return None
+
+  nlines = 0
+  src = ""
+  docstr_start_quote = None
+  while nlines < 100:
+    nlines += 1
+    line = script.readline()
+    if not line:
+      break
+    if docstr_start_quote is None:
+      if not line.strip() or line.startswith("#"):
+        continue
+      if line[:3] in ('"""', "'''"):
+        docstr_start_quote = line[:3]
+      elif line[:4] in ('r"""', "r'''"):
+        docstr_start_quote = line[1:4]
+      else:
+        break
+    src += line
+    if line.rstrip().endswith(docstr_start_quote):
+      return eval(src)
+  return None
+
+
+_version_re = re.compile(r"v([0-9.]*[0-9])")
+
+def ParseVersionTuple(version_str):
+  """Parses a version string as a tuple of ints (otherwise None), e.g. "v1.2" -> (1, 2)"""
+  if not version_str or type(version_str) is not str:
+    return None
+
+  re_match = _version_re.match(version_str)
+  if not re_match:
+    return None
+
+  return [int(x) for x in re_match.group(1).split(".")]
+
+
+def VersionAsString(version_tuple):
+  """Prints a tuple of ints as a string, e.g. (1, 2, 3) -> 'v1.2.3'"""
+  return "v" + ".".join([str(x) for x in version_tuple])
+
+
+def CheckVersionCompatibility(
+    module_name, module_docstr, errors=[], module_versions=dict(), debug=False):
+  """Checks version compatibility of the given module, recursively parsing required deps.
+
+  Args:
+    module_name: name of the module to check compatibility
+    module_docstr: docstring of module for checking versions of required deps
+    errors: list to which error strings are added
+    module_versions: cache of dict from module name (str) to version (tuple[int])
+    debug: if True, print debug information (bool)
+
+  Returns:
+    version tuple (tuple of ints) of the given module
+  """
+  if not module_docstr:
+    return None
+  found_requires = False
+  first_line = True
+  declared_version = None
+  for line in module_docstr.splitlines():
+    line = line.strip()
+    if first_line:
+      first_line = False
+      words = line.split()
+      if len(words) >= 2:
+        if module_name != words[0]:
+          found = " ".join(line.split()[:2])
+          errors.append(
+              f'{module_name}: non-conforming docstring; '
+              f'expected first line to start with "{module_name} v<version>" '
+              f'but found "{found}..."')
+        declared_version = ParseVersionTuple(words[1])
+        if debug:
+          version_str = VersionAsString(declared_version)
+          print(
+              f"(debug) Parsed module version from docstring: "
+              f"{module_name} {version_str}",
+              file=sys.stderr)
+      else:
+        errors.append(
+            f'{module_name}: non-conforming docstring; '
+            f'expected first line to start with "{module_name} v<version>" '
+            f'but found "{line}"')
+    if line == "Requires:":
+      found_requires = True
+    elif found_requires:
+      if not line:
+        break
+      required_version_words = line.split()
+      if len(required_version_words) == 2:
+        name, required_version_str = required_version_words
+        required_version = ParseVersionTuple(required_version_str)
+        if not required_version:
+          errors.append(
+              f'{module_name}: cannot parse required version of {name}: '
+              f'{required_version_str}')
+          continue
+
+        if name not in module_versions:
+          script_filename = os.path.join("minescript", name) + ".py"
+          if os.path.exists(script_filename):
+            docstr = ReadDocString(script_filename)
+            actual_version = CheckVersionCompatibility(
+                name, docstr, errors, module_versions, debug)
+            module_versions[name] = actual_version
+          else:
+            errors.append(
+                f'{module_name}: missing required dependency: '
+                f'{name} {VersionAsString(required_version)}')
+            continue
+        else:
+          actual_version = module_versions[name]
+          if debug:
+            version_str = VersionAsString(actual_version)
+            print(
+                f'(debug) module verison previously computed: {name} {version_str}',
+                file=sys.stderr)
+
+        if not actual_version:
+          errors.append(
+              f'{module_name}: could not verify version of {name} '
+              f'({module_name} requires {name} {VersionAsString(required_version)})')
+        elif actual_version < required_version:
+          errors.append(
+              f'{module_name}: requires {name} {VersionAsString(required_version)} '
+              f'but found {VersionAsString(actual_version)}')
+      else:
+        errors.append(
+            f'{module_name}: cannot parse required version for dependency: "{line}"')
+
+  return declared_version
+
+
+def CheckMainModuleVersionCompatibility():
+  debug = "--debug" in sys.argv
+  main_module = sys.modules["__main__"]
+  script_fullname = sys.argv[0]
+  script_shortname = os.path.split(script_fullname)[-1].split(".py")[0]
+  versioned_first_line_re = re.compile(r"([^ ]+) +(v[0-9.]+)")
+  if main_module.__doc__:
+    re_match = versioned_first_line_re.match(main_module.__doc__)
+    if re_match and re_match.group(1) == script_shortname:
+      errors = []
+      CheckVersionCompatibility(
+          script_shortname, main_module.__doc__, errors=errors, debug=debug)
+      if errors:
+        print(
+            f"Warning: {script_shortname} failed version compatibility check:",
+            file=sys.stderr)
+        # If there's more than one error, print a numbered prefix before each,
+        # e.g. "[1]".
+        for i, error in enumerate(sorted(errors)):
+          error_prefix = "  " if len(errors) == 1 else f"[{i+1}] "
+          print(error_prefix + error, file=sys.stderr)
+    elif debug:
+      print(
+          f'(debug) {script_shortname} has docstring without version header: '
+          f'"{main_module.__doc__.splitlines()[0]}"',
+          file=sys.stderr)
+  elif debug:
+    print(
+        f'(debug) {script_shortname} has no docstring for checking version requirements.',
+        file=sys.stderr)
+
+
+CheckMainModuleVersionCompatibility()
