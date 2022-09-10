@@ -12,7 +12,7 @@
     "homepage": "https://minescript.net/"
   },
 
-  "license": "GPL-3.0-only for Java sources, MIT for Python sources",
+  "license": "Java -> GPL-3.0-only; Python -> MIT",
   "icon": "assets/modid/minescript-logo.png",
 
   "environment": "client",
