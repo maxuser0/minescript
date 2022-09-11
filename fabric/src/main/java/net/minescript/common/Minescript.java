@@ -2237,18 +2237,21 @@ public class Minescript {
                       response = "null";
                       job.respond(funcCallId, response, true);
                     }
-                  } else if (functionName.equals("get_client_chat_received_events")) {
-                    if (args.isEmpty()) {
-                      clientChatReceivedEventListeners.put(
-                          job.jobId(), new ScriptFunctionCall(job, funcCallId));
-                      response = "<unused>";
-                    } else {
+                  } else if (functionName.equals("register_chat_message_listener")) {
+                    if (!args.isEmpty()) {
                       logUserError(
                           "Error: `{}` expected no params but got: {}", functionName, argsString);
-                      response = "null";
-                      job.respond(funcCallId, response, true);
+                    } else if (clientChatReceivedEventListeners.containsKey(job.jobId())) {
+                      logUserError(
+                          "Error: `{}` failed: listener already registered for job: {}",
+                          functionName,
+                          job.jobSummary());
+                    } else {
+                      clientChatReceivedEventListeners.put(
+                          job.jobId(), new ScriptFunctionCall(job, funcCallId));
                     }
-                  } else if (functionName.equals("unregister_client_chat_received_events")) {
+                    response = "<unused>";
+                  } else if (functionName.equals("unregister_chat_message_listener")) {
                     if (!args.isEmpty()) {
                       logUserError(
                           "Error: `{}` expected no params but got: {}", functionName, argsString);

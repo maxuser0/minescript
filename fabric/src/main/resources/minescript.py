@@ -15,7 +15,48 @@ Minescript mod.  This module should be imported by other
 scripts and not run directly.
 """
 
+import sys
 from minescript_runtime import CallScriptFunction, CallAsyncScriptFunction
+from typing import Any, List, Set, Dict, Tuple, Optional, Callable
+
+
+def exec(command: str):
+  """Executes the given command.
+
+  If command doesn't already start with a slash or backslash, automatically
+  prepends a slash. Ignores leading and trailing whitespace, and ignores empty
+  commands.
+  """
+  command = command.strip()
+  if not command:
+    return
+  if command[0] not in ("/", "\\"):
+    command = "/" + command
+  print(command)
+
+
+def echo(message: Any):
+  """Echoes message to the chat.
+
+  The echoed message is visible only to the local player.
+  """
+  print(message, file=sys.stderr)
+
+
+def chat(message: str):
+  """Sends the given message to the chat.
+
+  If message starts with a slash or backslash, automatically prepends a space
+  so that the message is sent as a chat and not executed as a command.  Ignores
+  empty messages.
+  """
+  if not message:
+    return
+  # If the message starts with a slash or backslash, prepend a space so that
+  # the message is printed and not executed as a command.
+  if message[0] in ("/", "\\"):
+    message = " " + message
+  print(message)
 
 
 def player_position(done_callback=None):
@@ -99,3 +140,22 @@ def await_loaded_region(x1: int, z1: int, x2: int, z2: int, done_callback=None):
   else:
     CallAsyncScriptFunction(
         "await_loaded_region", (x1, z1, x2, z2), done_callback)
+
+
+def register_chat_message_listener(listener: Callable[[str], None]):
+  """Registers a listener for receiving chat messages. One listener allowed per job.
+
+  Args:
+    listener: callable that repeatedly accepts a string representing chat messages
+  """
+  CallAsyncScriptFunction(
+      "register_chat_message_listener", (), listener)
+
+
+def unregister_chat_message_listener():
+  """Unegisters a chat message listener, if any, for the currently running job.
+
+  Returns:
+    True if successfully unregistered a listener, False otherwise.
+  """
+  CallScriptFunction("unregister_chat_message_listener")
