@@ -1,4 +1,4 @@
-# Minescript Fabric Mod
+# Minescript Forge Mod
 
 ## Command-line instructions
 
@@ -20,5 +20,5 @@ The built mod jar (along with a sources jar) file will be in `build/libs`, e.g.
 
 ```
 $ ls build/libs/
-minescript-mc1.19.2-fabric-mod-2.0-sources.jar	minescript-mc1.19.2-fabric-mod-2.0.jar
+minescript-mc1.19.2-forge-mod-2.0.jar
 ```
