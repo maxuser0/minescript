@@ -61,6 +61,8 @@ java {
 }
 
 jar {
+  // Exclude vim swap files:
+  processResources.exclude('**/.*.swp')
 }
 
 // configure the maven publication

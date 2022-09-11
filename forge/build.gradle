@@ -163,6 +163,9 @@ dependencies {
 }
 
 jar {
+  // Exclude vim swap files:
+  processResources.exclude('**/.*.swp')
+
   manifest {
     attributes([
         "Specification-Title"   : "minescript",
