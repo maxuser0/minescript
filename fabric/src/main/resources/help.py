@@ -6,7 +6,7 @@
 # make edits to this file, make sure to save a backup copy when upgrading to a
 # new version of Minescript.
 
-r"""help v2.0 distributed via Minescript jar file
+r"""help v2.0.1 distributed via Minescript jar file
 
 Usage: \help SCRIPT_NAME
 
