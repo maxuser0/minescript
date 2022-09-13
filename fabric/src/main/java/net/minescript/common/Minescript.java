@@ -2140,9 +2140,9 @@ public class Minescript {
         LOGGER.info("Minecraft command blocked for server: {}", message); // [norewrite]
         return;
       }
-      player.sendCommand(message.substring(1));
+      player.sendChatMessage(message);
     } else {
-      player.sendChatMessage(message, null /* preview */);
+      player.sendChatMessage(message);
     }
   }
 
@@ -2332,7 +2332,7 @@ public class Minescript {
                   } else if (functionName.equals("player_hand_items")) {
                     if (args.isEmpty()) {
                       var result = new StringBuilder("[");
-                      for (var itemStack : player.getHandItems()) {
+                      for (var itemStack : player.getItemsHand()) {
                         if (result.length() > 1) {
                           result.append(",");
                         }

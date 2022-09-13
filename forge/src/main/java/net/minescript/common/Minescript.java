@@ -2139,9 +2139,9 @@ public class Minescript {
         LOGGER.info("Minecraft command blocked for server: {}", message); // [norewrite]
         return;
       }
-      player.commandUnsigned(message.substring(1));
+      player.chat(message);
     } else {
-      player.chatSigned(message, null /* preview */);
+      player.chat(message);
     }
   }
 

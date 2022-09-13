@@ -4,8 +4,6 @@
 package net.minescript.fabric.mixin;
 
 import net.minecraft.client.gui.hud.ChatHud;
-import net.minecraft.client.gui.hud.MessageIndicator;
-import net.minecraft.network.message.MessageSignatureData;
 import net.minecraft.text.Text;
 import net.minescript.common.Minescript;
 import org.slf4j.Logger;
@@ -19,13 +17,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class ChatHudMixin {
   private static final Logger LOGGER = LoggerFactory.getLogger("ChatHudMixin");
 
-  @Inject(
-      at = @At("HEAD"),
-      method =
-          "addMessage(Lnet/minecraft/text/Text;Lnet/minecraft/network/message/MessageSignatureData;Lnet/minecraft/client/gui/hud/MessageIndicator;)V",
-      cancellable = true)
-  private void addMessage(
-      Text message, MessageSignatureData signature, MessageIndicator indicator, CallbackInfo ci) {
+  @Inject(at = @At("HEAD"), method = "addMessage(Lnet/minecraft/text/Text;)V", cancellable = true)
+  private void addMessage(Text message, CallbackInfo ci) {
     if (Minescript.onClientChatReceived(message)) {
       ci.cancel();
     }
