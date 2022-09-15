@@ -49,6 +49,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ChatScreen;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.client.util.ScreenshotRecorder;
 import net.minecraft.item.ItemStack;
 import net.minecraft.text.Text;
 import net.minecraft.world.World;
@@ -2365,6 +2366,30 @@ public class Minescript {
                       logUserError(
                           "Error: `{}` expected no params but got: {}", functionName, argsString);
                       response = "null";
+                    }
+                    job.respond(funcCallId, response, true);
+                  } else if (functionName.equals("screenshot")) {
+                    final Optional<String> filename;
+                    if (args.isEmpty()) {
+                      filename = Optional.empty();
+                      response = "true";
+                    } else if (args.size() == 1 && args.get(0) instanceof String) {
+                      filename = Optional.of((String) args.get(0));
+                      response = "true";
+                    } else {
+                      filename = null;
+                      logUserError(
+                          "Error: `{}` expected no params or 1 string param but got: {}",
+                          functionName,
+                          argsString);
+                      response = "false";
+                    }
+                    if (filename != null) {
+                      ScreenshotRecorder.saveScreenshot(
+                          minecraft.runDirectory,
+                          filename.orElse(null),
+                          minecraft.getFramebuffer(),
+                          message -> job.enqueueStderr(message.getString()));
                     }
                     job.respond(funcCallId, response, true);
                   } else if (funcCallId == 0 && functionName.equals("exit!")) {

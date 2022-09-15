@@ -15,6 +15,7 @@ Minescript mod.  This module should be imported by other
 scripts and not run directly.
 """
 
+import os
 import sys
 from minescript_runtime import CallScriptFunction, CallAsyncScriptFunction
 from typing import Any, List, Set, Dict, Tuple, Optional, Callable
@@ -57,6 +58,28 @@ def chat(message: str):
   if message[0] in ("/", "\\"):
     message = " " + message
   print(message)
+
+
+def screenshot(filename=None):
+  """Takes a screenshot, similar to pressing the F2 key.
+
+  Args:
+    filename: if specified, screenshot filename relative to the screenshots directory; ".png"
+      extension is added to the screenshot file if it doesn't already have a png extension.
+
+  Returns:
+    True is successful
+  """
+  if filename is None:
+    return CallScriptFunction("screenshot")
+  else:
+    if os.path.sep in filename:
+      echo(f'Error: `screenshot` does not support filenames with "{os.path.sep}" character.')
+      return False
+    else:
+      if not filename.lower().endswith(".png"):
+        filename += ".png"
+      return CallScriptFunction("screenshot", filename)
 
 
 def player_position(done_callback=None):

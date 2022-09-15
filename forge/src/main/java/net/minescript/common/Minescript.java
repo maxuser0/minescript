@@ -45,6 +45,7 @@ import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
@@ -2364,6 +2365,30 @@ public class Minescript {
                       logUserError(
                           "Error: `{}` expected no params but got: {}", functionName, argsString);
                       response = "null";
+                    }
+                    job.respond(funcCallId, response, true);
+                  } else if (functionName.equals("screenshot")) {
+                    final Optional<String> filename;
+                    if (args.isEmpty()) {
+                      filename = Optional.empty();
+                      response = "true";
+                    } else if (args.size() == 1 && args.get(0) instanceof String) {
+                      filename = Optional.of((String) args.get(0));
+                      response = "true";
+                    } else {
+                      filename = null;
+                      logUserError(
+                          "Error: `{}` expected no params or 1 string param but got: {}",
+                          functionName,
+                          argsString);
+                      response = "false";
+                    }
+                    if (filename != null) {
+                      Screenshot.grab(
+                          minecraft.gameDirectory,
+                          filename.orElse(null),
+                          minecraft.getMainRenderTarget(),
+                          message -> job.enqueueStderr(message.getString()));
                     }
                     job.respond(funcCallId, response, true);
                   } else if (funcCallId == 0 && functionName.equals("exit!")) {

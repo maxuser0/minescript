@@ -31,6 +31,7 @@ forge_to_fabric_class_names = (
   ('net.minecraft.world.level.chunk.ChunkAccess', 'net.minecraft.world.chunk.Chunk'),
   ('net.minecraft.world.level.chunk.ChunkSource', 'net.minecraft.world.chunk.ChunkManager'),
   ('net.minecraft.network.chat.Component', 'net.minecraft.text.Text'),
+  ('net.minecraft.client.Screenshot', 'net.minecraft.client.util.ScreenshotRecorder'),
 )
 
 forge_to_fabric_member_names = (
@@ -61,8 +62,11 @@ forge_to_fabric_member_names = (
   ('chunkManager.getChunkNow', 'chunkManager.getWorldChunk'),
   ('minecraft.level', 'minecraft.world'),
   ('minecraft.gui.getChat', 'minecraft.inGameHud.getChatHud'),
+  ('minecraft.gameDirectory', 'minecraft.runDirectory'),
+  ('minecraft.getMainRenderTarget', 'minecraft.getFramebuffer'),
   ('chatHud.addRecentChat', 'chatHud.addToMessageHistory'),
   ('Component.nullToEmpty', 'Text.of'),
+  ('Screenshot.grab', 'ScreenshotRecorder.saveScreenshot'),
 )
 
 def Usage():
