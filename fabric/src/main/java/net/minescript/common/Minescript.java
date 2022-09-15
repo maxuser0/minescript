@@ -19,8 +19,6 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -1781,51 +1779,11 @@ public class Minescript {
 
   private static boolean loggedMethodNameFallback = false;
 
-  private static Method getMethod(
-      Object object, String unobfuscatedName, String obfuscatedName, Class<?>... paramTypes)
-      throws IllegalAccessException, NoSuchMethodException {
-    Method method;
-    try {
-      method = object.getClass().getDeclaredMethod(obfuscatedName, paramTypes);
-    } catch (NoSuchMethodException e) {
-      if (!loggedMethodNameFallback) {
-        LOGGER.info(
-            "Cannot find method with obfuscated name \"{}\", falling back to"
-                + " unobfuscated name \"{}\"",
-            obfuscatedName,
-            unobfuscatedName);
-        loggedMethodNameFallback = true;
-      }
-      try {
-        method = object.getClass().getDeclaredMethod(unobfuscatedName, paramTypes);
-      } catch (NoSuchMethodException e2) {
-        logUserError(
-            "Internal Minescript error: cannot find method {}/{} in class {}. See log file for"
-                + " details.",
-            unobfuscatedName,
-            obfuscatedName,
-            object.getClass().getSimpleName());
-        LOGGER.info("Declared methods of {}:", object.getClass().getName());
-        for (Method m : object.getClass().getDeclaredMethods()) {
-          LOGGER.info("  {}", m);
-        }
-        throw e2;
-      }
-    }
-    method.setAccessible(true);
-    return method;
-  }
-
   public static void onKeyInput(int key) {
     var minecraft = MinecraftClient.getInstance();
     var screen = minecraft.currentScreen;
     if (screen == null && key == BACKSLASH_KEY) {
-      try {
-        var method = getMethod(minecraft, "openChatScreen", "method_29041", String.class);
-        method.invoke(minecraft, "");
-      } catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
-        logException(e);
-      }
+      minecraft.setScreen(new ChatScreen(""));
     }
   }
 

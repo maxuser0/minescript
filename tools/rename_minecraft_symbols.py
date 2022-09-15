@@ -47,7 +47,6 @@ forge_to_fabric_member_names = (
   ('chatEditBox.setTextColor', 'chatEditBox.setEditableColor'),
   ('screen.onClose', 'screen.close'),
   ('minecraft.screen', 'minecraft.currentScreen'),
-  ('"m_91326_"', '"method_29041"'),
   ('player.getHandSlots', 'player.getHandItems'),
   ('player.getCommandSenderWorld', 'player.getEntityWorld'),
   ('playerWorld.dimension', 'playerWorld.getDimension'),
