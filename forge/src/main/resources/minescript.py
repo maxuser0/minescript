@@ -137,13 +137,113 @@ def player_inventory(done_callback=None):
     CallAsyncScriptFunction("player_inventory", done_callback)
 
 
-def player_go_forward(go_forward: bool):
-  """Starts/stops moving the local player forward, similar to pressing/releasing the 'w' key.
+def player_press_forward(pressed: bool):
+  """Starts/stops moving the local player forward, simulating press/release of the 'w' key.
 
   Args:
-    go_forward: if True, go forward, otherwise stop going forward
+    pressed: if True, go forward, otherwise stop doing so
   """
-  return CallScriptFunction("player_go_forward", go_forward)
+  return CallScriptFunction("player_press_forward", pressed)
+
+
+def player_press_backward(pressed: bool):
+  """Starts/stops moving the local player backward, simulating press/release of the 's' key.
+
+  Args:
+    pressed: if True, go backward, otherwise stop doing so
+  """
+  return CallScriptFunction("player_press_backward", pressed)
+
+
+def player_press_left(pressed: bool):
+  """Starts/stops moving the local player to the left, simulating press/release of the 'a' key.
+
+  Args:
+    pressed: if True, move to the left, otherwise stop doing so
+  """
+  return CallScriptFunction("player_press_left", pressed)
+
+
+def player_press_right(pressed: bool):
+  """Starts/stops moving the local player to the right, simulating press/release of the 'd' key.
+
+  Args:
+    pressed: if True, move to the right, otherwise stop doing so
+  """
+  return CallScriptFunction("player_press_right", pressed)
+
+
+def player_press_jump(pressed: bool):
+  """Starts/stops the local player jumping, simulating press/release of the space key.
+
+  Args:
+    pressed: if True, jump, otherwise stop doing so
+  """
+  return CallScriptFunction("player_press_jump", pressed)
+
+
+def player_press_sprint(pressed: bool):
+  """Starts/stops the local player sprinting, simulating press/release of the left control key.
+
+  Args:
+    pressed: if True, sprint, otherwise stop doing so
+  """
+  return CallScriptFunction("player_press_sprint", pressed)
+
+
+def player_press_sneak(pressed: bool):
+  """Starts/stops the local player sneaking, simulating press/release of the left shift key.
+
+  Args:
+    pressed: if True, sneak, otherwise stop doing so
+  """
+  return CallScriptFunction("player_press_sneak", pressed)
+
+
+def player_press_pick_item(pressed: bool):
+  """Starts/stops the local player picking an item, simulating press/release of the middle mouse button.
+
+  Args:
+    pressed: if True, pick an item, otherwise stop doing so
+  """
+  return CallScriptFunction("player_press_pick_item", pressed)
+
+
+def player_press_use(pressed: bool):
+  """Starts/stops the local player using an item or selecting a block, simulating press/release of the right mouse button.
+
+  Args:
+    pressed: if True, use an item, otherwise stop doing so
+  """
+  return CallScriptFunction("player_press_use", pressed)
+
+
+def player_press_attack(pressed: bool):
+  """Starts/stops the local player attacking or breaking a block, simulating press/release of the left mouse button.
+
+  Args:
+    pressed: if True, press attack, otherwise stop doing so
+  """
+  return CallScriptFunction("player_press_attack", pressed)
+
+
+def player_press_swap_hands(pressed: bool):
+  """Starts/stops moving the local player swapping hands, simulating press/release of the 'f' key.
+
+  Args:
+    pressed: if True, swap hands, otherwise stop doing so
+  """
+  return CallScriptFunction("player_press_swap_hands", pressed)
+
+
+def player_press_drop(pressed: bool):
+  """Starts/stops the local player dropping an item, simulating press/release of the 'q' key.
+
+  Args:
+    pressed: if True, drop an item, otherwise stop doing so
+  """
+  return CallScriptFunction("player_press_drop", pressed)
+
 
 
 def player_orientation():

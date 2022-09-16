@@ -19,6 +19,7 @@ import re
 import sys
 
 forge_to_fabric_class_names = (
+  ('net.minecraft.client.KeyMapping', 'net.minecraft.client.option.KeyBinding'),
   ('net.minecraft.client.Minecraft', 'net.minecraft.client.MinecraftClient'),
   ('net.minecraft.client.Screenshot', 'net.minecraft.client.util.ScreenshotRecorder'),
   ('net.minecraft.client.gui.components.EditBox', 'net.minecraft.client.gui.widget.TextFieldWidget'),
@@ -66,6 +67,7 @@ forge_to_fabric_member_names = (
   ('options.keyPickItem.setDown', 'options.pickItemKey.setPressed'),
   ('options.keyRight.setDown', 'options.rightKey.setPressed'),
   ('options.keyShift.setDown', 'options.sneakKey.setPressed'),
+  ('options.keySprint.setDown', 'options.sprintKey.setPressed'),
   ('options.keySwapOffhand.setDown', 'options.swapHandsKey.setPressed'),
   ('options.keyUp.setDown', 'options.forwardKey.setPressed'),
   ('options.keyUse.setDown', 'options.useKey.setPressed'),

@@ -47,6 +47,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ChatScreen;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.ScreenshotRecorder;
 import net.minecraft.item.ItemStack;
 import net.minecraft.text.Text;
@@ -2124,6 +2125,28 @@ public class Minescript {
 
   private static boolean scriptFunctionDebugOutptut = false;
 
+  private static String sendKeyPress(
+      String functionName,
+      long funcCallId,
+      KeyBinding keyBinding,
+      List<?> args,
+      String argsString,
+      Job job) {
+    final String response;
+    if (args.size() == 1 && args.get(0) instanceof Boolean) {
+      keyBinding.setPressed((Boolean) args.get(0));
+      response = "true";
+    } else {
+      logUserError(
+          "Error: `{}` expected 1 boolean param (true or false) but got: {}",
+          functionName,
+          argsString);
+      response = "false";
+    }
+    job.respond(funcCallId, response, true);
+    return response;
+  }
+
   public static void onPlayerTick() {
     if (++playerTickEventCounter % minescriptTicksPerCycle == 0) {
       var minecraft = MinecraftClient.getInstance();
@@ -2326,19 +2349,42 @@ public class Minescript {
                       response = "null";
                     }
                     job.respond(funcCallId, response, true);
-                  } else if (functionName.equals("player_go_forward")) {
-                    if (args.size() == 1 && args.get(0) instanceof Boolean) {
-                      boolean goForward = (Boolean) args.get(0);
-                      minecraft.options.forwardKey.setPressed(goForward);
-                      response = "true";
-                    } else {
-                      logUserError(
-                          "Error: `{}` expected 1 boolean param (true or false) but got: {}",
-                          functionName,
-                          argsString);
-                      response = "false";
-                    }
-                    job.respond(funcCallId, response, true);
+                  } else if (functionName.equals("player_press_forward")) {
+                    var key = minecraft.options.forwardKey;
+                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                  } else if (functionName.equals("player_press_backward")) {
+                    var key = minecraft.options.backKey;
+                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                  } else if (functionName.equals("player_press_left")) {
+                    var key = minecraft.options.leftKey;
+                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                  } else if (functionName.equals("player_press_right")) {
+                    var key = minecraft.options.rightKey;
+                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                  } else if (functionName.equals("player_press_jump")) {
+                    var key = minecraft.options.jumpKey;
+                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                  } else if (functionName.equals("player_press_sprint")) {
+                    var key = minecraft.options.sprintKey;
+                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                  } else if (functionName.equals("player_press_sneak")) {
+                    var key = minecraft.options.sneakKey;
+                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                  } else if (functionName.equals("player_press_pick_item")) {
+                    var key = minecraft.options.pickItemKey;
+                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                  } else if (functionName.equals("player_press_use")) {
+                    var key = minecraft.options.useKey;
+                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                  } else if (functionName.equals("player_press_attack")) {
+                    var key = minecraft.options.attackKey;
+                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                  } else if (functionName.equals("player_press_swap_hands")) {
+                    var key = minecraft.options.swapHandsKey;
+                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                  } else if (functionName.equals("player_press_drop")) {
+                    var key = minecraft.options.dropKey;
+                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
                   } else if (functionName.equals("player_orientation")) {
                     if (args.isEmpty()) {
                       response = String.format("[%f, %f]", player.getYaw(), player.getPitch());
