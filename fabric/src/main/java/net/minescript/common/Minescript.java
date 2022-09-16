@@ -2326,6 +2326,45 @@ public class Minescript {
                       response = "null";
                     }
                     job.respond(funcCallId, response, true);
+                  } else if (functionName.equals("player_go_forward")) {
+                    if (args.size() == 1 && args.get(0) instanceof Boolean) {
+                      boolean goForward = (Boolean) args.get(0);
+                      minecraft.options.forwardKey.setPressed(goForward);
+                      response = "true";
+                    } else {
+                      logUserError(
+                          "Error: `{}` expected 1 boolean param (true or false) but got: {}",
+                          functionName,
+                          argsString);
+                      response = "false";
+                    }
+                    job.respond(funcCallId, response, true);
+                  } else if (functionName.equals("player_orientation")) {
+                    if (args.isEmpty()) {
+                      response = String.format("[%f, %f]", player.getYaw(), player.getPitch());
+                    } else {
+                      logUserError(
+                          "Error: `{}` expected no params but got: {}", functionName, argsString);
+                      response = "null";
+                    }
+                    job.respond(funcCallId, response, true);
+                  } else if (functionName.equals("player_set_orientation")) {
+                    if (args.size() == 2
+                        && args.get(0) instanceof Number
+                        && args.get(1) instanceof Number) {
+                      Number yaw = (Number) args.get(0);
+                      Number pitch = (Number) args.get(1);
+                      player.setYaw(yaw.floatValue() % 360.0f);
+                      player.setPitch(pitch.floatValue() % 360.0f);
+                      response = "true";
+                    } else {
+                      logUserError(
+                          "Error: `{}` expected 2 number params but got: {}",
+                          functionName,
+                          argsString);
+                      response = "false";
+                    }
+                    job.respond(funcCallId, response, true);
                   } else if (functionName.equals("screenshot")) {
                     final Optional<String> filename;
                     if (args.isEmpty()) {

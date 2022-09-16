@@ -132,6 +132,37 @@ def player_inventory(done_callback=None):
     CallAsyncScriptFunction("player_inventory", done_callback)
 
 
+def player_go_forward(go_forward: bool):
+  """Starts/stops moving the local player forward, similar to pressing/releasing the 'w' key.
+
+  Args:
+    go_forward: if True, go forward, otherwise stop going forward
+  """
+  return CallScriptFunction("player_go_forward", go_forward)
+
+
+def player_orientation():
+  """Gets the local player's orientation.
+
+  Returns:
+    (yaw: float, pitch: float) as angles in degrees
+  """
+  return CallScriptFunction("player_orientation")
+
+
+def player_set_orientation(yaw: float, pitch: float):
+  """Sets the local player's orientation.
+
+  Args:
+    yaw: degrees rotation of the local player's orientation around the y axis
+    pitch: degrees rotation of the local player's orientation from the x-z plane
+
+  Returns:
+    True if successful
+  """
+  return CallScriptFunction("player_set_orientation", yaw, pitch)
+
+
 def getblock(x: int, y: int, z: int, done_callback=None):
   """Gets the type of block as position (x, y, z).
 

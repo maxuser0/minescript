@@ -52,6 +52,10 @@ forge_to_fabric_member_names = (
   ('playerWorld.dimension', 'playerWorld.getDimension'),
   ('player.commandUnsigned', 'player.sendCommand'),
   ('player.chatSigned', 'player.sendChatMessage'),
+  ('player.getYRot', 'player.getYaw'),
+  ('player.setYRot', 'player.setYaw'),
+  ('player.getXRot', 'player.getPitch'),
+  ('player.setXRot', 'player.setPitch'),
   ('inventory.getItem', 'inventory.getStack'),
   ('inventory.getContainerSize', 'inventory.size'),
   ('itemStack.getTag', 'itemStack.getNbt'),
@@ -66,6 +70,13 @@ forge_to_fabric_member_names = (
   ('chatHud.addRecentChat', 'chatHud.addToMessageHistory'),
   ('Component.nullToEmpty', 'Text.of'),
   ('Screenshot.grab', 'ScreenshotRecorder.saveScreenshot'),
+  ('options.keyUp.setDown', 'options.forwardKey.setPressed'),
+  ('options.keyLeft.setDown', 'options.leftKey.setPressed'),
+  ('options.keyDown.setDown', 'options.backKey.setPressed'),
+  ('options.keyRight.setDown', 'options.rightKey.setPressed'),
+  ('options.keyJump.setDown', 'options.jumpKey.setPressed'),
+  ('options.keyShift.setDown', 'options.sneakKey.setPressed'),
+  ('options.keySprint.setDown', 'options.sprintKey.setPressed'),
 )
 
 def Usage():
