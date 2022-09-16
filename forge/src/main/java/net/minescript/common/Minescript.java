@@ -597,6 +597,9 @@ public class Minescript {
   interface Task {
     int run(String[] command, JobControl jobControl);
 
+    /** Begin flushing and call {@code callback.run()} when done flushing. */
+    default void flush(Runnable callback) {}
+
     default boolean handleResponse(long functionCallId, String returnValue, boolean finalReply) {
       return false;
     }
@@ -669,6 +672,11 @@ public class Minescript {
     public void start() {
       thread = new Thread(this::runOnJobThread, String.format("job-%d-%s", jobId, command[0]));
       thread.start();
+    }
+
+    /** Begin flushing and call {@code callback.run()} when done flushing. */
+    public void flush(Runnable callback) {
+      task.flush(callback);
     }
 
     public boolean suspend() {
@@ -812,6 +820,7 @@ public class Minescript {
   static class SubprocessTask implements Task {
     private Process process;
     private BufferedWriter stdinWriter;
+    private Runnable flushCallback = null;
 
     @Override
     public int run(String[] command, JobControl jobControl) {
@@ -850,14 +859,22 @@ public class Minescript {
             && jobControl.state() != JobState.DONE
             && (process.isAlive()
                 || System.currentTimeMillis() - lastReadTime < trailingReadTimeoutMillis)) {
-          if (stdoutReader.ready()) {
+          final boolean flushing;
+          synchronized (this) {
+            flushing = flushCallback != null;
+            if (flushing && jobControl.commandQueue().isEmpty()) {
+              flushCallback.run();
+              flushCallback = null;
+            }
+          }
+          if (!flushing && stdoutReader.ready()) {
             if ((line = stdoutReader.readLine()) == null) {
               break;
             }
             lastReadTime = System.currentTimeMillis();
             jobControl.enqueueStdout(line);
           }
-          if (stderrReader.ready()) {
+          if (!flushing && stderrReader.ready()) {
             if ((line = stderrReader.readLine()) == null) {
               break;
             }
@@ -889,6 +906,11 @@ public class Minescript {
         jobControl.logJobException(e);
         return -6;
       }
+    }
+
+    @Override
+    public synchronized void flush(Runnable callback) {
+      flushCallback = callback;
     }
 
     @Override
@@ -2388,6 +2410,15 @@ public class Minescript {
                           message -> job.enqueueStderr(message.getString()));
                     }
                     job.respond(funcCallId, response, true);
+                  } else if (functionName.equals("flush")) {
+                    if (args.isEmpty()) {
+                      response = "true";
+                      job.flush(() -> job.respond(funcCallId, response, true));
+                    } else {
+                      logUserError(
+                          "Error: `{}` expected no params but got: {}", functionName, argsString);
+                      response = "false";
+                    }
                   } else if (funcCallId == 0 && functionName.equals("exit!")) {
                     response = "\"exit!\"";
                     job.respond(0, response, true);

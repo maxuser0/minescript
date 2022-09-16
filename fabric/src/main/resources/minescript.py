@@ -82,6 +82,11 @@ def screenshot(filename=None):
       return CallScriptFunction("screenshot", filename)
 
 
+def flush():
+  """Wait for all previously issued script commands from this job to complete."""
+  return CallScriptFunction("flush")
+
+
 def player_position(done_callback=None):
   """Gets the local player's position.
 
