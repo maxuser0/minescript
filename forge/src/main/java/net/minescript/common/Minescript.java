@@ -8,6 +8,7 @@ import static net.minescript.common.CommandSyntax.quoteCommand;
 import static net.minescript.common.CommandSyntax.quoteString;
 
 import com.google.gson.Gson;
+import com.mojang.blaze3d.platform.InputConstants;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -57,6 +58,7 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.lwjgl.glfw.GLFW;
 
 public class Minescript {
   private static final Logger LOGGER = LogManager.getLogger();
@@ -2124,7 +2126,49 @@ public class Minescript {
 
   private static boolean scriptFunctionDebugOutptut = false;
 
-  private static String sendKeyPress(
+  private static final Map<KeyMapping, InputConstants.Key> boundKeys = new ConcurrentHashMap<>();
+
+  private static void lazyInitBoundKeys() {
+    // The map of bound keys must be initialized lazily because
+    // minecraft.options is still null at the time the mod is initialized.
+    if (!boundKeys.isEmpty()) {
+      return;
+    }
+
+    // TODO(maxuser): These default bindings do not track custom bindings. Use
+    // mixins to intercept KeyMapping constructor and setBoundKey method.
+    var minecraft = Minecraft.getInstance();
+    boundKeys.put(minecraft.options.keyUp, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_W));
+    boundKeys.put(
+        minecraft.options.keyDown, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_S));
+    boundKeys.put(
+        minecraft.options.keyLeft, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_A));
+    boundKeys.put(
+        minecraft.options.keyRight, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_D));
+    boundKeys.put(
+        minecraft.options.keyJump, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_SPACE));
+    boundKeys.put(
+        minecraft.options.keySprint,
+        InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_LEFT_CONTROL));
+    boundKeys.put(
+        minecraft.options.keyShift,
+        InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_LEFT_SHIFT));
+    boundKeys.put(
+        minecraft.options.keyPickItem,
+        InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_MIDDLE));
+    boundKeys.put(
+        minecraft.options.keyUse,
+        InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_RIGHT));
+    boundKeys.put(
+        minecraft.options.keyAttack,
+        InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_LEFT));
+    boundKeys.put(
+        minecraft.options.keySwapOffhand, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_F));
+    boundKeys.put(
+        minecraft.options.keyDrop, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_Q));
+  }
+
+  private static String doPlayerAction(
       String functionName,
       long funcCallId,
       KeyMapping keyBinding,
@@ -2133,7 +2177,15 @@ public class Minescript {
       Job job) {
     final String response;
     if (args.size() == 1 && args.get(0) instanceof Boolean) {
-      keyBinding.setPressed((Boolean) args.get(0));
+      lazyInitBoundKeys();
+      boolean pressed = (Boolean) args.get(0);
+      var key = boundKeys.get(keyBinding);
+      if (pressed) {
+        KeyMapping.set(key, true);
+        KeyMapping.click(key);
+      } else {
+        KeyMapping.set(key, false);
+      }
       response = "true";
     } else {
       logUserError(
@@ -2349,41 +2401,41 @@ public class Minescript {
                     }
                     job.respond(funcCallId, response, true);
                   } else if (functionName.equals("player_press_forward")) {
-                    var key = minecraft.options.forwardKey;
-                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                    var key = minecraft.options.keyUp;
+                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
                   } else if (functionName.equals("player_press_backward")) {
-                    var key = minecraft.options.backKey;
-                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                    var key = minecraft.options.keyDown;
+                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
                   } else if (functionName.equals("player_press_left")) {
-                    var key = minecraft.options.leftKey;
-                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                    var key = minecraft.options.keyLeft;
+                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
                   } else if (functionName.equals("player_press_right")) {
-                    var key = minecraft.options.rightKey;
-                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                    var key = minecraft.options.keyRight;
+                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
                   } else if (functionName.equals("player_press_jump")) {
-                    var key = minecraft.options.jumpKey;
-                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                    var key = minecraft.options.keyJump;
+                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
                   } else if (functionName.equals("player_press_sprint")) {
-                    var key = minecraft.options.sprintKey;
-                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                    var key = minecraft.options.keySprint;
+                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
                   } else if (functionName.equals("player_press_sneak")) {
-                    var key = minecraft.options.sneakKey;
-                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                    var key = minecraft.options.keyShift;
+                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
                   } else if (functionName.equals("player_press_pick_item")) {
-                    var key = minecraft.options.pickItemKey;
-                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                    var key = minecraft.options.keyPickItem;
+                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
                   } else if (functionName.equals("player_press_use")) {
-                    var key = minecraft.options.useKey;
-                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                    var key = minecraft.options.keyUse;
+                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
                   } else if (functionName.equals("player_press_attack")) {
-                    var key = minecraft.options.attackKey;
-                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                    var key = minecraft.options.keyAttack;
+                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
                   } else if (functionName.equals("player_press_swap_hands")) {
-                    var key = minecraft.options.swapHandsKey;
-                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                    var key = minecraft.options.keySwapOffhand;
+                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
                   } else if (functionName.equals("player_press_drop")) {
-                    var key = minecraft.options.dropKey;
-                    response = sendKeyPress(functionName, funcCallId, key, args, argsString, job);
+                    var key = minecraft.options.keyDrop;
+                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
                   } else if (functionName.equals("player_orientation")) {
                     if (args.isEmpty()) {
                       response = String.format("[%f, %f]", player.getYRot(), player.getXRot());
