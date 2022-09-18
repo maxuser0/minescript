@@ -87,6 +87,11 @@ def flush():
   return CallScriptFunction("flush")
 
 
+def player_name():
+  """Gets the local player's name."""
+  return CallScriptFunction("player_name")
+
+
 def player_position(done_callback=None):
   """Gets the local player's position.
 
@@ -245,7 +250,6 @@ def player_press_drop(pressed: bool):
   return CallScriptFunction("player_press_drop", pressed)
 
 
-
 def player_orientation():
   """Gets the local player's orientation.
 
@@ -266,6 +270,16 @@ def player_set_orientation(yaw: float, pitch: float):
     True if successful
   """
   return CallScriptFunction("player_set_orientation", yaw, pitch)
+
+
+def players():
+  """Gets a list of nearby players and their attributes: name, position, velocity, etc."""
+  return CallScriptFunction("players")
+
+
+def entities():
+  """Gets a list of nearby entities and their attributes: name, position, velocity, etc."""
+  return CallScriptFunction("entities")
 
 
 def getblock(x: int, y: int, z: int, done_callback=None):

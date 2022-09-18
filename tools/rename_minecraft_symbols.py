@@ -28,6 +28,7 @@ forge_to_fabric_class_names = (
   ('net.minecraft.client.gui.screens.Screen', 'net.minecraft.client.gui.screen.Screen'),
   ('net.minecraft.client.player.LocalPlayer', 'net.minecraft.client.network.ClientPlayerEntity'),
   ('net.minecraft.network.chat.Component', 'net.minecraft.text.Text'),
+  ('net.minecraft.world.entity.Entity', 'net.minecraft.entity.Entity'),
   ('net.minecraft.world.item.ItemStack', 'net.minecraft.item.ItemStack'),
   ('net.minecraft.world.level.Level', 'net.minecraft.world.World'),
   ('net.minecraft.world.level.LevelAccessor', 'net.minecraft.world.WorldAccess'),
@@ -54,6 +55,9 @@ forge_to_fabric_member_names = (
   ('chatHud.addRecentChat', 'chatHud.addToMessageHistory'),
   ('chunkManager.getChunkNow', 'chunkManager.getWorldChunk'),
   ('chunkPos.getBlockAt', 'chunkPos.getBlockPos'),
+  ('entity.getDeltaMovement', 'entity.getVelocity'),
+  ('entity.getXRot', 'entity.getPitch'),
+  ('entity.getYRot', 'entity.getYaw'),
   ('inventory.getContainerSize', 'inventory.size'),
   ('inventory.getItem', 'inventory.getStack'),
   ('itemStack.getTag', 'itemStack.getNbt'),
@@ -88,6 +92,8 @@ forge_to_fabric_member_names = (
   ('playerWorld.dimension', 'playerWorld.getDimension'),
   ('screen.onClose', 'screen.close'),
   ('serverData.ip', 'serverData.address'),
+  ('world.entitiesForRendering', 'world.getEntities'),
+  ('world.players', 'world.getPlayers'),
 )
 
 def Usage():

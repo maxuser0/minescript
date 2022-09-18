@@ -50,6 +50,7 @@ import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.client.util.ScreenshotRecorder;
+import net.minecraft.entity.Entity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.text.Text;
 import net.minecraft.world.World;
@@ -2125,6 +2126,28 @@ public class Minescript {
     }
   }
 
+  private static String entitiesToJsonString(Iterable<? extends Entity> entities) {
+    var result = new StringBuilder("[");
+    for (var entity : entities) {
+      if (result.length() > 1) {
+        result.append(",");
+      }
+      result.append("{");
+      // TODO(maxuser): Double-quote name and type values. Introduce doubleQuoteString(String).
+      result.append(String.format("\"name\":\"%s\",", entity.getName().getString()));
+      result.append(String.format("\"type\":\"%s\",", entity.getType().toString()));
+      result.append(
+          String.format("\"position\":[%f,%f,%f],", entity.getX(), entity.getY(), entity.getZ()));
+      result.append(String.format("\"yaw\":%f,", entity.getYaw()));
+      result.append(String.format("\"pitch\":%f,", entity.getPitch()));
+      var v = entity.getVelocity();
+      result.append(String.format("\"velocity\":[%f,%f,%f]", v.x, v.y, v.z));
+      result.append("}");
+    }
+    result.append("]");
+    return result.toString();
+  }
+
   private static boolean scriptFunctionDebugOutptut = false;
 
   private static final Map<KeyBinding, InputUtil.Key> boundKeys = new ConcurrentHashMap<>();
@@ -2239,6 +2262,16 @@ public class Minescript {
                       response =
                           String.format(
                               "[%f, %f, %f]", player.getX(), player.getY(), player.getZ());
+                      job.respond(funcCallId, response, true);
+                    } else {
+                      logUserError(
+                          "Error: `{}` expected no params but got: {}", functionName, argsString);
+                      response = "null";
+                      job.respond(funcCallId, response, true);
+                    }
+                  } else if (functionName.equals("player_name")) {
+                    if (args.isEmpty()) {
+                      response = quoteString(player.getName().getString(), true);
                       job.respond(funcCallId, response, true);
                     } else {
                       logUserError(
@@ -2459,6 +2492,14 @@ public class Minescript {
                           argsString);
                       response = "false";
                     }
+                    job.respond(funcCallId, response, true);
+                  } else if (functionName.equals("players")) {
+                    var world = minecraft.world;
+                    response = entitiesToJsonString(world.getPlayers());
+                    job.respond(funcCallId, response, true);
+                  } else if (functionName.equals("entities")) {
+                    var world = minecraft.world;
+                    response = entitiesToJsonString(world.getEntities());
                     job.respond(funcCallId, response, true);
                   } else if (functionName.equals("screenshot")) {
                     final Optional<String> filename;
