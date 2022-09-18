@@ -2191,14 +2191,8 @@ public class Minescript {
         minecraft.options.keyDrop, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_Q));
   }
 
-  private static String doPlayerAction(
-      String functionName,
-      long funcCallId,
-      KeyMapping keyBinding,
-      List<?> args,
-      String argsString,
-      Job job) {
-    final String response;
+  private static Optional<String> doPlayerAction(
+      String functionName, KeyMapping keyBinding, List<?> args, String argsString) {
     if (args.size() == 1 && args.get(0) instanceof Boolean) {
       lazyInitBoundKeys();
       boolean pressed = (Boolean) args.get(0);
@@ -2209,16 +2203,293 @@ public class Minescript {
       } else {
         KeyMapping.set(key, false);
       }
-      response = "true";
+      return Optional.of("true");
     } else {
       logUserError(
           "Error: `{}` expected 1 boolean param (true or false) but got: {}",
           functionName,
           argsString);
-      response = "false";
+      return Optional.of("false");
     }
-    job.respond(funcCallId, response, true);
-    return response;
+  }
+
+  /** Returns a JSON response string if a script function is called. */
+  private static Optional<String> handleScriptFunction(
+      Job job, long funcCallId, String functionName, List<?> args, String argsString) {
+    var minecraft = Minecraft.getInstance();
+    var world = minecraft.level;
+    var player = minecraft.player;
+    var options = minecraft.options;
+    switch (functionName) {
+      case "player_position":
+        if (args.isEmpty()) {
+          return Optional.of(
+              String.format("[%f, %f, %f]", player.getX(), player.getY(), player.getZ()));
+        } else {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.of("null");
+        }
+
+      case "player_name":
+        if (args.isEmpty()) {
+          return Optional.of(quoteString(player.getName().getString(), true));
+        } else {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.of("null");
+        }
+
+      case "getblock":
+        if (args.size() == 3
+            && args.get(0) instanceof Number
+            && args.get(1) instanceof Number
+            && args.get(2) instanceof Number) {
+          Level level = player.getCommandSenderWorld();
+          Number arg0 = (Number) args.get(0);
+          Number arg1 = (Number) args.get(1);
+          Number arg2 = (Number) args.get(2);
+          Optional<String> block =
+              blockStateToString(
+                  readBlockState(level, arg0.intValue(), arg1.intValue(), arg2.intValue()));
+          return Optional.of(block.map(str -> quoteString(str, true)).orElse("null"));
+        } else {
+          logUserError(
+              "Error: `{}` expected 3 params (x, y, z) but got: {}", functionName, argsString);
+          return Optional.of("null");
+        }
+
+      case "register_chat_message_listener":
+        if (!args.isEmpty()) {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+        } else if (clientChatReceivedEventListeners.containsKey(job.jobId())) {
+          logUserError(
+              "Error: `{}` failed: listener already registered for job: {}",
+              functionName,
+              job.jobSummary());
+        } else {
+          clientChatReceivedEventListeners.put(
+              job.jobId(), new ScriptFunctionCall(job, funcCallId));
+        }
+        return Optional.empty();
+
+      case "unregister_chat_message_listener":
+        if (!args.isEmpty()) {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.of("false");
+        } else if (!clientChatReceivedEventListeners.containsKey(job.jobId())) {
+          logUserError(
+              "Error: `{}` has no listeners to unregister for job: {}",
+              functionName,
+              job.jobSummary());
+          return Optional.of("false");
+        } else {
+          clientChatReceivedEventListeners.remove(job.jobId());
+          return Optional.of("true");
+        }
+
+      case "await_loaded_region":
+        if (args.size() == 4
+            && args.get(0) instanceof Number
+            && args.get(1) instanceof Number
+            && args.get(2) instanceof Number
+            && args.get(3) instanceof Number) {
+          Number arg0 = (Number) args.get(0);
+          Number arg1 = (Number) args.get(1);
+          Number arg2 = (Number) args.get(2);
+          Number arg3 = (Number) args.get(3);
+          var listener =
+              new ChunkLoadEventListener(
+                  arg0.intValue(),
+                  arg1.intValue(),
+                  arg2.intValue(),
+                  arg3.intValue(),
+                  new ScriptFunctionCall(job, funcCallId));
+          listener.updateChunkStatuses();
+          if (listener.isFinished()) {
+            listener.onFinished();
+          } else {
+            chunkLoadEventListeners.put(listener, job.jobId());
+          }
+          return Optional.empty();
+        } else {
+          // TODO(maxuser): Support raising exceptions through script functions, e.g.
+          // {"fcid": ..., "exception": "error message...", "conn": "close"}
+          logUserError(
+              "Error: `{}` expected 4 number params (x1, z1, x2, z2) but got: {}",
+              functionName,
+              argsString);
+          return Optional.of("false");
+        }
+
+      case "set_nickname":
+        if (args.isEmpty()) {
+          logUserInfo(
+              "Chat nickname reset to default; was {}",
+              customNickname == null ? "default already" : quoteString(customNickname));
+          customNickname = null;
+          return Optional.of("true");
+        } else if (args.size() == 1) {
+          String arg = args.get(0).toString();
+          if (arg.contains("%s")) {
+            logUserInfo("Chat nickname set to {}.", quoteString(arg, true));
+            customNickname = arg;
+            return Optional.of("true");
+          } else {
+            logUserError(
+                "Error: `{}` expects nickname to contain %s as a placeholder for"
+                    + " message text.",
+                functionName);
+            return Optional.of("false");
+          }
+        } else {
+          logUserError("Error: `{}` expected 0 or 1 param but got: {}", functionName, argsString);
+          return Optional.of("false");
+        }
+
+      case "player_hand_items":
+        if (args.isEmpty()) {
+          var result = new StringBuilder("[");
+          for (var itemStack : player.getHandSlots()) {
+            if (result.length() > 1) {
+              result.append(",");
+            }
+            result.append(itemStackToJsonString(itemStack));
+          }
+          result.append("]");
+          return Optional.of(result.toString());
+        } else {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.of("null");
+        }
+
+      case "player_inventory":
+        if (args.isEmpty()) {
+          var inventory = player.getInventory();
+          var result = new StringBuilder("[");
+          for (int i = 0; i < inventory.getContainerSize(); i++) {
+            var itemStack = inventory.getItem(i);
+            if (itemStack.getCount() > 0) {
+              if (result.length() > 1) {
+                result.append(",");
+              }
+              result.append(itemStackToJsonString(itemStack));
+            }
+          }
+          result.append("]");
+          return Optional.of(result.toString());
+        } else {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.of("null");
+        }
+
+      case "player_press_forward":
+        return doPlayerAction(functionName, options.keyUp, args, argsString);
+
+      case "player_press_backward":
+        return doPlayerAction(functionName, options.keyDown, args, argsString);
+
+      case "player_press_left":
+        return doPlayerAction(functionName, options.keyLeft, args, argsString);
+
+      case "player_press_right":
+        return doPlayerAction(functionName, options.keyRight, args, argsString);
+
+      case "player_press_jump":
+        return doPlayerAction(functionName, options.keyJump, args, argsString);
+
+      case "player_press_sprint":
+        return doPlayerAction(functionName, options.keySprint, args, argsString);
+
+      case "player_press_sneak":
+        return doPlayerAction(functionName, options.keyShift, args, argsString);
+
+      case "player_press_pick_item":
+        return doPlayerAction(functionName, options.keyPickItem, args, argsString);
+
+      case "player_press_use":
+        return doPlayerAction(functionName, options.keyUse, args, argsString);
+
+      case "player_press_attack":
+        return doPlayerAction(functionName, options.keyAttack, args, argsString);
+
+      case "player_press_swap_hands":
+        return doPlayerAction(functionName, options.keySwapOffhand, args, argsString);
+
+      case "player_press_drop":
+        return doPlayerAction(functionName, options.keyDrop, args, argsString);
+
+      case "player_orientation":
+        if (args.isEmpty()) {
+          return Optional.of(String.format("[%f, %f]", player.getYRot(), player.getXRot()));
+        } else {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.of("null");
+        }
+
+      case "player_set_orientation":
+        if (args.size() == 2 && args.get(0) instanceof Number && args.get(1) instanceof Number) {
+          Number yaw = (Number) args.get(0);
+          Number pitch = (Number) args.get(1);
+          player.setYRot(yaw.floatValue() % 360.0f);
+          player.setXRot(pitch.floatValue() % 360.0f);
+          return Optional.of("true");
+        } else {
+          logUserError(
+              "Error: `{}` expected 2 number params but got: {}", functionName, argsString);
+          return Optional.of("false");
+        }
+
+      case "players":
+        return Optional.of(entitiesToJsonString(world.players()));
+
+      case "entities":
+        return Optional.of(entitiesToJsonString(world.entitiesForRendering()));
+
+      case "screenshot":
+        final Optional<String> filename;
+        final String response;
+        if (args.isEmpty()) {
+          filename = Optional.empty();
+          response = "true";
+        } else if (args.size() == 1 && args.get(0) instanceof String) {
+          filename = Optional.of((String) args.get(0));
+          response = "true";
+        } else {
+          filename = null;
+          logUserError(
+              "Error: `{}` expected no params or 1 string param but got: {}",
+              functionName,
+              argsString);
+          response = "false";
+        }
+        if (filename != null) {
+          Screenshot.grab(
+              minecraft.gameDirectory,
+              filename.orElse(null),
+              minecraft.getMainRenderTarget(),
+              message -> job.enqueueStderr(message.getString()));
+        }
+        return Optional.of(response);
+
+      case "flush":
+        if (args.isEmpty()) {
+          return Optional.of("true");
+        } else {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.of("false");
+        }
+
+      case "exit!":
+        if (funcCallId == 0) {
+          return Optional.of("\"exit!\"");
+        } else {
+          return Optional.of("null");
+        }
+
+      default:
+        logUserError(
+            "Error: unknown function `{}` called from job: {}", functionName, job.jobSummary());
+        return Optional.of("false");
+    }
   }
 
   public static void onPlayerTick() {
@@ -2245,307 +2516,12 @@ public class Minescript {
                   var gson = new Gson();
                   List<?> args = gson.fromJson(argsString, ArrayList.class);
 
-                  // TODO(maxuser): This is poor form for a number of reasons. First, some branches
-                  // (namely async-only functions) have no immediate response, but we have to assign
-                  // a value to `response` anyway because it's `final`.  This is arguably better
-                  // than removing `final` from the variable because that would allow multiple
-                  // assignments.  Second, the long if-else-if chain is cumbersome.
-                  //
-                  // Refactor this so that each script function becomes an instance of a
-                  // ScriptFunction class with a call(...) method.
-
-                  final String response;
-
                   // TODO(maxuser): Support raising exceptions from script functions, e.g.
                   // {"fcid": ..., "exception": "error message...", "conn": "close"}
-
-                  if (functionName.equals("player_position")) {
-                    if (args.isEmpty()) {
-                      response =
-                          String.format(
-                              "[%f, %f, %f]", player.getX(), player.getY(), player.getZ());
-                      job.respond(funcCallId, response, true);
-                    } else {
-                      logUserError(
-                          "Error: `{}` expected no params but got: {}", functionName, argsString);
-                      response = "null";
-                      job.respond(funcCallId, response, true);
-                    }
-                  } else if (functionName.equals("player_name")) {
-                    if (args.isEmpty()) {
-                      response = quoteString(player.getName().getString(), true);
-                      job.respond(funcCallId, response, true);
-                    } else {
-                      logUserError(
-                          "Error: `{}` expected no params but got: {}", functionName, argsString);
-                      response = "null";
-                      job.respond(funcCallId, response, true);
-                    }
-                  } else if (functionName.equals("getblock")) {
-                    if (args.size() == 3
-                        && args.get(0) instanceof Number
-                        && args.get(1) instanceof Number
-                        && args.get(2) instanceof Number) {
-                      Number arg0 = (Number) args.get(0);
-                      Number arg1 = (Number) args.get(1);
-                      Number arg2 = (Number) args.get(2);
-                      Optional<String> block =
-                          blockStateToString(
-                              readBlockState(
-                                  level, arg0.intValue(), arg1.intValue(), arg2.intValue()));
-                      response = block.map(str -> quoteString(str, true)).orElse("null");
-                      job.respond(funcCallId, response, true);
-                    } else {
-                      logUserError(
-                          "Error: `{}` expected 3 params (x, y, z) but got: {}",
-                          functionName,
-                          argsString);
-                      response = "null";
-                      job.respond(funcCallId, response, true);
-                    }
-                  } else if (functionName.equals("register_chat_message_listener")) {
-                    if (!args.isEmpty()) {
-                      logUserError(
-                          "Error: `{}` expected no params but got: {}", functionName, argsString);
-                    } else if (clientChatReceivedEventListeners.containsKey(job.jobId())) {
-                      logUserError(
-                          "Error: `{}` failed: listener already registered for job: {}",
-                          functionName,
-                          job.jobSummary());
-                    } else {
-                      clientChatReceivedEventListeners.put(
-                          job.jobId(), new ScriptFunctionCall(job, funcCallId));
-                    }
-                    response = "<unused>";
-                  } else if (functionName.equals("unregister_chat_message_listener")) {
-                    if (!args.isEmpty()) {
-                      logUserError(
-                          "Error: `{}` expected no params but got: {}", functionName, argsString);
-                      response = "false";
-                    } else if (!clientChatReceivedEventListeners.containsKey(job.jobId())) {
-                      logUserError(
-                          "Error: `{}` has no listeners to unregister for job: {}",
-                          functionName,
-                          job.jobSummary());
-                      response = "false";
-                    } else {
-                      clientChatReceivedEventListeners.remove(job.jobId());
-                      response = "true";
-                    }
-                    job.respond(funcCallId, response, true);
-                  } else if (functionName.equals("await_loaded_region")) {
-                    if (args.size() == 4
-                        && args.get(0) instanceof Number
-                        && args.get(1) instanceof Number
-                        && args.get(2) instanceof Number
-                        && args.get(3) instanceof Number) {
-                      Number arg0 = (Number) args.get(0);
-                      Number arg1 = (Number) args.get(1);
-                      Number arg2 = (Number) args.get(2);
-                      Number arg3 = (Number) args.get(3);
-                      var listener =
-                          new ChunkLoadEventListener(
-                              arg0.intValue(),
-                              arg1.intValue(),
-                              arg2.intValue(),
-                              arg3.intValue(),
-                              new ScriptFunctionCall(job, funcCallId));
-                      listener.updateChunkStatuses();
-                      if (listener.isFinished()) {
-                        listener.onFinished();
-                      } else {
-                        chunkLoadEventListeners.put(listener, job.jobId());
-                      }
-                      response = "<unused>";
-                    } else {
-                      // TODO(maxuser): Support raising exceptions through script functions, e.g.
-                      // {"fcid": ..., "exception": "error message...", "conn": "close"}
-                      logUserError(
-                          "Error: `{}` expected 4 number params (x1, z1, x2, z2) but got: {}",
-                          functionName,
-                          argsString);
-                      response = "false";
-                      job.respond(funcCallId, response, true);
-                    }
-                  } else if (functionName.equals("set_nickname")) {
-                    if (args.isEmpty()) {
-                      logUserInfo(
-                          "Chat nickname reset to default; was {}",
-                          customNickname == null ? "default already" : quoteString(customNickname));
-                      customNickname = null;
-                      response = "true";
-                    } else if (args.size() == 1) {
-                      String arg = args.get(0).toString();
-                      if (arg.contains("%s")) {
-                        logUserInfo("Chat nickname set to {}.", quoteString(arg, true));
-                        customNickname = arg;
-                        response = "true";
-                      } else {
-                        logUserError(
-                            "Error: `{}` expects nickname to contain %s as a placeholder for"
-                                + " message text.",
-                            functionName);
-                        response = "false";
-                      }
-                    } else {
-                      logUserError(
-                          "Error: `{}` expected 0 or 1 param but got: {}",
-                          functionName,
-                          argsString);
-                      response = "false";
-                    }
-                    job.respond(funcCallId, response, true);
-                  } else if (functionName.equals("player_hand_items")) {
-                    if (args.isEmpty()) {
-                      var result = new StringBuilder("[");
-                      for (var itemStack : player.getHandSlots()) {
-                        if (result.length() > 1) {
-                          result.append(",");
-                        }
-                        result.append(itemStackToJsonString(itemStack));
-                      }
-                      result.append("]");
-                      response = result.toString();
-                    } else {
-                      logUserError(
-                          "Error: `{}` expected no params but got: {}", functionName, argsString);
-                      response = "null";
-                    }
-                    job.respond(funcCallId, response, true);
-                  } else if (functionName.equals("player_inventory")) {
-                    if (args.isEmpty()) {
-                      var inventory = player.getInventory();
-                      var result = new StringBuilder("[");
-                      for (int i = 0; i < inventory.getContainerSize(); i++) {
-                        var itemStack = inventory.getItem(i);
-                        if (itemStack.getCount() > 0) {
-                          if (result.length() > 1) {
-                            result.append(",");
-                          }
-                          result.append(itemStackToJsonString(itemStack));
-                        }
-                      }
-                      result.append("]");
-                      response = result.toString();
-                    } else {
-                      logUserError(
-                          "Error: `{}` expected no params but got: {}", functionName, argsString);
-                      response = "null";
-                    }
-                    job.respond(funcCallId, response, true);
-                  } else if (functionName.equals("player_press_forward")) {
-                    var key = minecraft.options.keyUp;
-                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
-                  } else if (functionName.equals("player_press_backward")) {
-                    var key = minecraft.options.keyDown;
-                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
-                  } else if (functionName.equals("player_press_left")) {
-                    var key = minecraft.options.keyLeft;
-                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
-                  } else if (functionName.equals("player_press_right")) {
-                    var key = minecraft.options.keyRight;
-                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
-                  } else if (functionName.equals("player_press_jump")) {
-                    var key = minecraft.options.keyJump;
-                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
-                  } else if (functionName.equals("player_press_sprint")) {
-                    var key = minecraft.options.keySprint;
-                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
-                  } else if (functionName.equals("player_press_sneak")) {
-                    var key = minecraft.options.keyShift;
-                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
-                  } else if (functionName.equals("player_press_pick_item")) {
-                    var key = minecraft.options.keyPickItem;
-                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
-                  } else if (functionName.equals("player_press_use")) {
-                    var key = minecraft.options.keyUse;
-                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
-                  } else if (functionName.equals("player_press_attack")) {
-                    var key = minecraft.options.keyAttack;
-                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
-                  } else if (functionName.equals("player_press_swap_hands")) {
-                    var key = minecraft.options.keySwapOffhand;
-                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
-                  } else if (functionName.equals("player_press_drop")) {
-                    var key = minecraft.options.keyDrop;
-                    response = doPlayerAction(functionName, funcCallId, key, args, argsString, job);
-                  } else if (functionName.equals("player_orientation")) {
-                    if (args.isEmpty()) {
-                      response = String.format("[%f, %f]", player.getYRot(), player.getXRot());
-                    } else {
-                      logUserError(
-                          "Error: `{}` expected no params but got: {}", functionName, argsString);
-                      response = "null";
-                    }
-                    job.respond(funcCallId, response, true);
-                  } else if (functionName.equals("player_set_orientation")) {
-                    if (args.size() == 2
-                        && args.get(0) instanceof Number
-                        && args.get(1) instanceof Number) {
-                      Number yaw = (Number) args.get(0);
-                      Number pitch = (Number) args.get(1);
-                      player.setYRot(yaw.floatValue() % 360.0f);
-                      player.setXRot(pitch.floatValue() % 360.0f);
-                      response = "true";
-                    } else {
-                      logUserError(
-                          "Error: `{}` expected 2 number params but got: {}",
-                          functionName,
-                          argsString);
-                      response = "false";
-                    }
-                    job.respond(funcCallId, response, true);
-                  } else if (functionName.equals("players")) {
-                    var world = minecraft.level;
-                    response = entitiesToJsonString(world.players());
-                    job.respond(funcCallId, response, true);
-                  } else if (functionName.equals("entities")) {
-                    var world = minecraft.level;
-                    response = entitiesToJsonString(world.entitiesForRendering());
-                    job.respond(funcCallId, response, true);
-                  } else if (functionName.equals("screenshot")) {
-                    final Optional<String> filename;
-                    if (args.isEmpty()) {
-                      filename = Optional.empty();
-                      response = "true";
-                    } else if (args.size() == 1 && args.get(0) instanceof String) {
-                      filename = Optional.of((String) args.get(0));
-                      response = "true";
-                    } else {
-                      filename = null;
-                      logUserError(
-                          "Error: `{}` expected no params or 1 string param but got: {}",
-                          functionName,
-                          argsString);
-                      response = "false";
-                    }
-                    if (filename != null) {
-                      Screenshot.grab(
-                          minecraft.gameDirectory,
-                          filename.orElse(null),
-                          minecraft.getMainRenderTarget(),
-                          message -> job.enqueueStderr(message.getString()));
-                    }
-                    job.respond(funcCallId, response, true);
-                  } else if (functionName.equals("flush")) {
-                    if (args.isEmpty()) {
-                      response = "true";
-                      job.respond(funcCallId, response, true);
-                    } else {
-                      logUserError(
-                          "Error: `{}` expected no params but got: {}", functionName, argsString);
-                      response = "false";
-                    }
-                  } else if (funcCallId == 0 && functionName.equals("exit!")) {
-                    response = "\"exit!\"";
-                    job.respond(0, response, true);
-                  } else {
-                    logUserError(
-                        "Error: unknown function `{}` called from job: {}",
-                        functionName,
-                        job.jobSummary());
-                    response = "false";
-                    job.respond(funcCallId, response, true);
+                  Optional<String> response =
+                      handleScriptFunction(job, funcCallId, functionName, args, argsString);
+                  if (response.isPresent()) {
+                    job.respond(funcCallId, response.get(), true);
                   }
                   if (scriptFunctionDebugOutptut) {
                     LOGGER.info(
@@ -2553,7 +2529,7 @@ public class Minescript {
                         functionName,
                         quoteString(argsString, true),
                         args,
-                        response);
+                        response.orElse("<no response>"));
                   }
                 } else {
                   processMessage(jobCommand);
