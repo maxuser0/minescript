@@ -1949,12 +1949,11 @@ public class Minescript {
     // World with chunks to listen for. Store hash rather than reference to avoid memory leak.
     private final int levelHashCode;
 
-    private final ScriptFunctionCall scriptFunction;
+    private final Runnable doneCallback;
     private int numUnloadedChunks = 0;
     private boolean suspended = false;
 
-    public ChunkLoadEventListener(
-        int x1, int z1, int x2, int z2, ScriptFunctionCall scriptFunction) {
+    public ChunkLoadEventListener(int x1, int z1, int x2, int z2, Runnable doneCallback) {
       var minecraft = MinecraftClient.getInstance();
       this.levelHashCode = minecraft.world.hashCode();
       LOGGER.info("listener chunk region in level {}: {} {} {} {}", levelHashCode, x1, z1, x2, z2);
@@ -1975,7 +1974,7 @@ public class Minescript {
           chunksToLoad.put(packedChunkXZ, false);
         }
       }
-      this.scriptFunction = scriptFunction;
+      this.doneCallback = doneCallback;
     }
 
     public synchronized void suspend() {
@@ -2056,7 +2055,7 @@ public class Minescript {
 
     /** To be called when all requested chunks are loaded. */
     public synchronized void onFinished() {
-      scriptFunction.respond("true", true);
+      doneCallback.run();
     }
   }
 
@@ -2300,7 +2299,7 @@ public class Minescript {
                   arg1.intValue(),
                   arg2.intValue(),
                   arg3.intValue(),
-                  new ScriptFunctionCall(job, funcCallId));
+                  () -> job.respond(funcCallId, "true", true));
           listener.updateChunkStatuses();
           if (listener.isFinished()) {
             listener.onFinished();
