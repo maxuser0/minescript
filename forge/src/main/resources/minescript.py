@@ -318,6 +318,11 @@ def await_loaded_region(x1: int, z1: int, x2: int, z2: int, done_callback=None):
 def register_chat_message_listener(listener: Callable[[str], None]):
   """Registers a listener for receiving chat messages. One listener allowed per job.
 
+  Listener receives both incoming and outgoing chat messages.
+
+  See also register_chat_message_interceptor() for swallowing outgoing chat
+  messages.
+
   Args:
     listener: callable that repeatedly accepts a string representing chat messages
   """
@@ -332,3 +337,31 @@ def unregister_chat_message_listener():
     True if successfully unregistered a listener, False otherwise.
   """
   CallScriptFunction("unregister_chat_message_listener")
+
+
+def register_chat_message_interceptor(interceptor: Callable[[str], None]):
+  """Registers an interceptor for swallowing chat messages.
+
+  An interceptor swallows outgoing chat messages, typically for use in
+  rewriting outgoing chat messages by calling minecraft.chat(str), e.g. to
+  decorate or post-process outgoing messages automatically before they're sent
+  to the server.  Only one interceptor is allowed at a time within a Minecraft
+  instance.
+
+  See also register_chat_message_listener() for non-destructive listening of
+  chat messages.
+
+  Args:
+    interceptor: callable that repeatedly accepts a string representing chat messages
+  """
+  CallAsyncScriptFunction(
+      "register_chat_message_interceptor", (), interceptor)
+
+
+def unregister_chat_message_interceptor():
+  """Unegisters the chat message interceptor, if one is currently registered.
+
+  Returns:
+    True if successfully unregistered an interceptor, False otherwise.
+  """
+  CallScriptFunction("unregister_chat_message_interceptor")

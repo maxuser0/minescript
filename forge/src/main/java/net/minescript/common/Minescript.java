@@ -620,12 +620,17 @@ public class Minescript {
     private Consumer<Integer> doneCallback;
     private Queue<String> jobCommandQueue = new ConcurrentLinkedQueue<String>();
     private Lock lock = new ReentrantLock(true); // true indicates a fair lock to avoid starvation
+    private List<Runnable> atExitHandlers = new ArrayList<>();
 
     public Job(int jobId, String[] command, Task task, Consumer<Integer> doneCallback) {
       this.jobId = jobId;
       this.command = Arrays.copyOf(command, command.length);
       this.task = task;
       this.doneCallback = doneCallback;
+    }
+
+    public void addAtExitHandler(Runnable handler) {
+      atExitHandlers.add(handler);
     }
 
     @Override
@@ -778,6 +783,9 @@ public class Minescript {
         }
       } finally {
         doneCallback.accept(jobId);
+        for (Runnable handler : atExitHandlers) {
+          handler.run();
+        }
       }
     }
 
@@ -1681,7 +1689,9 @@ public class Minescript {
         String value = chatEditBox.getValue();
         if (!value.startsWith("\\")) {
           minescriptCommandHistory.moveToEnd();
-          if (key == ENTER_KEY && customNickname != null && !value.startsWith("/")) {
+          if (key == ENTER_KEY
+              && (customNickname != null || chatInterceptor != null)
+              && !value.startsWith("/")) {
             cancel = true;
             chatEditBox.setValue("");
             onClientChat(value);
@@ -1869,6 +1879,9 @@ public class Minescript {
 
       LOGGER.info("Processing command from chat event: {}", message);
       runMinescriptCommand(message.substring(1));
+      cancel = true;
+    } else if (chatInterceptor != null && !message.startsWith("/")) {
+      chatInterceptor.accept(message);
       cancel = true;
     } else if (customNickname != null && !message.startsWith("/")) {
       String tellrawCommand = "/tellraw @a " + String.format(customNickname, message);
@@ -2066,6 +2079,7 @@ public class Minescript {
       new ConcurrentHashMap<ChunkLoadEventListener, Integer>();
 
   private static String customNickname = null;
+  private static Consumer<String> chatInterceptor = null;
 
   private static boolean areCommandsAllowed() {
     var minecraft = Minecraft.getInstance();
@@ -2286,6 +2300,38 @@ public class Minescript {
         } else {
           clientChatReceivedEventListeners.remove(job.jobId());
           return Optional.of("true");
+        }
+
+      case "register_chat_message_interceptor":
+        if (args.isEmpty()) {
+          if (chatInterceptor == null) {
+            chatInterceptor =
+                s -> {
+                  job.respond(funcCallId, toJsonString(s), false);
+                };
+            job.addAtExitHandler(() -> chatInterceptor = null);
+            logUserInfo("Chat interceptor enabled for job: {}", job.jobSummary());
+          } else {
+            logUserError("Error: Chat interceptor already enabled for another job.");
+          }
+          return Optional.empty();
+        } else {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.empty();
+        }
+
+      case "unregister_chat_message_interceptor":
+        if (args.isEmpty()) {
+          if (chatInterceptor != null) {
+            chatInterceptor = null;
+            logUserInfo("Chat interceptor disabled for job: {}", job.jobSummary());
+          } else {
+            logUserError("Error: Chat interceptor already disabled: {}", job.jobSummary());
+          }
+          return Optional.empty();
+        } else {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.empty();
         }
 
       case "await_loaded_region":
