@@ -1682,7 +1682,6 @@ public class Minescript {
         if (!value.startsWith("\\")) {
           minescriptCommandHistory.moveToEnd();
           if (key == ENTER_KEY && customNickname != null && !value.startsWith("/")) {
-            // This branch is unnecessary on Forge because it supports ClientChatEvent.
             cancel = true;
             chatEditBox.setValue("");
             onClientChat(value);
@@ -1707,7 +1706,6 @@ public class Minescript {
           }
           cancel = true;
         } else if (key == ENTER_KEY) {
-          // This branch is unnecessary on Forge because it supports ClientChatEvent.
           cancel = true;
           String text = chatEditBox.getValue();
           chatEditBox.setValue("");
