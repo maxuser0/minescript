@@ -5,7 +5,6 @@ package net.minescript.common;
 
 import static net.minescript.common.CommandSyntax.parseCommand;
 import static net.minescript.common.CommandSyntax.quoteCommand;
-import static net.minescript.common.CommandSyntax.quoteString;
 
 import com.google.gson.Gson;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -107,6 +106,12 @@ public class Minescript {
     }
 
     loadConfig();
+  }
+
+  private static Gson GSON = new Gson();
+
+  private static String toJsonString(String s) {
+    return GSON.toJson(s);
   }
 
   private static String getCurrentVersion() {
@@ -1800,9 +1805,9 @@ public class Minescript {
     var iter = clientChatReceivedEventListeners.entrySet().iterator();
     while (iter.hasNext()) {
       var listener = iter.next();
-      LOGGER.info(
-          "Forwarding chat message to listener {}: {}", listener.getKey(), quoteString(text));
-      if (!listener.getValue().respond(quoteString(text), false)) {
+      String quotedText = toJsonString(text);
+      LOGGER.info("Forwarding chat message to listener {}: {}", listener.getKey(), quotedText);
+      if (!listener.getValue().respond(quotedText, false)) {
         iter.remove();
       }
     }
@@ -2231,7 +2236,7 @@ public class Minescript {
 
       case "player_name":
         if (args.isEmpty()) {
-          return Optional.of(quoteString(player.getName().getString(), true));
+          return Optional.of(toJsonString(player.getName().getString()));
         } else {
           logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
           return Optional.of("null");
@@ -2249,7 +2254,7 @@ public class Minescript {
           Optional<String> block =
               blockStateToString(
                   readBlockState(level, arg0.intValue(), arg1.intValue(), arg2.intValue()));
-          return Optional.of(block.map(str -> quoteString(str, true)).orElse("null"));
+          return Optional.of(block.map(str -> toJsonString(str)).orElse("null"));
         } else {
           logUserError(
               "Error: `{}` expected 3 params (x, y, z) but got: {}", functionName, argsString);
@@ -2323,13 +2328,13 @@ public class Minescript {
         if (args.isEmpty()) {
           logUserInfo(
               "Chat nickname reset to default; was {}",
-              customNickname == null ? "default already" : quoteString(customNickname));
+              customNickname == null ? "default already" : toJsonString(customNickname));
           customNickname = null;
           return Optional.of("true");
         } else if (args.size() == 1) {
           String arg = args.get(0).toString();
           if (arg.contains("%s")) {
-            logUserInfo("Chat nickname set to {}.", quoteString(arg, true));
+            logUserInfo("Chat nickname set to {}.", toJsonString(arg));
             customNickname = arg;
             return Optional.of("true");
           } else {
@@ -2526,7 +2531,7 @@ public class Minescript {
                     LOGGER.info(
                         "(debug) Script function `{}`: {} / {}  ->  {}",
                         functionName,
-                        quoteString(argsString, true),
+                        toJsonString(argsString),
                         args,
                         response.orElse("<no response>"));
                   }
