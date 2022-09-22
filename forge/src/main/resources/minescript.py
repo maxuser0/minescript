@@ -283,7 +283,7 @@ def entities():
 
 
 def getblock(x: int, y: int, z: int, done_callback=None):
-  """Gets the type of block as position (x, y, z).
+  """Gets the type of block at position (x, y, z).
 
   Args:
     done_callback: if given, return immediately and call done_callback(return_value)
@@ -296,6 +296,22 @@ def getblock(x: int, y: int, z: int, done_callback=None):
     return CallScriptFunction("getblock", x, y, z)
   else:
     CallAsyncScriptFunction("getblock", (x, y, z), done_callback)
+
+
+def getblocklist(positions: List[List[int]], done_callback=None):
+  """Gets the types of block at the specified [x, y, z] positions.
+
+  Args:
+    done_callback: if given, return immediately and call done_callback(return_value)
+        asynchronously when return_value is ready
+
+  Returns:
+    if done_callback is None, returns the block types at given positions as list of strings
+  """
+  if done_callback is None:
+    return CallScriptFunction("getblocklist", positions)
+  else:
+    CallAsyncScriptFunction("getblocklist", (positions,), done_callback)
 
 
 def await_loaded_region(x1: int, z1: int, x2: int, z2: int, done_callback=None):

@@ -40,6 +40,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.minecraft.client.KeyMapping;
@@ -281,7 +282,6 @@ public class Minescript {
         "resume",
         "killjob",
         "undo",
-        "minescript_copy_size_limit",
         "minescript_commands_per_cycle",
         "minescript_ticks_per_cycle",
         "minescript_incremental_command_suggestions",
@@ -1045,16 +1045,19 @@ public class Minescript {
   public enum ParamType {
     INT,
     BOOL,
-    STRING
+    STRING,
+    VAR_ARGS // matches any number of optional args at the end of the arg list
   }
 
   private static boolean checkParamTypes(String[] command, ParamType... types) {
-    if (command.length != 1 + types.length) {
-      return false;
+    if (types.length == 0 || types[types.length - 1] != ParamType.VAR_ARGS) {
+      if (command.length != 1 + types.length) {
+        return false;
+      }
     }
-    for (int i = 0; i < types.length; i++) {
-      String param = command[i + 1];
-      switch (types[i]) {
+    for (int i = 1; i < command.length; i++) {
+      String param = command[i];
+      switch (types[i - 1]) {
         case INT:
           try {
             Integer.valueOf(param);
@@ -1230,8 +1233,6 @@ public class Minescript {
   // "minecraft:acacia_button[face=floor,facing=west,powered=false]"
   private static Pattern BLOCK_STATE_RE = Pattern.compile("^Block\\{([^}]*)\\}(\\[.*\\])?$");
 
-  private static int copySizeLimit = 200;
-
   private static Optional<String> blockStateToString(BlockState blockState) {
     var match = BLOCK_STATE_RE.matcher(blockState.toString());
     if (!match.find()) {
@@ -1243,7 +1244,7 @@ public class Minescript {
   }
 
   private static void copyBlocks(
-      int x0, int y0, int z0, int x1, int y1, int z1, Optional<String> label) {
+      int x0, int y0, int z0, int x1, int y1, int z1, Optional<String> label, boolean safetyLimit) {
     var minecraft = Minecraft.getInstance();
     var player = minecraft.player;
     if (player == null) {
@@ -1255,16 +1256,6 @@ public class Minescript {
     int playerY = (int) player.getY();
     int playerZ = (int) player.getZ();
 
-    if (Math.abs(x0 - playerX) > copySizeLimit
-        || Math.abs(y0 - playerY) > copySizeLimit
-        || Math.abs(z0 - playerZ) > copySizeLimit
-        || Math.abs(x1 - playerX) > copySizeLimit
-        || Math.abs(y1 - playerY) > copySizeLimit
-        || Math.abs(z1 - playerZ) > copySizeLimit) {
-      logUserError("Player is more than {} blocks from `copy` coordinate.", copySizeLimit);
-      return;
-    }
-
     int xMin = Math.min(x0, x1);
     int yMin = Math.max(Math.min(y0, y1), -64); // TODO(maxuser): Use an API for min build height.
     int zMin = Math.min(z0, z1);
@@ -1273,7 +1264,29 @@ public class Minescript {
     int yMax = Math.min(Math.max(y0, y1), 320); // TODO(maxuser): Use an API for max build height.
     int zMax = Math.max(z0, z1);
 
+    if (safetyLimit) {
+      // Estimate the number of chunks to check against a soft limit.
+      int numChunks = ((xMax - xMin) / 16 + 1) * ((zMax - zMin) / 16 + 1);
+      if (numChunks > 1600) {
+        logUserError(
+            "`copy` command exceeded soft limit of 1600 chunks (region covers {} chunks; override"
+                + " this safety check with `no_limit`).",
+            numChunks);
+        return;
+      }
+    }
+
     Level level = player.getCommandSenderWorld();
+
+    for (int x = xMin; x <= xMax; x += 16) {
+      for (int z = zMin; z <= zMax; z += 16) {
+        Optional<String> block = blockStateToString(readBlockState(level, x, 0, z));
+        if (block.isEmpty() || block.get().equals("minecraft:void_air")) {
+          logUserError("Not all chunks are loaded within the requested `copy` volume.");
+          return;
+        }
+      }
+    }
 
     final String copiesDir = Paths.get(MINESCRIPT_DIR, "copies").toString();
     if (new File(copiesDir).mkdir()) {
@@ -1385,41 +1398,48 @@ public class Minescript {
     }
 
     if (command[0].equals("copy")) {
+      final var cmd = command;
+      Runnable badArgsMessage =
+          () ->
+              logUserError(
+                  "Expected 6 params of type integer (plus optional params for label and"
+                      + " `no_limit`), instead got `{}`",
+                  getParamsAsString(cmd));
+
       if (checkParamTypes(
-          command,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.INT)) {
+              command,
+              ParamType.INT,
+              ParamType.INT,
+              ParamType.INT,
+              ParamType.INT,
+              ParamType.INT,
+              ParamType.INT,
+              ParamType.VAR_ARGS)
+          && command.length <= 9) {
         int x0 = Integer.valueOf(command[1]);
         int y0 = Integer.valueOf(command[2]);
         int z0 = Integer.valueOf(command[3]);
         int x1 = Integer.valueOf(command[4]);
         int y1 = Integer.valueOf(command[5]);
         int z1 = Integer.valueOf(command[6]);
-        copyBlocks(x0, y0, z0, x1, y1, z1, Optional.empty());
-      } else if (checkParamTypes(
-          command,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.STRING)) {
-        int x0 = Integer.valueOf(command[1]);
-        int y0 = Integer.valueOf(command[2]);
-        int z0 = Integer.valueOf(command[3]);
-        int x1 = Integer.valueOf(command[4]);
-        int y1 = Integer.valueOf(command[5]);
-        int z1 = Integer.valueOf(command[6]);
-        copyBlocks(x0, y0, z0, x1, y1, z1, Optional.of(command[7]));
+
+        boolean safetyLimit = true;
+        Optional<String> label = Optional.empty();
+        for (int i = 7; i < command.length; i++) {
+          // Don't allow safetyLimit to be set to false multiple times.
+          if (command[i].equals("no_limit") && safetyLimit) {
+            safetyLimit = false;
+          } else if (label.isEmpty()) {
+            label = Optional.of(command[i]);
+          } else {
+            badArgsMessage.run();
+            return;
+          }
+        }
+
+        copyBlocks(x0, y0, z0, x1, y1, z1, label, safetyLimit);
       } else {
-        logUserError(
-            "Expected 6 params of type integer (optional 7th for label), instead got `{}`",
-            getParamsAsString(command));
+        badArgsMessage.run();
       }
       return;
     }
@@ -1447,21 +1467,6 @@ public class Minescript {
         if (ticks < 1) ticks = 1;
         minescriptTicksPerCycle = ticks;
         logUserInfo("Minescript execution set to {} tick(s) per cycle.", ticks);
-      } else {
-        logUserError(
-            "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
-      }
-      return;
-    }
-
-    if (command[0].equals("minescript_copy_size_limit")) {
-      if (checkParamTypes(command)) {
-        logUserInfo("Minescript copy size limit is {} blocks.", copySizeLimit);
-      } else if (checkParamTypes(command, ParamType.INT)) {
-        int limit = Integer.valueOf(command[1]);
-        if (limit < 1) limit = 1;
-        copySizeLimit = limit;
-        logUserInfo("Minescript copy size limit set to {} blocks.", limit);
       } else {
         logUserError(
             "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
@@ -2272,6 +2277,41 @@ public class Minescript {
               "Error: `{}` expected 3 params (x, y, z) but got: {}", functionName, argsString);
           return Optional.of("null");
         }
+
+      case "getblocklist":
+        Supplier<Optional<String>> badArgsResponse =
+            () -> {
+              logUserError(
+                  "Error: `{}` expected a list of (x, y, z) positions but got: {}",
+                  functionName,
+                  argsString);
+              return Optional.of("null");
+            };
+
+        if (args.size() != 1 || !(args.get(0) instanceof List)) {
+          return badArgsResponse.get();
+        }
+        List<?> positions = (List<?>) args.get(0);
+        Level level = player.getCommandSenderWorld();
+        List<String> blocks = new ArrayList<>();
+        for (var position : positions) {
+          if (!(position instanceof List)) {
+            return badArgsResponse.get();
+          }
+          List<?> coords = (List<?>) position;
+          if (coords.size() != 3
+              || !(coords.get(0) instanceof Number)
+              || !(coords.get(1) instanceof Number)
+              || !(coords.get(2) instanceof Number)) {
+            return badArgsResponse.get();
+          }
+          int x = ((Number) coords.get(0)).intValue();
+          int y = ((Number) coords.get(1)).intValue();
+          int z = ((Number) coords.get(2)).intValue();
+          Optional<String> block = blockStateToString(readBlockState(level, x, y, z));
+          blocks.add(block.orElse(null));
+        }
+        return Optional.of(GSON.toJson(blocks));
 
       case "register_chat_message_listener":
         if (!args.isEmpty()) {
