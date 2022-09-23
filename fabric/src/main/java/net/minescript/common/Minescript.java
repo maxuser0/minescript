@@ -1315,9 +1315,6 @@ public class Minescript {
       for (int x = xMin; x <= xMax; ++x) {
         for (int y = yMin; y <= yMax; ++y) {
           for (int z = zMin; z <= zMax; ++z) {
-            // TODO(maxuser): Need to check chunkPos.get{Min,Max}Block{X,Z}()?
-            // TODO(maxuser): Listen to ChunkEvent.Load and .Unload events to determine if the chunk
-            // we're trying to read here is loaded. If it's not, load it and try again later.
             BlockState blockState = level.getBlockState(pos.set(x, y, z));
             if (!blockState.isAir()) {
               int xOffset = x - x0;
