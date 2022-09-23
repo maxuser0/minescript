@@ -7,6 +7,7 @@ import static net.minescript.common.CommandSyntax.parseCommand;
 import static net.minescript.common.CommandSyntax.quoteCommand;
 import static net.minescript.common.CommandSyntax.quoteString;
 
+import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
 import com.mojang.blaze3d.platform.InputConstants;
 import java.io.BufferedReader;
@@ -273,30 +274,26 @@ public class Minescript {
     }
   }
 
-  // TODO(maxuser): replace with ImmutableList
-  private static final String[] BUILTIN_COMMANDS =
-      new String[] {
-        "ls",
-        "copy",
-        "jobs",
-        "suspend",
-        "z", // alias for suspend
-        "resume",
-        "killjob",
-        "undo",
-        "minescript_commands_per_cycle",
-        "minescript_ticks_per_cycle",
-        "minescript_incremental_command_suggestions",
-        "minescript_script_function_debug_outptut",
-        "minescript_log_chunk_load_events",
-        "enable_minescript_on_chat_received_event"
-      };
+  private static final ImmutableList<String> BUILTIN_COMMANDS =
+      ImmutableList.of(
+          "ls",
+          "copy",
+          "jobs",
+          "suspend",
+          "z", // alias for suspend
+          "resume",
+          "killjob",
+          "undo",
+          "minescript_commands_per_cycle",
+          "minescript_ticks_per_cycle",
+          "minescript_incremental_command_suggestions",
+          "minescript_script_function_debug_outptut",
+          "minescript_log_chunk_load_events",
+          "enable_minescript_on_chat_received_event");
 
   private static List<String> getScriptCommandNamesWithBuiltins() {
     var names = getScriptCommandNames();
-    for (String builtin : BUILTIN_COMMANDS) {
-      names.add(builtin);
-    }
+    names.addAll(BUILTIN_COMMANDS);
     return names;
   }
 
