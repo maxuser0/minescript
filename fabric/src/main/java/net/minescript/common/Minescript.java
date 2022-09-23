@@ -5,6 +5,7 @@ package net.minescript.common;
 
 import static net.minescript.common.CommandSyntax.parseCommand;
 import static net.minescript.common.CommandSyntax.quoteCommand;
+import static net.minescript.common.CommandSyntax.quoteString;
 
 import com.google.gson.Gson;
 import java.io.BufferedReader;
@@ -1095,9 +1096,15 @@ public class Minescript {
     return true;
   }
 
-  // TODO(maxuser): Do proper quoting of params with spaces.
   private static String getParamsAsString(String[] command) {
-    return String.join(" ", Arrays.copyOfRange(command, 1, command.length));
+    var result = new StringBuilder();
+    for (int i = 1; i < command.length; i++) {
+      if (result.length() > 0) {
+        result.append(' ');
+      }
+      result.append(quoteString(command[i]));
+    }
+    return result.toString();
   }
 
   public static void logUserInfo(String messagePattern, Object... arguments) {
