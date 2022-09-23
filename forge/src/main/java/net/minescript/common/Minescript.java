@@ -1060,7 +1060,7 @@ public class Minescript {
         return false;
       }
     } else {
-      // Formal params have a  terminating varargs param. The command name (which isn't a param) at
+      // Formal params have a terminating varargs param. The command name (which isn't a param) at
       // command[0] and varargs at types[types.length - 1] don't count toward the number of params
       // to compare. (Technically there's no need to subtract one from each side, but being more
       // explicit about what's being compared is arguably more clear.)
@@ -1069,9 +1069,9 @@ public class Minescript {
       }
     }
 
-    for (int i = 1; i < command.length; i++) {
-      String param = command[i];
-      switch (types[i - 1]) {
+    for (int i = 0; i < types.length; i++) {
+      String param = command[i + 1];
+      switch (types[i]) {
         case INT:
           try {
             Integer.valueOf(param);
@@ -1086,6 +1086,9 @@ public class Minescript {
           break;
         case STRING:
           // Do nothing. String params are always valid.
+          break;
+        case VAR_ARGS:
+          // Do nothing. Varargs need to be checked by the caller.
           break;
       }
     }
