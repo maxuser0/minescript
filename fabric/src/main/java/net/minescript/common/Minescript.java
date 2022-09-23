@@ -53,6 +53,7 @@ import net.minecraft.client.util.ScreenshotRecorder;
 import net.minecraft.entity.Entity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.text.Text;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldAccess;
 import net.minecraft.world.chunk.Chunk;
@@ -461,8 +462,11 @@ public class Minescript {
     private final Deque<String> commands = new ArrayDeque<>();
     private final Set<Position> blocks = new HashSet<>();
     private String commandsFilename;
-    private int[] coords = new int[6]; // Reuse array to avoid lots of small object instantiations.
     private boolean undone = false;
+
+    // coords and pos are reused to avoid lots of small object instantiations.
+    private int[] coords = new int[6];
+    private BlockPos.Mutable pos = new BlockPos.Mutable();
 
     private static class Position {
       public final int x;
@@ -537,7 +541,7 @@ public class Minescript {
     public synchronized void processCommandToUndo(World level, String command) {
       if (command.startsWith("/setblock ") && getSetblockCoords(command, coords)) {
         Optional<String> block =
-            blockStateToString(readBlockState(level, coords[0], coords[1], coords[2]));
+            blockStateToString(level.getBlockState(pos.set(coords[0], coords[1], coords[2])));
         if (block.isPresent()) {
           if (!addBlockToUndoQueue(coords[0], coords[1], coords[2], block.get())) {
             return;
@@ -553,7 +557,7 @@ public class Minescript {
         for (int x = x0; x <= x1; x++) {
           for (int y = y0; y <= y1; y++) {
             for (int z = z0; z <= z1; z++) {
-              Optional<String> block = blockStateToString(readBlockState(level, x, y, z));
+              Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, y, z)));
               if (block.isPresent()) {
                 if (!addBlockToUndoQueue(x, y, z, block.get())) {
                   return;
@@ -1228,14 +1232,6 @@ public class Minescript {
     return (x >= 0) ? (x / 16) : (((x + 1) / 16) - 1);
   }
 
-  private static BlockState readBlockState(World level, int x, int y, int z) {
-    int chunkX = worldCoordToChunkCoord(x);
-    int chunkZ = worldCoordToChunkCoord(z);
-    var chunk = level.getChunk(chunkX, chunkZ);
-    var chunkPos = chunk.getPos();
-    return chunk.getBlockState(chunkPos.getBlockPos(x, y, z));
-  }
-
   // BlockState#toString() returns a string formatted as:
   // "Block{minecraft:acacia_button}[face=floor,facing=west,powered=false]"
   //
@@ -1288,9 +1284,10 @@ public class Minescript {
 
     World level = player.getEntityWorld();
 
+    var pos = new BlockPos.Mutable();
     for (int x = xMin; x <= xMax; x += 16) {
       for (int z = zMin; z <= zMax; z += 16) {
-        Optional<String> block = blockStateToString(readBlockState(level, x, 0, z));
+        Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, 0, z)));
         if (block.isEmpty() || block.get().equals("minecraft:void_air")) {
           logUserError("Not all chunks are loaded within the requested `copy` volume.");
           return;
@@ -1318,7 +1315,7 @@ public class Minescript {
             // TODO(maxuser): Need to check chunkPos.get{Min,Max}Block{X,Z}()?
             // TODO(maxuser): Listen to ChunkEvent.Load and .Unload events to determine if the chunk
             // we're trying to read here is loaded. If it's not, load it and try again later.
-            BlockState blockState = readBlockState(level, x, y, z);
+            BlockState blockState = level.getBlockState(pos.set(x, y, z));
             if (!blockState.isAir()) {
               int xOffset = x - x0;
               int yOffset = y - y0;
@@ -2264,12 +2261,11 @@ public class Minescript {
             && args.get(1) instanceof Number
             && args.get(2) instanceof Number) {
           World level = player.getEntityWorld();
-          Number arg0 = (Number) args.get(0);
-          Number arg1 = (Number) args.get(1);
-          Number arg2 = (Number) args.get(2);
+          int arg0 = ((Number) args.get(0)).intValue();
+          int arg1 = ((Number) args.get(1)).intValue();
+          int arg2 = ((Number) args.get(2)).intValue();
           Optional<String> block =
-              blockStateToString(
-                  readBlockState(level, arg0.intValue(), arg1.intValue(), arg2.intValue()));
+              blockStateToString(level.getBlockState(new BlockPos(arg0, arg1, arg2)));
           return Optional.of(block.map(str -> toJsonString(str)).orElse("null"));
         } else {
           logUserError(
@@ -2293,6 +2289,7 @@ public class Minescript {
         List<?> positions = (List<?>) args.get(0);
         World level = player.getEntityWorld();
         List<String> blocks = new ArrayList<>();
+        var pos = new BlockPos.Mutable();
         for (var position : positions) {
           if (!(position instanceof List)) {
             return badArgsResponse.get();
@@ -2307,7 +2304,7 @@ public class Minescript {
           int x = ((Number) coords.get(0)).intValue();
           int y = ((Number) coords.get(1)).intValue();
           int z = ((Number) coords.get(2)).intValue();
-          Optional<String> block = blockStateToString(readBlockState(level, x, y, z));
+          Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, y, z)));
           blocks.add(block.orElse(null));
         }
         return Optional.of(GSON.toJson(blocks));

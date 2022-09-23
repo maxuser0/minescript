@@ -27,6 +27,7 @@ forge_to_fabric_class_names = (
   ('net.minecraft.client.gui.screens.ChatScreen', 'net.minecraft.client.gui.screen.ChatScreen'),
   ('net.minecraft.client.gui.screens.Screen', 'net.minecraft.client.gui.screen.Screen'),
   ('net.minecraft.client.player.LocalPlayer', 'net.minecraft.client.network.ClientPlayerEntity'),
+  ('net.minecraft.core.BlockPos', 'net.minecraft.util.math.BlockPos'),
   ('net.minecraft.network.chat.Component', 'net.minecraft.text.Text'),
   ('net.minecraft.world.entity.Entity', 'net.minecraft.entity.Entity'),
   ('net.minecraft.world.item.ItemStack', 'net.minecraft.item.ItemStack'),
@@ -40,6 +41,7 @@ forge_to_fabric_class_names = (
 forge_to_fabric_member_names = (
   ('"f_95573_"', '"field_2382"'),
   ('"input"', '"chatField"'),
+  ('BlockPos.MutableBlockPos', 'BlockPos.Mutable'),
   ('Component.nullToEmpty', 'Text.of'),
   ('KEYSYM.getOrCreate', 'KEYSYM.createFromCode'),
   ('KeyMapping.click', 'KeyBinding.onKeyPressed'),
