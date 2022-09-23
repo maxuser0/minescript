@@ -1051,10 +1051,20 @@ public class Minescript {
 
   private static boolean checkParamTypes(String[] command, ParamType... types) {
     if (types.length == 0 || types[types.length - 1] != ParamType.VAR_ARGS) {
-      if (command.length != 1 + types.length) {
+      // No terminating varargs param.
+      if (command.length - 1 != types.length) {
+        return false;
+      }
+    } else {
+      // Formal params have a  terminating varargs param. The command name (which isn't a param) at
+      // command[0] and varargs at types[types.length - 1] don't count toward the number of params
+      // to compare. (Technically there's no need to subtract one from each side, but being more
+      // explicit about what's being compared is arguably more clear.)
+      if (command.length - 1 < types.length - 1) {
         return false;
       }
     }
+
     for (int i = 1; i < command.length; i++) {
       String param = command[i];
       switch (types[i - 1]) {
