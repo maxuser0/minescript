@@ -2152,9 +2152,8 @@ public class Minescript {
         result.append(",");
       }
       result.append("{");
-      // TODO(maxuser): Double-quote name and type values. Introduce doubleQuoteString(String).
-      result.append(String.format("\"name\":\"%s\",", entity.getName().getString()));
-      result.append(String.format("\"type\":\"%s\",", entity.getType().toString()));
+      result.append(String.format("\"name\":%s,", toJsonString(entity.getName().getString())));
+      result.append(String.format("\"type\":%s,", toJsonString(entity.getType().toString())));
       result.append(
           String.format("\"position\":[%f,%f,%f],", entity.getX(), entity.getY(), entity.getZ()));
       result.append(String.format("\"yaw\":%f,", entity.getYaw()));
