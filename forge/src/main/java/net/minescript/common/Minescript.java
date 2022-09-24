@@ -301,8 +301,11 @@ public class Minescript {
     var sw = new StringWriter();
     var pw = new PrintWriter(sw);
     e.printStackTrace(pw);
-    logUserError("{}: {}", e.getClass().getSimpleName(), e.getMessage());
-    LOGGER.error("exception stack trace: {}", sw.toString());
+    logUserError(
+        "Minescript internal error: {} (see logs/latest.log for details; to browse or report issues"
+            + " see https://minescript.net/issues)",
+        e.toString());
+    LOGGER.error(sw.toString());
   }
 
   private static List<String> getScriptCommandNames() {
@@ -678,8 +681,11 @@ public class Minescript {
       var sw = new StringWriter();
       var pw = new PrintWriter(sw);
       e.printStackTrace(pw);
-      logUserError("Exception in job \"{}\": {}", jobSummary(), e.getMessage());
-      LOGGER.error("exception stack trace in job \"{}\": {}", jobSummary(), sw.toString());
+      logUserError(
+          "Exception in job `{}`: {} (see logs/latest.log for details)",
+          jobSummary(),
+          e.toString());
+      LOGGER.error("exception stack trace in job `{}`: {}", jobSummary(), sw.toString());
     }
 
     public void start() {
@@ -1342,214 +1348,228 @@ public class Minescript {
   }
 
   private static void runMinescriptCommand(String commandLine) {
-    if (!checkMinescriptDir()) {
-      return;
-    }
-
-    // Check if config needs to be reloaded.
-    loadConfig();
-
-    String[] command = parseCommand(commandLine);
-    if (command.length == 0) {
-      systemCommandQueue.add(
-          "|{\"text\":\"Technoblade never dies.\",\"color\":\"dark_red\",\"bold\":true}");
-      return;
-    }
-
-    command = substituteMinecraftVars(command);
-
-    switch (command[0]) {
-      case "jobs":
-        if (checkParamTypes(command)) {
-          listJobs();
-        } else {
-          logUserError("Expected no params, instead got `{}`", getParamsAsString(command));
-        }
+    try {
+      if (!checkMinescriptDir()) {
         return;
+      }
 
-      case "suspend":
-      case "z":
-        if (checkParamTypes(command)) {
-          suspendJob(OptionalInt.empty());
-        } else if (checkParamTypes(command, ParamType.INT)) {
-          suspendJob(OptionalInt.of(Integer.valueOf(command[1])));
-        } else {
-          logUserError(
-              "Expected no params or 1 param of type integer, instead got `{}`",
-              getParamsAsString(command));
-        }
+      // Check if config needs to be reloaded.
+      loadConfig();
+
+      String[] command = parseCommand(commandLine);
+      if (command.length == 0) {
+        systemCommandQueue.add(
+            "|{\"text\":\"Technoblade never dies.\",\"color\":\"dark_red\",\"bold\":true}");
         return;
+      }
 
-      case "resume":
-        if (checkParamTypes(command)) {
-          resumeJob(OptionalInt.empty());
-        } else if (checkParamTypes(command, ParamType.INT)) {
-          resumeJob(OptionalInt.of(Integer.valueOf(command[1])));
-        } else {
-          logUserError(
-              "Expected no params or 1 param of type integer, instead got `{}`",
-              getParamsAsString(command));
-        }
-        return;
+      command = substituteMinecraftVars(command);
 
-      case "killjob":
-        if (checkParamTypes(command, ParamType.INT)) {
-          killJob(Integer.valueOf(command[1]));
-        } else {
-          logUserError(
-              "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
-        }
-        return;
-
-      case "undo":
-        if (checkParamTypes(command)) {
-          jobs.startUndo();
-        } else {
-          logUserError(
-              "Expected no params or 1 param of type integer, instead got `{}`",
-              getParamsAsString(command));
-        }
-        return;
-
-      case "copy":
-        final var cmd = command;
-        Runnable badArgsMessage =
-            () ->
-                logUserError(
-                    "Expected 6 params of type integer (plus optional params for label and"
-                        + " `no_limit`), instead got `{}`",
-                    getParamsAsString(cmd));
-
-        if (checkParamTypes(
-                command,
-                ParamType.INT,
-                ParamType.INT,
-                ParamType.INT,
-                ParamType.INT,
-                ParamType.INT,
-                ParamType.INT,
-                ParamType.VAR_ARGS)
-            && command.length <= 9) {
-          int x0 = Integer.valueOf(command[1]);
-          int y0 = Integer.valueOf(command[2]);
-          int z0 = Integer.valueOf(command[3]);
-          int x1 = Integer.valueOf(command[4]);
-          int y1 = Integer.valueOf(command[5]);
-          int z1 = Integer.valueOf(command[6]);
-
-          boolean safetyLimit = true;
-          Optional<String> label = Optional.empty();
-          for (int i = 7; i < command.length; i++) {
-            // Don't allow safetyLimit to be set to false multiple times.
-            if (command[i].equals("no_limit") && safetyLimit) {
-              safetyLimit = false;
-            } else if (label.isEmpty()) {
-              label = Optional.of(command[i]);
-            } else {
-              badArgsMessage.run();
-              return;
-            }
+      switch (command[0]) {
+        case "jobs":
+          if (checkParamTypes(command)) {
+            listJobs();
+          } else {
+            logUserError("Expected no params, instead got `{}`", getParamsAsString(command));
           }
+          return;
 
-          copyBlocks(x0, y0, z0, x1, y1, z1, label, safetyLimit);
-        } else {
-          badArgsMessage.run();
+        case "suspend":
+        case "z":
+          if (checkParamTypes(command)) {
+            suspendJob(OptionalInt.empty());
+          } else if (checkParamTypes(command, ParamType.INT)) {
+            suspendJob(OptionalInt.of(Integer.valueOf(command[1])));
+          } else {
+            logUserError(
+                "Expected no params or 1 param of type integer, instead got `{}`",
+                getParamsAsString(command));
+          }
+          return;
+
+        case "resume":
+          if (checkParamTypes(command)) {
+            resumeJob(OptionalInt.empty());
+          } else if (checkParamTypes(command, ParamType.INT)) {
+            resumeJob(OptionalInt.of(Integer.valueOf(command[1])));
+          } else {
+            logUserError(
+                "Expected no params or 1 param of type integer, instead got `{}`",
+                getParamsAsString(command));
+          }
+          return;
+
+        case "killjob":
+          if (checkParamTypes(command, ParamType.INT)) {
+            killJob(Integer.valueOf(command[1]));
+          } else {
+            logUserError(
+                "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
+          }
+          return;
+
+        case "undo":
+          if (checkParamTypes(command)) {
+            jobs.startUndo();
+          } else {
+            logUserError(
+                "Expected no params or 1 param of type integer, instead got `{}`",
+                getParamsAsString(command));
+          }
+          return;
+
+        case "copy":
+          final var cmd = command;
+          Runnable badArgsMessage =
+              () ->
+                  logUserError(
+                      "Expected 6 params of type integer (plus optional params for label and"
+                          + " `no_limit`), instead got `{}`",
+                      getParamsAsString(cmd));
+
+          if (checkParamTypes(
+                  command,
+                  ParamType.INT,
+                  ParamType.INT,
+                  ParamType.INT,
+                  ParamType.INT,
+                  ParamType.INT,
+                  ParamType.INT,
+                  ParamType.VAR_ARGS)
+              && command.length <= 9) {
+            int x0 = Integer.valueOf(command[1]);
+            int y0 = Integer.valueOf(command[2]);
+            int z0 = Integer.valueOf(command[3]);
+            int x1 = Integer.valueOf(command[4]);
+            int y1 = Integer.valueOf(command[5]);
+            int z1 = Integer.valueOf(command[6]);
+
+            boolean safetyLimit = true;
+            Optional<String> label = Optional.empty();
+            for (int i = 7; i < command.length; i++) {
+              // Don't allow safetyLimit to be set to false multiple times.
+              if (command[i].equals("no_limit") && safetyLimit) {
+                safetyLimit = false;
+              } else if (label.isEmpty()) {
+                label = Optional.of(command[i]);
+              } else {
+                badArgsMessage.run();
+                return;
+              }
+            }
+
+            copyBlocks(x0, y0, z0, x1, y1, z1, label, safetyLimit);
+          } else {
+            badArgsMessage.run();
+          }
+          return;
+
+        case "minescript_commands_per_cycle":
+          if (checkParamTypes(command)) {
+            logUserInfo(
+                "Minescript executing {} command(s) per cycle.", minescriptCommandsPerCycle);
+          } else if (checkParamTypes(command, ParamType.INT)) {
+            int numCommands = Integer.valueOf(command[1]);
+            if (numCommands < 1) numCommands = 1;
+            minescriptCommandsPerCycle = numCommands;
+            logUserInfo("Minescript execution set to {} command(s) per cycle.", numCommands);
+          } else {
+            logUserError(
+                "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
+          }
+          return;
+
+        case "minescript_ticks_per_cycle":
+          if (checkParamTypes(command)) {
+            logUserInfo("Minescript executing {} tick(s) per cycle.", minescriptTicksPerCycle);
+          } else if (checkParamTypes(command, ParamType.INT)) {
+            int ticks = Integer.valueOf(command[1]);
+            if (ticks < 1) ticks = 1;
+            minescriptTicksPerCycle = ticks;
+            logUserInfo("Minescript execution set to {} tick(s) per cycle.", ticks);
+          } else {
+            logUserError(
+                "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
+          }
+          return;
+
+        case "minescript_incremental_command_suggestions":
+          if (checkParamTypes(command, ParamType.BOOL)) {
+            boolean value = Boolean.valueOf(command[1]);
+            incrementalCommandSuggestions = value;
+            logUserInfo("Minescript incremental command suggestions set to {}", value);
+          } else {
+            logUserError(
+                "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
+          }
+          return;
+
+        case "minescript_script_function_debug_outptut":
+          if (checkParamTypes(command, ParamType.BOOL)) {
+            boolean value = Boolean.valueOf(command[1]);
+            scriptFunctionDebugOutptut = value;
+            logUserInfo("Minescript script function debug output set to {}", value);
+          } else {
+            logUserError(
+                "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
+          }
+          return;
+
+        case "minescript_log_chunk_load_events":
+          if (checkParamTypes(command, ParamType.BOOL)) {
+            boolean value = Boolean.valueOf(command[1]);
+            logChunkLoadEvents = value;
+            logUserInfo("Minescript logging of chunk load events set to {}", value);
+          } else {
+            logUserError(
+                "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
+          }
+          return;
+
+        case "enable_minescript_on_chat_received_event":
+          if (checkParamTypes(command, ParamType.BOOL)) {
+            boolean enable = command[1].equals("true");
+            enableMinescriptOnChatReceivedEvent = enable;
+            logUserInfo(
+                "Minescript execution on client chat events {}.{}",
+                (enable ? "enabled" : "disabled"),
+                (enable
+                    ? " e.g. add command to command block: [execute as Player run tell Player"
+                        + " \\help]"
+                    : ""));
+          } else {
+            logUserError(
+                "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
+          }
+          return;
+
+        case "NullPointerException":
+          // This is for testing purposes only. Throw NPE only if we're in debug mode.
+          if (scriptFunctionDebugOutptut) {
+            String s = null;
+            logUserError("Length of a null string is {}", s.length());
+          }
+      }
+
+      if (!getScriptCommandNames().contains(command[0])) {
+        logUserInfo("Minescript commands:");
+        for (String builtin : BUILTIN_COMMANDS) {
+          logUserInfo("  {} [builtin]", builtin);
+        }
+        for (String script : getScriptCommandNames()) {
+          logUserInfo("  {}", script);
+        }
+        if (!command[0].equals("ls")) {
+          logUserError("No Minescript command named \"{}\"", command[0]);
         }
         return;
+      }
 
-      case "minescript_commands_per_cycle":
-        if (checkParamTypes(command)) {
-          logUserInfo("Minescript executing {} command(s) per cycle.", minescriptCommandsPerCycle);
-        } else if (checkParamTypes(command, ParamType.INT)) {
-          int numCommands = Integer.valueOf(command[1]);
-          if (numCommands < 1) numCommands = 1;
-          minescriptCommandsPerCycle = numCommands;
-          logUserInfo("Minescript execution set to {} command(s) per cycle.", numCommands);
-        } else {
-          logUserError(
-              "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
-        }
-        return;
+      jobs.createSubprocess(command);
 
-      case "minescript_ticks_per_cycle":
-        if (checkParamTypes(command)) {
-          logUserInfo("Minescript executing {} tick(s) per cycle.", minescriptTicksPerCycle);
-        } else if (checkParamTypes(command, ParamType.INT)) {
-          int ticks = Integer.valueOf(command[1]);
-          if (ticks < 1) ticks = 1;
-          minescriptTicksPerCycle = ticks;
-          logUserInfo("Minescript execution set to {} tick(s) per cycle.", ticks);
-        } else {
-          logUserError(
-              "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
-        }
-        return;
-
-      case "minescript_incremental_command_suggestions":
-        if (checkParamTypes(command, ParamType.BOOL)) {
-          boolean value = Boolean.valueOf(command[1]);
-          incrementalCommandSuggestions = value;
-          logUserInfo("Minescript incremental command suggestions set to {}", value);
-        } else {
-          logUserError(
-              "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
-        }
-        return;
-
-      case "minescript_script_function_debug_outptut":
-        if (checkParamTypes(command, ParamType.BOOL)) {
-          boolean value = Boolean.valueOf(command[1]);
-          scriptFunctionDebugOutptut = value;
-          logUserInfo("Minescript script function debug output set to {}", value);
-        } else {
-          logUserError(
-              "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
-        }
-        return;
-
-      case "minescript_log_chunk_load_events":
-        if (checkParamTypes(command, ParamType.BOOL)) {
-          boolean value = Boolean.valueOf(command[1]);
-          logChunkLoadEvents = value;
-          logUserInfo("Minescript logging of chunk load events set to {}", value);
-        } else {
-          logUserError(
-              "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
-        }
-        return;
-
-      case "enable_minescript_on_chat_received_event":
-        if (checkParamTypes(command, ParamType.BOOL)) {
-          boolean enable = command[1].equals("true");
-          enableMinescriptOnChatReceivedEvent = enable;
-          logUserInfo(
-              "Minescript execution on client chat events {}.{}",
-              (enable ? "enabled" : "disabled"),
-              (enable
-                  ? " e.g. add command to command block: [execute as Player run tell Player \\help]"
-                  : ""));
-        } else {
-          logUserError(
-              "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
-        }
-        return;
+    } catch (RuntimeException e) {
+      logException(e);
     }
-
-    if (!getScriptCommandNames().contains(command[0])) {
-      logUserInfo("Minescript commands:");
-      for (String builtin : BUILTIN_COMMANDS) {
-        logUserInfo("  {} [builtin]", builtin);
-      }
-      for (String script : getScriptCommandNames()) {
-        logUserInfo("  {}", script);
-      }
-      if (!command[0].equals("ls")) {
-        logUserError("No Minescript command named \"{}\"", command[0]);
-      }
-      return;
-    }
-
-    jobs.createSubprocess(command);
   }
 
   private static int minescriptTicksPerCycle = 3;
@@ -2600,35 +2620,39 @@ public class Minescript {
           }
           for (var job : jobs.getMap().values()) {
             if (job.state() == JobState.RUNNING) {
-              String jobCommand = job.commandQueue().poll();
-              if (jobCommand != null) {
-                jobs.getUndoForJob(job).ifPresent(u -> u.processCommandToUndo(level, jobCommand));
-                if (jobCommand.startsWith("?") && jobCommand.length() > 1) {
-                  String[] functionCall = jobCommand.substring(1).split("\\s+", 3);
-                  long funcCallId = Long.valueOf(functionCall[0]);
-                  String functionName = functionCall[1];
-                  String argsString = functionCall.length == 3 ? functionCall[2] : "";
-                  var gson = new Gson();
-                  List<?> args = gson.fromJson(argsString, ArrayList.class);
+              try {
+                String jobCommand = job.commandQueue().poll();
+                if (jobCommand != null) {
+                  jobs.getUndoForJob(job).ifPresent(u -> u.processCommandToUndo(level, jobCommand));
+                  if (jobCommand.startsWith("?") && jobCommand.length() > 1) {
+                    String[] functionCall = jobCommand.substring(1).split("\\s+", 3);
+                    long funcCallId = Long.valueOf(functionCall[0]);
+                    String functionName = functionCall[1];
+                    String argsString = functionCall.length == 3 ? functionCall[2] : "";
+                    var gson = new Gson();
+                    List<?> args = gson.fromJson(argsString, ArrayList.class);
 
-                  // TODO(maxuser): Support raising exceptions from script functions, e.g.
-                  // {"fcid": ..., "exception": "error message...", "conn": "close"}
-                  Optional<String> response =
-                      handleScriptFunction(job, funcCallId, functionName, args, argsString);
-                  if (response.isPresent()) {
-                    job.respond(funcCallId, response.get(), true);
+                    // TODO(maxuser): Support raising exceptions from script functions, e.g.
+                    // {"fcid": ..., "exception": "error message...", "conn": "close"}
+                    Optional<String> response =
+                        handleScriptFunction(job, funcCallId, functionName, args, argsString);
+                    if (response.isPresent()) {
+                      job.respond(funcCallId, response.get(), true);
+                    }
+                    if (scriptFunctionDebugOutptut) {
+                      LOGGER.info(
+                          "(debug) Script function `{}`: {} / {}  ->  {}",
+                          functionName,
+                          toJsonString(argsString),
+                          args,
+                          response.orElse("<no response>"));
+                    }
+                  } else {
+                    processMessage(jobCommand);
                   }
-                  if (scriptFunctionDebugOutptut) {
-                    LOGGER.info(
-                        "(debug) Script function `{}`: {} / {}  ->  {}",
-                        functionName,
-                        toJsonString(argsString),
-                        args,
-                        response.orElse("<no response>"));
-                  }
-                } else {
-                  processMessage(jobCommand);
                 }
+              } catch (RuntimeException e) {
+                job.logJobException(e);
               }
             }
           }
