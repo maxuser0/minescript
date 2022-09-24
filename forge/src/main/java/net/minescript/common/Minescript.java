@@ -7,7 +7,9 @@ import static net.minescript.common.CommandSyntax.parseCommand;
 import static net.minescript.common.CommandSyntax.quoteCommand;
 import static net.minescript.common.CommandSyntax.quoteString;
 
+import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
+import com.mojang.blaze3d.platform.InputConstants;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -19,8 +21,6 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -42,13 +42,18 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
@@ -57,6 +62,7 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.lwjgl.glfw.GLFW;
 
 public class Minescript {
   private static final Logger LOGGER = LogManager.getLogger();
@@ -104,6 +110,12 @@ public class Minescript {
     }
 
     loadConfig();
+  }
+
+  private static Gson GSON = new Gson();
+
+  private static String toJsonString(String s) {
+    return GSON.toJson(s);
   }
 
   private static String getCurrentVersion() {
@@ -262,31 +274,26 @@ public class Minescript {
     }
   }
 
-  // TODO(maxuser): replace with ImmutableList
-  private static final String[] BUILTIN_COMMANDS =
-      new String[] {
-        "ls",
-        "copy",
-        "jobs",
-        "suspend",
-        "z", // alias for suspend
-        "resume",
-        "killjob",
-        "undo",
-        "minescript_copy_size_limit",
-        "minescript_commands_per_cycle",
-        "minescript_ticks_per_cycle",
-        "minescript_incremental_command_suggestions",
-        "minescript_script_function_debug_outptut",
-        "minescript_log_chunk_load_events",
-        "enable_minescript_on_chat_received_event"
-      };
+  private static final ImmutableList<String> BUILTIN_COMMANDS =
+      ImmutableList.of(
+          "ls",
+          "copy",
+          "jobs",
+          "suspend",
+          "z", // alias for suspend
+          "resume",
+          "killjob",
+          "undo",
+          "minescript_commands_per_cycle",
+          "minescript_ticks_per_cycle",
+          "minescript_incremental_command_suggestions",
+          "minescript_script_function_debug_outptut",
+          "minescript_log_chunk_load_events",
+          "enable_minescript_on_chat_received_event");
 
   private static List<String> getScriptCommandNamesWithBuiltins() {
     var names = getScriptCommandNames();
-    for (String builtin : BUILTIN_COMMANDS) {
-      names.add(builtin);
-    }
+    names.addAll(BUILTIN_COMMANDS);
     return names;
   }
 
@@ -453,8 +460,11 @@ public class Minescript {
     private final Deque<String> commands = new ArrayDeque<>();
     private final Set<Position> blocks = new HashSet<>();
     private String commandsFilename;
-    private int[] coords = new int[6]; // Reuse array to avoid lots of small object instantiations.
     private boolean undone = false;
+
+    // coords and pos are reused to avoid lots of small object instantiations.
+    private int[] coords = new int[6];
+    private BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 
     private static class Position {
       public final int x;
@@ -529,7 +539,7 @@ public class Minescript {
     public synchronized void processCommandToUndo(Level level, String command) {
       if (command.startsWith("/setblock ") && getSetblockCoords(command, coords)) {
         Optional<String> block =
-            blockStateToString(readBlockState(level, coords[0], coords[1], coords[2]));
+            blockStateToString(level.getBlockState(pos.set(coords[0], coords[1], coords[2])));
         if (block.isPresent()) {
           if (!addBlockToUndoQueue(coords[0], coords[1], coords[2], block.get())) {
             return;
@@ -545,7 +555,7 @@ public class Minescript {
         for (int x = x0; x <= x1; x++) {
           for (int y = y0; y <= y1; y++) {
             for (int z = z0; z <= z1; z++) {
-              Optional<String> block = blockStateToString(readBlockState(level, x, y, z));
+              Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, y, z)));
               if (block.isPresent()) {
                 if (!addBlockToUndoQueue(x, y, z, block.get())) {
                   return;
@@ -612,12 +622,17 @@ public class Minescript {
     private Consumer<Integer> doneCallback;
     private Queue<String> jobCommandQueue = new ConcurrentLinkedQueue<String>();
     private Lock lock = new ReentrantLock(true); // true indicates a fair lock to avoid starvation
+    private List<Runnable> atExitHandlers = new ArrayList<>();
 
     public Job(int jobId, String[] command, Task task, Consumer<Integer> doneCallback) {
       this.jobId = jobId;
       this.command = Arrays.copyOf(command, command.length);
       this.task = task;
       this.doneCallback = doneCallback;
+    }
+
+    public void addAtExitHandler(Runnable handler) {
+      atExitHandlers.add(handler);
     }
 
     @Override
@@ -770,6 +785,9 @@ public class Minescript {
         }
       } finally {
         doneCallback.accept(jobId);
+        for (Runnable handler : atExitHandlers) {
+          handler.run();
+        }
       }
     }
 
@@ -1029,13 +1047,26 @@ public class Minescript {
   public enum ParamType {
     INT,
     BOOL,
-    STRING
+    STRING,
+    VAR_ARGS // matches any number of optional args at the end of the arg list
   }
 
   private static boolean checkParamTypes(String[] command, ParamType... types) {
-    if (command.length != 1 + types.length) {
-      return false;
+    if (types.length == 0 || types[types.length - 1] != ParamType.VAR_ARGS) {
+      // No terminating varargs param.
+      if (command.length - 1 != types.length) {
+        return false;
+      }
+    } else {
+      // Formal params have a terminating varargs param. The command name (which isn't a param) at
+      // command[0] and varargs at types[types.length - 1] don't count toward the number of params
+      // to compare. (Technically there's no need to subtract one from each side, but being more
+      // explicit about what's being compared is arguably more clear.)
+      if (command.length - 1 < types.length - 1) {
+        return false;
+      }
     }
+
     for (int i = 0; i < types.length; i++) {
       String param = command[i + 1];
       switch (types[i]) {
@@ -1054,14 +1085,23 @@ public class Minescript {
         case STRING:
           // Do nothing. String params are always valid.
           break;
+        case VAR_ARGS:
+          // Do nothing. Varargs need to be checked by the caller.
+          break;
       }
     }
     return true;
   }
 
-  // TODO(maxuser): Do proper quoting of params with spaces.
   private static String getParamsAsString(String[] command) {
-    return String.join(" ", Arrays.copyOfRange(command, 1, command.length));
+    var result = new StringBuilder();
+    for (int i = 1; i < command.length; i++) {
+      if (result.length() > 0) {
+        result.append(' ');
+      }
+      result.append(quoteString(command[i]));
+    }
+    return result.toString();
   }
 
   public static void logUserInfo(String messagePattern, Object... arguments) {
@@ -1199,22 +1239,12 @@ public class Minescript {
     return (x >= 0) ? (x / 16) : (((x + 1) / 16) - 1);
   }
 
-  private static BlockState readBlockState(Level level, int x, int y, int z) {
-    int chunkX = worldCoordToChunkCoord(x);
-    int chunkZ = worldCoordToChunkCoord(z);
-    var chunk = level.getChunk(chunkX, chunkZ);
-    var chunkPos = chunk.getPos();
-    return chunk.getBlockState(chunkPos.getBlockAt(x, y, z));
-  }
-
   // BlockState#toString() returns a string formatted as:
   // "Block{minecraft:acacia_button}[face=floor,facing=west,powered=false]"
   //
   // BLOCK_STATE_RE helps transform this to:
   // "minecraft:acacia_button[face=floor,facing=west,powered=false]"
   private static Pattern BLOCK_STATE_RE = Pattern.compile("^Block\\{([^}]*)\\}(\\[.*\\])?$");
-
-  private static int copySizeLimit = 200;
 
   private static Optional<String> blockStateToString(BlockState blockState) {
     var match = BLOCK_STATE_RE.matcher(blockState.toString());
@@ -1227,7 +1257,7 @@ public class Minescript {
   }
 
   private static void copyBlocks(
-      int x0, int y0, int z0, int x1, int y1, int z1, Optional<String> label) {
+      int x0, int y0, int z0, int x1, int y1, int z1, Optional<String> label, boolean safetyLimit) {
     var minecraft = Minecraft.getInstance();
     var player = minecraft.player;
     if (player == null) {
@@ -1239,16 +1269,6 @@ public class Minescript {
     int playerY = (int) player.getY();
     int playerZ = (int) player.getZ();
 
-    if (Math.abs(x0 - playerX) > copySizeLimit
-        || Math.abs(y0 - playerY) > copySizeLimit
-        || Math.abs(z0 - playerZ) > copySizeLimit
-        || Math.abs(x1 - playerX) > copySizeLimit
-        || Math.abs(y1 - playerY) > copySizeLimit
-        || Math.abs(z1 - playerZ) > copySizeLimit) {
-      logUserError("Player is more than {} blocks from `copy` coordinate.", copySizeLimit);
-      return;
-    }
-
     int xMin = Math.min(x0, x1);
     int yMin = Math.max(Math.min(y0, y1), -64); // TODO(maxuser): Use an API for min build height.
     int zMin = Math.min(z0, z1);
@@ -1257,7 +1277,30 @@ public class Minescript {
     int yMax = Math.min(Math.max(y0, y1), 320); // TODO(maxuser): Use an API for max build height.
     int zMax = Math.max(z0, z1);
 
+    if (safetyLimit) {
+      // Estimate the number of chunks to check against a soft limit.
+      int numChunks = ((xMax - xMin) / 16 + 1) * ((zMax - zMin) / 16 + 1);
+      if (numChunks > 1600) {
+        logUserError(
+            "`copy` command exceeded soft limit of 1600 chunks (region covers {} chunks; override"
+                + " this safety check with `no_limit`).",
+            numChunks);
+        return;
+      }
+    }
+
     Level level = player.getCommandSenderWorld();
+
+    var pos = new BlockPos.MutableBlockPos();
+    for (int x = xMin; x <= xMax; x += 16) {
+      for (int z = zMin; z <= zMax; z += 16) {
+        Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, 0, z)));
+        if (block.isEmpty() || block.get().equals("minecraft:void_air")) {
+          logUserError("Not all chunks are loaded within the requested `copy` volume.");
+          return;
+        }
+      }
+    }
 
     final String copiesDir = Paths.get(MINESCRIPT_DIR, "copies").toString();
     if (new File(copiesDir).mkdir()) {
@@ -1276,10 +1319,7 @@ public class Minescript {
       for (int x = xMin; x <= xMax; ++x) {
         for (int y = yMin; y <= yMax; ++y) {
           for (int z = zMin; z <= zMax; ++z) {
-            // TODO(maxuser): Need to check chunkPos.get{Min,Max}Block{X,Z}()?
-            // TODO(maxuser): Listen to ChunkEvent.Load and .Unload events to determine if the chunk
-            // we're trying to read here is loaded. If it's not, load it and try again later.
-            BlockState blockState = readBlockState(level, x, y, z);
+            BlockState blockState = level.getBlockState(pos.set(x, y, z));
             if (!blockState.isAir()) {
               int xOffset = x - x0;
               int yOffset = y - y0;
@@ -1312,198 +1352,181 @@ public class Minescript {
     String[] command = parseCommand(commandLine);
     command = substituteMinecraftVars(command);
 
-    if (command[0].equals("jobs")) {
-      if (checkParamTypes(command)) {
-        listJobs();
-      } else {
-        logUserError("Expected no params, instead got `{}`", getParamsAsString(command));
-      }
-      return;
-    }
+    switch (command[0]) {
+      case "jobs":
+        if (checkParamTypes(command)) {
+          listJobs();
+        } else {
+          logUserError("Expected no params, instead got `{}`", getParamsAsString(command));
+        }
+        return;
 
-    if (command[0].equals("suspend") || command[0].equals("z")) {
-      if (checkParamTypes(command)) {
-        suspendJob(OptionalInt.empty());
-      } else if (checkParamTypes(command, ParamType.INT)) {
-        suspendJob(OptionalInt.of(Integer.valueOf(command[1])));
-      } else {
-        logUserError(
-            "Expected no params or 1 param of type integer, instead got `{}`",
-            getParamsAsString(command));
-      }
-      return;
-    }
+      case "suspend":
+      case "z":
+        if (checkParamTypes(command)) {
+          suspendJob(OptionalInt.empty());
+        } else if (checkParamTypes(command, ParamType.INT)) {
+          suspendJob(OptionalInt.of(Integer.valueOf(command[1])));
+        } else {
+          logUserError(
+              "Expected no params or 1 param of type integer, instead got `{}`",
+              getParamsAsString(command));
+        }
+        return;
 
-    if (command[0].equals("resume")) {
-      if (checkParamTypes(command)) {
-        resumeJob(OptionalInt.empty());
-      } else if (checkParamTypes(command, ParamType.INT)) {
-        resumeJob(OptionalInt.of(Integer.valueOf(command[1])));
-      } else {
-        logUserError(
-            "Expected no params or 1 param of type integer, instead got `{}`",
-            getParamsAsString(command));
-      }
-      return;
-    }
+      case "resume":
+        if (checkParamTypes(command)) {
+          resumeJob(OptionalInt.empty());
+        } else if (checkParamTypes(command, ParamType.INT)) {
+          resumeJob(OptionalInt.of(Integer.valueOf(command[1])));
+        } else {
+          logUserError(
+              "Expected no params or 1 param of type integer, instead got `{}`",
+              getParamsAsString(command));
+        }
+        return;
 
-    if (command[0].equals("killjob")) {
-      if (checkParamTypes(command, ParamType.INT)) {
-        killJob(Integer.valueOf(command[1]));
-      } else {
-        logUserError(
-            "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
-      }
-      return;
-    }
+      case "killjob":
+        if (checkParamTypes(command, ParamType.INT)) {
+          killJob(Integer.valueOf(command[1]));
+        } else {
+          logUserError(
+              "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
+        }
+        return;
 
-    if (command[0].equals("undo")) {
-      if (checkParamTypes(command)) {
-        jobs.startUndo();
-      } else {
-        logUserError(
-            "Expected no params or 1 param of type integer, instead got `{}`",
-            getParamsAsString(command));
-      }
-      return;
-    }
+      case "undo":
+        if (checkParamTypes(command)) {
+          jobs.startUndo();
+        } else {
+          logUserError(
+              "Expected no params or 1 param of type integer, instead got `{}`",
+              getParamsAsString(command));
+        }
+        return;
 
-    if (command[0].equals("copy")) {
-      if (checkParamTypes(
-          command,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.INT)) {
-        int x0 = Integer.valueOf(command[1]);
-        int y0 = Integer.valueOf(command[2]);
-        int z0 = Integer.valueOf(command[3]);
-        int x1 = Integer.valueOf(command[4]);
-        int y1 = Integer.valueOf(command[5]);
-        int z1 = Integer.valueOf(command[6]);
-        copyBlocks(x0, y0, z0, x1, y1, z1, Optional.empty());
-      } else if (checkParamTypes(
-          command,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.INT,
-          ParamType.STRING)) {
-        int x0 = Integer.valueOf(command[1]);
-        int y0 = Integer.valueOf(command[2]);
-        int z0 = Integer.valueOf(command[3]);
-        int x1 = Integer.valueOf(command[4]);
-        int y1 = Integer.valueOf(command[5]);
-        int z1 = Integer.valueOf(command[6]);
-        copyBlocks(x0, y0, z0, x1, y1, z1, Optional.of(command[7]));
-      } else {
-        logUserError(
-            "Expected 6 params of type integer (optional 7th for label), instead got `{}`",
-            getParamsAsString(command));
-      }
-      return;
-    }
+      case "copy":
+        final var cmd = command;
+        Runnable badArgsMessage =
+            () ->
+                logUserError(
+                    "Expected 6 params of type integer (plus optional params for label and"
+                        + " `no_limit`), instead got `{}`",
+                    getParamsAsString(cmd));
 
-    if (command[0].equals("minescript_commands_per_cycle")) {
-      if (checkParamTypes(command)) {
-        logUserInfo("Minescript executing {} command(s) per cycle.", minescriptCommandsPerCycle);
-      } else if (checkParamTypes(command, ParamType.INT)) {
-        int numCommands = Integer.valueOf(command[1]);
-        if (numCommands < 1) numCommands = 1;
-        minescriptCommandsPerCycle = numCommands;
-        logUserInfo("Minescript execution set to {} command(s) per cycle.", numCommands);
-      } else {
-        logUserError(
-            "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
-      }
-      return;
-    }
+        if (checkParamTypes(
+                command,
+                ParamType.INT,
+                ParamType.INT,
+                ParamType.INT,
+                ParamType.INT,
+                ParamType.INT,
+                ParamType.INT,
+                ParamType.VAR_ARGS)
+            && command.length <= 9) {
+          int x0 = Integer.valueOf(command[1]);
+          int y0 = Integer.valueOf(command[2]);
+          int z0 = Integer.valueOf(command[3]);
+          int x1 = Integer.valueOf(command[4]);
+          int y1 = Integer.valueOf(command[5]);
+          int z1 = Integer.valueOf(command[6]);
 
-    if (command[0].equals("minescript_ticks_per_cycle")) {
-      if (checkParamTypes(command)) {
-        logUserInfo("Minescript executing {} tick(s) per cycle.", minescriptTicksPerCycle);
-      } else if (checkParamTypes(command, ParamType.INT)) {
-        int ticks = Integer.valueOf(command[1]);
-        if (ticks < 1) ticks = 1;
-        minescriptTicksPerCycle = ticks;
-        logUserInfo("Minescript execution set to {} tick(s) per cycle.", ticks);
-      } else {
-        logUserError(
-            "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
-      }
-      return;
-    }
+          boolean safetyLimit = true;
+          Optional<String> label = Optional.empty();
+          for (int i = 7; i < command.length; i++) {
+            // Don't allow safetyLimit to be set to false multiple times.
+            if (command[i].equals("no_limit") && safetyLimit) {
+              safetyLimit = false;
+            } else if (label.isEmpty()) {
+              label = Optional.of(command[i]);
+            } else {
+              badArgsMessage.run();
+              return;
+            }
+          }
 
-    if (command[0].equals("minescript_copy_size_limit")) {
-      if (checkParamTypes(command)) {
-        logUserInfo("Minescript copy size limit is {} blocks.", copySizeLimit);
-      } else if (checkParamTypes(command, ParamType.INT)) {
-        int limit = Integer.valueOf(command[1]);
-        if (limit < 1) limit = 1;
-        copySizeLimit = limit;
-        logUserInfo("Minescript copy size limit set to {} blocks.", limit);
-      } else {
-        logUserError(
-            "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
-      }
-      return;
-    }
+          copyBlocks(x0, y0, z0, x1, y1, z1, label, safetyLimit);
+        } else {
+          badArgsMessage.run();
+        }
+        return;
 
-    if (command[0].equals("minescript_incremental_command_suggestions")) {
-      if (checkParamTypes(command, ParamType.BOOL)) {
-        boolean value = Boolean.valueOf(command[1]);
-        incrementalCommandSuggestions = value;
-        logUserInfo("Minescript incremental command suggestions set to {}", value);
-      } else {
-        logUserError(
-            "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
-      }
-      return;
-    }
+      case "minescript_commands_per_cycle":
+        if (checkParamTypes(command)) {
+          logUserInfo("Minescript executing {} command(s) per cycle.", minescriptCommandsPerCycle);
+        } else if (checkParamTypes(command, ParamType.INT)) {
+          int numCommands = Integer.valueOf(command[1]);
+          if (numCommands < 1) numCommands = 1;
+          minescriptCommandsPerCycle = numCommands;
+          logUserInfo("Minescript execution set to {} command(s) per cycle.", numCommands);
+        } else {
+          logUserError(
+              "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
+        }
+        return;
 
-    if (command[0].equals("minescript_script_function_debug_outptut")) {
-      if (checkParamTypes(command, ParamType.BOOL)) {
-        boolean value = Boolean.valueOf(command[1]);
-        scriptFunctionDebugOutptut = value;
-        logUserInfo("Minescript script function debug output set to {}", value);
-      } else {
-        logUserError(
-            "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
-      }
-      return;
-    }
+      case "minescript_ticks_per_cycle":
+        if (checkParamTypes(command)) {
+          logUserInfo("Minescript executing {} tick(s) per cycle.", minescriptTicksPerCycle);
+        } else if (checkParamTypes(command, ParamType.INT)) {
+          int ticks = Integer.valueOf(command[1]);
+          if (ticks < 1) ticks = 1;
+          minescriptTicksPerCycle = ticks;
+          logUserInfo("Minescript execution set to {} tick(s) per cycle.", ticks);
+        } else {
+          logUserError(
+              "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
+        }
+        return;
 
-    if (command[0].equals("minescript_log_chunk_load_events")) {
-      if (checkParamTypes(command, ParamType.BOOL)) {
-        boolean value = Boolean.valueOf(command[1]);
-        logChunkLoadEvents = value;
-        logUserInfo("Minescript logging of chunk load events set to {}", value);
-      } else {
-        logUserError(
-            "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
-      }
-      return;
-    }
+      case "minescript_incremental_command_suggestions":
+        if (checkParamTypes(command, ParamType.BOOL)) {
+          boolean value = Boolean.valueOf(command[1]);
+          incrementalCommandSuggestions = value;
+          logUserInfo("Minescript incremental command suggestions set to {}", value);
+        } else {
+          logUserError(
+              "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
+        }
+        return;
 
-    if (command[0].equals("enable_minescript_on_chat_received_event")) {
-      if (checkParamTypes(command, ParamType.BOOL)) {
-        boolean enable = command[1].equals("true");
-        enableMinescriptOnChatReceivedEvent = enable;
-        logUserInfo(
-            "Minescript execution on client chat events {}.{}",
-            (enable ? "enabled" : "disabled"),
-            (enable
-                ? " e.g. add command to command block: [execute as Player run tell Player \\help]"
-                : ""));
-      } else {
-        logUserError(
-            "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
-      }
-      return;
+      case "minescript_script_function_debug_outptut":
+        if (checkParamTypes(command, ParamType.BOOL)) {
+          boolean value = Boolean.valueOf(command[1]);
+          scriptFunctionDebugOutptut = value;
+          logUserInfo("Minescript script function debug output set to {}", value);
+        } else {
+          logUserError(
+              "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
+        }
+        return;
+
+      case "minescript_log_chunk_load_events":
+        if (checkParamTypes(command, ParamType.BOOL)) {
+          boolean value = Boolean.valueOf(command[1]);
+          logChunkLoadEvents = value;
+          logUserInfo("Minescript logging of chunk load events set to {}", value);
+        } else {
+          logUserError(
+              "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
+        }
+        return;
+
+      case "enable_minescript_on_chat_received_event":
+        if (checkParamTypes(command, ParamType.BOOL)) {
+          boolean enable = command[1].equals("true");
+          enableMinescriptOnChatReceivedEvent = enable;
+          logUserInfo(
+              "Minescript execution on client chat events {}.{}",
+              (enable ? "enabled" : "disabled"),
+              (enable
+                  ? " e.g. add command to command block: [execute as Player run tell Player \\help]"
+                  : ""));
+        } else {
+          logUserError(
+              "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
+        }
+        return;
     }
 
     if (!getScriptCommandNames().contains(command[0])) {
@@ -1673,8 +1696,9 @@ public class Minescript {
         String value = chatEditBox.getValue();
         if (!value.startsWith("\\")) {
           minescriptCommandHistory.moveToEnd();
-          if (key == ENTER_KEY && customNickname != null && !value.startsWith("/")) {
-            // This branch is unnecessary on Forge because it supports ClientChatEvent.
+          if (key == ENTER_KEY
+              && (customNickname != null || chatInterceptor != null)
+              && !value.startsWith("/")) {
             cancel = true;
             chatEditBox.setValue("");
             onClientChat(value);
@@ -1699,7 +1723,6 @@ public class Minescript {
           }
           cancel = true;
         } else if (key == ENTER_KEY) {
-          // This branch is unnecessary on Forge because it supports ClientChatEvent.
           cancel = true;
           String text = chatEditBox.getValue();
           chatEditBox.setValue("");
@@ -1779,51 +1802,11 @@ public class Minescript {
 
   private static boolean loggedMethodNameFallback = false;
 
-  private static Method getMethod(
-      Object object, String unobfuscatedName, String obfuscatedName, Class<?>... paramTypes)
-      throws IllegalAccessException, NoSuchMethodException {
-    Method method;
-    try {
-      method = object.getClass().getDeclaredMethod(obfuscatedName, paramTypes);
-    } catch (NoSuchMethodException e) {
-      if (!loggedMethodNameFallback) {
-        LOGGER.info(
-            "Cannot find method with obfuscated name \"{}\", falling back to"
-                + " unobfuscated name \"{}\"",
-            obfuscatedName,
-            unobfuscatedName);
-        loggedMethodNameFallback = true;
-      }
-      try {
-        method = object.getClass().getDeclaredMethod(unobfuscatedName, paramTypes);
-      } catch (NoSuchMethodException e2) {
-        logUserError(
-            "Internal Minescript error: cannot find method {}/{} in class {}. See log file for"
-                + " details.",
-            unobfuscatedName,
-            obfuscatedName,
-            object.getClass().getSimpleName());
-        LOGGER.info("Declared methods of {}:", object.getClass().getName());
-        for (Method m : object.getClass().getDeclaredMethods()) {
-          LOGGER.info("  {}", m);
-        }
-        throw e2;
-      }
-    }
-    method.setAccessible(true);
-    return method;
-  }
-
   public static void onKeyInput(int key) {
     var minecraft = Minecraft.getInstance();
     var screen = minecraft.screen;
     if (screen == null && key == BACKSLASH_KEY) {
-      try {
-        var method = getMethod(minecraft, "openChatScreen", "m_91326_", String.class);
-        method.invoke(minecraft, "");
-      } catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
-        logException(e);
-      }
+      minecraft.setScreen(new ChatScreen(""));
     }
   }
 
@@ -1837,9 +1820,9 @@ public class Minescript {
     var iter = clientChatReceivedEventListeners.entrySet().iterator();
     while (iter.hasNext()) {
       var listener = iter.next();
-      LOGGER.info(
-          "Forwarding chat message to listener {}: {}", listener.getKey(), quoteString(text));
-      if (!listener.getValue().respond(quoteString(text), false)) {
+      String quotedText = toJsonString(text);
+      LOGGER.info("Forwarding chat message to listener {}: {}", listener.getKey(), quotedText);
+      if (!listener.getValue().respond(quotedText, false)) {
         iter.remove();
       }
     }
@@ -1903,6 +1886,9 @@ public class Minescript {
 
       LOGGER.info("Processing command from chat event: {}", message);
       runMinescriptCommand(message.substring(1));
+      cancel = true;
+    } else if (chatInterceptor != null && !message.startsWith("/")) {
+      chatInterceptor.accept(message);
       cancel = true;
     } else if (customNickname != null && !message.startsWith("/")) {
       String tellrawCommand = "/tellraw @a " + String.format(customNickname, message);
@@ -1985,12 +1971,11 @@ public class Minescript {
     // Level with chunks to listen for. Store hash rather than reference to avoid memory leak.
     private final int levelHashCode;
 
-    private final ScriptFunctionCall scriptFunction;
+    private final Runnable doneCallback;
     private int numUnloadedChunks = 0;
     private boolean suspended = false;
 
-    public ChunkLoadEventListener(
-        int x1, int z1, int x2, int z2, ScriptFunctionCall scriptFunction) {
+    public ChunkLoadEventListener(int x1, int z1, int x2, int z2, Runnable doneCallback) {
       var minecraft = Minecraft.getInstance();
       this.levelHashCode = minecraft.level.hashCode();
       LOGGER.info("listener chunk region in level {}: {} {} {} {}", levelHashCode, x1, z1, x2, z2);
@@ -2011,7 +1996,7 @@ public class Minescript {
           chunksToLoad.put(packedChunkXZ, false);
         }
       }
-      this.scriptFunction = scriptFunction;
+      this.doneCallback = doneCallback;
     }
 
     public synchronized void suspend() {
@@ -2092,7 +2077,7 @@ public class Minescript {
 
     /** To be called when all requested chunks are loaded. */
     public synchronized void onFinished() {
-      scriptFunction.respond("true", true);
+      doneCallback.run();
     }
   }
 
@@ -2101,6 +2086,7 @@ public class Minescript {
       new ConcurrentHashMap<ChunkLoadEventListener, Integer>();
 
   private static String customNickname = null;
+  private static Consumer<String> chatInterceptor = null;
 
   private static boolean areCommandsAllowed() {
     var minecraft = Minecraft.getInstance();
@@ -2162,7 +2148,438 @@ public class Minescript {
     }
   }
 
+  private static String entitiesToJsonString(Iterable<? extends Entity> entities) {
+    var result = new StringBuilder("[");
+    for (var entity : entities) {
+      if (result.length() > 1) {
+        result.append(",");
+      }
+      result.append("{");
+      result.append(String.format("\"name\":%s,", toJsonString(entity.getName().getString())));
+      result.append(String.format("\"type\":%s,", toJsonString(entity.getType().toString())));
+      result.append(
+          String.format("\"position\":[%f,%f,%f],", entity.getX(), entity.getY(), entity.getZ()));
+      result.append(String.format("\"yaw\":%f,", entity.getYRot()));
+      result.append(String.format("\"pitch\":%f,", entity.getXRot()));
+      var v = entity.getDeltaMovement();
+      result.append(String.format("\"velocity\":[%f,%f,%f]", v.x, v.y, v.z));
+      result.append("}");
+    }
+    result.append("]");
+    return result.toString();
+  }
+
   private static boolean scriptFunctionDebugOutptut = false;
+
+  private static final Map<KeyMapping, InputConstants.Key> boundKeys = new ConcurrentHashMap<>();
+
+  private static void lazyInitBoundKeys() {
+    // The map of bound keys must be initialized lazily because
+    // minecraft.options is still null at the time the mod is initialized.
+    if (!boundKeys.isEmpty()) {
+      return;
+    }
+
+    // TODO(maxuser): These default bindings do not track custom bindings. Use
+    // mixins to intercept KeyMapping constructor and setBoundKey method.
+    var minecraft = Minecraft.getInstance();
+    boundKeys.put(minecraft.options.keyUp, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_W));
+    boundKeys.put(
+        minecraft.options.keyDown, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_S));
+    boundKeys.put(
+        minecraft.options.keyLeft, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_A));
+    boundKeys.put(
+        minecraft.options.keyRight, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_D));
+    boundKeys.put(
+        minecraft.options.keyJump, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_SPACE));
+    boundKeys.put(
+        minecraft.options.keySprint,
+        InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_LEFT_CONTROL));
+    boundKeys.put(
+        minecraft.options.keyShift,
+        InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_LEFT_SHIFT));
+    boundKeys.put(
+        minecraft.options.keyPickItem,
+        InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_MIDDLE));
+    boundKeys.put(
+        minecraft.options.keyUse,
+        InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_RIGHT));
+    boundKeys.put(
+        minecraft.options.keyAttack,
+        InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_LEFT));
+    boundKeys.put(
+        minecraft.options.keySwapOffhand, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_F));
+    boundKeys.put(
+        minecraft.options.keyDrop, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_Q));
+  }
+
+  private static Optional<String> doPlayerAction(
+      String functionName, KeyMapping keyBinding, List<?> args, String argsString) {
+    if (args.size() == 1 && args.get(0) instanceof Boolean) {
+      lazyInitBoundKeys();
+      boolean pressed = (Boolean) args.get(0);
+      var key = boundKeys.get(keyBinding);
+      if (pressed) {
+        KeyMapping.set(key, true);
+        KeyMapping.click(key);
+      } else {
+        KeyMapping.set(key, false);
+      }
+      return Optional.of("true");
+    } else {
+      logUserError(
+          "Error: `{}` expected 1 boolean param (true or false) but got: {}",
+          functionName,
+          argsString);
+      return Optional.of("false");
+    }
+  }
+
+  /** Returns a JSON response string if a script function is called. */
+  private static Optional<String> handleScriptFunction(
+      Job job, long funcCallId, String functionName, List<?> args, String argsString) {
+    var minecraft = Minecraft.getInstance();
+    var world = minecraft.level;
+    var player = minecraft.player;
+    var options = minecraft.options;
+    switch (functionName) {
+      case "player_position":
+        if (args.isEmpty()) {
+          return Optional.of(
+              String.format("[%f, %f, %f]", player.getX(), player.getY(), player.getZ()));
+        } else {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.of("null");
+        }
+
+      case "player_name":
+        if (args.isEmpty()) {
+          return Optional.of(toJsonString(player.getName().getString()));
+        } else {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.of("null");
+        }
+
+      case "getblock":
+        if (args.size() == 3
+            && args.get(0) instanceof Number
+            && args.get(1) instanceof Number
+            && args.get(2) instanceof Number) {
+          Level level = player.getCommandSenderWorld();
+          int arg0 = ((Number) args.get(0)).intValue();
+          int arg1 = ((Number) args.get(1)).intValue();
+          int arg2 = ((Number) args.get(2)).intValue();
+          Optional<String> block =
+              blockStateToString(level.getBlockState(new BlockPos(arg0, arg1, arg2)));
+          return Optional.of(block.map(str -> toJsonString(str)).orElse("null"));
+        } else {
+          logUserError(
+              "Error: `{}` expected 3 params (x, y, z) but got: {}", functionName, argsString);
+          return Optional.of("null");
+        }
+
+      case "getblocklist":
+        Supplier<Optional<String>> badArgsResponse =
+            () -> {
+              logUserError(
+                  "Error: `{}` expected a list of (x, y, z) positions but got: {}",
+                  functionName,
+                  argsString);
+              return Optional.of("null");
+            };
+
+        if (args.size() != 1 || !(args.get(0) instanceof List)) {
+          return badArgsResponse.get();
+        }
+        List<?> positions = (List<?>) args.get(0);
+        Level level = player.getCommandSenderWorld();
+        List<String> blocks = new ArrayList<>();
+        var pos = new BlockPos.MutableBlockPos();
+        for (var position : positions) {
+          if (!(position instanceof List)) {
+            return badArgsResponse.get();
+          }
+          List<?> coords = (List<?>) position;
+          if (coords.size() != 3
+              || !(coords.get(0) instanceof Number)
+              || !(coords.get(1) instanceof Number)
+              || !(coords.get(2) instanceof Number)) {
+            return badArgsResponse.get();
+          }
+          int x = ((Number) coords.get(0)).intValue();
+          int y = ((Number) coords.get(1)).intValue();
+          int z = ((Number) coords.get(2)).intValue();
+          Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, y, z)));
+          blocks.add(block.orElse(null));
+        }
+        return Optional.of(GSON.toJson(blocks));
+
+      case "register_chat_message_listener":
+        if (!args.isEmpty()) {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+        } else if (clientChatReceivedEventListeners.containsKey(job.jobId())) {
+          logUserError(
+              "Error: `{}` failed: listener already registered for job: {}",
+              functionName,
+              job.jobSummary());
+        } else {
+          clientChatReceivedEventListeners.put(
+              job.jobId(), new ScriptFunctionCall(job, funcCallId));
+        }
+        return Optional.empty();
+
+      case "unregister_chat_message_listener":
+        if (!args.isEmpty()) {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.of("false");
+        } else if (!clientChatReceivedEventListeners.containsKey(job.jobId())) {
+          logUserError(
+              "Error: `{}` has no listeners to unregister for job: {}",
+              functionName,
+              job.jobSummary());
+          return Optional.of("false");
+        } else {
+          clientChatReceivedEventListeners.remove(job.jobId());
+          return Optional.of("true");
+        }
+
+      case "register_chat_message_interceptor":
+        if (args.isEmpty()) {
+          if (chatInterceptor == null) {
+            chatInterceptor =
+                s -> {
+                  job.respond(funcCallId, toJsonString(s), false);
+                };
+            job.addAtExitHandler(() -> chatInterceptor = null);
+            logUserInfo("Chat interceptor enabled for job: {}", job.jobSummary());
+          } else {
+            logUserError("Error: Chat interceptor already enabled for another job.");
+          }
+          return Optional.empty();
+        } else {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.empty();
+        }
+
+      case "unregister_chat_message_interceptor":
+        if (args.isEmpty()) {
+          if (chatInterceptor != null) {
+            chatInterceptor = null;
+            logUserInfo("Chat interceptor disabled for job: {}", job.jobSummary());
+          } else {
+            logUserError("Error: Chat interceptor already disabled: {}", job.jobSummary());
+          }
+          return Optional.empty();
+        } else {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.empty();
+        }
+
+      case "await_loaded_region":
+        if (args.size() == 4
+            && args.get(0) instanceof Number
+            && args.get(1) instanceof Number
+            && args.get(2) instanceof Number
+            && args.get(3) instanceof Number) {
+          Number arg0 = (Number) args.get(0);
+          Number arg1 = (Number) args.get(1);
+          Number arg2 = (Number) args.get(2);
+          Number arg3 = (Number) args.get(3);
+          var listener =
+              new ChunkLoadEventListener(
+                  arg0.intValue(),
+                  arg1.intValue(),
+                  arg2.intValue(),
+                  arg3.intValue(),
+                  () -> job.respond(funcCallId, "true", true));
+          listener.updateChunkStatuses();
+          if (listener.isFinished()) {
+            listener.onFinished();
+          } else {
+            chunkLoadEventListeners.put(listener, job.jobId());
+          }
+          return Optional.empty();
+        } else {
+          // TODO(maxuser): Support raising exceptions through script functions, e.g.
+          // {"fcid": ..., "exception": "error message...", "conn": "close"}
+          logUserError(
+              "Error: `{}` expected 4 number params (x1, z1, x2, z2) but got: {}",
+              functionName,
+              argsString);
+          return Optional.of("false");
+        }
+
+      case "set_nickname":
+        if (args.isEmpty()) {
+          logUserInfo(
+              "Chat nickname reset to default; was {}",
+              customNickname == null ? "default already" : toJsonString(customNickname));
+          customNickname = null;
+          return Optional.of("true");
+        } else if (args.size() == 1) {
+          String arg = args.get(0).toString();
+          if (arg.contains("%s")) {
+            logUserInfo("Chat nickname set to {}.", toJsonString(arg));
+            customNickname = arg;
+            return Optional.of("true");
+          } else {
+            logUserError(
+                "Error: `{}` expects nickname to contain %s as a placeholder for"
+                    + " message text.",
+                functionName);
+            return Optional.of("false");
+          }
+        } else {
+          logUserError("Error: `{}` expected 0 or 1 param but got: {}", functionName, argsString);
+          return Optional.of("false");
+        }
+
+      case "player_hand_items":
+        if (args.isEmpty()) {
+          var result = new StringBuilder("[");
+          for (var itemStack : player.getHandSlots()) {
+            if (result.length() > 1) {
+              result.append(",");
+            }
+            result.append(itemStackToJsonString(itemStack));
+          }
+          result.append("]");
+          return Optional.of(result.toString());
+        } else {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.of("null");
+        }
+
+      case "player_inventory":
+        if (args.isEmpty()) {
+          var inventory = player.getInventory();
+          var result = new StringBuilder("[");
+          for (int i = 0; i < inventory.getContainerSize(); i++) {
+            var itemStack = inventory.getItem(i);
+            if (itemStack.getCount() > 0) {
+              if (result.length() > 1) {
+                result.append(",");
+              }
+              result.append(itemStackToJsonString(itemStack));
+            }
+          }
+          result.append("]");
+          return Optional.of(result.toString());
+        } else {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.of("null");
+        }
+
+      case "player_press_forward":
+        return doPlayerAction(functionName, options.keyUp, args, argsString);
+
+      case "player_press_backward":
+        return doPlayerAction(functionName, options.keyDown, args, argsString);
+
+      case "player_press_left":
+        return doPlayerAction(functionName, options.keyLeft, args, argsString);
+
+      case "player_press_right":
+        return doPlayerAction(functionName, options.keyRight, args, argsString);
+
+      case "player_press_jump":
+        return doPlayerAction(functionName, options.keyJump, args, argsString);
+
+      case "player_press_sprint":
+        return doPlayerAction(functionName, options.keySprint, args, argsString);
+
+      case "player_press_sneak":
+        return doPlayerAction(functionName, options.keyShift, args, argsString);
+
+      case "player_press_pick_item":
+        return doPlayerAction(functionName, options.keyPickItem, args, argsString);
+
+      case "player_press_use":
+        return doPlayerAction(functionName, options.keyUse, args, argsString);
+
+      case "player_press_attack":
+        return doPlayerAction(functionName, options.keyAttack, args, argsString);
+
+      case "player_press_swap_hands":
+        return doPlayerAction(functionName, options.keySwapOffhand, args, argsString);
+
+      case "player_press_drop":
+        return doPlayerAction(functionName, options.keyDrop, args, argsString);
+
+      case "player_orientation":
+        if (args.isEmpty()) {
+          return Optional.of(String.format("[%f, %f]", player.getYRot(), player.getXRot()));
+        } else {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.of("null");
+        }
+
+      case "player_set_orientation":
+        if (args.size() == 2 && args.get(0) instanceof Number && args.get(1) instanceof Number) {
+          Number yaw = (Number) args.get(0);
+          Number pitch = (Number) args.get(1);
+          player.setYRot(yaw.floatValue() % 360.0f);
+          player.setXRot(pitch.floatValue() % 360.0f);
+          return Optional.of("true");
+        } else {
+          logUserError(
+              "Error: `{}` expected 2 number params but got: {}", functionName, argsString);
+          return Optional.of("false");
+        }
+
+      case "players":
+        return Optional.of(entitiesToJsonString(world.players()));
+
+      case "entities":
+        return Optional.of(entitiesToJsonString(world.entitiesForRendering()));
+
+      case "screenshot":
+        final Optional<String> filename;
+        final String response;
+        if (args.isEmpty()) {
+          filename = Optional.empty();
+          response = "true";
+        } else if (args.size() == 1 && args.get(0) instanceof String) {
+          filename = Optional.of((String) args.get(0));
+          response = "true";
+        } else {
+          filename = null;
+          logUserError(
+              "Error: `{}` expected no params or 1 string param but got: {}",
+              functionName,
+              argsString);
+          response = "false";
+        }
+        if (filename != null) {
+          Screenshot.grab(
+              minecraft.gameDirectory,
+              filename.orElse(null),
+              minecraft.getMainRenderTarget(),
+              message -> job.enqueueStderr(message.getString()));
+        }
+        return Optional.of(response);
+
+      case "flush":
+        if (args.isEmpty()) {
+          return Optional.of("true");
+        } else {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.of("false");
+        }
+
+      case "exit!":
+        if (funcCallId == 0) {
+          return Optional.of("\"exit!\"");
+        } else {
+          return Optional.of("null");
+        }
+
+      default:
+        logUserError(
+            "Error: unknown function `{}` called from job: {}", functionName, job.jobSummary());
+        return Optional.of("false");
+    }
+  }
 
   public static void onPlayerTick() {
     if (++playerTickEventCounter % minescriptTicksPerCycle == 0) {
@@ -2188,202 +2605,20 @@ public class Minescript {
                   var gson = new Gson();
                   List<?> args = gson.fromJson(argsString, ArrayList.class);
 
-                  // TODO(maxuser): This is poor form for a number of reasons. First, some branches
-                  // (namely async-only functions) have no immediate response, but we have to assign
-                  // a value to `response` anyway because it's `final`.  This is arguably better
-                  // than removing `final` from the variable because that would allow multiple
-                  // assignments.  Second, the long if-else-if chain is cumbersome.
-                  //
-                  // Refactor this so that each script function becomes an instance of a
-                  // ScriptFunction class with a call(...) method.
-
-                  final String response;
-
                   // TODO(maxuser): Support raising exceptions from script functions, e.g.
                   // {"fcid": ..., "exception": "error message...", "conn": "close"}
-
-                  if (functionName.equals("player_position")) {
-                    if (args.isEmpty()) {
-                      response =
-                          String.format(
-                              "[%f, %f, %f]", player.getX(), player.getY(), player.getZ());
-                      job.respond(funcCallId, response, true);
-                    } else {
-                      logUserError(
-                          "Error: `{}` expected no params but got: {}", functionName, argsString);
-                      response = "null";
-                      job.respond(funcCallId, response, true);
-                    }
-                  } else if (functionName.equals("getblock")) {
-                    if (args.size() == 3
-                        && args.get(0) instanceof Number
-                        && args.get(1) instanceof Number
-                        && args.get(2) instanceof Number) {
-                      Number arg0 = (Number) args.get(0);
-                      Number arg1 = (Number) args.get(1);
-                      Number arg2 = (Number) args.get(2);
-                      Optional<String> block =
-                          blockStateToString(
-                              readBlockState(
-                                  level, arg0.intValue(), arg1.intValue(), arg2.intValue()));
-                      response = block.map(str -> quoteString(str, true)).orElse("null");
-                      job.respond(funcCallId, response, true);
-                    } else {
-                      logUserError(
-                          "Error: `{}` expected 3 params (x, y, z) but got: {}",
-                          functionName,
-                          argsString);
-                      response = "null";
-                      job.respond(funcCallId, response, true);
-                    }
-                  } else if (functionName.equals("register_chat_message_listener")) {
-                    if (!args.isEmpty()) {
-                      logUserError(
-                          "Error: `{}` expected no params but got: {}", functionName, argsString);
-                    } else if (clientChatReceivedEventListeners.containsKey(job.jobId())) {
-                      logUserError(
-                          "Error: `{}` failed: listener already registered for job: {}",
-                          functionName,
-                          job.jobSummary());
-                    } else {
-                      clientChatReceivedEventListeners.put(
-                          job.jobId(), new ScriptFunctionCall(job, funcCallId));
-                    }
-                    response = "<unused>";
-                  } else if (functionName.equals("unregister_chat_message_listener")) {
-                    if (!args.isEmpty()) {
-                      logUserError(
-                          "Error: `{}` expected no params but got: {}", functionName, argsString);
-                      response = "false";
-                    } else if (!clientChatReceivedEventListeners.containsKey(job.jobId())) {
-                      logUserError(
-                          "Error: `{}` has no listeners to unregister for job: {}",
-                          functionName,
-                          job.jobSummary());
-                      response = "false";
-                    } else {
-                      clientChatReceivedEventListeners.remove(job.jobId());
-                      response = "true";
-                    }
-                    job.respond(funcCallId, response, true);
-                  } else if (functionName.equals("await_loaded_region")) {
-                    if (args.size() == 4
-                        && args.get(0) instanceof Number
-                        && args.get(1) instanceof Number
-                        && args.get(2) instanceof Number
-                        && args.get(3) instanceof Number) {
-                      Number arg0 = (Number) args.get(0);
-                      Number arg1 = (Number) args.get(1);
-                      Number arg2 = (Number) args.get(2);
-                      Number arg3 = (Number) args.get(3);
-                      var listener =
-                          new ChunkLoadEventListener(
-                              arg0.intValue(),
-                              arg1.intValue(),
-                              arg2.intValue(),
-                              arg3.intValue(),
-                              new ScriptFunctionCall(job, funcCallId));
-                      listener.updateChunkStatuses();
-                      if (listener.isFinished()) {
-                        listener.onFinished();
-                      } else {
-                        chunkLoadEventListeners.put(listener, job.jobId());
-                      }
-                      response = "<unused>";
-                    } else {
-                      // TODO(maxuser): Support raising exceptions through script functions, e.g.
-                      // {"fcid": ..., "exception": "error message...", "conn": "close"}
-                      logUserError(
-                          "Error: `{}` expected 4 number params (x1, z1, x2, z2) but got: {}",
-                          functionName,
-                          argsString);
-                      response = "false";
-                      job.respond(funcCallId, response, true);
-                    }
-                  } else if (functionName.equals("set_nickname")) {
-                    if (args.isEmpty()) {
-                      logUserInfo(
-                          "Chat nickname reset to default; was {}",
-                          customNickname == null ? "default already" : quoteString(customNickname));
-                      customNickname = null;
-                      response = "true";
-                    } else if (args.size() == 1) {
-                      String arg = args.get(0).toString();
-                      if (arg.contains("%s")) {
-                        logUserInfo("Chat nickname set to {}.", quoteString(arg, true));
-                        customNickname = arg;
-                        response = "true";
-                      } else {
-                        logUserError(
-                            "Error: `{}` expects nickname to contain %s as a placeholder for"
-                                + " message text.",
-                            functionName);
-                        response = "false";
-                      }
-                    } else {
-                      logUserError(
-                          "Error: `{}` expected 0 or 1 param but got: {}",
-                          functionName,
-                          argsString);
-                      response = "false";
-                    }
-                    job.respond(funcCallId, response, true);
-                  } else if (functionName.equals("player_hand_items")) {
-                    if (args.isEmpty()) {
-                      var result = new StringBuilder("[");
-                      for (var itemStack : player.getHandSlots()) {
-                        if (result.length() > 1) {
-                          result.append(",");
-                        }
-                        result.append(itemStackToJsonString(itemStack));
-                      }
-                      result.append("]");
-                      response = result.toString();
-                    } else {
-                      logUserError(
-                          "Error: `{}` expected no params but got: {}", functionName, argsString);
-                      response = "null";
-                    }
-                    job.respond(funcCallId, response, true);
-                  } else if (functionName.equals("player_inventory")) {
-                    if (args.isEmpty()) {
-                      var inventory = player.getInventory();
-                      var result = new StringBuilder("[");
-                      for (int i = 0; i < inventory.getContainerSize(); i++) {
-                        var itemStack = inventory.getItem(i);
-                        if (itemStack.getCount() > 0) {
-                          if (result.length() > 1) {
-                            result.append(",");
-                          }
-                          result.append(itemStackToJsonString(itemStack));
-                        }
-                      }
-                      result.append("]");
-                      response = result.toString();
-                    } else {
-                      logUserError(
-                          "Error: `{}` expected no params but got: {}", functionName, argsString);
-                      response = "null";
-                    }
-                    job.respond(funcCallId, response, true);
-                  } else if (funcCallId == 0 && functionName.equals("exit!")) {
-                    response = "\"exit!\"";
-                    job.respond(0, response, true);
-                  } else {
-                    logUserError(
-                        "Error: unknown function `{}` called from job: {}",
-                        functionName,
-                        job.jobSummary());
-                    response = "false";
-                    job.respond(funcCallId, response, true);
+                  Optional<String> response =
+                      handleScriptFunction(job, funcCallId, functionName, args, argsString);
+                  if (response.isPresent()) {
+                    job.respond(funcCallId, response.get(), true);
                   }
                   if (scriptFunctionDebugOutptut) {
                     LOGGER.info(
                         "(debug) Script function `{}`: {} / {}  ->  {}",
                         functionName,
-                        quoteString(argsString, true),
+                        toJsonString(argsString),
                         args,
-                        response);
+                        response.orElse("<no response>"));
                   }
                 } else {
                   processMessage(jobCommand);

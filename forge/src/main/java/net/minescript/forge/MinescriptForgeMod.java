@@ -3,8 +3,10 @@
 
 package net.minescript.forge;
 
+import static net.minescript.common.Minescript.ENTER_KEY;
+
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraftforge.client.event.ClientChatEvent;
 import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
@@ -19,6 +21,10 @@ import org.apache.logging.log4j.Logger;
 @Mod("minescript")
 public class MinescriptForgeMod {
   private static final Logger LOGGER = LogManager.getLogger();
+
+  private static int KEY_ACTION_DOWN = 1;
+  private static int KEY_ACTION_REPEAT = 2;
+  private static int KEY_ACTION_UP = 0;
 
   public MinescriptForgeMod() {
     LOGGER.info("(minescript) Minescript mod starting...");
@@ -36,6 +42,16 @@ public class MinescriptForgeMod {
 
   @SubscribeEvent
   public void onKeyInputEvent(InputEvent.KeyInputEvent event) {
+    var key = event.getKey();
+    var action = event.getAction();
+    var screen = Minecraft.getInstance().screen;
+    if (screen == null) {
+      Minescript.onKeyInput(key);
+    } else if (key == ENTER_KEY
+        && action == KEY_ACTION_DOWN
+        && Minescript.onKeyboardKeyPressed(screen, key)) {
+      event.setCanceled(true);
+    }
     Minescript.onKeyInput(event.getKey());
   }
 
@@ -50,13 +66,6 @@ public class MinescriptForgeMod {
   public void onChunkUnloadEvent(ChunkEvent.Unload event) {
     if (event.getWorld() instanceof ClientLevel) {
       Minescript.onChunkUnload(event.getWorld(), event.getChunk());
-    }
-  }
-
-  @SubscribeEvent
-  public void onClientChatEvent(ClientChatEvent event) {
-    if (Minescript.onClientChat(event.getMessage())) {
-      event.setCanceled(true);
     }
   }
 
