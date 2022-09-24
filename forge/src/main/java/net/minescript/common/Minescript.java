@@ -1350,6 +1350,12 @@ public class Minescript {
     loadConfig();
 
     String[] command = parseCommand(commandLine);
+    if (command.length == 0) {
+      systemCommandQueue.add(
+          "|{\"text\":\"Technoblade never dies.\",\"color\":\"dark_red\",\"bold\":true}");
+      return;
+    }
+
     command = substituteMinecraftVars(command);
 
     switch (command[0]) {
