@@ -314,9 +314,11 @@ public class Minescript {
     try {
       Files.list(new File(minescriptDir).toPath())
           .filter(
-              path ->
-                  !path.getFileName().toString().startsWith("minescript")
-                      && path.toString().endsWith(".py"))
+              path -> {
+                String filename = path.getFileName().toString();
+                return (!filename.startsWith("minescript") || filename.endsWith("_test.py"))
+                    && path.toString().endsWith(".py");
+              })
           .forEach(
               path -> {
                 String commandName =
@@ -1074,6 +1076,9 @@ public class Minescript {
     }
 
     for (int i = 0; i < types.length; i++) {
+      if (types[i] == ParamType.VAR_ARGS) {
+        break;
+      }
       String param = command[i + 1];
       switch (types[i]) {
         case INT:
@@ -1090,9 +1095,6 @@ public class Minescript {
           break;
         case STRING:
           // Do nothing. String params are always valid.
-          break;
-        case VAR_ARGS:
-          // Do nothing. Varargs need to be checked by the caller.
           break;
       }
     }
