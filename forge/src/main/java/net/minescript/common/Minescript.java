@@ -1074,6 +1074,9 @@ public class Minescript {
     }
 
     for (int i = 0; i < types.length; i++) {
+      if (types[i] == ParamType.VAR_ARGS) {
+        break;
+      }
       String param = command[i + 1];
       switch (types[i]) {
         case INT:
@@ -1090,9 +1093,6 @@ public class Minescript {
           break;
         case STRING:
           // Do nothing. String params are always valid.
-          break;
-        case VAR_ARGS:
-          // Do nothing. Varargs need to be checked by the caller.
           break;
       }
     }
