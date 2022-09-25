@@ -291,26 +291,46 @@ def CheckVersionCompatibility(
 
 
 def CheckMainModuleVersionCompatibility():
-  debug = "--debug" in sys.argv
+  debug = False
+  if "--debug-version-check" in sys.argv:
+    debug = True
+    sys.argv.remove("--debug-version-check")
+
+  relax_version_check = False
+  if "--relax-version-check" in sys.argv:
+    relax_version_check = True
+    sys.argv.remove("--relax-version-check")
+
+  version_check_only = False
+  if "--version-check-only" in sys.argv:
+    version_check_only = True
+    sys.argv.remove("--version-check-only")
+
   main_module = sys.modules["__main__"]
   script_fullname = sys.argv[0]
   script_shortname = os.path.split(script_fullname)[-1].split(".py")[0]
   versioned_first_line_re = re.compile(r"([^ ]+) +(v[0-9.]+)")
+  errors = []
   if main_module.__doc__:
     re_match = versioned_first_line_re.match(main_module.__doc__)
     if re_match and re_match.group(1) == script_shortname:
-      errors = []
       CheckVersionCompatibility(
           script_shortname, main_module.__doc__, errors=errors, debug=debug)
       if errors:
+        severity = "Warning" if relax_version_check else "Error"
         print(
-            f"Warning: {script_shortname} failed version compatibility check:",
+            f"{severity}: {script_shortname} failed version compatibility check:",
             file=sys.stderr)
         # If there's more than one error, print a numbered prefix before each,
         # e.g. "[1]".
         for i, error in enumerate(sorted(errors)):
           error_prefix = "  " if len(errors) == 1 else f"[{i+1}] "
           print(error_prefix + error, file=sys.stderr)
+        if not relax_version_check:
+          print(
+              "(Re-run with `--relax-version-check` to run anyway.)",
+              file=sys.stderr)
+          sys.exit(1)
     elif debug:
       print(
           f'(debug) {script_shortname} has docstring without version header: '
@@ -320,6 +340,13 @@ def CheckMainModuleVersionCompatibility():
     print(
         f'(debug) {script_shortname} has no docstring for checking version requirements.',
         file=sys.stderr)
+
+  if version_check_only:
+    if not errors:
+      print(
+          f"Success: {script_shortname} passes version compatibility check.",
+          file=sys.stderr)
+    sys.exit()
 
 
 CheckMainModuleVersionCompatibility()
