@@ -314,9 +314,11 @@ public class Minescript {
     try {
       Files.list(new File(minescriptDir).toPath())
           .filter(
-              path ->
-                  !path.getFileName().toString().startsWith("minescript")
-                      && path.toString().endsWith(".py"))
+              path -> {
+                String filename = path.getFileName().toString();
+                return (!filename.startsWith("minescript") || filename.endsWith("_test.py"))
+                    && path.toString().endsWith(".py");
+              })
           .forEach(
               path -> {
                 String commandName =
