@@ -1,15 +1,22 @@
 # SPDX-FileCopyrightText: © 2022 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: GPL-3.0-only
 
-r"""minescript_test: Integration testing of script functions in minescript.py.
+r"""minescript_test v2.1 from https://github.com/maxuser0/minescript
 
-Copy this file to the "minescript" directory within the "minecraft" directory
-and run it from within Minecraft with the command:
+Integration testing of script functions in minescript.py.
+
+Requires:
+  minescript v2.1
+
+Copy this file to the "minescript" directory within the
+"minecraft" directory and run it from within Minecraft with
+the command:
 
 \minescript_test
 
-Upon success, "All tests passed" is printed to the chat in green. Otherwise, a
-red error message reports the first failure among the tests.
+Upon success, "All tests passed" is printed in green to the
+chat. Otherwise, a red error message reports the first failure
+among the tests.
 """
 
 import minescript

@@ -8,6 +8,9 @@
 
 r"""paste v2.1 distributed via Minescript jar file
 
+Requires:
+  minescript v2.1
+
 Usage: \paste X Y Z [LABEL]
 
 Pastes blocks at location (X, Y, Z) that were previously copied
