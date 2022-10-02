@@ -25,5 +25,6 @@ for line in html_output.splitlines():
     anchor_html = f'<p><a name="{anchor}"></a></p>'
     if anchor_html != prev_line:
       print(anchor_html)
+  line = line.replace("\\", "&#92;")
   print(line)
   prev_line = line
