@@ -1,4 +1,4 @@
-## Minescript v2.0 docs
+## Minescript v1.19 docs
 
 Table of contents:
 
@@ -10,8 +10,6 @@ Table of contents:
     - [Script input](#script-input)
     - [Script output](#script-output)
     - [minescript module](#minescript-module)
-
-Previous version: [v1.19](../v1.19/README.md)
 
 Latest version: [latest](../README.md)
 
@@ -125,7 +123,7 @@ the state of your build before the last command. `\undo` can be run multiple
 times to undo the build changes from multiple recent Minescript commands.
 
 ***Note:*** *Some block state may be lost when undoing a Minescript command, such as
-commands specified within command blocks and items in chests.*
+commands specified within command blocks.*
 
 ### Advanced commands
 
@@ -152,17 +150,6 @@ run.
 possibly crash.*
 
 Default is 3.
-
-#### minescript_incremental_command_suggestions 
-*Usage:* `\minescript_incremental_command_suggestions  BOOL`
-
-Enables or disables printing of incremental command suggestions to the in-game
-chat as the user types a Minescript command.
-
-Default is false.
-
-Since: v2.0 (in prior versions, incremental command suggestions were
-unconditionally enabled)
 
 ## Python API
 
@@ -197,36 +184,19 @@ That command passes parameters that set `width` to `100`, `height` to `50`, and
 
 ### Script output
 
-Minescript Python scripts can write outputs using `sys.stdout` and
-`sys.stderr`, or they can use functions defined in `minescript.py` (see
-[`echo`](#echo), [`chat`](#chat), and [`exec`](#exec)).  The
-`minescript.py` functions are recommended going forward, but output via
-`sys.stdout` and `sys.stderr` are provided for backward compatibility with
-earlier versions of Minescript.
-
-Printing to standard output (`sys.stdout`) outputs text to the Minecraft chat
-as if entered by the user:
+When a Minescript Python script prints to standard output (`sys.stdout`), the
+output text is sent to the Minecraft chat as if entered by the user:
 
 ```
 # Sends a chat message that's visible to
 # all players in the world:
 print("hi, friends!")
 
-# Since Minescript v2.0 this can be written as:
-import minescript
-minescript.chat("hi, friends!")
-
 # Runs a command to set the block under the
 # current player to yellow concrete (assuming
 # you have permission to run commands):
 print("/setblock ~ ~-1 ~ yellow_concrete")
-
-# Since Minescript v2.0 this can be written as:
-minescript.exec("/setblock ~ ~-1 ~ yellow_concrete")
 ```
-
-***Note:*** *`exec` has been renamed to `execute` in Minescript v2.1 to avoid
-confusion with Python's built-in `exec`.*
 
 When a script prints to standard error (`sys.stderr`), the output text is
 printed to the Minecraft chat, but is visible only to you:
@@ -235,9 +205,6 @@ printed to the Minecraft chat, but is visible only to you:
 # Prints a message to the in-game chat that's
 # visible only to you:
 print("Note to self...", file=sys.stderr)
-
-# Since Minescript v2.0 this can be written as:
-minescript.echo("Note to self...")
 ```
 
 ### minescript module
@@ -248,43 +215,6 @@ module:
 ```
 import minescript
 ```
-
-#### exec
-*Usage:* `exec(command: str)`
-
-Executes the given Minecraft or Minescript command.
-
-If command doesn't already start with a slash or backslash, automatically
-prepends a slash. Ignores leading and trailing whitespace, and ignores empty
-commands.
-
-*Note: This is named `execute` in Minescript 2.1. The old name is still
-available in v2.1, but is deprecated and will be removed in a future version.*
-
-Since: v2.0
-
-
-#### echo
-*Usage:* `echo(message: Any)`
-
-Echoes message to the chat.
-
-The echoed message is visible only to the local player.
-
-Since: v2.0
-
-
-#### chat
-*Usage:* `chat(message: str)`
-
-Sends the given message to the chat.
-
-If message starts with a slash or backslash, automatically prepends a space
-so that the message is sent as a chat and not executed as a command.  Ignores
-empty messages.
-
-Since: v2.0
-
 
 #### player_position
 *Usage:* `player_position(done_callback=None)`
@@ -304,42 +234,6 @@ Gets the local player’s position.
 ```
 x, y, z = minescript.player_position()
 ```
-
-#### player_hand_items
-*Usage:* `player_hand_items(done_callback=None)`
-
-Gets the items in the local player's hands.
-
-*Args:*
-
-- `done_callback`: if given, return immediately and call
-  `done_callback(return_value)` asynchronously when return_value is ready.
-
-*Returns:*
-
-- If `done_callback` is `None`, returns items in player's inventory as list of
-  items where each item is a dict: `{"item": str, "count": int, "nbt": str}`
-
-Since: v2.0
-
-
-#### player_inventory
-*Usage:* `player_inventory(done_callback=None)`
-
-Gets the items in the local player's inventory.
-
-*Args:*
-
-- `done_callback`: if given, return immediately and call
-  `done_callback(return_value)` asynchronously when return_value is ready
-
-*Returns:*
-
-- If `done_callback` is `None`, returns items in player's inventory as list of
-  items where each item is a dict: `{"item": str, "count": int, "nbt": str}`
-
-Since: v2.0
-
 
 #### getblock
 *Usage:* `getblock(x: int, y: int, z: int, done_callback=None)`
@@ -424,30 +318,4 @@ lock.acquire()
 
 print("Do more work now that region finished loading...", file=stderr)
 ```
-
-
-#### register_chat_message_listener
-*Usage:* `register_chat_message_listener(listener: Callable[[str], None])`
-
-Registers a listener for receiving chat messages. One listener allowed per job.
-
-Listener receives both incoming and outgoing chat messages.
-
-*Args:*
-
-- `listener`: callable that repeatedly accepts a string representing chat messages
-
-Since: v2.0
-
-
-#### unregister_chat_message_listener
-*Usage:* `unregister_chat_message_listener()`
-
-Unegisters a chat message listener, if any, for the currently running job.
-
-*Returns:*
-
-- `True` if successfully unregistered a listener, `False` otherwise.
-
-Since: v2.0
 

@@ -1,5 +1,6 @@
-### Minescript v2.0 docs
-*v2.1 docs coming soon...*
+## Minescript v2.1 docs
+
+Table of contents:
 
 - [In-game commands](#in-game-commands)
     - [Command basics](#command-basics)
@@ -9,6 +10,8 @@
     - [Script input](#script-input)
     - [Script output](#script-output)
     - [minescript module](#minescript-module)
+
+Previous version: [v2.0](v2.0/README.md)
 
 ## In-game commands
 
@@ -54,11 +57,14 @@ Prints documentation for the given script or command name.
 Since: v1.19.2
 
 #### copy
-*Usage:* `\copy  X1  Y1  Z1  X2  Y2  Z2  [LABEL]`
+*Usage:* `\copy  X1  Y1  Z1  X2  Y2  Z2  [LABEL] [no_limit]`
 
 Copies blocks within the rectangular box from (X1, Y1, Z1) to (X2, Y2, Z2),
 similar to the coordinates passed to the /fill command. LABEL is optional,
 allowing a set of blocks to be named.
+
+By default, attempts to copy a region covering more than 1600 chunks are
+disallowed. This limit can be relaxed by passing `no_limit`.
 
 See [\paste](#paste).
 
@@ -120,7 +126,7 @@ the state of your build before the last command. `\undo` can be run multiple
 times to undo the build changes from multiple recent Minescript commands.
 
 ***Note:*** *Some block state may be lost when undoing a Minescript command, such as
-commands specified within command blocks.*
+commands specified within command blocks and items in chests.*
 
 ### Advanced commands
 
@@ -192,18 +198,32 @@ That command passes parameters that set `width` to `100`, `height` to `50`, and
 
 ### Script output
 
-When a Minescript Python script prints to standard output (`sys.stdout`), the
-output text is sent to the Minecraft chat as if entered by the user:
+Minescript Python scripts can write outputs using `sys.stdout` and
+`sys.stderr`, or they can use functions defined in `minescript.py` (see
+[`echo`](#echo), [`chat`](#chat), and [`execute`](#execute)).  The
+`minescript.py` functions are recommended going forward, but output via
+`sys.stdout` and `sys.stderr` are provided for backward compatibility with
+earlier versions of Minescript.
+
+Printing to standard output (`sys.stdout`) outputs text to the Minecraft chat
+as if entered by the user:
 
 ```
 # Sends a chat message that's visible to
 # all players in the world:
 print("hi, friends!")
 
+# Since Minescript v2.0 this can be written as:
+import minescript
+minescript.chat("hi, friends!")
+
 # Runs a command to set the block under the
 # current player to yellow concrete (assuming
 # you have permission to run commands):
 print("/setblock ~ ~-1 ~ yellow_concrete")
+
+# Since Minescript v2.1 this can be written as:
+minescript.execute("/setblock ~ ~-1 ~ yellow_concrete")
 ```
 
 When a script prints to standard error (`sys.stderr`), the output text is
@@ -213,6 +233,9 @@ printed to the Minecraft chat, but is visible only to you:
 # Prints a message to the in-game chat that's
 # visible only to you:
 print("Note to self...", file=sys.stderr)
+
+# Since Minescript v2.0 this can be written as:
+minescript.echo("Note to self...")
 ```
 
 ### minescript module
@@ -223,6 +246,77 @@ module:
 ```
 import minescript
 ```
+
+#### execute
+*Usage:* `execute(command: str)`
+
+Executes the given Minecraft or Minescript command.
+
+If command doesn't already start with a slash or backslash, automatically
+prepends a slash. Ignores leading and trailing whitespace, and ignores empty
+commands.
+
+*Note: This was named `exec` in Minescript 2.0. The old name is still available,
+but is deprecated and will be removed in a future version.*
+
+Since: v2.1
+
+
+#### echo
+*Usage:* `echo(message: Any)`
+
+Echoes message to the chat.
+
+The echoed message is visible only to the local player.
+
+Since: v2.0
+
+
+#### chat
+*Usage:* `chat(message: str)`
+
+Sends the given message to the chat.
+
+If message starts with a slash or backslash, automatically prepends a space
+so that the message is sent as a chat and not executed as a command.  Ignores
+empty messages.
+
+Since: v2.0
+
+
+#### screenshot
+*Usage:* `screenshot(filename=None)`
+
+Takes a screenshot, similar to pressing the F2 key.
+
+*Args:*
+
+- `filename`: if specified, screenshot filename relative to the screenshots
+  directory; ".png" extension is added to the screenshot file if it doesn't
+  already have a png extension.
+
+*Returns:*
+
+- `True` is successful
+
+Since: v2.1
+
+
+#### flush
+*Usage:* `flush()`
+
+Wait for all previously issued script commands from this job to complete.
+
+Since: v2.1
+
+
+#### player_name
+*Usage:* `player_name()`
+
+Gets the local player's name.
+
+Since: v2.1
+
 
 #### player_position
 *Usage:* `player_position(done_callback=None)`
@@ -236,12 +330,238 @@ Gets the local player’s position.
 
 *Returns:*
 
-- if `done_callback` is None, returns player’s position as [x, y, z]
+- If `done_callback` is `None`, returns player’s position as [x, y, z]
 
 *Example:*
 ```
 x, y, z = minescript.player_position()
 ```
+
+
+#### player_hand_items
+*Usage:* `player_hand_items(done_callback=None)`
+
+Gets the items in the local player's hands.
+
+*Args:*
+
+- `done_callback`: if given, return immediately and call
+  `done_callback(return_value)` asynchronously when return_value is ready.
+
+*Returns:*
+
+- If `done_callback` is `None`, returns items in player's inventory as list of
+  items where each item is a dict: `{"item": str, "count": int, "nbt": str}`
+
+Since: v2.0
+
+
+#### player_inventory
+*Usage:* `player_inventory(done_callback=None)`
+
+Gets the items in the local player's inventory.
+
+*Args:*
+
+- `done_callback`: if given, return immediately and call
+  `done_callback(return_value)` asynchronously when return_value is ready
+
+*Returns:*
+
+- If `done_callback` is `None`, returns items in player's inventory as list of
+  items where each item is a dict: `{"item": str, "count": int, "nbt": str}`
+
+Since: v2.0
+
+
+#### player_press_forward
+*Usage:* `player_press_forward(pressed: bool)`
+
+Starts/stops moving the local player forward, simulating press/release of the `w` key.
+
+*Args:*
+
+- `pressed`: if `True`, go forward, otherwise stop doing so
+
+Since: v2.1
+
+
+#### player_press_backward
+*Usage:* `player_press_backward(pressed: bool)`
+
+Starts/stops moving the local player backward, simulating press/release of the `s` key.
+
+*Args:*
+
+- `pressed`: if `True`, go backward, otherwise stop doing so
+
+Since: v2.1
+
+
+#### player_press_left
+*Usage:* `player_press_left(pressed: bool)`
+
+Starts/stops moving the local player to the left, simulating press/release of the `a` key.
+
+*Args:*
+
+- `pressed`: if `True`, move to the left, otherwise stop doing so
+
+Since: v2.1
+
+
+#### player_press_right
+*Usage:* `player_press_right(pressed: bool)`
+
+Starts/stops moving the local player to the right, simulating press/release of the `d` key.
+
+*Args:*
+
+- `pressed`: if `True`, move to the right, otherwise stop doing so
+
+Since: v2.1
+
+
+#### player_press_jump
+*Usage:* `player_press_jump(pressed: bool)`
+
+Starts/stops the local player jumping, simulating press/release of the space key.
+
+*Args:*
+
+- `pressed`: if `True`, jump, otherwise stop doing so
+
+Since: v2.1
+
+
+#### player_press_sprint
+*Usage:* `player_press_sprint(pressed: bool)`
+
+Starts/stops the local player sprinting, simulating press/release of the left control key.
+
+*Args:*
+
+- `pressed`: if `True`, sprint, otherwise stop doing so
+
+Since: v2.1
+
+
+#### player_press_sneak
+*Usage:* `player_press_sneak(pressed: bool)`
+
+Starts/stops the local player sneaking, simulating press/release of the left shift key.
+
+*Args:*
+
+- `pressed`: if `True`, sneak, otherwise stop doing so
+
+Since: v2.1
+
+
+#### player_press_pick_item
+*Usage:* `player_press_pick_item(pressed: bool)`
+
+Starts/stops the local player picking an item, simulating press/release of the middle mouse button.
+
+*Args:*
+
+- `pressed`: if `True`, pick an item, otherwise stop doing so
+
+Since: v2.1
+
+
+#### player_press_use
+*Usage:* `player_press_use(pressed: bool)`
+
+Starts/stops the local player using an item or selecting a block, simulating press/release of the right mouse button.
+
+*Args:*
+
+- `pressed`: if `True`, use an item, otherwise stop doing so
+
+Since: v2.1
+
+
+#### player_press_attack
+*Usage:* `player_press_attack(pressed: bool)`
+
+Starts/stops the local player attacking or breaking a block, simulating press/release of the left mouse button.
+
+*Args:*
+
+- `pressed`: if `True`, press attack, otherwise stop doing so
+
+Since: v2.1
+
+
+#### player_press_swap_hands
+*Usage:* `player_press_swap_hands(pressed: bool)`
+
+Starts/stops moving the local player swapping hands, simulating press/release of the `f` key.
+
+*Args:*
+
+- `pressed`: if `True`, swap hands, otherwise stop doing so
+
+Since: v2.1
+
+
+#### player_press_drop
+*Usage:* `player_press_drop(pressed: bool)`
+
+Starts/stops the local player dropping an item, simulating press/release of the `q` key.
+
+*Args:*
+
+- `pressed`: if `True`, drop an item, otherwise stop doing so
+
+Since: v2.1
+
+
+#### player_orientation
+*Usage:* `player_orientation()`
+
+Gets the local player's orientation.
+
+*Returns:*
+
+- `(yaw: float, pitch: float)` as angles in degrees
+
+Since: v2.1
+
+
+#### player_set_orientation
+*Usage:* `player_set_orientation(yaw: float, pitch: float)`
+
+Sets the local player's orientation.
+
+*Args:*
+
+- `yaw`: degrees rotation of the local player's orientation around the y axis
+- `pitch`: degrees rotation of the local player's orientation from the x-z plane
+
+*Returns:*
+
+- `True` if successful
+
+Since: v2.1
+
+
+#### players
+*Usage:* `players()`
+
+Gets a list of nearby players and their attributes: name, position, velocity, etc.
+
+Since: v2.1
+
+
+#### entities
+*Usage:* `entities()`
+
+Gets a list of nearby entities and their attributes: name, position, velocity, etc.
+
+Since: v2.1
+
 
 #### getblock
 *Usage:* `getblock(x: int, y: int, z: int, done_callback=None)`
@@ -255,13 +575,31 @@ Gets the type of block at position (x, y, z).
 
 *Returns:*
 
-- if done_callback is None, returns the block type at (x, y, z) as a string
+- if `done_callback` is `None`, returns the block type at (x, y, z) as a string
 
 *Example:*
 
 ```
 block_type = minescript.getblock(x, y, z)
 ```
+
+
+#### getblocklist
+*Usage:* `getblocklist(positions: List[List[int]], done_callback=None)`
+
+Gets the types of block at the specified [x, y, z] positions.
+
+*Args:*
+
+- `done_callback`: if given, return immediately and call
+  `done_callback(return_value)` asynchronously when return_value is ready
+
+*Returns:*
+
+- if `done_callback` is `None`, returns the block types at given positions as list of strings
+
+Since: v2.1
+
 
 #### await_loaded_region
 *Usage:* `await_loaded_region(x1: int, z1: int, x2: int, z2: int, done_callback=None)`
@@ -277,7 +615,7 @@ fully loaded before setting or filling blocks within it.
 
 *Returns:*
 
-- if done_callback is None, returns True when the requested region is fully
+- if `done_callback` is `None`, returns `True` when the requested region is fully
   loaded.
 
 *Examples:*
@@ -327,3 +665,65 @@ lock.acquire()
 print("Do more work now that region finished loading...", file=stderr)
 ```
 
+
+#### register_chat_message_listener
+*Usage:* `register_chat_message_listener(listener: Callable[[str], None])`
+
+Registers a listener for receiving chat messages. One listener allowed per job.
+
+Listener receives both incoming and outgoing chat messages.
+
+See also
+[`register_chat_message_interceptor()`](#register_chat_message_interceptor) for
+swallowing outgoing chat messages.
+
+*Args:*
+
+- `listener`: callable that repeatedly accepts a string representing chat messages
+
+Since: v2.0
+
+
+#### unregister_chat_message_listener
+*Usage:* `unregister_chat_message_listener()`
+
+Unegisters a chat message listener, if any, for the currently running job.
+
+*Returns:*
+
+- `True` if successfully unregistered a listener, `False` otherwise.
+
+Since: v2.0
+
+
+#### register_chat_message_interceptor
+*Usage:* `register_chat_message_interceptor(interceptor: Callable[[str], None])`
+
+Registers an interceptor for swallowing chat messages.
+
+An interceptor swallows outgoing chat messages, typically for use in
+rewriting outgoing chat messages by calling minecraft.chat(str), e.g. to
+decorate or post-process outgoing messages automatically before they're sent
+to the server.  Only one interceptor is allowed at a time within a Minecraft
+instance.
+
+See also [`register_chat_message_listener()`](#register_chat_message_listener)
+for non-destructive listening of chat messages.
+
+*Args:*
+
+- `interceptor`: callable that repeatedly accepts a string representing chat messages
+
+Since: v2.1
+
+
+#### unregister_chat_message_interceptor
+*Usage:* `unregister_chat_message_interceptor()`
+
+Unegisters the chat message interceptor, if one is currently registered.
+
+*Returns:*
+
+- `True` if successfully unregistered an interceptor, `False` otherwise.
+
+Since: v2.1
