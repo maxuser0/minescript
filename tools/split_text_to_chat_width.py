@@ -1,5 +1,8 @@
 #!/usr/bin/python3
 
+# SPDX-FileCopyrightText: © 2022 Greg Christiana <maxuser@minescript.net>
+# SPDX-License-Identifier: MIT
+
 from typing import List
 import sys
 
