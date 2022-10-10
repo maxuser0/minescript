@@ -4,35 +4,35 @@
 # SPDX-License-Identifier: MIT
 
 # Updates the Minescript version number across configs and sources. If
-# --branch_docs is specified, docs/README.md is branched to
-# docs/v<old_version>/README.md; if --nobranch_docs is specified, docs are not
-# branched. Pass -n for a dry run, i.e. print the commands that would run or
-# the old version strings that would be matched, but do not rewrite the version
+# --fork_docs is specified, docs/README.md is forked to
+# docs/v<old_version>/README.md; if --nofork_docs is specified, docs are not
+# forked. Pass -n for a dry run, i.e. print the commands that would run or the
+# old version strings that would be matched, but do not rewrite the version
 # number.
 #
 # This script must be run from the 'minescript' directory, and expects 'fabric'
 # and 'forge' subdirectories.
 #
 # Usage:
-#   tools/update_version_number.sh <old_version> <new_versio> --branch_docs|--nobranch_docs -n
+#   tools/update_version_number.sh <old_version> <new_versio> --fork_docs|--nofork_docs -n
 #
 # Example:
-#   Update version number from 2.1 to 2.2 and branch docs from to docs/v2.1:
-#   $ tools/update_version_number.sh 2.1 2.2 --branch_docs
+#   Update version number from 2.1 to 2.2 and fork docs from to docs/v2.1:
+#   $ tools/update_version_number.sh 2.1 2.2 --fork_docs
 
 old_version=${1:?"Error: old version number required."}
 new_version=${2:?"Error: new version number required."}
-branch_docs_arg=${3:?"Error: must specify --branch_docs or --nobranch_docs"}
+fork_docs_arg=${3:?"Error: must specify --fork_docs or --nofork_docs"}
 
 # Discard the fixed-position args.
 shift 3
 
-if [[ $branch_docs_arg = "--branch_docs" ]]; then
-  branch_docs=1
-elif [[ $branch_docs_arg = "--nobranch_docs" ]]; then
-  branch_docs=0
+if [[ $fork_docs_arg = "--fork_docs" ]]; then
+  fork_docs=1
+elif [[ $fork_docs_arg = "--nofork_docs" ]]; then
+  fork_docs=0
 else
-  echo "Required 3rd arg must be --branch_docs or --nobranch_docs." >&2
+  echo "Required 3rd arg must be --fork_docs or --nofork_docs." >&2
   exit 1
 fi
 
@@ -75,7 +75,7 @@ if [ ! -e docs/README.md ]; then
   exit 5
 fi
 
-if [ $branch_docs = 1 ]; then
+if [ $fork_docs = 1 ]; then
   old_version_docs=docs/v${old_version}
   if [ $dry_run = 0 ]; then
     mkdir "$old_version_docs" || (echo "$old_version_docs already exists." >&2; exit 6)
