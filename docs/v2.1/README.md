@@ -1,4 +1,4 @@
-## Minescript v2.2 docs
+## Minescript v2.1 docs
 
 Table of contents:
 
@@ -11,7 +11,9 @@ Table of contents:
     - [Script output](#script-output)
     - [minescript module](#minescript-module)
 
-Previous version: [v2.1](v2.1/README.md)
+Previous version: [v2.0](v2.0/README.md)
+
+Latest version: [latest](../README.md)
 
 ## In-game commands
 
