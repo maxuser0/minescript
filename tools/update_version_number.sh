@@ -83,6 +83,9 @@ if [ $fork_docs = 1 ]; then
     old_version_readme=$old_version_docs/README.md
     cp -p docs/README.md "$old_version_readme"
 
+    sed -i '' -e \
+        "s#^Previous version: \[v.*\](v.*/README.md)#Previous version: [v${old_version}](v${old_version}/README.md)#" docs/README.md
+
     # Insert a blank line and "Latest version: ..." after "Previous version: ...".
     sed -i '' -e '/^Previous version:/a \
 Latest version: [latest](../README.md)' "$old_version_readme"
@@ -91,20 +94,17 @@ Latest version: [latest](../README.md)' "$old_version_readme"
 
   else
     echo mkdir "$old_version_docs" || (echo "$old_version_docs already exists." >&2; exit 7)
+    grep '^Previous version: \[v.*\](v.*/README.md)' docs/README.md
   fi
 fi
 
-# Rewrite version in first line of docs/README.md and linked "Previous version".
+# Rewrite version in first line of docs/README.md.
 if [ $dry_run = 0 ]; then
   sed -i '' -e \
       "s/^## Minescript v${old_version} docs$/## Minescript v${new_version} docs/" \
       docs/README.md
-
-  sed -i '' -e \
-      "s#^Previous version: \[v.*\](v.*/README.md)#Previous version: [v${old_version}](v${old_version}/README.md)#" docs/README.md
 else
   grep "^## Minescript v${old_version} docs$" docs/README.md
-  grep '^Previous version: \[v.*\](v.*/README.md)' docs/README.md
 fi
 
 for x in {fabric,forge}/gradle.properties; do
