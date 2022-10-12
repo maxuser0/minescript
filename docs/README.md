@@ -369,9 +369,49 @@ Gets the items in the local player's inventory.
 *Returns:*
 
 - If `done_callback` is `None`, returns items in player's inventory as list of
-  items where each item is a dict: `{"item": str, "count": int, "nbt": str}`
+  items where each item is a dict: `{"item": str, "count": int, "slot": int}`,
+  plus `"nbt": str` if an item has NBT data and `"selected": True` for the
+  selected item in the player's hand.
 
 Since: v2.0
+
+
+#### player_inventory_slot_to_hotbar
+*Usage:* `player_inventory_slot_to_hotbar(slot: int, done_callback=None)`
+
+Swaps an inventory item into the hotbar and selects that hotbar slot into the
+player's hand.
+
+*Args:*
+
+- `slot`: inventory slot (9 or higher) to swap into the hotbar
+- `done_callback`: if given, return immediately and call
+  `done_callback(return_value)` asynchronously when return_value is ready
+
+*Returns:*
+
+- If `done_callback` is `None`, returns the hotbar slot (0-8) that the
+  inventory item was swapped into
+
+Since: v2.2
+
+
+#### player_inventory_select_slot
+*Usage:* `player_inventory_select_slot(slot: int, done_callback=None)`
+
+Selects the given slot within the player's hotbar.
+
+*Args:*
+
+- `slot`: hotbar slot (0-8) to select in the player's hand
+- `done_callback`: if given, return immediately and call
+  `done_callback(return_value)` asynchronously when return_value is ready
+
+*Returns:*
+
+- If `done_callback` is `None`, returns the previously selected hotbar slot
+
+Since: v2.2
 
 
 #### player_press_forward

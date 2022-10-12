@@ -160,6 +160,41 @@ def player_inventory(done_callback=None):
     CallAsyncScriptFunction("player_inventory", done_callback)
 
 
+def player_inventory_slot_to_hotbar(slot: int, done_callback=None):
+  """Swaps an inventory item into the hotbar.
+
+  Args:
+    slot: inventory slot (9 or higher) to swap into the hotbar
+    done_callback: if given, return immediately and call done_callback(return_value)
+        asynchronously when return_value is ready
+
+  Returns:
+    If done_callback is None, returns the hotbar slot (0-8) that the inventory
+    item was swapped into
+  """
+  if done_callback is None:
+    return CallScriptFunction("player_inventory_slot_to_hotbar", slot)
+  else:
+    CallAsyncScriptFunction("player_inventory_slot_to_hotbar", (slot,), done_callback)
+
+
+def player_inventory_select_slot(slot: int, done_callback=None):
+  """Selects the given slot within the player's hotbar.
+
+  Args:
+    slot: hotbar slot (0-8) to select in the player's hand
+    done_callback: if given, return immediately and call done_callback(return_value)
+        asynchronously when return_value is ready
+
+  Returns:
+    If done_callback is None, returns the previously selected hotbar slot
+  """
+  if done_callback is None:
+    return CallScriptFunction("player_inventory_select_slot", slot)
+  else:
+    CallAsyncScriptFunction("player_inventory_select_slot", (slot,), done_callback)
+
+
 def player_press_forward(pressed: bool):
   """Starts/stops moving the local player forward, simulating press/release of the 'w' key.
 

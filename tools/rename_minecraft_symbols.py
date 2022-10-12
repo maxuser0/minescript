@@ -62,6 +62,8 @@ forge_to_fabric_member_names = (
   ('entity.getYRot', 'entity.getYaw'),
   ('inventory.getContainerSize', 'inventory.size'),
   ('inventory.getItem', 'inventory.getStack'),
+  ('inventory.pickSlot', 'inventory.swapSlotWithHotbar'),
+  ('inventory.selected', 'inventory.selectedSlot'),
   ('itemStack.getTag', 'itemStack.getNbt'),
   ('level.getChunkSource', 'level.getChunkManager'),
   ('minecraft.gameDirectory', 'minecraft.runDirectory'),

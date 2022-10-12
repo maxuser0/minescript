@@ -2160,20 +2160,30 @@ public class Minescript {
     }
   }
 
-  private static String itemStackToJsonString(ItemStack itemStack) {
+  private static String itemStackToJsonString(
+      ItemStack itemStack, OptionalInt slot, boolean markSelected) {
     if (itemStack.getCount() == 0) {
       return "null";
     } else {
       var nbt = itemStack.getNbt();
-      return String.format(
-          "{\"item\": \"%s\", \"count\": %d, \"nbt\": %s}",
-          itemStack.getItem(),
-          itemStack.getCount(),
-          nbt == null
-              ? "null"
-              : '"'
-                  + nbt.toString().replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
-                  + '"');
+      var out = new StringBuilder("{");
+      out.append(
+          String.format(
+              "\"item\": \"%s\", \"count\": %d", itemStack.getItem(), itemStack.getCount()));
+      if (nbt != null) {
+        out.append(
+            String.format(
+                ", \"nbt\": \"%s\"",
+                nbt.toString().replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")));
+      }
+      if (slot.isPresent()) {
+        out.append(String.format(", \"slot\": %d", slot.getAsInt()));
+      }
+      if (markSelected) {
+        out.append(", \"selected\":true");
+      }
+      out.append("}");
+      return out.toString();
     }
   }
 
@@ -2259,6 +2269,32 @@ public class Minescript {
           argsString);
       return Optional.of("false");
     }
+  }
+
+  /** Returns int if object is a Number representing an int without truncation or rounding. */
+  private static OptionalInt getStrictIntValue(Object object) {
+    if (!(object instanceof Number)) {
+      return OptionalInt.empty();
+    }
+    Number number = (Number) object;
+    if (number instanceof Integer) {
+      return OptionalInt.of(number.intValue());
+    }
+    if (number instanceof Long) {
+      long lng = number.longValue();
+      if (lng >= Integer.MIN_VALUE && lng <= Integer.MAX_VALUE) {
+        return OptionalInt.of(number.intValue());
+      } else {
+        return OptionalInt.empty();
+      }
+    }
+    if (number instanceof Double) {
+      double dbl = number.doubleValue();
+      if (!Double.isInfinite(dbl) && dbl == Math.floor(dbl)) {
+        return OptionalInt.of(number.intValue());
+      }
+    }
+    return OptionalInt.empty();
   }
 
   /** Returns a JSON response string if a script function is called. */
@@ -2467,7 +2503,7 @@ public class Minescript {
             if (result.length() > 1) {
               result.append(",");
             }
-            result.append(itemStackToJsonString(itemStack));
+            result.append(itemStackToJsonString(itemStack, OptionalInt.empty(), false));
           }
           result.append("]");
           return Optional.of(result.toString());
@@ -2480,13 +2516,14 @@ public class Minescript {
         if (args.isEmpty()) {
           var inventory = player.getInventory();
           var result = new StringBuilder("[");
+          int selectedSlot = inventory.selectedSlot;
           for (int i = 0; i < inventory.size(); i++) {
             var itemStack = inventory.getStack(i);
             if (itemStack.getCount() > 0) {
               if (result.length() > 1) {
                 result.append(",");
               }
-              result.append(itemStackToJsonString(itemStack));
+              result.append(itemStackToJsonString(itemStack, OptionalInt.of(i), i == selectedSlot));
             }
           }
           result.append("]");
@@ -2494,6 +2531,37 @@ public class Minescript {
         } else {
           logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
           return Optional.of("null");
+        }
+
+      case "player_inventory_slot_to_hotbar":
+        {
+          OptionalInt value =
+              (args.size() == 1) ? getStrictIntValue(args.get(0)) : OptionalInt.empty();
+          if (value.isPresent()) {
+            int slot = value.getAsInt();
+            var inventory = player.getInventory();
+            inventory.swapSlotWithHotbar(slot);
+            return Optional.of(Integer.toString(inventory.selectedSlot));
+          } else {
+            logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
+            return Optional.of("null");
+          }
+        }
+
+      case "player_inventory_select_slot":
+        {
+          OptionalInt value =
+              (args.size() == 1) ? getStrictIntValue(args.get(0)) : OptionalInt.empty();
+          if (value.isPresent()) {
+            int slot = value.getAsInt();
+            var inventory = player.getInventory();
+            var previouslySelectedSlot = inventory.selectedSlot;
+            inventory.selectedSlot = slot;
+            return Optional.of(Integer.toString(previouslySelectedSlot));
+          } else {
+            logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
+            return Optional.of("null");
+          }
         }
 
       case "player_press_forward":
