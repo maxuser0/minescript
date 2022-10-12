@@ -373,6 +373,11 @@ Gets the items in the local player's inventory.
   plus `"nbt": str` if an item has NBT data and `"selected": True` for the
   selected item in the player's hand.
 
+Update in v2.2: introduced `"slot"` and `"selected"` entries in the returned
+dict, and `"nbt"` is populated only when NBT data is present. (In prior
+versions, `"nbt"` was always populated, with a value of `null` when NBT data
+was absent.)
+
 Since: v2.0
 
 
