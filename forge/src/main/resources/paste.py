@@ -90,18 +90,28 @@ def main(args):
             "pasting blocks...")
       continue
 
-    fields = line.split(" ", 4)
-    if fields[0] != "/setblock":
-      echo("Error: paste works only with setblock commands, but got the following instead:\n")
+    fields = line.split(" ")
+    if fields[0] == "/setblock":
+      # Apply coordinate offsets:
+      fields[1] = str(int(fields[1]) + x)
+      fields[2] = str(int(fields[2]) + y)
+      fields[3] = str(int(fields[3]) + z)
+      minescript.execute(" ".join(fields))
+    elif fields[0] == "/fill":
+      # Apply coordinate offsets:
+      fields[1] = str(int(fields[1]) + x)
+      fields[2] = str(int(fields[2]) + y)
+      fields[3] = str(int(fields[3]) + z)
+      fields[4] = str(int(fields[4]) + x)
+      fields[5] = str(int(fields[5]) + y)
+      fields[6] = str(int(fields[6]) + z)
+      minescript.execute(" ".join(fields))
+    else:
+      echo(
+          "Error: paste works only with setblock and fill commands, "
+          "but got the following instead:\n")
       echo(line)
       return
-
-    # Apply coordinate offsets:
-    fields[1] = str(int(fields[1]) + x)
-    fields[2] = str(int(fields[2]) + y)
-    fields[3] = str(int(fields[3]) + z)
-
-    minescript.exec(" ".join(fields))
 
 if __name__ == "__main__":
   main(sys.argv[1:])
