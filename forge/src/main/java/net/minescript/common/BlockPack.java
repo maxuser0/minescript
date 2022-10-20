@@ -7,8 +7,8 @@ import java.util.TreeMap;
 
 /**
  * {@code BlockPack} represents blocks stored as rectangular volumes of equivalent blocks.
- * <p>
- * {@code BlockPack} stores blocks for efficient translation into /fill and /setblock commands.
+ *
+ * <p>{@code BlockPack} stores blocks for efficient translation into /fill and /setblock commands.
  */
 public class BlockPack {
   private final int minX;

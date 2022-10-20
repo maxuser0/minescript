@@ -9,8 +9,8 @@ import java.util.TreeMap;
 
 /**
  * {@code BlockPacker} manages blocks and packs them into a {@code BlockPack}.
- * <p>
- * While {@code BlockPacker} manages a dynamic set of blocks, {@code BlockPack} is immutable.
+ *
+ * <p>While {@code BlockPacker} manages a dynamic set of blocks, {@code BlockPack} is immutable.
  */
 public class BlockPacker {
   private static final int X_BUILD_MIN = Integer.MIN_VALUE;
