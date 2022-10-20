@@ -339,7 +339,7 @@ public class BlockPacker {
             if (maxAreaX != -1 && maxAreaZ != -1) {
               for (int x2 = x; x2 < maxAreaX + 1; ++x2) {
                 for (int z2 = z; z2 < maxAreaZ + 1; ++z2) {
-                  int yRun = getBlockPlusYRun(coordToIndex(x2, y, z));
+                  int yRun = getBlockPlusYRun(coordToIndex(x2, y, z2));
                   if (yRun < minYRun) {
                     minYRun = yRun;
                   }
