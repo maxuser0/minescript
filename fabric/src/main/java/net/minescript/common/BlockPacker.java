@@ -35,7 +35,7 @@ public class BlockPacker {
     this.zTileSize = zTileSize;
   }
 
-  public void addBlock(int x, int y, int z, String blockType) {
+  public void setBlock(int x, int y, int z, String blockType) {
     long key = getTileKey(x, y, z);
     Tile tile =
         tiles.computeIfAbsent(
@@ -59,7 +59,7 @@ public class BlockPacker {
 
               return new Tile(xOffset, yOffset, zOffset, xTileSize, yTileSize, zTileSize);
             });
-    tile.addBlock(x, y, z, blockType);
+    tile.setBlock(x, y, z, blockType);
     if (x < minX) {
       minX = x;
     }
@@ -102,10 +102,12 @@ public class BlockPacker {
     }
   }
 
-  // TODO(maxuser): Allow re-packing of blocks from the same BlockPacker after adding more blocks.
   public BlockPack pack() {
-    // TODO(mxuser): Consider transforming tile.types into a symbol table attached to entire
-    // BlockPack rather than each BlockPack.Tile.
+    // TODO(mxuser): Transform tile.types into a symbol table attached to BlockPack rather than each
+    // BlockPack.Tile, and change BlockPack.Tile to index block type into a Tile-level index table
+    // that indexes into the BlockPack-level symbol table. The double indirection allows the
+    // Tile-level indices to stay within the 16-bit range while keeping all block type strings in
+    // the BlockPack.
     var packedTiles = new TreeMap<Long, BlockPack.Tile>();
     for (var entry : tiles.entrySet()) {
       long key = entry.getKey();
@@ -140,13 +142,15 @@ public class BlockPacker {
     private boolean prefillVolume = false; // TODO(maxuser): allow this to be enabled
     private static final int STRUCTURE_VOID_BLOCK = 0;
 
+    // Block type value from typeMap (15 bits = 32768 unique values)
+    private final short[] blocks;
+
     // Each value in blocks stores data in these bits:
-    // - bits 0-14: block type value from typeMap (15 bits = 32768 unique values)
-    // - bits 15-19: consecutive blocks of same type in +x direction
-    // - bits 20-24: consecutive blocks of same type in +y direction
-    // - bits 25-29: consecutive blocks of same type in +z direction
-    // - bit 30: 1 if this block has been filled, 0 otherwise
-    private final int[] blocks;
+    // - bits 0-4: consecutive blocks of same type in +x direction
+    // - bits 5-9: consecutive blocks of same type in +y direction
+    // - bits 10-14: consecutive blocks of same type in +z direction
+    // - bit 15: 1 if this block has been filled during packing, 0 otherwise
+    private short[] blockMetrics;
 
     public Tile(int xOffset, int yOffset, int zOffset) {
       this(xOffset, yOffset, zOffset, 16, 16, 16);
@@ -174,7 +178,8 @@ public class BlockPacker {
       this.xzArea = xSize * zSize;
       this.xyzVolume = xzArea * ySize;
 
-      blocks = new int[xyzVolume];
+      blocks = new short[xyzVolume];
+      blockMetrics = null; // initialized in computeRunLengths() with same size as `blocks` array
       typeId("structure_void");
     }
 
@@ -208,7 +213,7 @@ public class BlockPacker {
       }
     }
 
-    public void addBlock(int x, int y, int z, String blockType) {
+    public void setBlock(int x, int y, int z, String blockType) {
       if (x < xOffset
           || x >= xOffset + xSize
           || y < yOffset
@@ -235,8 +240,9 @@ public class BlockPacker {
         maxFrequencyType = type;
         maxFrequency = frequency;
       }
-      ++numBlocks;
-      setBlockType(x - xOffset, y - yOffset, z - zOffset, type);
+      if (setBlockType(x - xOffset, y - yOffset, z - zOffset, type)) {
+        ++numBlocks;
+      }
     }
 
     public void computeRunLengths() {
@@ -250,6 +256,8 @@ public class BlockPacker {
       // at
       //        least 2 blocks, record a "fill" command; otherwise, record "setblock" commands.
       //      - Mark the blocks in the corresponding volume as "filled".
+
+      blockMetrics = new short[blocks.length];
 
       int numVoidBlocks = xyzVolume - numBlocks;
       if (numVoidBlocks > maxFrequency) {
@@ -297,7 +305,7 @@ public class BlockPacker {
         for (int x = 0; x < xSize; ++x) {
           for (int z = 0; z < zSize; ++z) {
             int index = coordToIndex(x, y, z);
-            if (isBlockFilled(index)) {
+            if (isBlockPacked(index)) {
               continue;
             }
 
@@ -366,7 +374,7 @@ public class BlockPacker {
               for (int x2 = x; x2 < maxAreaX + 1; ++x2) {
                 for (int z2 = z; z2 < maxAreaZ + 1; ++z2) {
                   for (int y2 = y; y2 < y + minYRun + 1; ++y2) {
-                    setBlockFilled(x2, y2, z2);
+                    setBlockPacked(x2, y2, z2);
                   }
                 }
               }
@@ -376,19 +384,16 @@ public class BlockPacker {
       }
     }
 
-    private void setBlockType(int x, int y, int z, int type) {
+    private boolean setBlockType(int x, int y, int z, int type) {
       int index = coordToIndex(x, y, z);
-      if (blocks[index] != 0) {
-        updateTypeList();
-        throw new IllegalStateException(
-            String.format("Block at %s already set: %s", indexToCoordString(index), types[type]));
-      }
-      blocks[index] = type;
+      boolean newBlock = (blocks[index] == 0);
+      blocks[index] = (short) type;
+      return newBlock;
     }
 
-    private void setBlockFilled(int x, int y, int z) {
+    private void setBlockPacked(int x, int y, int z) {
       int index = coordToIndex(x, y, z);
-      blocks[index] |= 0x40000000; // 1 << 30
+      blockMetrics[index] |= (1 << 15);
     }
 
     private void setBlockRuns(int index, int plusXRun, int plusYRun, int plusZRun) {
@@ -404,33 +409,33 @@ public class BlockPacker {
         throw new IllegalArgumentException(
             String.format("+z run length not in range [0, %d): %d", zSize, plusZRun));
       }
-      int value = blocks[index];
 
-      // 0xc0007fff in binary: 11000000000000000111111111111111
-      //                         ^^^^^^^^^^^^^^^
-      //                       15 bits of x,y,z runs (5 bits each)
-      value = (value & 0xc0007fff) | (plusXRun << 15) | (plusYRun << 20) | (plusZRun << 25);
-      blocks[index] = value;
+      // TODO(maxuser): Is reading blockMetrics[index] for the packed bit necessary? Or is that
+      // always zero at this point? If the latter, then don't need to read blockMetrics, only need
+      // to overwrite it.
+      int value = blockMetrics[index];
+      value = (value & (1 << 15)) | plusXRun | (plusYRun << 5) | (plusZRun << 10);
+      blockMetrics[index] = (short) value;
     }
 
     private int getBlockType(int index) {
-      return blocks[index] & 0x7fff;
+      return blocks[index] & ((1 << 16) - 1);
     }
 
     private int getBlockPlusXRun(int index) {
-      return (blocks[index] & 0xf8000) >> 15;
+      return (blockMetrics[index] & 0x1f);
     }
 
     private int getBlockPlusYRun(int index) {
-      return (blocks[index] & 0x1f00000) >> 20;
+      return (blockMetrics[index] & (0x1f << 5)) >> 5;
     }
 
     private int getBlockPlusZRun(int index) {
-      return (blocks[index] & 0x3e000000) >> 25;
+      return (blockMetrics[index] & (0x1f << 10)) >> 10;
     }
 
-    private boolean isBlockFilled(int index) {
-      return (blocks[index] & 0x40000000) != 0;
+    private boolean isBlockPacked(int index) {
+      return (blockMetrics[index] & (1 << 15)) != 0;
     }
 
     private static String hex(int value) {
