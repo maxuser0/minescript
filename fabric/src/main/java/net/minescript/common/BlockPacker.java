@@ -103,9 +103,9 @@ public class BlockPacker {
   }
 
   public BlockPack pack() {
-    // TODO(mxuser): Transform tile.types into a symbol table attached to BlockPack rather than each
-    // BlockPack.Tile, and change BlockPack.Tile to index block type into a Tile-level index table
-    // that indexes into the BlockPack-level symbol table. The double indirection allows the
+    // TODO(maxuser): Transform tile.types into a symbol table attached to BlockPack rather than
+    // each BlockPack.Tile, and change BlockPack.Tile to index block type into a Tile-level index
+    // table that indexes into the BlockPack-level symbol table. The double indirection allows the
     // Tile-level indices to stay within the 16-bit range while keeping all block type strings in
     // the BlockPack.
     var packedTiles = new TreeMap<Long, BlockPack.Tile>();
@@ -130,15 +130,11 @@ public class BlockPacker {
     private final int ySize;
     private final int zSize;
     private final int xzArea;
-    private final int xyzVolume;
     private Map<String, Integer> typeMap = new HashMap<>();
     private Map<Integer, Integer> typeFrequencies = new HashMap<>();
     private String[] types;
-    private int numBlocks = 0;
     private int nextTypeId = 0;
-    private int maxRunProduct = 0;
-    private int maxFrequency = 0;
-    private int maxFrequencyType = -1;
+    private int maxFrequencyType = -1; // written in computeRunLengths, read in computeBlockCommands
     private boolean prefillVolume = false; // TODO(maxuser): allow this to be enabled
     private static final int STRUCTURE_VOID_BLOCK = 0;
 
@@ -176,11 +172,16 @@ public class BlockPacker {
       this.zSize = zSize;
 
       this.xzArea = xSize * zSize;
-      this.xyzVolume = xzArea * ySize;
+      final int xyzVolume = xzArea * ySize;
 
       blocks = new short[xyzVolume];
       blockMetrics = null; // initialized in computeRunLengths() with same size as `blocks` array
-      typeId("structure_void");
+      var voidId = typeId("structure_void");
+      if (voidId != STRUCTURE_VOID_BLOCK) {
+        throw new IllegalStateException(
+            String.format("Expected type ID of structure_void to be 0 but got %d", voidId));
+      }
+      typeFrequencies.put(STRUCTURE_VOID_BLOCK, xyzVolume);
     }
 
     public int coordToIndex(int x, int y, int z) {
@@ -233,15 +234,16 @@ public class BlockPacker {
                 zOffset,
                 zOffset + zSize));
       }
-      int type = typeId(blockType);
-      int frequency = typeFrequencies.computeIfAbsent(type, k -> 0) + 1;
-      typeFrequencies.put(type, frequency);
-      if (type != STRUCTURE_VOID_BLOCK && frequency > maxFrequency) {
-        maxFrequencyType = type;
-        maxFrequency = frequency;
-      }
-      if (setBlockType(x - xOffset, y - yOffset, z - zOffset, type)) {
-        ++numBlocks;
+      final int type = typeId(blockType);
+      var previousBlockType = setBlockType(x - xOffset, y - yOffset, z - zOffset, type);
+      if (type != previousBlockType) {
+        // Decrement frequency of previous block type and increment frequency of new block type.
+        final var previousBlockTypeFrequency = typeFrequencies.get(previousBlockType) - 1;
+        typeFrequencies.put(previousBlockType, previousBlockTypeFrequency);
+        typeFrequencies.put(type, typeFrequencies.computeIfAbsent(type, k -> 0) + 1);
+
+        // TODO(maxuser): If previousBlockTypeFrequency drops to zero, add previousBlockType to a
+        // set of available block types to be reused before hitting nextTypeId.
       }
     }
 
@@ -259,10 +261,14 @@ public class BlockPacker {
 
       blockMetrics = new short[blocks.length];
 
-      int numVoidBlocks = xyzVolume - numBlocks;
-      if (numVoidBlocks > maxFrequency) {
-        maxFrequency = numVoidBlocks;
-        maxFrequencyType = STRUCTURE_VOID_BLOCK;
+      int maxFrequency = 0;
+      for (var entry : typeFrequencies.entrySet()) {
+        var type = entry.getKey();
+        var frequency = entry.getValue();
+        if (frequency > maxFrequency) {
+          maxFrequencyType = type;
+          maxFrequency = frequency;
+        }
       }
 
       // Compute the runs of consecutive blocks of the same type in each dimension: x, y, and z.
@@ -384,11 +390,19 @@ public class BlockPacker {
       }
     }
 
-    private boolean setBlockType(int x, int y, int z, int type) {
+    // Returns the block type previously at (x, y, z), or STRUCTURE_VOID_BLOCK if not set before.
+    private int setBlockType(int x, int y, int z, int type) {
       int index = coordToIndex(x, y, z);
-      boolean newBlock = (blocks[index] == 0);
+      var previousBlockType = blocks[index];
+      if (type < 0 || type > Short.MAX_VALUE) {
+        throw new IllegalStateException(
+            String.format(
+                "Setting block at (%d, %d, %d) with block type %d which is outside the expected"
+                    + " range 0..32767",
+                x, y, z, type));
+      }
       blocks[index] = (short) type;
-      return newBlock;
+      return previousBlockType;
     }
 
     private void setBlockPacked(int x, int y, int z) {
@@ -447,10 +461,7 @@ public class BlockPacker {
       var buffer = new StringBuilder();
       buffer.append("Type map:\n");
       for (int i = 0; i < types.length; ++i) {
-        buffer.append(
-            String.format(
-                "  %d -> [%dx] %s\n",
-                i, i == 0 ? xyzVolume - numBlocks : typeFrequencies.get(i), types[i]));
+        buffer.append(String.format("  %d -> [%dx] %s\n", i, typeFrequencies.get(i), types[i]));
       }
       buffer.append('\n');
       for (int y = ySize - 1; y >= 0; --y) {
