@@ -3,6 +3,8 @@
 
 package net.minescript.common;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
@@ -30,6 +32,7 @@ public class BlockPacker {
   private int minZ = Z_BUILD_MAX;
 
   public BlockPacker(int xTileSize, int yTileSize, int zTileSize) {
+    // TODO(maxuser): Validate that volume fits within 15 bits.
     this.xTileSize = xTileSize;
     this.yTileSize = yTileSize;
     this.zTileSize = zTileSize;
@@ -122,6 +125,22 @@ public class BlockPacker {
     return new BlockPack(minX, minY, minZ, packedTiles);
   }
 
+  static class IdManager {
+    private Deque<Integer> freelist = new ArrayDeque<>();
+    private int nextId = 0;
+
+    public int allocateId() {
+      if (freelist.isEmpty()) {
+        return nextId++;
+      }
+      return freelist.removeFirst();
+    }
+
+    public void freeId(int id) {
+      freelist.addLast(id);
+    }
+  }
+
   public static class Tile {
     private final int xOffset;
     private final int yOffset;
@@ -133,7 +152,7 @@ public class BlockPacker {
     private Map<String, Integer> typeMap = new HashMap<>();
     private Map<Integer, Integer> typeFrequencies = new HashMap<>();
     private String[] types;
-    private int nextTypeId = 0;
+    private final IdManager idManager = new IdManager();
     private int maxFrequencyType = -1; // written in computeRunLengths, read in computeBlockCommands
     private boolean prefillVolume = false; // TODO(maxuser): allow this to be enabled
     private static final int STRUCTURE_VOID_BLOCK = 0;
@@ -201,7 +220,7 @@ public class BlockPacker {
     }
 
     private int typeId(String type) {
-      return typeMap.computeIfAbsent(type, k -> nextTypeId++);
+      return typeMap.computeIfAbsent(type, k -> idManager.allocateId());
     }
 
     private void updateTypeList() {
@@ -209,8 +228,8 @@ public class BlockPacker {
         return;
       }
       types = new String[typeMap.size()];
-      for (var keyValue : typeMap.entrySet()) {
-        types[keyValue.getValue()] = keyValue.getKey();
+      for (var entry : typeMap.entrySet()) {
+        types[entry.getValue()] = entry.getKey();
       }
     }
 
@@ -239,11 +258,13 @@ public class BlockPacker {
       if (type != previousBlockType) {
         // Decrement frequency of previous block type and increment frequency of new block type.
         final var previousBlockTypeFrequency = typeFrequencies.get(previousBlockType) - 1;
-        typeFrequencies.put(previousBlockType, previousBlockTypeFrequency);
+        if (previousBlockTypeFrequency == 0) {
+          typeFrequencies.remove(previousBlockType);
+          idManager.freeId(previousBlockType);
+        } else {
+          typeFrequencies.put(previousBlockType, previousBlockTypeFrequency);
+        }
         typeFrequencies.put(type, typeFrequencies.computeIfAbsent(type, k -> 0) + 1);
-
-        // TODO(maxuser): If previousBlockTypeFrequency drops to zero, add previousBlockType to a
-        // set of available block types to be reused before hitting nextTypeId.
       }
     }
 
@@ -461,7 +482,9 @@ public class BlockPacker {
       var buffer = new StringBuilder();
       buffer.append("Type map:\n");
       for (int i = 0; i < types.length; ++i) {
-        buffer.append(String.format("  %d -> [%dx] %s\n", i, typeFrequencies.get(i), types[i]));
+        if (typeFrequencies.containsKey(i)) {
+          buffer.append(String.format("  %d -> [%dx] %s\n", i, typeFrequencies.get(i), types[i]));
+        }
       }
       buffer.append('\n');
       for (int y = ySize - 1; y >= 0; --y) {
