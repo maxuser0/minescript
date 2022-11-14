@@ -31,11 +31,25 @@ public class BlockPacker {
   private int minY = Y_BUILD_MAX;
   private int minZ = Z_BUILD_MAX;
 
+  // Allocator for IDs of block types used across all tiles in this BlockPacker, serving as keys
+  // into typeMap.
+  private final IdAllocator idAllocator = new IdAllocator();
+  private Map<String, Integer> typeMap = new HashMap<>();
+  private Map<Integer, String> symbolMap = new HashMap<>();
+
   public BlockPacker(int xTileSize, int yTileSize, int zTileSize) {
     // TODO(maxuser): Validate that volume fits within 15 bits.
     this.xTileSize = xTileSize;
     this.yTileSize = yTileSize;
     this.zTileSize = zTileSize;
+
+    int voidId = idAllocator.allocateId();
+    if (voidId != 0) {
+      throw new IllegalStateException(
+          String.format("Expected type ID of structure_void to be 0 but got %d", voidId));
+    }
+    typeMap.put("structure_void", voidId);
+    symbolMap.put(voidId, "structure_void");
   }
 
   public void setBlock(int x, int y, int z, String blockType) {
@@ -62,7 +76,11 @@ public class BlockPacker {
 
               return new Tile(xOffset, yOffset, zOffset, xTileSize, yTileSize, zTileSize);
             });
-    tile.setBlock(x, y, z, blockType);
+    int blockTypeId = typeMap.computeIfAbsent(blockType, k -> idAllocator.allocateId());
+    if (!symbolMap.containsKey(blockTypeId)) {
+      symbolMap.put(blockTypeId, blockType);
+    }
+    tile.setBlock(x, y, z, blockTypeId);
     if (x < minX) {
       minX = x;
     }
@@ -106,11 +124,6 @@ public class BlockPacker {
   }
 
   public BlockPack pack() {
-    // TODO(maxuser): Transform tile.types into a symbol table attached to BlockPack rather than
-    // each BlockPack.Tile, and change BlockPack.Tile to index block type into a Tile-level index
-    // table that indexes into the BlockPack-level symbol table. The double indirection allows the
-    // Tile-level indices to stay within the 16-bit range while keeping all block type strings in
-    // the BlockPack.
     var packedTiles = new TreeMap<Long, BlockPack.Tile>();
     for (var entry : tiles.entrySet()) {
       long key = entry.getKey();
@@ -122,10 +135,20 @@ public class BlockPacker {
       tile.computeBlockCommands(packedTile);
       packedTiles.put(key, packedTile);
     }
-    return new BlockPack(minX, minY, minZ, packedTiles);
+
+    // TODO(maxuser): Remove entries from symbolMap that are no longer referenced. Entries become
+    // unreferenced when the last block of a particular type is overwritten via
+    // BlockPacker.setBlock(...) with a different type of block.
+
+    // TODO(maxuser): Make a copy of symbolMap so that symbols referenced from a BlockPack don't
+    // have extraneous or missing entries when the BlockPacker that created it has more blocks
+    // added. Also, pass in copied map as a Map<> (rather than passing a Function<>) so that
+    // BlockPack (including its symbol table) can be serialized.
+
+    return new BlockPack(minX, minY, minZ, symbolMap::get, packedTiles);
   }
 
-  static class IdManager {
+  static class IdAllocator {
     private Deque<Integer> freelist = new ArrayDeque<>();
     private int nextId = 0;
 
@@ -149,15 +172,22 @@ public class BlockPacker {
     private final int ySize;
     private final int zSize;
     private final int xzArea;
-    private Map<String, Integer> typeMap = new HashMap<>();
-    private Map<Integer, Integer> typeFrequencies = new HashMap<>();
-    private String[] types;
-    private final IdManager idManager = new IdManager();
+
+    // Maps packer-level block type ID to tile-level block type ID.
+    private Map<Integer, Short> tileTypeMap = new HashMap<>();
+
+    // Maps tile-level block type ID to block type frequency within this tile.
+    private Map<Short, Integer> typeFrequencies = new HashMap<>();
+    private int[] types;
+
+    // Allocator for IDs of block types used in this tile.
+    private final IdAllocator tileIdAllocator = new IdAllocator();
+
     private int maxFrequencyType = -1; // written in computeRunLengths, read in computeBlockCommands
     private boolean prefillVolume = false; // TODO(maxuser): allow this to be enabled
     private static final int STRUCTURE_VOID_BLOCK = 0;
 
-    // Block type value from typeMap (15 bits = 32768 unique values)
+    // Block type value from tileTypeMap (15 bits = 32768 unique values)
     private final short[] blocks;
 
     // Each value in blocks stores data in these bits:
@@ -195,12 +225,12 @@ public class BlockPacker {
 
       blocks = new short[xyzVolume];
       blockMetrics = null; // initialized in computeRunLengths() with same size as `blocks` array
-      var voidId = typeId("structure_void");
-      if (voidId != STRUCTURE_VOID_BLOCK) {
+      var voidId = tileTypeId(STRUCTURE_VOID_BLOCK);
+      if (voidId != 0) {
         throw new IllegalStateException(
             String.format("Expected type ID of structure_void to be 0 but got %d", voidId));
       }
-      typeFrequencies.put(STRUCTURE_VOID_BLOCK, xyzVolume);
+      typeFrequencies.put(voidId, xyzVolume);
     }
 
     public int coordToIndex(int x, int y, int z) {
@@ -219,21 +249,33 @@ public class BlockPacker {
       return String.format("(%d, %d, %d)", coord[0], coord[1], coord[2]);
     }
 
-    private int typeId(String type) {
-      return typeMap.computeIfAbsent(type, k -> idManager.allocateId());
+    private short tileTypeId(int packerTypeId) {
+      return tileTypeMap.computeIfAbsent(
+          packerTypeId,
+          k -> {
+            int id = tileIdAllocator.allocateId();
+            if (id < 0 || id > Short.MAX_VALUE) {
+              throw new IllegalStateException(
+                  String.format(
+                      "BlockPacker.Tile allocated block type ID outside of expected range 0..%d:"
+                          + " %d",
+                      Short.MAX_VALUE, id));
+            }
+            return (short) id;
+          });
     }
 
     private void updateTypeList() {
-      if (types != null && types.length == typeMap.size()) {
+      if (types != null && types.length == tileTypeMap.size()) {
         return;
       }
-      types = new String[typeMap.size()];
-      for (var entry : typeMap.entrySet()) {
+      types = new int[tileTypeMap.size()];
+      for (var entry : tileTypeMap.entrySet()) {
         types[entry.getValue()] = entry.getKey();
       }
     }
 
-    public void setBlock(int x, int y, int z, String blockType) {
+    public void setBlock(int x, int y, int z, int blockTypeId) {
       if (x < xOffset
           || x >= xOffset + xSize
           || y < yOffset
@@ -253,14 +295,14 @@ public class BlockPacker {
                 zOffset,
                 zOffset + zSize));
       }
-      final int type = typeId(blockType);
-      var previousBlockType = setBlockType(x - xOffset, y - yOffset, z - zOffset, type);
+      final short type = tileTypeId(blockTypeId);
+      final short previousBlockType = setBlockType(x - xOffset, y - yOffset, z - zOffset, type);
       if (type != previousBlockType) {
         // Decrement frequency of previous block type and increment frequency of new block type.
         final var previousBlockTypeFrequency = typeFrequencies.get(previousBlockType) - 1;
         if (previousBlockTypeFrequency == 0) {
           typeFrequencies.remove(previousBlockType);
-          idManager.freeId(previousBlockType);
+          tileIdAllocator.freeId(previousBlockType);
         } else {
           typeFrequencies.put(previousBlockType, previousBlockTypeFrequency);
         }
@@ -297,7 +339,7 @@ public class BlockPacker {
         for (int z = zSize - 1; z >= 0; --z) {
           for (int x = xSize - 1; x >= 0; --x) {
             int index = coordToIndex(x, y, z);
-            int type = getBlockType(index);
+            short type = getBlockType(index);
             if (prefillVolume && type == maxFrequencyType) {
               continue;
             }
@@ -336,7 +378,7 @@ public class BlockPacker {
               continue;
             }
 
-            final int blockType = getBlockType(index);
+            final short blockType = getBlockType(index);
             if (blockType == STRUCTURE_VOID_BLOCK) {
               continue;
             }
@@ -411,18 +453,10 @@ public class BlockPacker {
       }
     }
 
-    // Returns the block type previously at (x, y, z), or STRUCTURE_VOID_BLOCK if not set before.
-    private int setBlockType(int x, int y, int z, int type) {
+    private short setBlockType(int x, int y, int z, short type) {
       int index = coordToIndex(x, y, z);
       var previousBlockType = blocks[index];
-      if (type < 0 || type > Short.MAX_VALUE) {
-        throw new IllegalStateException(
-            String.format(
-                "Setting block at (%d, %d, %d) with block type %d which is outside the expected"
-                    + " range 0..32767",
-                x, y, z, type));
-      }
-      blocks[index] = (short) type;
+      blocks[index] = type;
       return previousBlockType;
     }
 
@@ -453,8 +487,8 @@ public class BlockPacker {
       blockMetrics[index] = (short) value;
     }
 
-    private int getBlockType(int index) {
-      return blocks[index] & ((1 << 16) - 1);
+    private short getBlockType(int index) {
+      return blocks[index];
     }
 
     private int getBlockPlusXRun(int index) {

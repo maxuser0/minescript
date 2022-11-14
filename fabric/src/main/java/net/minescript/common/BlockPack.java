@@ -4,6 +4,7 @@
 package net.minescript.common;
 
 import java.util.TreeMap;
+import java.util.function.Function;
 
 /**
  * {@code BlockPack} represents blocks stored as rectangular volumes of equivalent blocks.
@@ -15,6 +16,9 @@ public class BlockPack {
   private final int minY;
   private final int minZ;
 
+  // Symbol table for mapping BlockPack-level block ID to symbolic block-type string.
+  private final Function<Integer, String> symbolTable;
+
   // TODO(maxuser): Currently using a TreeMap to preserve ordering, but the current ordering is
   // determined by the code that instantiates a BlockPack. For instance, the keys defined by
   // BlockPacker.getTileKey() intentionally encode the tile's y offset as the high bits of the key.
@@ -24,10 +28,16 @@ public class BlockPack {
   // y-first key order within BlockPack itself.
   private final TreeMap<Long, Tile> tiles;
 
-  public BlockPack(int minX, int minY, int minZ, TreeMap<Long, Tile> tiles) {
+  public BlockPack(
+      int minX,
+      int minY,
+      int minZ,
+      Function<Integer, String> symbolTable,
+      TreeMap<Long, Tile> tiles) {
     this.minX = minX;
     this.minY = minY;
     this.minZ = minZ;
+    this.symbolTable = symbolTable;
     this.tiles = tiles;
   }
 
@@ -35,7 +45,7 @@ public class BlockPack {
   // (see #Layering below).
   public void printBlockCommands(boolean offsetToOrigin, boolean setblockOnly) {
     for (Tile tile : tiles.values()) {
-      tile.printBlockCommands(offsetToOrigin, setblockOnly, minX, minY, minZ);
+      tile.printBlockCommands(offsetToOrigin, setblockOnly, minX, minY, minZ, symbolTable);
     }
   }
 
@@ -92,8 +102,7 @@ public class BlockPack {
     private final int yOffset;
     private final int zOffset;
 
-    // TODO(maxuser): Consider using ImmutableList<String> for immutability.
-    private final String[] blockTypes;
+    private final int[] blockTypes;
 
     // Every 4 ints represents: x, y, z, block_type
     // TODO(maxuser): Don't need 4 32-bit ints since each value requires only 5 bits.
@@ -105,7 +114,8 @@ public class BlockPack {
     // TODO(maxuser): Consider subclassing IntList with FillList.
     public IntList fills = new IntList();
 
-    public Tile(String[] blockTypes, int xOffset, int yOffset, int zOffset) {
+    // blockTypes contains indices into BlockPack symbol table.
+    public Tile(int[] blockTypes, int xOffset, int yOffset, int zOffset) {
       this.blockTypes = blockTypes;
       this.xOffset = xOffset;
       this.yOffset = yOffset;
@@ -138,7 +148,12 @@ public class BlockPack {
     }
 
     public void printBlockCommands(
-        boolean offsetToOrigin, boolean setblockOnly, int minX, int minY, int minZ) {
+        boolean offsetToOrigin,
+        boolean setblockOnly,
+        int minX,
+        int minY,
+        int minZ,
+        Function<Integer, String> symbolTable) {
       for (int i = 0; i < fills.size(); i += 7) {
         int x1 = xOffset + fills.get(i);
         int y1 = yOffset + fills.get(i + 1);
@@ -154,17 +169,18 @@ public class BlockPack {
           y2 -= minY;
           z2 -= minZ;
         }
-        String blockType = blockTypes[fills.get(i + 6)];
+        int blockType = blockTypes[fills.get(i + 6)];
+        String blockSymbol = symbolTable.apply(blockType);
         if (setblockOnly) {
           for (int x = x1; x <= x2; ++x) {
             for (int y = y1; y <= y2; ++y) {
               for (int z = z1; z <= z2; ++z) {
-                System.out.printf("/setblock %d %d %d %s\n", x, y, z, blockType);
+                System.out.printf("/setblock %d %d %d %s\n", x, y, z, blockSymbol);
               }
             }
           }
         } else {
-          System.out.printf("/fill %d %d %d %d %d %d %s\n", x1, y1, z1, x2, y2, z2, blockType);
+          System.out.printf("/fill %d %d %d %d %d %d %s\n", x1, y1, z1, x2, y2, z2, blockSymbol);
         }
       }
       for (int i = 0; i < setblocks.size(); i += 4) {
@@ -176,8 +192,9 @@ public class BlockPack {
           y -= minY;
           z -= minZ;
         }
-        String blockType = blockTypes[setblocks.get(i + 3)];
-        System.out.printf("/setblock %d %d %d %s\n", x, y, z, blockType);
+        int blockType = blockTypes[setblocks.get(i + 3)];
+        String blockSymbol = symbolTable.apply(blockType);
+        System.out.printf("/setblock %d %d %d %s\n", x, y, z, blockSymbol);
       }
     }
   }
