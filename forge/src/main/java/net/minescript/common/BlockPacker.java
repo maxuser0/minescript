@@ -140,12 +140,10 @@ public class BlockPacker {
     // unreferenced when the last block of a particular type is overwritten via
     // BlockPacker.setBlock(...) with a different type of block.
 
-    // TODO(maxuser): Make a copy of symbolMap so that symbols referenced from a BlockPack don't
-    // have extraneous or missing entries when the BlockPacker that created it has more blocks
-    // added. Also, pass in copied map as a Map<> (rather than passing a Function<>) so that
-    // BlockPack (including its symbol table) can be serialized.
-
-    return new BlockPack(minX, minY, minZ, symbolMap::get, packedTiles);
+    // Mappings in symbolMap are snapshotted by the BlockPack constructor so that symbols referenced
+    // in a BlockPack are stable in the face of the BlockPacker that created it adding or removing
+    // entries.
+    return new BlockPack(minX, minY, minZ, symbolMap, packedTiles);
   }
 
   static class IdAllocator {
