@@ -45,7 +45,10 @@ public class BlockPack {
   // (see #Layering below).
   public void printBlockCommands(boolean offsetToOrigin, boolean setblockOnly) {
     for (Tile tile : tiles.values()) {
-      tile.printBlockCommands(offsetToOrigin, setblockOnly, minX, minY, minZ, symbolTable);
+      // TODO(maxuser): Use tile.printBlockCommands(...) for the initial "stable blocks" layer, and
+      // tile.printBlockCommandsInAscendingYOrder(...) for the subsequent "unstable blocks" layer.
+      tile.printBlockCommandsInAscendingYOrder(
+          offsetToOrigin, setblockOnly, minX, minY, minZ, symbolTable);
     }
   }
 
@@ -195,6 +198,75 @@ public class BlockPack {
         int blockType = blockTypes[setblocks.get(i + 3)];
         String blockSymbol = symbolTable.apply(blockType);
         System.out.printf("/setblock %d %d %d %s\n", x, y, z, blockSymbol);
+      }
+    }
+
+    public void printBlockCommandsInAscendingYOrder(
+        boolean offsetToOrigin,
+        boolean setblockOnly,
+        int minX,
+        int minY,
+        int minZ,
+        Function<Integer, String> symbolTable) {
+      final int setblocksSize = setblocks.size();
+      final int fillsSize = fills.size();
+
+      int setblocksPos = 0;
+      int fillsPos = 0;
+      while (setblocksPos < setblocksSize || fillsPos < fillsSize) {
+        int fillsY = fillsPos < fillsSize ? fills.get(fillsPos + 1) : Integer.MAX_VALUE;
+        int setblocksY =
+            setblocksPos < setblocksSize ? setblocks.get(setblocksPos + 1) : Integer.MAX_VALUE;
+
+        if (fillsY <= setblocksY) {
+          // fill at fillsPos.
+          int i = fillsPos;
+          int x1 = xOffset + fills.get(i);
+          int y1 = yOffset + fills.get(i + 1);
+          int z1 = zOffset + fills.get(i + 2);
+          int x2 = xOffset + fills.get(i + 3);
+          int y2 = yOffset + fills.get(i + 4);
+          int z2 = zOffset + fills.get(i + 5);
+          if (offsetToOrigin) {
+            x1 -= minX;
+            y1 -= minY;
+            z1 -= minZ;
+            x2 -= minX;
+            y2 -= minY;
+            z2 -= minZ;
+          }
+          int blockType = blockTypes[fills.get(i + 6)];
+          String blockSymbol = symbolTable.apply(blockType);
+          if (setblockOnly) {
+            for (int x = x1; x <= x2; ++x) {
+              for (int y = y1; y <= y2; ++y) {
+                for (int z = z1; z <= z2; ++z) {
+                  System.out.printf("/setblock %d %d %d %s\n", x, y, z, blockSymbol);
+                }
+              }
+            }
+          } else {
+            System.out.printf("/fill %d %d %d %d %d %d %s\n", x1, y1, z1, x2, y2, z2, blockSymbol);
+          }
+          fillsPos += 7;
+        }
+
+        if (setblocksY < fillsY) {
+          // setblock at setblocksPos
+          int i = setblocksPos;
+          int x = xOffset + setblocks.get(i);
+          int y = yOffset + setblocks.get(i + 1);
+          int z = zOffset + setblocks.get(i + 2);
+          if (offsetToOrigin) {
+            x -= minX;
+            y -= minY;
+            z -= minZ;
+          }
+          int blockType = blockTypes[setblocks.get(i + 3)];
+          String blockSymbol = symbolTable.apply(blockType);
+          System.out.printf("/setblock %d %d %d %s\n", x, y, z, blockSymbol);
+          setblocksPos += 4;
+        }
       }
     }
   }
