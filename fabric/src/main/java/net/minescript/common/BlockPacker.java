@@ -37,6 +37,8 @@ public class BlockPacker {
   private Map<String, Integer> typeMap = new HashMap<>();
   private Map<Integer, String> symbolMap = new HashMap<>();
 
+  private boolean debug = false;
+
   public BlockPacker(int xTileSize, int yTileSize, int zTileSize) {
     // TODO(maxuser): Validate that volume fits within 15 bits.
     this.xTileSize = xTileSize;
@@ -52,7 +54,24 @@ public class BlockPacker {
     symbolMap.put(voidId, "structure_void");
   }
 
-  public void setBlock(int x, int y, int z, String blockType) {
+  public void enableDebug() {
+    debug = true;
+  }
+
+  public void fill(int x1, int y1, int z1, int x2, int y2, int z2, String blockType) {
+    // TODO(maxuser): Consider the following optimizations:
+    // 1. look up blockType in typeMap only once, not once per block in the fill (definitely)
+    // 2. compute intersections between the fill volume and tile boundaries (maybe)
+    for (int x = x1; x <= x2; x++) {
+      for (int y = y1; y <= y2; y++) {
+        for (int z = z1; z <= z2; z++) {
+          setblock(x, y, z, blockType);
+        }
+      }
+    }
+  }
+
+  public void setblock(int x, int y, int z, String blockType) {
     long key = getTileKey(x, y, z);
     Tile tile =
         tiles.computeIfAbsent(
@@ -109,6 +128,10 @@ public class BlockPacker {
   }
 
   public void printDebugInfo(boolean offsetToOrigin) {
+    for (var entry : symbolMap.entrySet()) {
+      System.out.printf("# symbol: %d -> %s\n", entry.getKey(), entry.getValue());
+    }
+
     for (Tile tile : tiles.values()) {
       int x = tile.xOffset;
       int y = tile.yOffset;
@@ -119,12 +142,16 @@ public class BlockPacker {
         z -= minZ;
       }
       System.out.printf("# tile offset: %d %d %d\n", x, y, z);
-      System.out.print(tile.getDebugInfo());
+      System.out.print(tile.getDebugInfo(symbolMap));
     }
   }
 
   public BlockPack pack() {
     var packedTiles = new TreeMap<Long, BlockPack.Tile>();
+    int packBytes = 0;
+    int runLengthBytes = 0;
+    int bytes = 0;
+
     for (var entry : tiles.entrySet()) {
       long key = entry.getKey();
       var tile = entry.getValue();
@@ -134,6 +161,44 @@ public class BlockPacker {
       var packedTile = new BlockPack.Tile(tile.types, tile.xOffset, tile.yOffset, tile.zOffset);
       tile.computeBlockCommands(packedTile);
       packedTiles.put(key, packedTile);
+      if (debug) {
+        int tilePackBytes = packedTile.setblocks.size() * 2 + packedTile.fills.size() * 2;
+        packBytes += tilePackBytes;
+
+        int prevBlock = -1;
+        int runLengths = 0;
+        for (int i = 0; i < tile.blocks.length; ++i) {
+          int block = tile.blocks[i];
+          if (block == prevBlock) {
+            continue;
+          }
+          prevBlock = block;
+          ++runLengths;
+        }
+        int tileRunLengthBytes = runLengths * 4;
+        runLengthBytes += tileRunLengthBytes;
+
+        bytes += Math.min(tilePackBytes, tileRunLengthBytes);
+
+        System.out.printf(
+            "tilebytes: offset %d,%d,%d  packed %d  runlen %d  diff %d\n",
+            tile.xOffset,
+            tile.yOffset,
+            tile.zOffset,
+            tilePackBytes,
+            tileRunLengthBytes,
+            tilePackBytes - tileRunLengthBytes);
+      }
+    }
+
+    if (debug) {
+      int symbolBytes = 0;
+      for (var entry : symbolMap.entrySet()) {
+        symbolBytes += entry.getValue().length();
+      }
+      System.out.printf("symbolbytes: %d for %d entries\n", symbolBytes, symbolMap.size());
+      System.out.printf(
+          "totalbytes: min=%d packed=%d runlen=%d\n", bytes, packBytes, runLengthBytes);
     }
 
     // TODO(maxuser): Remove entries from symbolMap that are no longer referenced. Entries become
@@ -509,13 +574,16 @@ public class BlockPacker {
       return String.format("%X", value);
     }
 
-    public String getDebugInfo() {
+    public String getDebugInfo(Map<Integer, String> symbolMap) {
       updateTypeList();
       var buffer = new StringBuilder();
       buffer.append("Type map:\n");
       for (int i = 0; i < types.length; ++i) {
-        if (typeFrequencies.containsKey(i)) {
-          buffer.append(String.format("  %d -> [%dx] %s\n", i, typeFrequencies.get(i), types[i]));
+        if (typeFrequencies.containsKey((short) i)) {
+          buffer.append(
+              String.format(
+                  "  %d -> [%dx] %d -> %s\n",
+                  i, typeFrequencies.get((short) i), types[i], symbolMap.get(types[i])));
         }
       }
       buffer.append('\n');
