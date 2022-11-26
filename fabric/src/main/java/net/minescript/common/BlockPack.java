@@ -135,15 +135,11 @@ public class BlockPack {
 
     private final int[] blockTypes;
 
-    // Every 4 ints represents: x, y, z, block_type
-    // TODO(maxuser): Don't need 4 32-bit ints since each value requires only 5 bits.
-    // TODO(maxuser): Consider subclassing IntList with SetblockList.
-    public IntList setblocks = new IntList();
+    // Every 2 shorts represents: (x, y, z) and block_type
+    public final ShortList setblocks = new ShortList();
 
-    // Every 7 ints represents: x1, y1, z1, x2, y2, z2, block_type
-    // TODO(maxuser): Don't need 7 32-bit ints since each value requires only 5 bits.
-    // TODO(maxuser): Consider subclassing IntList with FillList.
-    public IntList fills = new IntList();
+    // Every 3 shorts represents: (x1, y1, z1), (x2, y2, z2), block_type
+    public final ShortList fills = new ShortList();
 
     // blockTypes contains indices into BlockPack symbol table.
     public Tile(int[] blockTypes, int xOffset, int yOffset, int zOffset) {
@@ -153,19 +149,24 @@ public class BlockPack {
       this.zOffset = zOffset;
     }
 
-    public static class IntList {
+    public static class ShortList {
       private int size = 0;
-      private int[] ints = new int[64];
+      private short[] shorts = new short[64];
 
-      public IntList() {}
+      public ShortList() {}
 
-      public IntList add(int i) {
-        if (size >= ints.length) {
-          int[] newInts = new int[2 * ints.length];
-          System.arraycopy(ints, 0, newInts, 0, ints.length);
-          ints = newInts;
+      public ShortList addCoord(int x, int y, int z) {
+        // TODO(maxuser): Throw an exception if x, y, and z aren't in range [0, 15].
+        return add((short) ((x << 10) | (y << 5) | z));
+      }
+
+      public ShortList add(short i) {
+        if (size >= shorts.length) {
+          short[] newInts = new short[2 * shorts.length];
+          System.arraycopy(shorts, 0, newInts, 0, shorts.length);
+          shorts = newInts;
         }
-        ints[size++] = i;
+        shorts[size++] = i;
         return this;
       }
 
@@ -173,8 +174,16 @@ public class BlockPack {
         return size;
       }
 
-      public int get(int i) {
-        return ints[i];
+      public int[] getCoord(int i, int[] coord) {
+        short s = shorts[i];
+        coord[0] = s >> 10;
+        coord[1] = (s >> 5) & ((1 << 5) - 1);
+        coord[2] = s & ((1 << 5) - 1);
+        return coord;
+      }
+
+      public short get(int i) {
+        return shorts[i];
       }
     }
 
@@ -185,13 +194,19 @@ public class BlockPack {
         int minY,
         int minZ,
         Map<Integer, BlockType> symbolMap) {
-      for (int i = 0; i < fills.size(); i += 7) {
-        int x1 = xOffset + fills.get(i);
-        int y1 = yOffset + fills.get(i + 1);
-        int z1 = zOffset + fills.get(i + 2);
-        int x2 = xOffset + fills.get(i + 3);
-        int y2 = yOffset + fills.get(i + 4);
-        int z2 = zOffset + fills.get(i + 5);
+      int[] coord = new int[3];
+
+      for (int i = 0; i < fills.size(); i += 3) {
+        fills.getCoord(i, coord);
+        int x1 = xOffset + coord[0];
+        int y1 = yOffset + coord[1];
+        int z1 = zOffset + coord[2];
+
+        fills.getCoord(i + 1, coord);
+        int x2 = xOffset + coord[0];
+        int y2 = yOffset + coord[1];
+        int z2 = zOffset + coord[2];
+
         if (offsetToOrigin) {
           x1 -= minX;
           y1 -= minY;
@@ -200,7 +215,7 @@ public class BlockPack {
           y2 -= minY;
           z2 -= minZ;
         }
-        int blockTypeId = blockTypes[fills.get(i + 6)];
+        int blockTypeId = blockTypes[fills.get(i + 2)];
         BlockType blockType = symbolMap.get(blockTypeId);
         if (setblockOnly) {
           for (int x = x1; x <= x2; ++x) {
@@ -215,16 +230,17 @@ public class BlockPack {
               "/fill %d %d %d %d %d %d %s\n", x1, y1, z1, x2, y2, z2, blockType.symbol);
         }
       }
-      for (int i = 0; i < setblocks.size(); i += 4) {
-        int x = xOffset + setblocks.get(i);
-        int y = yOffset + setblocks.get(i + 1);
-        int z = zOffset + setblocks.get(i + 2);
+      for (int i = 0; i < setblocks.size(); i += 2) {
+        setblocks.getCoord(i, coord);
+        int x = xOffset + coord[0];
+        int y = yOffset + coord[1];
+        int z = zOffset + coord[2];
         if (offsetToOrigin) {
           x -= minX;
           y -= minY;
           z -= minZ;
         }
-        int blockTypeId = blockTypes[setblocks.get(i + 3)];
+        int blockTypeId = blockTypes[setblocks.get(i + 1)];
         BlockType blockType = symbolMap.get(blockTypeId);
         System.out.printf("/setblock %d %d %d %s\n", x, y, z, blockType.symbol);
       }
@@ -242,20 +258,25 @@ public class BlockPack {
 
       int setblocksPos = 0;
       int fillsPos = 0;
+      int[] coord = new int[3];
       while (setblocksPos < setblocksSize || fillsPos < fillsSize) {
-        int fillsY = fillsPos < fillsSize ? fills.get(fillsPos + 1) : Integer.MAX_VALUE;
+        int fillsY = fillsPos < fillsSize ? fills.getCoord(fillsPos, coord)[1] : Integer.MAX_VALUE;
         int setblocksY =
-            setblocksPos < setblocksSize ? setblocks.get(setblocksPos + 1) : Integer.MAX_VALUE;
+            setblocksPos < setblocksSize
+                ? setblocks.getCoord(setblocksPos, coord)[1]
+                : Integer.MAX_VALUE;
 
         if (fillsY <= setblocksY) {
           // fill at fillsPos.
           int i = fillsPos;
-          int x1 = xOffset + fills.get(i);
-          int y1 = yOffset + fills.get(i + 1);
-          int z1 = zOffset + fills.get(i + 2);
-          int x2 = xOffset + fills.get(i + 3);
-          int y2 = yOffset + fills.get(i + 4);
-          int z2 = zOffset + fills.get(i + 5);
+          fills.getCoord(i, coord);
+          int x1 = xOffset + coord[0];
+          int y1 = yOffset + coord[1];
+          int z1 = zOffset + coord[2];
+          fills.getCoord(i + 1, coord);
+          int x2 = xOffset + coord[0];
+          int y2 = yOffset + coord[1];
+          int z2 = zOffset + coord[2];
           if (offsetToOrigin) {
             x1 -= minX;
             y1 -= minY;
@@ -264,7 +285,7 @@ public class BlockPack {
             y2 -= minY;
             z2 -= minZ;
           }
-          int blockTypeId = blockTypes[fills.get(i + 6)];
+          int blockTypeId = blockTypes[fills.get(i + 2)];
           BlockType blockType = symbolMap.get(blockTypeId);
           if (setblockOnly) {
             for (int x = x1; x <= x2; ++x) {
@@ -278,24 +299,25 @@ public class BlockPack {
             System.out.printf(
                 "/fill %d %d %d %d %d %d %s\n", x1, y1, z1, x2, y2, z2, blockType.symbol);
           }
-          fillsPos += 7;
+          fillsPos += 3;
         }
 
         if (setblocksY < fillsY) {
           // setblock at setblocksPos
           int i = setblocksPos;
-          int x = xOffset + setblocks.get(i);
-          int y = yOffset + setblocks.get(i + 1);
-          int z = zOffset + setblocks.get(i + 2);
+          setblocks.getCoord(i, coord);
+          int x = xOffset + coord[0];
+          int y = yOffset + coord[1];
+          int z = zOffset + coord[2];
           if (offsetToOrigin) {
             x -= minX;
             y -= minY;
             z -= minZ;
           }
-          int blockTypeId = blockTypes[setblocks.get(i + 3)];
+          int blockTypeId = blockTypes[setblocks.get(i + 1)];
           BlockType blockType = symbolMap.get(blockTypeId);
           System.out.printf("/setblock %d %d %d %s\n", x, y, z, blockType.symbol);
-          setblocksPos += 4;
+          setblocksPos += 2;
         }
       }
     }

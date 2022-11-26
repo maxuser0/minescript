@@ -187,7 +187,7 @@ public class BlockPacker {
             tile.zOffset,
             tilePackBytes,
             tileRunLengthBytes,
-            tilePackBytes - tileRunLengthBytes);
+            tileRunLengthBytes - tilePackBytes);
       }
     }
 
@@ -198,7 +198,8 @@ public class BlockPacker {
       }
       System.out.printf("symbolbytes: %d for %d entries\n", symbolBytes, symbolMap.size());
       System.out.printf(
-          "totalbytes: min=%d packed=%d runlen=%d\n", bytes, packBytes, runLengthBytes);
+          "totalbytes: min=%d packed=%d runlen=%d diff=%d\n",
+          bytes, packBytes, runLengthBytes, runLengthBytes - packBytes);
     }
 
     // TODO(maxuser): Remove entries from symbolMap that are no longer referenced. Entries become
@@ -492,15 +493,11 @@ public class BlockPacker {
               final int dy = minYRun;
               final int dz = maxAreaZ - z;
               if (dx == 0 && dy == 0 && dz == 0) {
-                tile.setblocks.add(x).add(y).add(z).add(blockType);
+                tile.setblocks.addCoord(x, y, z).add(blockType);
               } else {
                 tile.fills
-                    .add(x)
-                    .add(y)
-                    .add(z)
-                    .add(maxAreaX)
-                    .add(y + minYRun)
-                    .add(maxAreaZ)
+                    .addCoord(x, y, z)
+                    .addCoord(maxAreaX, y + minYRun, maxAreaZ)
                     .add(blockType);
               }
               for (int x2 = x; x2 < maxAreaX + 1; ++x2) {
