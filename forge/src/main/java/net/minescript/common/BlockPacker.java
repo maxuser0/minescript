@@ -96,9 +96,7 @@ public class BlockPacker {
               return new Tile(xOffset, yOffset, zOffset, xTileSize, yTileSize, zTileSize);
             });
     int blockTypeId = typeMap.computeIfAbsent(blockType, k -> idAllocator.allocateId());
-    if (!symbolMap.containsKey(blockTypeId)) {
-      symbolMap.put(blockTypeId, blockType);
-    }
+    symbolMap.putIfAbsent(blockTypeId, blockType);
     tile.setBlock(x, y, z, blockTypeId);
     if (x < minX) {
       minX = x;
