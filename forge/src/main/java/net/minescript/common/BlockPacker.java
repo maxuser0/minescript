@@ -158,11 +158,20 @@ public class BlockPacker {
 
       tile.computeRunLengths();
       tile.updateTypeList();
-      var packedTile = new BlockPack.Tile(tile.types, tile.xOffset, tile.yOffset, tile.zOffset);
-      tile.computeBlockCommands(packedTile);
+      ShortList fills = new ShortList();
+      ShortList setblocks = new ShortList();
+      tile.computeBlockCommands(fills, setblocks);
+      var packedTile =
+          new BlockPack.Tile(
+              tile.xOffset,
+              tile.yOffset,
+              tile.zOffset,
+              tile.types,
+              fills.toArray(),
+              setblocks.toArray());
       packedTiles.put(key, packedTile);
       if (debug) {
-        int tilePackBytes = packedTile.setblocks.size() * 2 + packedTile.fills.size() * 2;
+        int tilePackBytes = setblocks.size() * 2 + fills.size() * 2;
         packBytes += tilePackBytes;
 
         int prevBlock = -1;
@@ -225,6 +234,42 @@ public class BlockPacker {
 
     public void freeId(int id) {
       freelist.addLast(id);
+    }
+  }
+
+  public static class ShortList {
+    private int size = 0;
+    private short[] shorts = new short[64];
+
+    public ShortList() {}
+
+    public ShortList addCoord(int x, int y, int z) {
+      // TODO(maxuser): Throw an exception if x, y, and z aren't in range [0, 15].
+      return add((short) ((x << 10) | (y << 5) | z));
+    }
+
+    public ShortList add(short i) {
+      if (size >= shorts.length) {
+        short[] newInts = new short[2 * shorts.length];
+        System.arraycopy(shorts, 0, newInts, 0, shorts.length);
+        shorts = newInts;
+      }
+      shorts[size++] = i;
+      return this;
+    }
+
+    public int size() {
+      return size;
+    }
+
+    public short get(int i) {
+      return shorts[i];
+    }
+
+    public short[] toArray() {
+      short[] copy = new short[size];
+      System.arraycopy(shorts, 0, copy, 0, size);
+      return copy;
     }
   }
 
@@ -431,7 +476,7 @@ public class BlockPacker {
       }
     }
 
-    public void computeBlockCommands(BlockPack.Tile tile) {
+    public void computeBlockCommands(ShortList fills, ShortList setblocks) {
       // Use the runs of consecutive blocks of the same type computed above to identify x,z-plane
       // areas and x,y,z rectangular volumes of the same type of block.
       for (int y = 0; y < ySize; ++y) {
@@ -493,12 +538,9 @@ public class BlockPacker {
               final int dy = minYRun;
               final int dz = maxAreaZ - z;
               if (dx == 0 && dy == 0 && dz == 0) {
-                tile.setblocks.addCoord(x, y, z).add(blockType);
+                setblocks.addCoord(x, y, z).add(blockType);
               } else {
-                tile.fills
-                    .addCoord(x, y, z)
-                    .addCoord(maxAreaX, y + minYRun, maxAreaZ)
-                    .add(blockType);
+                fills.addCoord(x, y, z).addCoord(maxAreaX, y + minYRun, maxAreaZ).add(blockType);
               }
               for (int x2 = x; x2 < maxAreaX + 1; ++x2) {
                 for (int z2 = z; z2 < maxAreaZ + 1; ++z2) {
