@@ -6,6 +6,7 @@ package net.minescript.common;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.Consumer;
 
 /**
  * {@code BlockPack} represents blocks stored as rectangular volumes of equivalent blocks.
@@ -69,14 +70,15 @@ public class BlockPack {
     }
   }
 
-  // TODO(maxuser): Replace printBlockCommands with general-purpose iterability of tiles in layers
+  // TODO(maxuser): Replace getBlockCommands with general-purpose iterability of tiles in layers
   // (see #Layering below).
-  public void printBlockCommands(boolean offsetToOrigin, boolean setblockOnly) {
+  public void getBlockCommands(
+      boolean offsetToOrigin, boolean setblockOnly, Consumer<String> commandConsumer) {
     for (Tile tile : tiles.values()) {
-      // TODO(maxuser): Use tile.printBlockCommands(...) for the initial "stable blocks" layer, and
-      // tile.printBlockCommandsInAscendingYOrder(...) for the subsequent "unstable blocks" layer.
-      tile.printBlockCommandsInAscendingYOrder(
-          offsetToOrigin, setblockOnly, minX, minY, minZ, symbolMap);
+      // TODO(maxuser): Use tile.getBlockCommands(...) for the initial "stable blocks" layer, and
+      // tile.getBlockCommandsInAscendingYOrder(...) for the subsequent "unstable blocks" layer.
+      tile.getBlockCommandsInAscendingYOrder(
+          offsetToOrigin, setblockOnly, minX, minY, minZ, symbolMap, commandConsumer);
     }
   }
 
@@ -152,13 +154,14 @@ public class BlockPack {
       this.fills = fills;
     }
 
-    public void printBlockCommands(
+    public void getBlockCommands(
         boolean offsetToOrigin,
         boolean setblockOnly,
         int minX,
         int minY,
         int minZ,
-        Map<Integer, BlockType> symbolMap) {
+        Map<Integer, BlockType> symbolMap,
+        Consumer<String> commandConsumer) {
       int[] coord = new int[3];
 
       for (int i = 0; i < fills.length; i += 3) {
@@ -186,13 +189,15 @@ public class BlockPack {
           for (int x = x1; x <= x2; ++x) {
             for (int y = y1; y <= y2; ++y) {
               for (int z = z1; z <= z2; ++z) {
-                System.out.printf("/setblock %d %d %d %s\n", x, y, z, blockType.symbol);
+                commandConsumer.accept(
+                    String.format("/setblock %d %d %d %s", x, y, z, blockType.symbol));
               }
             }
           }
         } else {
-          System.out.printf(
-              "/fill %d %d %d %d %d %d %s\n", x1, y1, z1, x2, y2, z2, blockType.symbol);
+          commandConsumer.accept(
+              String.format(
+                  "/fill %d %d %d %d %d %d %s", x1, y1, z1, x2, y2, z2, blockType.symbol));
         }
       }
       for (int i = 0; i < setblocks.length; i += 2) {
@@ -207,7 +212,7 @@ public class BlockPack {
         }
         int blockTypeId = blockTypes[setblocks[i + 1]];
         BlockType blockType = symbolMap.get(blockTypeId);
-        System.out.printf("/setblock %d %d %d %s\n", x, y, z, blockType.symbol);
+        commandConsumer.accept(String.format("/setblock %d %d %d %s", x, y, z, blockType.symbol));
       }
     }
 
@@ -219,13 +224,14 @@ public class BlockPack {
       return coord;
     }
 
-    public void printBlockCommandsInAscendingYOrder(
+    public void getBlockCommandsInAscendingYOrder(
         boolean offsetToOrigin,
         boolean setblockOnly,
         int minX,
         int minY,
         int minZ,
-        Map<Integer, BlockType> symbolMap) {
+        Map<Integer, BlockType> symbolMap,
+        Consumer<String> commandConsumer) {
       final int setblocksSize = setblocks.length;
       final int fillsSize = fills.length;
 
@@ -264,13 +270,15 @@ public class BlockPack {
             for (int x = x1; x <= x2; ++x) {
               for (int y = y1; y <= y2; ++y) {
                 for (int z = z1; z <= z2; ++z) {
-                  System.out.printf("/setblock %d %d %d %s\n", x, y, z, blockType.symbol);
+                  commandConsumer.accept(
+                      String.format("/setblock %d %d %d %s", x, y, z, blockType.symbol));
                 }
               }
             }
           } else {
-            System.out.printf(
-                "/fill %d %d %d %d %d %d %s\n", x1, y1, z1, x2, y2, z2, blockType.symbol);
+            commandConsumer.accept(
+                String.format(
+                    "/fill %d %d %d %d %d %d %s", x1, y1, z1, x2, y2, z2, blockType.symbol));
           }
           fillsPos += 3;
         }
@@ -289,7 +297,7 @@ public class BlockPack {
           }
           int blockTypeId = blockTypes[setblocks[i + 1]];
           BlockType blockType = symbolMap.get(blockTypeId);
-          System.out.printf("/setblock %d %d %d %s\n", x, y, z, blockType.symbol);
+          commandConsumer.accept(String.format("/setblock %d %d %d %s", x, y, z, blockType.symbol));
           setblocksPos += 2;
         }
       }
