@@ -3,10 +3,22 @@
 
 package net.minescript.common;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.function.Consumer;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 
 /**
  * {@code BlockPack} represents blocks stored as rectangular volumes of equivalent blocks.
@@ -102,6 +114,158 @@ public class BlockPack {
     }
   }
 
+  private static void writeShortArray(DataOutputStream dataOut, short[] shorts) throws IOException {
+    byte[] bytes = new byte[shorts.length * 2];
+    dataOut.writeInt(shorts.length);
+    for (int i = 0; i < shorts.length; i++) {
+      bytes[2 * i] = (byte) (shorts[i] >>> 8);
+      bytes[2 * i + 1] = (byte) (shorts[i] & 0xff);
+    }
+    dataOut.write(bytes);
+  }
+
+  private static short[] readShortArray(DataInputStream dataIn) throws IOException {
+    int numShorts = dataIn.readInt();
+    byte[] bytes = new byte[numShorts * 2];
+    short[] shorts = new short[numShorts];
+    dataIn.readFully(bytes);
+    for (int i = 0; i < numShorts; i++) {
+      shorts[i] = (short) (((bytes[2 * i]) << 8) | (bytes[2 * i + 1] & 0xff));
+    }
+    return shorts;
+  }
+
+  private static void writeIntArray(DataOutputStream dataOut, int[] ints) throws IOException {
+    byte[] bytes = new byte[ints.length * 4];
+    dataOut.writeInt(ints.length);
+    for (int i = 0; i < ints.length; i++) {
+      bytes[4 * i] = (byte) (ints[i] >>> 24);
+      bytes[4 * i + 1] = (byte) ((ints[i] >>> 16) & 0xff);
+      bytes[4 * i + 2] = (byte) ((ints[i] >>> 8) & 0xff);
+      bytes[4 * i + 3] = (byte) (ints[i] & 0xff);
+    }
+    dataOut.write(bytes);
+  }
+
+  private static int[] readIntArray(DataInputStream dataIn) throws IOException {
+    int numInts = dataIn.readInt();
+    byte[] bytes = new byte[numInts * 4];
+    int[] ints = new int[numInts];
+    dataIn.readFully(bytes);
+    for (int i = 0; i < numInts; i++) {
+      ints[i] =
+          (bytes[4 * i] << 24)
+              | (bytes[4 * i + 1] << 16)
+              | (bytes[4 * i + 2] << 8)
+              | (bytes[4 * i + 3] & 0xff);
+    }
+    return ints;
+  }
+
+  private static void writeUtf8String(DataOutputStream dataOut, String string) throws IOException {
+    byte[] bytes = string.getBytes(StandardCharsets.UTF_8);
+    dataOut.writeInt(bytes.length);
+    dataOut.write(bytes);
+  }
+
+  private static String readUtf8String(DataInputStream dataIn) throws IOException {
+    byte[] bytes = new byte[dataIn.readInt()];
+    dataIn.readFully(bytes);
+    return new String(bytes, StandardCharsets.UTF_8);
+  }
+
+  public void writeFile(String filenameBase) {
+    try (ZipOutputStream zipOut =
+            new ZipOutputStream(new FileOutputStream(new File(filenameBase + ".zip")));
+        DataOutputStream dataOut = new DataOutputStream(zipOut)) {
+      zipOut.putNextEntry(new ZipEntry(filenameBase + ".blockpack"));
+      zipOut.setLevel(0);
+
+      dataOut.write("BLOCKPAC".getBytes(StandardCharsets.US_ASCII));
+      int majorVersion = 1;
+      int minorVersion = 0;
+      int patchVersion = 0;
+      dataOut.writeInt((majorVersion << 24) | (minorVersion << 16) | (patchVersion << 8));
+
+      int maxSymbolId = symbolMap.isEmpty() ? -1 : Collections.max(symbolMap.keySet());
+      dataOut.writeInt(maxSymbolId + 1);
+      for (int i = 0; i < maxSymbolId + 1; ++i) {
+        var blockType = symbolMap.get(i);
+        writeUtf8String(dataOut, blockType.symbol == null ? "" : blockType.symbol);
+      }
+
+      dataOut.writeInt(tiles.size());
+      for (var entry : tiles.entrySet()) {
+        long key = entry.getKey();
+        Tile tile = entry.getValue();
+
+        dataOut.writeLong(key);
+        writeIntArray(dataOut, tile.blockTypes);
+        writeShortArray(dataOut, tile.fills);
+        writeShortArray(dataOut, tile.setblocks);
+      }
+
+      zipOut.closeEntry();
+    } catch (IOException e) {
+      // TODO(maxuser): Log an error.
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static BlockPack readFile(String filenameBase) {
+    Map<Integer, String> symbolMap = new HashMap<>();
+    SortedMap<Long, Tile> tiles = new TreeMap<>();
+    try (ZipInputStream zipIn =
+            new ZipInputStream(new FileInputStream(new File(filenameBase + ".zip")));
+        DataInputStream dataIn = new DataInputStream(zipIn)) {
+      ZipEntry zipEntry;
+      while ((zipEntry = zipIn.getNextEntry()) != null) {
+        byte[] bytes = new byte[8];
+        dataIn.readFully(bytes);
+        String first8Bytes = new String(bytes, StandardCharsets.US_ASCII);
+        if (!first8Bytes.equals("BLOCKPAC")) {
+          throw new IllegalArgumentException(
+              String.format(
+                  "Expected first 8 bytes of blockpack zip entry in %s.zip to be \"BLOCKPAC\" but"
+                      + " got \"%s\"",
+                  filenameBase, first8Bytes));
+        }
+        int version = dataIn.readInt();
+        if (version >>> 8 != 0x10000) {
+          throw new IllegalArgumentException(
+              String.format(
+                  "Expected version in blockpack zip entry in %s.zip to be 0x10000 (v1.0.0) but got"
+                      + " %x",
+                  filenameBase, version));
+        }
+
+        int symbolMapSize = dataIn.readInt();
+        for (int i = 0; i < symbolMapSize; ++i) {
+          symbolMap.put(i, readUtf8String(dataIn));
+        }
+
+        int numTiles = dataIn.readInt();
+        for (int i = 0; i < numTiles; ++i) {
+          long key = dataIn.readLong();
+          int xOffset = getXFromTileKey(key);
+          int yOffset = getYFromTileKey(key);
+          int zOffset = getZFromTileKey(key);
+
+          int[] blockTypes = readIntArray(dataIn);
+          short[] fills = readShortArray(dataIn);
+          short[] setblocks = readShortArray(dataIn);
+
+          var tile = new Tile(xOffset, yOffset, zOffset, blockTypes, fills, setblocks);
+          tiles.put(key, tile);
+        }
+      }
+    } catch (IOException e) {
+      // TODO(maxuser): Log an error.
+      throw new RuntimeException(e);
+    }
+    return new BlockPack(symbolMap, tiles);
+  }
+
   // TODO(maxuser): Replace getBlockCommands with general-purpose iterability of tiles in layers
   // (see #Layering below).
   public void getBlockCommands(boolean setblockOnly, Consumer<String> commandConsumer) {
@@ -189,12 +353,12 @@ public class BlockPack {
       int[] coord = new int[3];
 
       for (int i = 0; i < fills.length; i += 3) {
-        getCoord(fills, i, coord);
+        getCoord(fills[i], coord);
         int x1 = xOffset + coord[0];
         int y1 = yOffset + coord[1];
         int z1 = zOffset + coord[2];
 
-        getCoord(fills, i + 1, coord);
+        getCoord(fills[i + 1], coord);
         int x2 = xOffset + coord[0];
         int y2 = yOffset + coord[1];
         int z2 = zOffset + coord[2];
@@ -217,7 +381,7 @@ public class BlockPack {
         }
       }
       for (int i = 0; i < setblocks.length; i += 2) {
-        getCoord(setblocks, i, coord);
+        getCoord(setblocks[i], coord);
         int x = xOffset + coord[0];
         int y = yOffset + coord[1];
         int z = zOffset + coord[2];
@@ -227,8 +391,7 @@ public class BlockPack {
       }
     }
 
-    private static int[] getCoord(short[] shorts, int i, int[] coord) {
-      short s = shorts[i];
+    private static int[] getCoord(short s, int[] coord) {
       coord[0] = s >> 10;
       coord[1] = (s >> 5) & ((1 << 5) - 1);
       coord[2] = s & ((1 << 5) - 1);
@@ -244,20 +407,20 @@ public class BlockPack {
       int fillsPos = 0;
       int[] coord = new int[3];
       while (setblocksPos < setblocksSize || fillsPos < fillsSize) {
-        int fillsY = fillsPos < fillsSize ? getCoord(fills, fillsPos, coord)[1] : Integer.MAX_VALUE;
+        int fillsY = fillsPos < fillsSize ? getCoord(fills[fillsPos], coord)[1] : Integer.MAX_VALUE;
         int setblocksY =
             setblocksPos < setblocksSize
-                ? getCoord(setblocks, setblocksPos, coord)[1]
+                ? getCoord(setblocks[setblocksPos], coord)[1]
                 : Integer.MAX_VALUE;
 
         if (fillsY <= setblocksY) {
           // fill at fillsPos.
           int i = fillsPos;
-          getCoord(fills, i, coord);
+          getCoord(fills[i], coord);
           int x1 = xOffset + coord[0];
           int y1 = yOffset + coord[1];
           int z1 = zOffset + coord[2];
-          getCoord(fills, i + 1, coord);
+          getCoord(fills[i + 1], coord);
           int x2 = xOffset + coord[0];
           int y2 = yOffset + coord[1];
           int z2 = zOffset + coord[2];
@@ -283,7 +446,7 @@ public class BlockPack {
         if (setblocksY < fillsY) {
           // setblock at setblocksPos
           int i = setblocksPos;
-          getCoord(setblocks, i, coord);
+          getCoord(setblocks[i], coord);
           int x = xOffset + coord[0];
           int y = yOffset + coord[1];
           int z = zOffset + coord[2];
