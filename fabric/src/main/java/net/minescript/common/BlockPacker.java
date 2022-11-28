@@ -7,6 +7,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.SortedMap;
 import java.util.TreeMap;
 
 /**
@@ -15,21 +16,7 @@ import java.util.TreeMap;
  * <p>While {@code BlockPacker} manages a dynamic set of blocks, {@code BlockPack} is immutable.
  */
 public class BlockPacker {
-  private static final int X_BUILD_MIN = Integer.MIN_VALUE;
-  private static final int X_BUILD_MAX = Integer.MAX_VALUE;
-  private static final int Y_BUILD_MIN = -64;
-  private static final int Y_BUILD_MAX = 319;
-  private static final int Z_BUILD_MIN = Integer.MIN_VALUE;
-  private static final int Z_BUILD_MAX = Integer.MAX_VALUE;
-
-  private final Map<Long, Tile> tiles = new TreeMap<>();
-  private final int xTileSize;
-  private final int yTileSize;
-  private final int zTileSize;
-
-  private int minX = X_BUILD_MAX;
-  private int minY = Y_BUILD_MAX;
-  private int minZ = Z_BUILD_MAX;
+  private final SortedMap<Long, Tile> tiles = new TreeMap<>();
 
   // Allocator for IDs of block types used across all tiles in this BlockPacker, serving as keys
   // into typeMap.
@@ -39,12 +26,7 @@ public class BlockPacker {
 
   private boolean debug = false;
 
-  public BlockPacker(int xTileSize, int yTileSize, int zTileSize) {
-    // TODO(maxuser): Validate that volume fits within 15 bits.
-    this.xTileSize = xTileSize;
-    this.yTileSize = yTileSize;
-    this.zTileSize = zTileSize;
-
+  public BlockPacker() {
     int voidId = idAllocator.allocateId();
     if (voidId != 0) {
       throw new IllegalStateException(
@@ -72,60 +54,22 @@ public class BlockPacker {
   }
 
   public void setblock(int x, int y, int z, String blockType) {
-    long key = getTileKey(x, y, z);
+    long key = BlockPack.getTileKey(x, y, z);
     Tile tile =
         tiles.computeIfAbsent(
             key,
             k -> {
-              // Adjust x, y, z to non-negative values so they're amenable to bit operations.
-              int adjustedX = x - X_BUILD_MIN;
-              int adjustedY = y - Y_BUILD_MIN;
-              int adjustedZ = z - Z_BUILD_MIN;
-
-              int xTile =
-                  (adjustedX >= 0) ? (adjustedX / xTileSize) : (((adjustedX + 1) / xTileSize) - 1);
-              int yTile =
-                  (adjustedY >= 0) ? (adjustedY / yTileSize) : (((adjustedY + 1) / yTileSize) - 1);
-              int zTile =
-                  (adjustedZ >= 0) ? (adjustedZ / zTileSize) : (((adjustedZ + 1) / zTileSize) - 1);
-
-              int xOffset = xTile * xTileSize + X_BUILD_MIN;
-              int yOffset = yTile * yTileSize + Y_BUILD_MIN;
-              int zOffset = zTile * zTileSize + Z_BUILD_MIN;
-
-              return new Tile(xOffset, yOffset, zOffset, xTileSize, yTileSize, zTileSize);
+              return new Tile(
+                  BlockPack.getXFromTileKey(key),
+                  BlockPack.getYFromTileKey(key),
+                  BlockPack.getZFromTileKey(key));
             });
     int blockTypeId = typeMap.computeIfAbsent(blockType, k -> idAllocator.allocateId());
     symbolMap.putIfAbsent(blockTypeId, blockType);
     tile.setBlock(x, y, z, blockTypeId);
-    if (x < minX) {
-      minX = x;
-    }
-    if (y < minY) {
-      minY = y;
-    }
-    if (z < minZ) {
-      minZ = z;
-    }
   }
 
-  private long getTileKey(int x, int y, int z) {
-    // Adjust x, y, z to non-negative values so they're amenable to bit operations.
-    int adjustedX = x - X_BUILD_MIN;
-    int adjustedY = y - Y_BUILD_MIN;
-    int adjustedZ = z - Z_BUILD_MIN;
-
-    int xTile = (adjustedX >= 0) ? (adjustedX / xTileSize) : (((adjustedX + 1) / xTileSize) - 1);
-    int yTile = (adjustedY >= 0) ? (adjustedY / yTileSize) : (((adjustedY + 1) / yTileSize) - 1);
-    int zTile = (adjustedZ >= 0) ? (adjustedZ / zTileSize) : (((adjustedZ + 1) / zTileSize) - 1);
-
-    // The y tile gets the high 10 bits, x tile gets the next 27 bits, and z tile the low 27 bits.
-    return ((long) (yTile & 0x3ff) << 54)
-        | ((long) (xTile & 0x7ffffff) << 27)
-        | ((long) zTile & 0x7ffffff);
-  }
-
-  public void printDebugInfo(boolean offsetToOrigin) {
+  public void printDebugInfo() {
     for (var entry : symbolMap.entrySet()) {
       System.out.printf("# symbol: %d -> %s\n", entry.getKey(), entry.getValue());
     }
@@ -134,11 +78,6 @@ public class BlockPacker {
       int x = tile.xOffset;
       int y = tile.yOffset;
       int z = tile.zOffset;
-      if (offsetToOrigin) {
-        x -= minX;
-        y -= minY;
-        z -= minZ;
-      }
       System.out.printf("# tile offset: %d %d %d\n", x, y, z);
       System.out.print(tile.getDebugInfo(symbolMap));
     }
@@ -216,7 +155,7 @@ public class BlockPacker {
     // Mappings in symbolMap are snapshotted by the BlockPack constructor so that symbols referenced
     // in a BlockPack are stable in the face of the BlockPacker that created it adding or removing
     // entries.
-    return new BlockPack(minX, minY, minZ, symbolMap, packedTiles);
+    return new BlockPack(symbolMap, packedTiles);
   }
 
   static class IdAllocator {

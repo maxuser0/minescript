@@ -5,7 +5,7 @@ package net.minescript.common;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.TreeMap;
+import java.util.SortedMap;
 import java.util.function.Consumer;
 
 /**
@@ -14,21 +14,29 @@ import java.util.function.Consumer;
  * <p>{@code BlockPack} stores blocks for efficient translation into /fill and /setblock commands.
  */
 public class BlockPack {
-  private final int minX;
-  private final int minY;
-  private final int minZ;
+  private static final int X_BUILD_MIN = -(1 << 25);
+  private static final int X_BUILD_MAX = (1 << 25) - 1;
+  private static final int Y_BUILD_MIN = -64;
+  private static final int Y_BUILD_MAX = 319;
+  private static final int Z_BUILD_MIN = -(1 << 25);
+  private static final int Z_BUILD_MAX = (1 << 25) - 1;
+
+  // X_TILE_SIZE * Y_TILE_SIZE * Z_TILE_SIZE must fit within 16 bits.
+  private static final int X_TILE_SIZE = 16;
+  private static final int Y_TILE_SIZE = 16;
+  private static final int Z_TILE_SIZE = 16;
+
+  private static final long MASK_26_BITS = (1L << 26) - 1;
+  private static final long MASK_12_BITS = (1L << 12) - 1;
 
   // Symbol table for mapping BlockPack-level block ID to symbolic block-type string.
   private final Map<Integer, BlockType> symbolMap = new HashMap<>();
 
-  // TODO(maxuser): Currently using a TreeMap to preserve ordering, but the current ordering is
-  // determined by the code that instantiates a BlockPack. For instance, the keys defined by
-  // BlockPacker.getTileKey() intentionally encode the tile's y offset as the high bits of the key.
-  // The y-first tile order means that blocks can be rendered naturally in bottom-up order so
-  // flowing blocks like water in higher tiles follow stable blocks beneath them in lower tiles. But
-  // other code that instantiates a BlockPack might order keys differently, so we should enforce
-  // y-first key order within BlockPack itself.
-  private final TreeMap<Long, Tile> tiles;
+  // Using a SortedMap to preserve ordering with y representing the high bits of the key; see
+  // #getTileKey(). The y-first tile order means that blocks can be rendered naturally in bottom-up
+  // order so flowing blocks like water in higher tiles follow stable blocks beneath them in lower
+  // tiles.
+  private final SortedMap<Long, Tile> tiles;
 
   private static class BlockType {
     public final String symbol;
@@ -58,11 +66,35 @@ public class BlockPack {
     }
   }
 
-  public BlockPack(
-      int minX, int minY, int minZ, Map<Integer, String> symbolMap, TreeMap<Long, Tile> tiles) {
-    this.minX = minX;
-    this.minY = minY;
-    this.minZ = minZ;
+  public static long getTileKey(int x, int y, int z) {
+    // Adjust x, y, z to non-negative values so they're amenable to bit operations.
+    int adjustedX = x - X_BUILD_MIN;
+    int adjustedY = y - Y_BUILD_MIN;
+    int adjustedZ = z - Z_BUILD_MIN;
+
+    int xOffset = adjustedX / X_TILE_SIZE * X_TILE_SIZE;
+    int yOffset = adjustedY / Y_TILE_SIZE * Y_TILE_SIZE;
+    int zOffset = adjustedZ / Z_TILE_SIZE * Z_TILE_SIZE;
+
+    // y gets the high 12 bits, x gets the next 26 bits, and z gets the low 26 bits.
+    return (((long) yOffset & MASK_12_BITS) << 26 + 26)
+        | (((long) xOffset & MASK_26_BITS) << 26)
+        | ((long) zOffset & MASK_26_BITS);
+  }
+
+  public static int getXFromTileKey(long key) {
+    return (int) ((key >>> 26) & MASK_26_BITS) + X_BUILD_MIN;
+  }
+
+  public static int getYFromTileKey(long key) {
+    return (int) (key >>> (26 + 26)) + Y_BUILD_MIN;
+  }
+
+  public static int getZFromTileKey(long key) {
+    return (int) (key & MASK_26_BITS) + Z_BUILD_MIN;
+  }
+
+  public BlockPack(Map<Integer, String> symbolMap, SortedMap<Long, Tile> tiles) {
     this.tiles = tiles;
 
     for (var entry : symbolMap.entrySet()) {
@@ -72,13 +104,11 @@ public class BlockPack {
 
   // TODO(maxuser): Replace getBlockCommands with general-purpose iterability of tiles in layers
   // (see #Layering below).
-  public void getBlockCommands(
-      boolean offsetToOrigin, boolean setblockOnly, Consumer<String> commandConsumer) {
+  public void getBlockCommands(boolean setblockOnly, Consumer<String> commandConsumer) {
     for (Tile tile : tiles.values()) {
       // TODO(maxuser): Use tile.getBlockCommands(...) for the initial "stable blocks" layer, and
       // tile.getBlockCommandsInAscendingYOrder(...) for the subsequent "unstable blocks" layer.
-      tile.getBlockCommandsInAscendingYOrder(
-          offsetToOrigin, setblockOnly, minX, minY, minZ, symbolMap, commandConsumer);
+      tile.getBlockCommandsInAscendingYOrder(setblockOnly, symbolMap, commandConsumer);
     }
   }
 
@@ -155,13 +185,7 @@ public class BlockPack {
     }
 
     public void getBlockCommands(
-        boolean offsetToOrigin,
-        boolean setblockOnly,
-        int minX,
-        int minY,
-        int minZ,
-        Map<Integer, BlockType> symbolMap,
-        Consumer<String> commandConsumer) {
+        boolean setblockOnly, Map<Integer, BlockType> symbolMap, Consumer<String> commandConsumer) {
       int[] coord = new int[3];
 
       for (int i = 0; i < fills.length; i += 3) {
@@ -175,14 +199,6 @@ public class BlockPack {
         int y2 = yOffset + coord[1];
         int z2 = zOffset + coord[2];
 
-        if (offsetToOrigin) {
-          x1 -= minX;
-          y1 -= minY;
-          z1 -= minZ;
-          x2 -= minX;
-          y2 -= minY;
-          z2 -= minZ;
-        }
         int blockTypeId = blockTypes[fills[i + 2]];
         BlockType blockType = symbolMap.get(blockTypeId);
         if (setblockOnly) {
@@ -205,11 +221,6 @@ public class BlockPack {
         int x = xOffset + coord[0];
         int y = yOffset + coord[1];
         int z = zOffset + coord[2];
-        if (offsetToOrigin) {
-          x -= minX;
-          y -= minY;
-          z -= minZ;
-        }
         int blockTypeId = blockTypes[setblocks[i + 1]];
         BlockType blockType = symbolMap.get(blockTypeId);
         commandConsumer.accept(String.format("/setblock %d %d %d %s", x, y, z, blockType.symbol));
@@ -225,13 +236,7 @@ public class BlockPack {
     }
 
     public void getBlockCommandsInAscendingYOrder(
-        boolean offsetToOrigin,
-        boolean setblockOnly,
-        int minX,
-        int minY,
-        int minZ,
-        Map<Integer, BlockType> symbolMap,
-        Consumer<String> commandConsumer) {
+        boolean setblockOnly, Map<Integer, BlockType> symbolMap, Consumer<String> commandConsumer) {
       final int setblocksSize = setblocks.length;
       final int fillsSize = fills.length;
 
@@ -256,14 +261,6 @@ public class BlockPack {
           int x2 = xOffset + coord[0];
           int y2 = yOffset + coord[1];
           int z2 = zOffset + coord[2];
-          if (offsetToOrigin) {
-            x1 -= minX;
-            y1 -= minY;
-            z1 -= minZ;
-            x2 -= minX;
-            y2 -= minY;
-            z2 -= minZ;
-          }
           int blockTypeId = blockTypes[fills[i + 2]];
           BlockType blockType = symbolMap.get(blockTypeId);
           if (setblockOnly) {
@@ -290,11 +287,6 @@ public class BlockPack {
           int x = xOffset + coord[0];
           int y = yOffset + coord[1];
           int z = zOffset + coord[2];
-          if (offsetToOrigin) {
-            x -= minX;
-            y -= minY;
-            z -= minZ;
-          }
           int blockTypeId = blockTypes[setblocks[i + 1]];
           BlockType blockType = symbolMap.get(blockTypeId);
           commandConsumer.accept(String.format("/setblock %d %d %d %s", x, y, z, blockType.symbol));
