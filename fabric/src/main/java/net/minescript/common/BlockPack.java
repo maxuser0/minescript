@@ -3,6 +3,8 @@
 
 package net.minescript.common;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -10,12 +12,14 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.function.Consumer;
+import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -40,6 +44,9 @@ public class BlockPack {
 
   private static final long MASK_26_BITS = (1L << 26) - 1;
   private static final long MASK_12_BITS = (1L << 12) - 1;
+
+  // Size threshold for cutting a new "Tile" chunk.
+  private static final int TILE_CHUNK_THRESHOLD_BYTES = 16384;
 
   // Symbol table for mapping BlockPack-level block ID to symbolic block-type string.
   private final Map<Integer, BlockType> symbolMap = new HashMap<>();
@@ -162,6 +169,17 @@ public class BlockPack {
     return ints;
   }
 
+  private static void writeAsciiString(DataOutputStream dataOut, String string) throws IOException {
+    dataOut.write(string.getBytes(StandardCharsets.US_ASCII));
+  }
+
+  private static String readAsciiString(DataInputStream dataIn, int length) throws IOException {
+    byte[] bytes = new byte[length];
+    dataIn.readFully(bytes);
+    String asciiString = new String(bytes, StandardCharsets.US_ASCII);
+    return asciiString;
+  }
+
   private static void writeUtf8String(DataOutputStream dataOut, String string) throws IOException {
     byte[] bytes = string.getBytes(StandardCharsets.UTF_8);
     dataOut.writeInt(bytes.length);
@@ -174,95 +192,299 @@ public class BlockPack {
     return new String(bytes, StandardCharsets.UTF_8);
   }
 
-  public void writeFile(String filenameBase) {
-    try (ZipOutputStream zipOut =
-            new ZipOutputStream(new FileOutputStream(new File(filenameBase + ".zip")));
-        DataOutputStream dataOut = new DataOutputStream(zipOut)) {
-      zipOut.putNextEntry(new ZipEntry(filenameBase + ".blockpack"));
-      zipOut.setLevel(0);
+  private static int computeCrc32(byte[] bytes) {
+    var crc32 = new CRC32();
+    crc32.update(bytes);
+    return (int) (crc32.getValue() & 0xffffffff);
+  }
 
-      dataOut.write("BLOCKPAC".getBytes(StandardCharsets.US_ASCII));
-      int majorVersion = 1;
-      int minorVersion = 0;
-      int patchVersion = 0;
-      dataOut.writeInt((majorVersion << 24) | (minorVersion << 16) | (patchVersion << 8));
-
-      int maxSymbolId = symbolMap.isEmpty() ? -1 : Collections.max(symbolMap.keySet());
-      dataOut.writeInt(maxSymbolId + 1);
-      for (int i = 0; i < maxSymbolId + 1; ++i) {
-        var blockType = symbolMap.get(i);
-        writeUtf8String(dataOut, blockType.symbol == null ? "" : blockType.symbol);
-      }
-
-      dataOut.writeInt(tiles.size());
-      for (var entry : tiles.entrySet()) {
-        long key = entry.getKey();
-        Tile tile = entry.getValue();
-
-        dataOut.writeLong(key);
-        writeIntArray(dataOut, tile.blockTypes);
-        writeShortArray(dataOut, tile.fills);
-        writeShortArray(dataOut, tile.setblocks);
-      }
-
-      zipOut.closeEntry();
-    } catch (IOException e) {
-      // TODO(maxuser): Log an error.
+  public byte[] toBytes() {
+    try (var bytesOut = new ByteArrayOutputStream();
+        var dataOut = new DataOutputStream(bytesOut)) {
+      writeStream(dataOut);
+      return bytesOut.toByteArray();
+    } catch (Exception e) {
       throw new RuntimeException(e);
     }
   }
 
-  public static BlockPack readFile(String filenameBase) {
+  public String toBase64EncodedString() {
+    return Base64.getEncoder().encodeToString(toBytes());
+  }
+
+  public void writeZipFile(String filename) {
+    // Add ".zip" if filename doesn't already end with it.
+    int dotZipIndex = filename.toLowerCase().lastIndexOf(".zip");
+    String filenameBase;
+    if (dotZipIndex > 0) {
+      filenameBase = filename.substring(0, dotZipIndex);
+    } else {
+      filenameBase = filename;
+      filename += ".zip";
+    }
+
+    try (ZipOutputStream zipOut = new ZipOutputStream(new FileOutputStream(new File(filename)));
+        DataOutputStream dataOut = new DataOutputStream(zipOut)) {
+      zipOut.putNextEntry(new ZipEntry(filenameBase + ".blockpack"));
+      zipOut.setLevel(6);
+      writeStream(dataOut);
+      zipOut.closeEntry();
+    } catch (Exception e) {
+      throw new RuntimeException("Exception while writing BlockPack to " + filename, e);
+    }
+  }
+
+  private interface ChunkWriter {
+    void writeChunk(DataOutputStream dataOut) throws IOException;
+  }
+
+  private static void writeChunk(
+      DataOutputStream dataOut, String chunkName, ChunkWriter chunkWriter) throws IOException {
+    if (chunkName.length() != 4) {
+      throw new IllegalArgumentException(
+          String.format("Expected chunk name to have 4 chars but got \"%s\"", chunkName));
+    }
+
+    try (var chunkBytesOut = new ByteArrayOutputStream();
+        var chunkDataOut = new DataOutputStream(chunkBytesOut)) {
+      writeAsciiString(chunkDataOut, chunkName);
+      chunkWriter.writeChunk(chunkDataOut);
+      dataOut.writeInt(chunkDataOut.size() - 4); // exclude 4-char type string
+      chunkBytesOut.writeTo(dataOut);
+      dataOut.writeInt(computeCrc32(chunkBytesOut.toByteArray()));
+    }
+  }
+
+  private static class ChunkReader {
+    private final String chunkName;
+    private final DataInputStream chunkDataIn;
+
+    public ChunkReader(DataInputStream dataIn) throws IOException {
+      this(dataIn, null);
+    }
+
+    public ChunkReader(DataInputStream dataIn, String expectedChunkName) throws IOException {
+      int chunkLength = dataIn.readInt();
+      byte[] chunkBytes = new byte[chunkLength + 4]; // include 4-char type string
+      dataIn.readFully(chunkBytes);
+      var chunkBytesIn = new ByteArrayInputStream(chunkBytes);
+      this.chunkDataIn = new DataInputStream(chunkBytesIn);
+      this.chunkName = readAsciiString(chunkDataIn, 4);
+      if (expectedChunkName != null && !chunkName.equals(expectedChunkName)) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Expected chunk named \"%s\" but got \"%s\"", expectedChunkName, chunkName));
+      }
+      int recordedCrc = dataIn.readInt();
+      int computedCrc = computeCrc32(chunkBytes);
+      if (recordedCrc != computedCrc) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Computed chunk CRC32 0x%x does not match recorded CRC32 0x%x",
+                computedCrc, recordedCrc));
+      }
+    }
+
+    public String chunkName() {
+      return chunkName;
+    }
+
+    DataInputStream dataInputStream() {
+      return chunkDataIn;
+    }
+  }
+
+  private void writeHeadChunk(DataOutputStream dataOut) throws IOException {
+    int majorVersion = 1;
+    int minorVersion = 0;
+    int patchVersion = 0;
+    dataOut.writeInt((majorVersion << 24) | (minorVersion << 16) | (patchVersion << 8));
+  }
+
+  private void writePaletteChunk(DataOutputStream dataOut) throws IOException {
+    int maxSymbolId = symbolMap.isEmpty() ? -1 : Collections.max(symbolMap.keySet());
+    dataOut.writeInt(maxSymbolId + 1);
+    for (int i = 0; i < maxSymbolId + 1; ++i) {
+      var blockType = symbolMap.get(i);
+      writeUtf8String(dataOut, blockType.symbol == null ? "" : blockType.symbol);
+    }
+  }
+
+  private static void readHeadChunk(DataInputStream dataIn) throws IOException {
+    int version = dataIn.readInt();
+    if (version >>> 24 != 1) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Expected version in blockpack zip entry to be v1.*.* but got v%d.%d.%d",
+              version >>> 24, (version >>> 16) & 0xff, (version >>> 8) & 0xff));
+    }
+  }
+
+  private static Map<Integer, String> readPaletteChunk(DataInputStream dataIn) throws IOException {
     Map<Integer, String> symbolMap = new HashMap<>();
-    SortedMap<Long, Tile> tiles = new TreeMap<>();
-    try (ZipInputStream zipIn =
-            new ZipInputStream(new FileInputStream(new File(filenameBase + ".zip")));
+    int symbolMapSize = dataIn.readInt();
+    for (int i = 0; i < symbolMapSize; ++i) {
+      symbolMap.put(i, readUtf8String(dataIn));
+    }
+    return symbolMap;
+  }
+
+  private static void readTileChunk(DataInputStream dataIn, SortedMap<Long, Tile> tiles)
+      throws IOException {
+    long numTiles = dataIn.readInt();
+
+    for (int i = 0; i < numTiles; ++i) {
+      long key = dataIn.readLong();
+      int xOffset = getXFromTileKey(key);
+      int yOffset = getYFromTileKey(key);
+      int zOffset = getZFromTileKey(key);
+
+      int[] blockTypes = readIntArray(dataIn);
+      short[] fills = readShortArray(dataIn);
+      short[] setblocks = readShortArray(dataIn);
+
+      var tile = new Tile(xOffset, yOffset, zOffset, blockTypes, fills, setblocks);
+      tiles.put(key, tile);
+    }
+  }
+
+  /** Writes "Tile" chunks, cutting new chunks whenever TILE_CHUNK_THRESHOLD_BYTES is exceeded. */
+  private static class TileChunkWriter implements AutoCloseable {
+    private final DataOutputStream dataOut;
+    private final ByteArrayOutputStream tmpBytesOut;
+    private final DataOutputStream tmpDataOut;
+    private int numTilesPending = 0; // Number of tiles written to tmpBytesOut, but not to dataOut.
+
+    public TileChunkWriter(DataOutputStream dataOut) {
+      this.dataOut = dataOut;
+      this.tmpBytesOut = new ByteArrayOutputStream();
+      this.tmpDataOut = new DataOutputStream(this.tmpBytesOut);
+    }
+
+    public void write(long tileKey, Tile tile) throws IOException {
+      tmpDataOut.writeLong(tileKey);
+      writeIntArray(tmpDataOut, tile.blockTypes);
+      writeShortArray(tmpDataOut, tile.fills);
+      writeShortArray(tmpDataOut, tile.setblocks);
+
+      ++numTilesPending;
+
+      if (tmpBytesOut.size() > TILE_CHUNK_THRESHOLD_BYTES) {
+        flushChunk();
+      }
+    }
+
+    @Override
+    public void close() throws Exception {
+      if (tmpBytesOut.size() > 0) {
+        flushChunk();
+      }
+    }
+
+    private void flushChunk() throws IOException {
+      writeChunk(
+          dataOut,
+          "Tile",
+          d -> {
+            d.writeInt(numTilesPending);
+            tmpBytesOut.writeTo(d);
+            tmpBytesOut.reset();
+            numTilesPending = 0;
+          });
+    }
+  }
+
+  private void writeStream(DataOutputStream dataOut) throws Exception {
+    writeAsciiString(dataOut, "BLOC_PAC");
+    writeChunk(dataOut, "Head", this::writeHeadChunk);
+    writeChunk(dataOut, "Plte", this::writePaletteChunk);
+
+    try (var tileChunkWriter = new TileChunkWriter(dataOut)) {
+      for (var entry : tiles.entrySet()) {
+        tileChunkWriter.write(entry.getKey(), entry.getValue());
+      }
+    }
+
+    writeChunk(dataOut, "Done", d -> {});
+  }
+
+  public static BlockPack fromBytes(byte[] bytes) {
+    try (var bytesIn = new ByteArrayInputStream(bytes);
+        var dataIn = new DataInputStream(bytesIn)) {
+      return readStream(dataIn);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static BlockPack fromBase64EncodedString(String base64) {
+    return fromBytes(Base64.getDecoder().decode(base64));
+  }
+
+  public static BlockPack readZipFile(String filename) {
+    // Add ".zip" if filename doesn't already end with it.
+    int dotZipIndex = filename.toLowerCase().lastIndexOf(".zip");
+    if (dotZipIndex <= 0) {
+      filename += ".zip";
+    }
+
+    try (ZipInputStream zipIn = new ZipInputStream(new FileInputStream(new File(filename)));
         DataInputStream dataIn = new DataInputStream(zipIn)) {
       ZipEntry zipEntry;
       while ((zipEntry = zipIn.getNextEntry()) != null) {
-        byte[] bytes = new byte[8];
-        dataIn.readFully(bytes);
-        String first8Bytes = new String(bytes, StandardCharsets.US_ASCII);
-        if (!first8Bytes.equals("BLOCKPAC")) {
-          throw new IllegalArgumentException(
-              String.format(
-                  "Expected first 8 bytes of blockpack zip entry in %s.zip to be \"BLOCKPAC\" but"
-                      + " got \"%s\"",
-                  filenameBase, first8Bytes));
-        }
-        int version = dataIn.readInt();
-        if (version >>> 8 != 0x10000) {
-          throw new IllegalArgumentException(
-              String.format(
-                  "Expected version in blockpack zip entry in %s.zip to be 0x10000 (v1.0.0) but got"
-                      + " %x",
-                  filenameBase, version));
-        }
-
-        int symbolMapSize = dataIn.readInt();
-        for (int i = 0; i < symbolMapSize; ++i) {
-          symbolMap.put(i, readUtf8String(dataIn));
-        }
-
-        int numTiles = dataIn.readInt();
-        for (int i = 0; i < numTiles; ++i) {
-          long key = dataIn.readLong();
-          int xOffset = getXFromTileKey(key);
-          int yOffset = getYFromTileKey(key);
-          int zOffset = getZFromTileKey(key);
-
-          int[] blockTypes = readIntArray(dataIn);
-          short[] fills = readShortArray(dataIn);
-          short[] setblocks = readShortArray(dataIn);
-
-          var tile = new Tile(xOffset, yOffset, zOffset, blockTypes, fills, setblocks);
-          tiles.put(key, tile);
+        var blockPack = readStream(dataIn);
+        if (blockPack != null) {
+          return blockPack;
         }
       }
-    } catch (IOException e) {
-      // TODO(maxuser): Log an error.
-      throw new RuntimeException(e);
+      return null;
+    } catch (Exception e) {
+      // This catch clause is widened from IOException to Exception because parse errors can lead to
+      // several different types of exceptions (e.g. indexing an array out of bounds), and it's
+      // useful to attach a message including the filename.
+      throw new RuntimeException("Exception while reading BlockPack from " + filename, e);
     }
+  }
+
+  private static BlockPack readStream(DataInputStream dataIn) throws IOException {
+    String first8Bytes = readAsciiString(dataIn, 8);
+    if (!first8Bytes.equals("BLOC_PAC")) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Expected first 8 bytes of blockpack data to be \"BLOC_PAC\" but got \"%s\"",
+              first8Bytes));
+    }
+
+    ChunkReader chunkReader;
+
+    chunkReader = new ChunkReader(dataIn, "Head");
+    readHeadChunk(chunkReader.dataInputStream());
+
+    chunkReader = new ChunkReader(dataIn);
+    // Ignore chunks until a "Plte" chunk.
+    while (!chunkReader.chunkName().equals("Plte")) {
+      chunkReader = new ChunkReader(dataIn);
+    }
+
+    var symbolMap = readPaletteChunk(chunkReader.dataInputStream());
+
+    chunkReader = new ChunkReader(dataIn);
+    // Ignore chunks until a "Tile" chunk.
+    while (!chunkReader.chunkName().equals("Tile")) {
+      chunkReader = new ChunkReader(dataIn);
+    }
+
+    SortedMap<Long, Tile> tiles = new TreeMap<>();
+    while (chunkReader.chunkName().equals("Tile")) {
+      readTileChunk(chunkReader.dataInputStream(), tiles);
+      chunkReader = new ChunkReader(dataIn);
+    }
+
+    // Ignore all remaining chunks until the "Done" chunk.
+    while (!chunkReader.chunkName().equals("Done")) {
+      chunkReader = new ChunkReader(dataIn);
+    }
+
     return new BlockPack(symbolMap, tiles);
   }
 
