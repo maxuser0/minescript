@@ -45,6 +45,8 @@ public class BlockPack {
   private static final long MASK_26_BITS = (1L << 26) - 1;
   private static final long MASK_12_BITS = (1L << 12) - 1;
 
+  private static final String FILE_FORMAT_MAGIC_BYTES = "BLOCPAK!";
+
   // Size threshold for cutting a new "Tile" chunk.
   private static final int TILE_CHUNK_THRESHOLD_BYTES = 16384;
 
@@ -225,7 +227,7 @@ public class BlockPack {
 
     try (ZipOutputStream zipOut = new ZipOutputStream(new FileOutputStream(new File(filename)));
         DataOutputStream dataOut = new DataOutputStream(zipOut)) {
-      zipOut.putNextEntry(new ZipEntry(filenameBase + ".blockpack"));
+      zipOut.putNextEntry(new ZipEntry(filenameBase + ".blox"));
       zipOut.setLevel(6);
       writeStream(dataOut);
       zipOut.closeEntry();
@@ -395,7 +397,7 @@ public class BlockPack {
   }
 
   private void writeStream(DataOutputStream dataOut) throws Exception {
-    writeAsciiString(dataOut, "BLOC_PAC");
+    writeAsciiString(dataOut, FILE_FORMAT_MAGIC_BYTES);
     writeChunk(dataOut, "Head", this::writeHeadChunk);
     writeChunk(dataOut, "Plte", this::writePaletteChunk);
 
@@ -432,27 +434,30 @@ public class BlockPack {
         DataInputStream dataIn = new DataInputStream(zipIn)) {
       ZipEntry zipEntry;
       while ((zipEntry = zipIn.getNextEntry()) != null) {
-        var blockPack = readStream(dataIn);
-        if (blockPack != null) {
-          return blockPack;
+        // Ignore the zip entries that don't end in ".blox".
+        if (zipEntry.getName().toLowerCase().endsWith(".blox")) {
+          var blockPack = readStream(dataIn);
+          if (blockPack != null) {
+            return blockPack;
+          }
         }
       }
-      return null;
     } catch (Exception e) {
       // This catch clause is widened from IOException to Exception because parse errors can lead to
       // several different types of exceptions (e.g. indexing an array out of bounds), and it's
       // useful to attach a message including the filename.
       throw new RuntimeException("Exception while reading BlockPack from " + filename, e);
     }
+    throw new IllegalArgumentException("Unable to read Blockpack from " + filename);
   }
 
   private static BlockPack readStream(DataInputStream dataIn) throws IOException {
     String first8Bytes = readAsciiString(dataIn, 8);
-    if (!first8Bytes.equals("BLOC_PAC")) {
+    if (!first8Bytes.equals(FILE_FORMAT_MAGIC_BYTES)) {
       throw new IllegalArgumentException(
           String.format(
-              "Expected first 8 bytes of blockpack data to be \"BLOC_PAC\" but got \"%s\"",
-              first8Bytes));
+              "Expected first 8 bytes of blockpack data to be \"%s\" but got \"%s\"",
+              FILE_FORMAT_MAGIC_BYTES, first8Bytes));
     }
 
     ChunkReader chunkReader;
