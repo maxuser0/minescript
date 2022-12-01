@@ -61,6 +61,8 @@ public class BlockPack {
   // tiles.
   private final SortedMap<Long, Tile> tiles;
 
+  private final Map<String, String> comments;
+
   public final int minTileX;
   public final int minTileY;
   public final int minTileZ;
@@ -146,7 +148,13 @@ public class BlockPack {
   }
 
   public BlockPack(Map<Integer, String> symbolMap, SortedMap<Long, Tile> tiles) {
+    this(symbolMap, tiles, new HashMap<>());
+  }
+
+  public BlockPack(
+      Map<Integer, String> symbolMap, SortedMap<Long, Tile> tiles, Map<String, String> comments) {
     this.tiles = tiles;
+    this.comments = new HashMap<>(comments);
 
     for (var entry : symbolMap.entrySet()) {
       this.symbolMap.put(entry.getKey(), new BlockType(entry.getValue()));
@@ -378,13 +386,14 @@ public class BlockPack {
   private static class ChunkReader {
     private final String chunkName;
     private final DataInputStream chunkDataIn;
+    private final int chunkLength;
 
     public ChunkReader(DataInputStream dataIn) throws IOException {
       this(dataIn, null);
     }
 
     public ChunkReader(DataInputStream dataIn, String expectedChunkName) throws IOException {
-      int chunkLength = dataIn.readInt();
+      this.chunkLength = dataIn.readInt();
       byte[] chunkBytes = new byte[chunkLength + 4]; // include 4-char type string
       dataIn.readFully(chunkBytes);
       var chunkBytesIn = new ByteArrayInputStream(chunkBytes);
@@ -411,6 +420,10 @@ public class BlockPack {
 
     DataInputStream dataInputStream() {
       return chunkDataIn;
+    }
+
+    int chunkLength() {
+      return chunkLength;
     }
   }
 
@@ -468,6 +481,22 @@ public class BlockPack {
     }
   }
 
+  private static void readTextChunk(
+      DataInputStream dataIn, int textLength, Map<String, String> comments) throws IOException {
+    byte[] bytes = new byte[textLength];
+    dataIn.readFully(bytes);
+    String text = new String(bytes, StandardCharsets.UTF_8);
+    int nullPos = text.indexOf(0);
+    if (nullPos == -1) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Comment in \"text\" chunk of blockpack is missing a null delimiter: \"%s\"", text));
+    }
+    String key = text.substring(0, nullPos);
+    String value = text.substring(nullPos + 1);
+    comments.put(key, value);
+  }
+
   /** Writes "Tile" chunks, cutting new chunks whenever TILE_CHUNK_THRESHOLD_BYTES is exceeded. */
   private static class TileChunkWriter implements AutoCloseable {
     private final DataOutputStream dataOut;
@@ -517,6 +546,18 @@ public class BlockPack {
   private void writeStream(DataOutputStream dataOut) throws Exception {
     writeAsciiString(dataOut, FILE_FORMAT_MAGIC_BYTES);
     writeChunk(dataOut, "Head", this::writeHeadChunk);
+
+    for (var entry : comments.entrySet()) {
+      writeChunk(
+          dataOut,
+          "text",
+          d -> {
+            d.write(
+                String.format("%s\0%s", entry.getKey(), entry.getValue())
+                    .getBytes(StandardCharsets.UTF_8));
+          });
+    }
+
     writeChunk(dataOut, "Plte", this::writePaletteChunk);
 
     try (var tileChunkWriter = new TileChunkWriter(dataOut)) {
@@ -587,6 +628,7 @@ public class BlockPack {
 
     Map<Integer, String> symbolMap = null;
     SortedMap<Long, Tile> tiles = new TreeMap<>();
+    Map<String, String> comments = new HashMap<>();
 
     chunkReader = new ChunkReader(dataIn);
     while (!chunkReader.chunkName().equals("Done")) {
@@ -603,6 +645,10 @@ public class BlockPack {
 
         case "Tile":
           readTileChunk(chunkReader.dataInputStream(), tiles);
+          break;
+
+        case "text":
+          readTextChunk(chunkReader.dataInputStream(), chunkReader.chunkLength(), comments);
           break;
 
         default:

@@ -23,6 +23,7 @@ public class BlockPacker {
   private final IdAllocator idAllocator = new IdAllocator();
   private Map<String, Integer> typeMap = new HashMap<>();
   private Map<Integer, String> symbolMap = new HashMap<>();
+  private Map<String, String> comments = new HashMap<>();
 
   private boolean debug = false;
 
@@ -81,6 +82,10 @@ public class BlockPacker {
       System.out.printf("# tile offset: %d %d %d\n", x, y, z);
       System.out.print(tile.getDebugInfo(symbolMap));
     }
+  }
+
+  public void addComment(String key, String value) {
+    comments.put(key, value);
   }
 
   public BlockPack pack() {
@@ -155,7 +160,7 @@ public class BlockPacker {
     // Mappings in symbolMap are snapshotted by the BlockPack constructor so that symbols referenced
     // in a BlockPack are stable in the face of the BlockPacker that created it adding or removing
     // entries.
-    return new BlockPack(symbolMap, packedTiles);
+    return new BlockPack(symbolMap, packedTiles, comments);
   }
 
   static class IdAllocator {
