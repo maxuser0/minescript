@@ -15,7 +15,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.function.Consumer;
@@ -576,34 +578,46 @@ public class BlockPack {
               FILE_FORMAT_MAGIC_BYTES, first8Bytes));
     }
 
-    ChunkReader chunkReader;
+    // Track the chunks that are allowed only once.
+    Set<String> exhaustedChunks = new HashSet<>();
 
-    chunkReader = new ChunkReader(dataIn, "Head");
+    ChunkReader chunkReader = new ChunkReader(dataIn, "Head");
     readHeadChunk(chunkReader.dataInputStream());
+    exhaustedChunks.add(chunkReader.chunkName());
 
-    chunkReader = new ChunkReader(dataIn);
-    // Ignore chunks until a "Plte" chunk.
-    while (!chunkReader.chunkName().equals("Plte")) {
-      chunkReader = new ChunkReader(dataIn);
-    }
-
-    var symbolMap = readPaletteChunk(chunkReader.dataInputStream());
-
-    chunkReader = new ChunkReader(dataIn);
-    // Ignore chunks until a "Tile" chunk.
-    while (!chunkReader.chunkName().equals("Tile")) {
-      chunkReader = new ChunkReader(dataIn);
-    }
-
+    Map<Integer, String> symbolMap = null;
     SortedMap<Long, Tile> tiles = new TreeMap<>();
-    while (chunkReader.chunkName().equals("Tile")) {
-      readTileChunk(chunkReader.dataInputStream(), tiles);
+
+    chunkReader = new ChunkReader(dataIn);
+    while (!chunkReader.chunkName().equals("Done")) {
+      if (exhaustedChunks.contains(chunkReader.chunkName())) {
+        throw new IllegalArgumentException(
+            String.format(
+                "\"%s\" chunk appears more than once in blockpack", chunkReader.chunkName()));
+      }
+      switch (chunkReader.chunkName()) {
+        case "Plte":
+          exhaustedChunks.add(chunkReader.chunkName());
+          symbolMap = readPaletteChunk(chunkReader.dataInputStream());
+          break;
+
+        case "Tile":
+          readTileChunk(chunkReader.dataInputStream(), tiles);
+          break;
+
+        default:
+          if (Character.isUpperCase(chunkReader.chunkName().charAt(0))) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "Unrecognized critical chunk named \"%s\" in blockpack",
+                    chunkReader.chunkName()));
+          }
+      }
       chunkReader = new ChunkReader(dataIn);
     }
 
-    // Ignore all remaining chunks until the "Done" chunk.
-    while (!chunkReader.chunkName().equals("Done")) {
-      chunkReader = new ChunkReader(dataIn);
+    if (symbolMap == null) {
+      throw new IllegalArgumentException("Required chunk \"Plte\" not found in blockpack");
     }
 
     return new BlockPack(symbolMap, tiles);
