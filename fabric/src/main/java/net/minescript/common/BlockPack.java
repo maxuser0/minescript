@@ -59,6 +59,22 @@ public class BlockPack {
   // tiles.
   private final SortedMap<Long, Tile> tiles;
 
+  public final int minTileX;
+  public final int minTileY;
+  public final int minTileZ;
+
+  public final int maxTileX;
+  public final int maxTileY;
+  public final int maxTileZ;
+
+  public final int minBlockX;
+  public final int minBlockY;
+  public final int minBlockZ;
+
+  public final int maxBlockX;
+  public final int maxBlockY;
+  public final int maxBlockZ;
+
   private static class BlockType {
     public final String symbol;
     public final boolean stable;
@@ -87,15 +103,27 @@ public class BlockPack {
     }
   }
 
-  public static long getTileKey(int x, int y, int z) {
-    // Adjust x, y, z to non-negative values so they're amenable to bit operations.
-    int adjustedX = x - X_BUILD_MIN;
-    int adjustedY = y - Y_BUILD_MIN;
-    int adjustedZ = z - Z_BUILD_MIN;
+  private static int worldXToTileX(int x) {
+    return ((x >= 0) ? (x / X_TILE_SIZE) : (((x + 1) / X_TILE_SIZE) - 1)) * X_TILE_SIZE;
+  }
 
-    int xOffset = adjustedX / X_TILE_SIZE * X_TILE_SIZE;
-    int yOffset = adjustedY / Y_TILE_SIZE * Y_TILE_SIZE;
-    int zOffset = adjustedZ / Z_TILE_SIZE * Z_TILE_SIZE;
+  private static int worldYToTileY(int y) {
+    return ((y >= 0) ? (y / Y_TILE_SIZE) : (((y + 1) / Y_TILE_SIZE) - 1)) * Y_TILE_SIZE;
+  }
+
+  private static int worldZToTileZ(int z) {
+    return ((z >= 0) ? (z / Z_TILE_SIZE) : (((z + 1) / Z_TILE_SIZE) - 1)) * Z_TILE_SIZE;
+  }
+
+  public static long getTileKey(int x, int y, int z) {
+    return packCoords(worldXToTileX(x), worldYToTileY(y), worldZToTileZ(z));
+  }
+
+  public static long packCoords(int x, int y, int z) {
+    // Adjust x, y, z to non-negative values so they're amenable to bit operations.
+    int xOffset = x - X_BUILD_MIN;
+    int yOffset = y - Y_BUILD_MIN;
+    int zOffset = z - Z_BUILD_MIN;
 
     // y gets the high 12 bits, x gets the next 26 bits, and z gets the low 26 bits.
     return (((long) yOffset & MASK_12_BITS) << 26 + 26)
@@ -103,15 +131,15 @@ public class BlockPack {
         | ((long) zOffset & MASK_26_BITS);
   }
 
-  public static int getXFromTileKey(long key) {
+  public static int getXFromPackedCoords(long key) {
     return (int) ((key >>> 26) & MASK_26_BITS) + X_BUILD_MIN;
   }
 
-  public static int getYFromTileKey(long key) {
+  public static int getYFromPackedCoords(long key) {
     return (int) (key >>> (26 + 26)) + Y_BUILD_MIN;
   }
 
-  public static int getZFromTileKey(long key) {
+  public static int getZFromPackedCoords(long key) {
     return (int) (key & MASK_26_BITS) + Z_BUILD_MIN;
   }
 
@@ -121,6 +149,94 @@ public class BlockPack {
     for (var entry : symbolMap.entrySet()) {
       this.symbolMap.put(entry.getKey(), new BlockType(entry.getValue()));
     }
+
+    // First iterate all tiles to find the min/max tile along each dimension.
+    int minTileX = X_BUILD_MAX;
+    int minTileY = Y_BUILD_MAX;
+    int minTileZ = Z_BUILD_MAX;
+    int maxTileX = X_BUILD_MIN;
+    int maxTileY = Y_BUILD_MIN;
+    int maxTileZ = Z_BUILD_MIN;
+    for (long key : tiles.keySet()) {
+      int x = getXFromPackedCoords(key);
+      int y = getYFromPackedCoords(key);
+      int z = getZFromPackedCoords(key);
+
+      if (x < minTileX) minTileX = x;
+      if (y < minTileY) minTileY = y;
+      if (z < minTileZ) minTileZ = z;
+
+      if (x > maxTileX) maxTileX = x;
+      if (y > maxTileY) maxTileY = y;
+      if (z > maxTileZ) maxTileZ = z;
+    }
+    this.minTileX = minTileX;
+    this.minTileY = minTileY;
+    this.minTileZ = minTileZ;
+    this.maxTileX = maxTileX + X_TILE_SIZE - 1; // offset to max end of tile
+    this.maxTileY = maxTileY + Y_TILE_SIZE - 1; // offset to max end of tile
+    this.maxTileZ = maxTileZ + Z_TILE_SIZE - 1; // offset to max end of tile
+
+    // Next find the tiles matching the min/max to find the min/max block in those border tiles.
+    int minBlockX = X_BUILD_MAX;
+    int minBlockY = Y_BUILD_MAX;
+    int minBlockZ = Z_BUILD_MAX;
+    int maxBlockX = X_BUILD_MIN;
+    int maxBlockY = Y_BUILD_MIN;
+    int maxBlockZ = Z_BUILD_MIN;
+    int[] coord = new int[3];
+    for (var entry : tiles.entrySet()) {
+      long key = entry.getKey();
+      int tileX = getXFromPackedCoords(key);
+      int tileY = getYFromPackedCoords(key);
+      int tileZ = getZFromPackedCoords(key);
+
+      Tile tile = entry.getValue();
+      if (tileX == minTileX
+          || tileX == maxTileX
+          || tileY == minTileY
+          || tileY == maxTileY
+          || tileZ == minTileZ
+          || tileZ == maxTileZ) {
+        for (int i = 0; i < tile.fills.length; ++i) {
+          if (i % 3 == 2) continue;
+          Tile.getCoord(tile.fills[i], coord);
+
+          int blockX = tileX + coord[0];
+          if (blockX < minBlockX) minBlockX = blockX;
+          if (blockX > maxBlockX) maxBlockX = blockX;
+
+          int blockY = tileY + coord[1];
+          if (blockY < minBlockY) minBlockY = blockY;
+          if (blockY > maxBlockY) maxBlockY = blockY;
+
+          int blockZ = tileZ + coord[2];
+          if (blockZ < minBlockZ) minBlockZ = blockZ;
+          if (blockZ > maxBlockZ) maxBlockZ = blockZ;
+        }
+        for (int i = 0; i < tile.setblocks.length; i += 2) {
+          Tile.getCoord(tile.setblocks[i], coord);
+
+          int blockX = tileX + coord[0];
+          if (blockX < minBlockX) minBlockX = blockX;
+          if (blockX > maxBlockX) maxBlockX = blockX;
+
+          int blockY = tileY + coord[1];
+          if (blockY < minBlockY) minBlockY = blockY;
+          if (blockY > maxBlockY) maxBlockY = blockY;
+
+          int blockZ = tileZ + coord[2];
+          if (blockZ < minBlockZ) minBlockZ = blockZ;
+          if (blockZ > maxBlockZ) maxBlockZ = blockZ;
+        }
+      }
+    }
+    this.minBlockX = minBlockX;
+    this.minBlockY = minBlockY;
+    this.minBlockZ = minBlockZ;
+    this.maxBlockX = maxBlockX;
+    this.maxBlockY = maxBlockY;
+    this.maxBlockZ = maxBlockZ;
   }
 
   private static void writeShortArray(DataOutputStream dataOut, short[] shorts) throws IOException {
@@ -337,9 +453,9 @@ public class BlockPack {
 
     for (int i = 0; i < numTiles; ++i) {
       long key = dataIn.readLong();
-      int xOffset = getXFromTileKey(key);
-      int yOffset = getYFromTileKey(key);
-      int zOffset = getZFromTileKey(key);
+      int xOffset = getXFromPackedCoords(key);
+      int yOffset = getYFromPackedCoords(key);
+      int zOffset = getZFromPackedCoords(key);
 
       int[] blockTypes = readIntArray(dataIn);
       short[] fills = readShortArray(dataIn);

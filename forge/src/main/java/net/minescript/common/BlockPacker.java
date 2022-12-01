@@ -60,9 +60,9 @@ public class BlockPacker {
             key,
             k -> {
               return new Tile(
-                  BlockPack.getXFromTileKey(key),
-                  BlockPack.getYFromTileKey(key),
-                  BlockPack.getZFromTileKey(key));
+                  BlockPack.getXFromPackedCoords(key),
+                  BlockPack.getYFromPackedCoords(key),
+                  BlockPack.getZFromPackedCoords(key));
             });
     int blockTypeId = typeMap.computeIfAbsent(blockType, k -> idAllocator.allocateId());
     symbolMap.putIfAbsent(blockTypeId, blockType);
