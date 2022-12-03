@@ -84,8 +84,8 @@ public class BlockPacker {
     }
   }
 
-  public void addComment(String key, String value) {
-    comments.put(key, value);
+  public Map<String, String> comments() {
+    return comments;
   }
 
   public BlockPack pack() {

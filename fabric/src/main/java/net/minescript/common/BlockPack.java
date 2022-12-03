@@ -343,11 +343,17 @@ public class BlockPack {
   public void writeZipFile(String filename) {
     // Add ".zip" if filename doesn't already end with it.
     int dotZipIndex = filename.toLowerCase().lastIndexOf(".zip");
-    String filenameBase;
+
+    // Note that even if there's no dir separator found, lastDirSeparatorPos will be -1, and
+    // creating a substring starting at `lastDirSeparatorPos + 1` will be correct (i.e. zero)
+    // without explicitly checking for whether it was found.
+    int lastDirSeparatorPos = Math.max(filename.lastIndexOf('/'), filename.lastIndexOf('\\'));
+    final String filenameBase;
+
     if (dotZipIndex > 0) {
-      filenameBase = filename.substring(0, dotZipIndex);
+      filenameBase = filename.substring(lastDirSeparatorPos + 1, dotZipIndex);
     } else {
-      filenameBase = filename;
+      filenameBase = filename.substring(lastDirSeparatorPos + 1);
       filename += ".zip";
     }
 
