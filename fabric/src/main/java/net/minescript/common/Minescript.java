@@ -1948,7 +1948,7 @@ public class Minescript {
         } else if (key == BACKSPACE_KEY) {
           value = eraseChar(value, cursorPos);
         }
-        if (value.length() > 1) {
+        if (value.stripTrailing().length() > 1) {
           String command = value.substring(1).split("\\s+")[0];
           if (key == TAB_KEY && !commandSuggestions.isEmpty()) {
             if (cursorPos == command.length() + 1) {
