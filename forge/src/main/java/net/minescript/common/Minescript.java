@@ -86,7 +86,7 @@ public class Minescript {
       int numDeletedFiles = 0;
       LOGGER.info("Deleting undo files from previous run...");
       for (var undoFile : undoDir.listFiles()) {
-        if (undoFile.getName().endsWith(".txt")) {
+        if (undoFile.getName().endsWith(".txt") || undoFile.getName().endsWith(".zip")) {
           if (undoFile.delete()) {
             ++numDeletedFiles;
           }
@@ -186,6 +186,8 @@ public class Minescript {
       new File(Paths.get(MINESCRIPT_DIR, "config.txt").toString());
   private static long lastConfigLoadTime = 0;
 
+  private static boolean useBlockPackForUndo = true;
+
   /** Loads config from {@code minescript/config.txt} if the file has changed since last loaded. */
   private static void loadConfig() {
     if (System.getProperty("os.name").startsWith("Windows")) {
@@ -261,6 +263,10 @@ public class Minescript {
               logChunkLoadEvents = Boolean.valueOf(value);
               LOGGER.info("Setting minescript_log_chunk_load_events to {}", logChunkLoadEvents);
               break;
+            case "minescript_use_blockpack_for_undo":
+              useBlockPackForUndo = Boolean.valueOf(value);
+              LOGGER.info("Setting minescript_use_blockpack_for_undo to {}", useBlockPackForUndo);
+              break;
             default:
               LOGGER.warn(
                   "Unrecognized config var: {} = \"{}\" (\"{}\")", name, value, pythonLocation);
@@ -289,6 +295,7 @@ public class Minescript {
           "minescript_incremental_command_suggestions",
           "minescript_script_function_debug_outptut",
           "minescript_log_chunk_load_events",
+          "minescript_use_blockpack_for_undo",
           "enable_minescript_on_chat_received_event");
 
   private static List<String> getScriptCommandNamesWithBuiltins() {
@@ -456,7 +463,29 @@ public class Minescript {
     void logJobException(Exception e);
   }
 
-  static class UndoableAction {
+  interface UndoableAction {
+    int originalJobId();
+
+    void onOriginalJobDone();
+
+    String[] originalCommand();
+
+    String[] derivativeCommand();
+
+    void processCommandToUndo(Level level, String command);
+
+    void enqueueCommands(Queue<String> commandQueue);
+
+    static UndoableAction create(int originalJobId, String[] originalCommand) {
+      if (useBlockPackForUndo) {
+        return new UndoableActionBlockPack(originalJobId, originalCommand);
+      } else {
+        return new UndoableActionSetblocks(originalJobId, originalCommand);
+      }
+    }
+  }
+
+  static class UndoableActionSetblocks implements UndoableAction {
     private static String UNDO_DIR = Paths.get(MINESCRIPT_DIR, "undo").toString();
 
     private volatile int originalJobId; // ID of the job that this undoes.
@@ -500,7 +529,7 @@ public class Minescript {
       }
     }
 
-    public UndoableAction(int originalJobId, String[] originalCommand) {
+    public UndoableActionSetblocks(int originalJobId, String[] originalCommand) {
       this.originalJobId = originalJobId;
       this.originalCommand = originalCommand;
       this.startTimeMillis = System.currentTimeMillis();
@@ -606,6 +635,144 @@ public class Minescript {
         } catch (IOException e) {
           logException(e);
         }
+      }
+    }
+  }
+
+  static class UndoableActionBlockPack implements UndoableAction {
+    private static String UNDO_DIR = Paths.get(MINESCRIPT_DIR, "undo").toString();
+
+    private volatile int originalJobId; // ID of the job that this undoes.
+    private String[] originalCommand;
+    private final long startTimeMillis;
+    private BlockPacker blockPacker = new BlockPacker();
+    private final Set<Position> blocks = new HashSet<>();
+    private String blockPackFilename;
+    private boolean undone = false;
+
+    // coords and pos are reused to avoid lots of small object instantiations.
+    private int[] coords = new int[6];
+    private BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+
+    private static class Position {
+      public final int x;
+      public final int y;
+      public final int z;
+
+      public Position(int x, int y, int z) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+      }
+
+      @Override
+      public int hashCode() {
+        return Objects.hash(x, y, z);
+      }
+
+      @Override
+      public boolean equals(Object o) {
+        if (this == o) {
+          return true;
+        }
+        if (!(o instanceof Position)) {
+          return false;
+        }
+        Position other = (Position) o;
+        return x == other.x && y == other.y && z == other.z;
+      }
+    }
+
+    public UndoableActionBlockPack(int originalJobId, String[] originalCommand) {
+      this.originalJobId = originalJobId;
+      this.originalCommand = originalCommand;
+      this.startTimeMillis = System.currentTimeMillis();
+    }
+
+    public int originalJobId() {
+      return originalJobId;
+    }
+
+    public synchronized void onOriginalJobDone() {
+      originalJobId = -1;
+
+      if (!blocks.isEmpty()) {
+        // Write undo BlockPack to a file and clear in-memory commands queue.
+        new File(UNDO_DIR).mkdirs();
+        blockPackFilename = Paths.get(UNDO_DIR, startTimeMillis + ".zip").toString();
+        blockPacker.comments().put("source command", "undo");
+        blockPacker.comments().put("command to undo", quoteCommand(originalCommand));
+        blockPacker.pack().writeZipFile(blockPackFilename);
+        blockPacker = null;
+        blocks.clear();
+      }
+    }
+
+    public String[] originalCommand() {
+      return originalCommand;
+    }
+
+    public String[] derivativeCommand() {
+      String[] derivative = new String[2];
+      derivative[0] = "\\undo";
+      derivative[1] = "(" + String.join(" ", originalCommand) + ")";
+      return derivative;
+    }
+
+    public synchronized void processCommandToUndo(Level level, String command) {
+      if (command.startsWith("/setblock ") && getSetblockCoords(command, coords)) {
+        Optional<String> block =
+            blockStateToString(level.getBlockState(pos.set(coords[0], coords[1], coords[2])));
+        if (block.isPresent()) {
+          if (!addBlockToUndoQueue(coords[0], coords[1], coords[2], block.get())) {
+            return;
+          }
+        }
+      } else if (command.startsWith("/fill ") && getFillCoords(command, coords)) {
+        int x0 = coords[0];
+        int y0 = coords[1];
+        int z0 = coords[2];
+        int x1 = coords[3];
+        int y1 = coords[4];
+        int z1 = coords[5];
+        for (int x = x0; x <= x1; x++) {
+          for (int y = y0; y <= y1; y++) {
+            for (int z = z0; z <= z1; z++) {
+              Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, y, z)));
+              if (block.isPresent()) {
+                if (!addBlockToUndoQueue(x, y, z, block.get())) {
+                  return;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    private boolean addBlockToUndoQueue(int x, int y, int z, String block) {
+      if (undone) {
+        LOGGER.error(
+            "Cannot add command to undoable action after already undone: {}",
+            String.join(" ", originalCommand));
+        return false;
+      }
+      // For a given position, add only the first block, because that's the
+      // block that needs to be restored at that position during an undo operation.
+      if (blocks.add(new Position(x, y, z))) {
+        blockPacker.setblock(x, y, z, block);
+      }
+      return true;
+    }
+
+    public synchronized void enqueueCommands(Queue<String> commandQueue) {
+      undone = true;
+      if (blockPackFilename == null) {
+        blockPacker.pack().getBlockCommands(false, commandQueue::add);
+        blockPacker = null;
+        blocks.clear();
+      } else {
+        BlockPack.readZipFile(blockPackFilename).getBlockCommands(false, commandQueue::add);
       }
     }
   }
@@ -981,7 +1148,7 @@ public class Minescript {
 
     public void createSubprocess(String[] command) {
       var job = new Job(allocateJobId(), command, new SubprocessTask(), this::removeJob);
-      var undo = new UndoableAction(job.jobId(), command);
+      var undo = UndoableAction.create(job.jobId(), command);
       jobUndoMap.put(job.jobId(), undo);
       undoStack.addFirst(undo);
       jobMap.put(job.jobId(), job);
@@ -1528,6 +1695,17 @@ public class Minescript {
           }
           return;
 
+        case "minescript_use_blockpack_for_undo":
+          if (checkParamTypes(command, ParamType.BOOL)) {
+            boolean value = Boolean.valueOf(command[1]);
+            useBlockPackForUndo = value;
+            logUserInfo("Minescript use of BlockPack for undo set to {}", value);
+          } else {
+            logUserError(
+                "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
+          }
+          return;
+
         case "enable_minescript_on_chat_received_event":
           if (checkParamTypes(command, ParamType.BOOL)) {
             boolean enable = command[1].equals("true");
@@ -1769,7 +1947,7 @@ public class Minescript {
         } else if (key == BACKSPACE_KEY) {
           value = eraseChar(value, cursorPos);
         }
-        if (value.length() > 1) {
+        if (value.stripTrailing().length() > 1) {
           String command = value.substring(1).split("\\s+")[0];
           if (key == TAB_KEY && !commandSuggestions.isEmpty()) {
             if (cursorPos == command.length() + 1) {
