@@ -54,7 +54,11 @@ def main(args):
   else:
     label = args[6].replace("/", "_").replace("\\", "_").replace(" ", "_")
 
-  copy_file = os.path.join("minescript", "copies", label + ".zip")
+  copies_dir = os.path.join("minescript", "copies")
+  if not os.path.exists(copies_dir):
+    os.makedirs(copies_dir)
+
+  copy_file = os.path.join(copies_dir, label + ".zip")
 
   blockpack = BlockPack.read_world(
       (x1, y1, z1), (x2, y2, z2), offset=(-x1, -y1, -z1),
