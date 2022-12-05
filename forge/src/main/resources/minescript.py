@@ -434,3 +434,99 @@ def unregister_chat_message_interceptor():
     True if successfully unregistered an interceptor, False otherwise.
   """
   CallScriptFunction("unregister_chat_message_interceptor")
+
+
+BlockPos = Tuple[int, int, int] # (x, y, z) position in block space
+
+
+# TODO(maxuser): add doc string
+def blockpack_read_world(
+    pos1: BlockPos, pos2: BlockPos,
+    offset: BlockPos = (0, 0, 0),
+    comments: Dict[str, str] = {},
+    safety_limit: bool = True) -> int:
+  return CallScriptFunction("blockpack_read_world", pos1, pos2, offset, comments, safety_limit)
+
+
+# TODO(maxuser): add doc string
+def blockpack_read_file(filename: str) -> int:
+  return CallScriptFunction("blockpack_read_file", filename)
+
+
+# TODO(maxuser): add doc string
+def blockpack_block_bounds(blockpack_id: int) -> (BlockPos, BlockPos):
+  return CallScriptFunction("blockpack_block_bounds", blockpack_id)
+
+
+# TODO(maxuser): add doc string
+def blockpack_write_world(blockpack_id: int, offset: BlockPos = (0, 0, 0)) -> bool:
+  return CallScriptFunction("blockpack_write_world", blockpack_id, offset)
+
+
+# TODO(maxuser): add doc string
+def blockpack_write_file(
+    blockpack_id: int, filename: str) -> bool:
+  return CallScriptFunction("blockpack_write_file", blockpack_id, filename)
+
+
+# TODO(maxuser): add doc string
+def blockpack_delete(blockpack_id: int) -> bool:
+  return CallScriptFunction("blockpack_delete", blockpack_id)
+
+
+class BlockPackException(Exception):
+  pass
+
+
+class BlockPack:
+  def __init__(self, java_generated_id: int):
+    """Do not call this directly. Use the classmethods read_world() or read_file() instead."""
+    self.id = java_generated_id
+
+  # TODO(maxuser): add doc string
+  @classmethod
+  def read_world(
+      cls,
+      pos1: BlockPos, pos2: BlockPos,
+      offset: BlockPos = (0, 0, 0),
+      comments: Dict[str, str] = {},
+      safety_limit: bool = True) -> 'BlockPack':
+    blockpack_id = blockpack_read_world(pos1, pos2, offset, comments, safety_limit)
+    if blockpack_id is None:
+      raise BlockPackException()
+    return BlockPack(blockpack_id)
+
+
+  # TODO(maxuser): add doc string
+  @classmethod
+  def read_file(cls, filename: str) -> 'BlockPack':
+    blockpack_id = blockpack_read_file(filename)
+    if blockpack_id is None:
+      raise BlockPackException()
+    return BlockPack(blockpack_id)
+
+
+  # TODO(maxuser): add doc string
+  def block_bounds(self) -> (BlockPos, BlockPos):
+    bounds = blockpack_block_bounds(self.id)
+    if bounds is None:
+      raise BlockPackException()
+    return bounds
+
+
+  # TODO(maxuser): add doc string
+  def write_world(self, offset: BlockPos = (0, 0, 0)) -> bool:
+    if not blockpack_write_world(self.id, offset):
+      raise BlockPackException()
+
+
+  # TODO(maxuser): add doc string
+  def write_file(self, filename: str) -> bool:
+    if not blockpack_write_file(self.id, filename):
+      raise BlockPackException()
+
+
+  # TODO(maxuser): add doc string
+  def __del__(self):
+    if not blockpack_delete(self.id):
+      raise BlockPackException()

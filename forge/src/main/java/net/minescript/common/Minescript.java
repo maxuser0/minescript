@@ -106,6 +106,7 @@ public class Minescript {
       copyJarResourceToMinescriptDir("minescript.py", FileOverwritePolicy.OVERWRITTE);
       copyJarResourceToMinescriptDir("minescript_runtime.py", FileOverwritePolicy.OVERWRITTE);
       copyJarResourceToMinescriptDir("help.py", FileOverwritePolicy.OVERWRITTE);
+      copyJarResourceToMinescriptDir("copy.py", FileOverwritePolicy.OVERWRITTE);
       copyJarResourceToMinescriptDir("paste.py", FileOverwritePolicy.OVERWRITTE);
     }
 
@@ -188,6 +189,9 @@ public class Minescript {
 
   private static boolean useBlockPackForUndo = true;
 
+  private static boolean useBlockPackForCopy = true;
+  private static final Map<Integer, BlockPack> blockpacks = new ConcurrentHashMap<>();
+
   /** Loads config from {@code minescript/config.txt} if the file has changed since last loaded. */
   private static void loadConfig() {
     if (System.getProperty("os.name").startsWith("Windows")) {
@@ -262,6 +266,10 @@ public class Minescript {
             case "minescript_log_chunk_load_events":
               logChunkLoadEvents = Boolean.valueOf(value);
               LOGGER.info("Setting minescript_log_chunk_load_events to {}", logChunkLoadEvents);
+              break;
+            case "minescript_use_blockpack_for_copy":
+              useBlockPackForCopy = Boolean.valueOf(value);
+              LOGGER.info("Setting minescript_use_blockpack_for_copy to {}", useBlockPackForCopy);
               break;
             case "minescript_use_blockpack_for_undo":
               useBlockPackForUndo = Boolean.valueOf(value);
@@ -1431,6 +1439,89 @@ public class Minescript {
     return Optional.of(blockType + blockAttrs);
   }
 
+  private interface BlockConsumer {
+    void acceptBlock(int x, int y, int z, String block);
+  }
+
+  private static boolean readBlocks(
+      int x0,
+      int y0,
+      int z0,
+      int x1,
+      int y1,
+      int z1,
+      int xOffset,
+      int yOffset,
+      int zOffset,
+      boolean safetyLimit,
+      BlockConsumer blockConsumer) {
+    var minecraft = Minecraft.getInstance();
+    var player = minecraft.player;
+    if (player == null) {
+      logUserError("Unable to read blocks because player is null.");
+      return false;
+    }
+
+    int playerX = (int) player.getX();
+    int playerY = (int) player.getY();
+    int playerZ = (int) player.getZ();
+
+    int xMin = Math.min(x0, x1);
+    int yMin = Math.max(Math.min(y0, y1), -64); // TODO(maxuser): Use an API for min build height.
+    int zMin = Math.min(z0, z1);
+
+    int xMax = Math.max(x0, x1);
+    int yMax = Math.min(Math.max(y0, y1), 320); // TODO(maxuser): Use an API for max build height.
+    int zMax = Math.max(z0, z1);
+
+    if (safetyLimit) {
+      // Estimate the number of chunks to check against a soft limit.
+      int numChunks = ((xMax - xMin) / 16 + 1) * ((zMax - zMin) / 16 + 1);
+      if (numChunks > 1600) {
+        logUserError(
+            "`blockpack_read_world` exceeded soft limit of 1600 chunks (region covers {} chunks; "
+                + "override this safety check by passing `no_limit` to `copy` command or "
+                + "`safety_limit=False` to `blockpack_read_world` function).",
+            numChunks);
+        return false;
+      }
+    }
+
+    Level level = player.getCommandSenderWorld();
+
+    var pos = new BlockPos.MutableBlockPos();
+    for (int x = xMin; x <= xMax; x += 16) {
+      for (int z = zMin; z <= zMax; z += 16) {
+        Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, 0, z)));
+        if (block.isEmpty() || block.get().equals("minecraft:void_air")) {
+          logUserError("Not all chunks are loaded within the requested `copy` volume.");
+          return false;
+        }
+      }
+    }
+
+    int numBlocks = 0;
+
+    for (int x = xMin; x <= xMax; ++x) {
+      for (int y = yMin; y <= yMax; ++y) {
+        for (int z = zMin; z <= zMax; ++z) {
+          BlockState blockState = level.getBlockState(pos.set(x, y, z));
+          if (!blockState.isAir()) {
+            Optional<String> block = blockStateToString(blockState);
+            if (block.isPresent()) {
+              blockConsumer.acceptBlock(x + xOffset, y + yOffset, z + zOffset, block.get());
+              numBlocks++;
+            } else {
+              logUserError("Unexpected BlockState format: {}", blockState.toString());
+            }
+          }
+        }
+      }
+    }
+
+    return true;
+  }
+
   private static void copyBlocks(
       int x0, int y0, int z0, int x1, int y1, int z1, Optional<String> label, boolean safetyLimit) {
     var minecraft = Minecraft.getInstance();
@@ -1588,50 +1679,55 @@ public class Minescript {
           return;
 
         case "copy":
-          final var cmd = command;
-          Runnable badArgsMessage =
-              () ->
-                  logUserError(
-                      "Expected 6 params of type integer (plus optional params for label and"
-                          + " `no_limit`), instead got `{}`",
-                      getParamsAsString(cmd));
-
-          if (checkParamTypes(
-                  command,
-                  ParamType.INT,
-                  ParamType.INT,
-                  ParamType.INT,
-                  ParamType.INT,
-                  ParamType.INT,
-                  ParamType.INT,
-                  ParamType.VAR_ARGS)
-              && command.length <= 9) {
-            int x0 = Integer.valueOf(command[1]);
-            int y0 = Integer.valueOf(command[2]);
-            int z0 = Integer.valueOf(command[3]);
-            int x1 = Integer.valueOf(command[4]);
-            int y1 = Integer.valueOf(command[5]);
-            int z1 = Integer.valueOf(command[6]);
-
-            boolean safetyLimit = true;
-            Optional<String> label = Optional.empty();
-            for (int i = 7; i < command.length; i++) {
-              // Don't allow safetyLimit to be set to false multiple times.
-              if (command[i].equals("no_limit") && safetyLimit) {
-                safetyLimit = false;
-              } else if (label.isEmpty()) {
-                label = Optional.of(command[i]);
-              } else {
-                badArgsMessage.run();
-                return;
-              }
-            }
-
-            copyBlocks(x0, y0, z0, x1, y1, z1, label, safetyLimit);
+          if (useBlockPackForCopy) {
+            // In this case, `copy` is implemented in a script: copy.py
+            break;
           } else {
-            badArgsMessage.run();
+            final var cmd = command;
+            Runnable badArgsMessage =
+                () ->
+                    logUserError(
+                        "Expected 6 params of type integer (plus optional params for label and"
+                            + " `no_limit`), instead got `{}`",
+                        getParamsAsString(cmd));
+
+            if (checkParamTypes(
+                    command,
+                    ParamType.INT,
+                    ParamType.INT,
+                    ParamType.INT,
+                    ParamType.INT,
+                    ParamType.INT,
+                    ParamType.INT,
+                    ParamType.VAR_ARGS)
+                && command.length <= 9) {
+              int x0 = Integer.valueOf(command[1]);
+              int y0 = Integer.valueOf(command[2]);
+              int z0 = Integer.valueOf(command[3]);
+              int x1 = Integer.valueOf(command[4]);
+              int y1 = Integer.valueOf(command[5]);
+              int z1 = Integer.valueOf(command[6]);
+
+              boolean safetyLimit = true;
+              Optional<String> label = Optional.empty();
+              for (int i = 7; i < command.length; i++) {
+                // Don't allow safetyLimit to be set to false multiple times.
+                if (command[i].equals("no_limit") && safetyLimit) {
+                  safetyLimit = false;
+                } else if (label.isEmpty()) {
+                  label = Optional.of(command[i]);
+                } else {
+                  badArgsMessage.run();
+                  return;
+                }
+              }
+
+              copyBlocks(x0, y0, z0, x1, y1, z1, label, safetyLimit);
+            } else {
+              badArgsMessage.run();
+            }
+            return;
           }
-          return;
 
         case "minescript_commands_per_cycle":
           if (checkParamTypes(command)) {
@@ -1689,6 +1785,17 @@ public class Minescript {
             boolean value = Boolean.valueOf(command[1]);
             logChunkLoadEvents = value;
             logUserInfo("Minescript logging of chunk load events set to {}", value);
+          } else {
+            logUserError(
+                "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
+          }
+          return;
+
+        case "minescript_use_blockpack_for_copy":
+          if (checkParamTypes(command, ParamType.BOOL)) {
+            boolean value = Boolean.valueOf(command[1]);
+            useBlockPackForCopy = value;
+            logUserInfo("Minescript use of BlockPack for copy set to {}", value);
           } else {
             logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
@@ -2477,6 +2584,31 @@ public class Minescript {
     return OptionalInt.empty();
   }
 
+  private static Optional<List<Integer>> getStrictIntList(Object object) {
+    if (!(object instanceof List)) {
+      return Optional.empty();
+    }
+    List<?> list = (List<?>) object;
+    List<Integer> intList = new ArrayList<>();
+    for (var element : list) {
+      var asInt = getStrictIntValue(element);
+      if (asInt.isEmpty()) {
+        return Optional.empty();
+      }
+      intList.add(asInt.getAsInt());
+    }
+    return Optional.of(intList);
+  }
+
+  private static int computeBlockPackKey(BlockPack blockpack) {
+    int key;
+    do {
+      key = blockpack.hashCode() ^ (int) System.nanoTime();
+    } while (key == 0 || blockpacks.containsKey(key));
+    blockpacks.put(key, blockpack);
+    return key;
+  }
+
   /** Returns a JSON response string if a script function is called. */
   private static Optional<String> handleScriptFunction(
       Job job, long funcCallId, String functionName, List<?> args, String argsString) {
@@ -2832,6 +2964,228 @@ public class Minescript {
               message -> job.enqueueStderr(message.getString()));
         }
         return Optional.of(response);
+
+      case "blockpack_read_world":
+        {
+          // Python function signature:
+          //    (pos1: BlockPos, pos2: BlockPos, offset: BlockPos = (0, 0, 0),
+          //     comments: Dict[str, str] = {}, safety_limit: bool = True) -> int
+          if (args.size() != 5) {
+            logUserError("Error: `{}` expected 5 params but got: {}", functionName, argsString);
+            return Optional.of("null");
+          }
+          Optional<List<Integer>> list0 = getStrictIntList(args.get(0));
+          Optional<List<Integer>> list1 = getStrictIntList(args.get(1));
+          Optional<List<Integer>> list2 = getStrictIntList(args.get(2));
+          if (list0.isEmpty()
+              || list1.isEmpty()
+              || list2.isEmpty()
+              || list0.get().size() != 3
+              || list1.get().size() != 3
+              || list2.get().size() != 3) {
+            logUserError(
+                "Error: `{}` expected first 3 params to be lists of int of size 3 but got: {}",
+                functionName,
+                argsString);
+            return Optional.of("null");
+          }
+
+          if (!(args.get(3) instanceof Map)) {
+            logUserError(
+                "Error: `{}` expected `comment` param to be a dictionary but got: {}",
+                functionName,
+                argsString);
+            return Optional.of("null");
+          }
+          var comments = (Map<String, String>) args.get(3);
+
+          if (!(args.get(4) instanceof Boolean)) {
+            logUserError(
+                "Error: `{}` expected `safety_limit` param to be bool but got: {}",
+                functionName,
+                argsString);
+            return Optional.of("null");
+          }
+          boolean safetyLimit = (Boolean) args.get(4);
+
+          var pos0 = list0.get();
+          var pos1 = list1.get();
+          var offset = list2.get();
+          var blockPacker = new BlockPacker();
+          if (!readBlocks(
+              pos0.get(0),
+              pos0.get(1),
+              pos0.get(2),
+              pos1.get(0),
+              pos1.get(1),
+              pos1.get(2),
+              offset.get(0),
+              offset.get(1),
+              offset.get(2),
+              safetyLimit,
+              blockPacker::setblock)) {}
+          blockPacker.comments().putAll(comments);
+          var blockpack = blockPacker.pack();
+          int key = computeBlockPackKey(blockpack);
+          LOGGER.info("Mapped BlockPack[{}]: {}", key, blockpack.comments());
+          return Optional.of(Integer.toString(key));
+        }
+
+      case "blockpack_read_file":
+        {
+          // Python function signature:
+          //    (filename: str) -> int
+          if (args.size() != 1 || !(args.get(0) instanceof String)) {
+            logUserError(
+                "Error: `{}` expected one param of type int but got: {}", functionName, argsString);
+            return Optional.of("-1");
+          }
+          String blockpackFilename = (String) args.get(0);
+          try {
+            var blockpack = BlockPack.readZipFile(blockpackFilename);
+            int key = computeBlockPackKey(blockpack);
+            LOGGER.info("Mapped BlockPack[{}]: {}", key, blockpack.comments());
+            return Optional.of(Integer.toString(key));
+          } catch (Exception e) {
+            logException(e);
+            return Optional.of("-1");
+          }
+        }
+
+      case "blockpack_block_bounds":
+        {
+          // Python function signature:
+          //    (blockpack_id) -> Tuple[Tuple[int, int, int], Tuple[int, int, int]]
+          OptionalInt value = args.isEmpty() ? OptionalInt.empty() : getStrictIntValue(args.get(0));
+          if (!value.isPresent()) {
+            logUserError(
+                "Error: `{}` expected one int param but got: {}", functionName, argsString);
+            return Optional.of("null");
+          }
+
+          int blockpackId = value.getAsInt();
+          var blockpack = blockpacks.get(blockpackId);
+          if (blockpack == null) {
+            logUserError(
+                "Error: `{}` Failed to find BlockPack[{}]: {}",
+                functionName,
+                blockpackId,
+                argsString);
+            return Optional.of("null");
+          }
+
+          int[] bounds = blockpack.blockBounds();
+          return Optional.of(
+              String.format(
+                  "[[%d,%d,%d],[%d,%d,%d]]",
+                  bounds[0], bounds[1], bounds[2], bounds[3], bounds[4], bounds[5]));
+        }
+
+      case "blockpack_write_world":
+        {
+          // Python function signature:
+          //    (blockpack_id: int, offset: BlockPos = (0, 0, 0)) -> bool
+          OptionalInt value = args.isEmpty() ? OptionalInt.empty() : getStrictIntValue(args.get(0));
+          if (!value.isPresent()) {
+            logUserError(
+                "Error: `{}` expected first param to be int but got: {}", functionName, argsString);
+            return Optional.of("false");
+          }
+
+          if (args.size() != 2) {
+            logUserError("Error: `{}` expected two params but got: {}", functionName, argsString);
+            return Optional.of("false");
+          }
+
+          Optional<List<Integer>> list = getStrictIntList(args.get(1));
+          if (list.isEmpty() || list.get().size() != 3) {
+            logUserError(
+                "Error: `{}` expected second param to be list of 3 ints but got: {}",
+                functionName,
+                argsString);
+            return Optional.of("false");
+          }
+
+          var offset = list.get();
+          int blockpackId = value.getAsInt();
+          var blockpack = blockpacks.get(blockpackId);
+          if (blockpack == null) {
+            logUserError(
+                "Error: `{}` Failed to find BlockPack[{}] to write to world: {}",
+                functionName,
+                blockpackId,
+                argsString);
+            return Optional.of("false");
+          }
+
+          blockpack.getBlockCommandsWithOffset(
+              false, offset.get(0), offset.get(1), offset.get(2), job::enqueueStdout);
+
+          return Optional.of("true");
+        }
+
+      case "blockpack_write_file":
+        {
+          // Python function signature:
+          //    (blockpack_id: int, filename: str) -> bool
+          OptionalInt value = args.isEmpty() ? OptionalInt.empty() : getStrictIntValue(args.get(0));
+          if (!value.isPresent()) {
+            logUserError(
+                "Error: `{}` expected first param to be int but got: {}", functionName, argsString);
+            return Optional.of("false");
+          }
+          if (args.size() < 2 || !(args.get(1) instanceof String)) {
+            logUserError(
+                "Error: `{}` expected second param to be string but got: {}",
+                functionName,
+                argsString);
+            return Optional.of("false");
+          }
+
+          int blockpackId = value.getAsInt();
+          String blockpackFilename = (String) args.get(1);
+
+          var blockpack = blockpacks.get(blockpackId);
+          if (blockpack == null) {
+            logUserError(
+                "Error: `{}` Failed to find BlockPack[{}] to write to file: {}",
+                functionName,
+                blockpackId,
+                argsString);
+            return Optional.of("false");
+          }
+
+          try {
+            blockpack.writeZipFile(blockpackFilename);
+            return Optional.of("true");
+          } catch (Exception e) {
+            logException(e);
+            return Optional.of("false");
+          }
+        }
+
+      case "blockpack_delete":
+        {
+          // Python function signature:
+          //    (blockpack_id: int) -> bool
+          OptionalInt value =
+              (args.size() == 1) ? getStrictIntValue(args.get(0)) : OptionalInt.empty();
+          if (!value.isPresent()) {
+            logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
+            return Optional.of("false");
+          }
+          var blockpack = blockpacks.remove(value.getAsInt());
+          if (blockpack == null) {
+            logUserError(
+                "Error: `{}` Failed to find BlockPack[{}] to delete: {}",
+                functionName,
+                value.getAsInt(),
+                argsString);
+            return Optional.of("false");
+          }
+          LOGGER.info("Unmapped BlockPack[{}]: {}", value.getAsInt(), blockpack.comments());
+          return Optional.of("true");
+        }
 
       case "flush":
         if (args.isEmpty()) {

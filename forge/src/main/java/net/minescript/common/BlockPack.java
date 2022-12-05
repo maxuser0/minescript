@@ -3,6 +3,7 @@
 
 package net.minescript.common;
 
+import com.google.common.collect.ImmutableMap;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -40,9 +41,9 @@ public class BlockPack {
   private static final int Z_BUILD_MAX = (1 << 25) - 1;
 
   // X_TILE_SIZE * Y_TILE_SIZE * Z_TILE_SIZE must fit within 16 bits.
-  private static final int X_TILE_SIZE = 16;
-  private static final int Y_TILE_SIZE = 16;
-  private static final int Z_TILE_SIZE = 16;
+  public static final int X_TILE_SIZE = 32;
+  public static final int Y_TILE_SIZE = 32;
+  public static final int Z_TILE_SIZE = 32;
 
   private static final long MASK_26_BITS = (1L << 26) - 1;
   private static final long MASK_12_BITS = (1L << 12) - 1;
@@ -61,7 +62,7 @@ public class BlockPack {
   // tiles.
   private final SortedMap<Long, Tile> tiles;
 
-  private final Map<String, String> comments;
+  private final ImmutableMap<String, String> comments;
 
   public final int minTileX;
   public final int minTileY;
@@ -147,14 +148,10 @@ public class BlockPack {
     return (int) (key & MASK_26_BITS) + Z_BUILD_MIN;
   }
 
-  public BlockPack(Map<Integer, String> symbolMap, SortedMap<Long, Tile> tiles) {
-    this(symbolMap, tiles, new HashMap<>());
-  }
-
   public BlockPack(
       Map<Integer, String> symbolMap, SortedMap<Long, Tile> tiles, Map<String, String> comments) {
     this.tiles = tiles;
-    this.comments = new HashMap<>(comments);
+    this.comments = ImmutableMap.copyOf(comments);
 
     for (var entry : symbolMap.entrySet()) {
       this.symbolMap.put(entry.getKey(), new BlockType(entry.getValue()));
@@ -247,6 +244,14 @@ public class BlockPack {
     this.maxBlockX = maxBlockX;
     this.maxBlockY = maxBlockY;
     this.maxBlockZ = maxBlockZ;
+  }
+
+  public ImmutableMap<String, String> comments() {
+    return comments;
+  }
+
+  public int[] blockBounds() {
+    return new int[] {minBlockX, minBlockY, minBlockZ, maxBlockX, maxBlockY, maxBlockZ};
   }
 
   private static void writeShortArray(DataOutputStream dataOut, short[] shorts) throws IOException {
@@ -672,16 +677,31 @@ public class BlockPack {
       throw new IllegalArgumentException("Required chunk \"Plte\" not found in blockpack");
     }
 
-    return new BlockPack(symbolMap, tiles);
+    return new BlockPack(symbolMap, tiles, comments);
   }
 
   // TODO(maxuser): Replace getBlockCommands with general-purpose iterability of tiles in layers
   // (see #Layering below).
   public void getBlockCommands(boolean setblockOnly, Consumer<String> commandConsumer) {
+    getBlockCommandsWithOffset(setblockOnly, 0, 0, 0, commandConsumer);
+  }
+
+  public void getBlockCommandsWithOffset(
+      boolean setblockOnly,
+      int xOffset,
+      int yOffset,
+      int zOffset,
+      Consumer<String> commandConsumer) {
     for (Tile tile : tiles.values()) {
       // TODO(maxuser): Use tile.getBlockCommands(...) for the initial "stable blocks" layer, and
       // tile.getBlockCommandsInAscendingYOrder(...) for the subsequent "unstable blocks" layer.
-      tile.getBlockCommandsInAscendingYOrder(setblockOnly, symbolMap, commandConsumer);
+      tile.getBlockCommandsInAscendingYOrder(
+          setblockOnly,
+          tile.xOffset + xOffset,
+          tile.yOffset + yOffset,
+          tile.zOffset + zOffset,
+          symbolMap,
+          commandConsumer);
     }
   }
 
@@ -808,7 +828,12 @@ public class BlockPack {
     }
 
     public void getBlockCommandsInAscendingYOrder(
-        boolean setblockOnly, Map<Integer, BlockType> symbolMap, Consumer<String> commandConsumer) {
+        boolean setblockOnly,
+        int xOffset,
+        int yOffset,
+        int zOffset,
+        Map<Integer, BlockType> symbolMap,
+        Consumer<String> commandConsumer) {
       final int setblocksSize = setblocks.length;
       final int fillsSize = fills.length;
 

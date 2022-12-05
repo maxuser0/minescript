@@ -249,7 +249,13 @@ public class BlockPacker {
     private short[] blockMetrics;
 
     public Tile(int xOffset, int yOffset, int zOffset) {
-      this(xOffset, yOffset, zOffset, 16, 16, 16);
+      this(
+          xOffset,
+          yOffset,
+          zOffset,
+          BlockPack.X_TILE_SIZE,
+          BlockPack.Y_TILE_SIZE,
+          BlockPack.Z_TILE_SIZE);
     }
 
     public Tile(int xOffset, int yOffset, int zOffset, int xSize, int ySize, int zSize) {
@@ -335,7 +341,7 @@ public class BlockPacker {
           || z >= zOffset + zSize) {
         throw new ArrayIndexOutOfBoundsException(
             String.format(
-                "Coord (%d, %d, %d) out of bounds for volume [%d-%d, %d-%d, %d-%d]",
+                "Coord (%d, %d, %d) out of bounds for volume [%d..%d, %d..%d, %d..%d]",
                 x,
                 y,
                 z,
