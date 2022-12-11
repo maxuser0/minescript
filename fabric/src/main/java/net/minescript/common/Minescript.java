@@ -2602,7 +2602,7 @@ public class Minescript {
     int key;
     do {
       key = blockpack.hashCode() ^ (int) System.nanoTime();
-    } while (key == 0 || blockpacks.containsKey(key));
+    } while (blockpacks.containsKey(key));
     blockpacks.put(key, blockpack);
     return key;
   }
@@ -2937,6 +2937,16 @@ public class Minescript {
       case "entities":
         return Optional.of(entitiesToJsonString(world.getEntities()));
 
+      case "log":
+        if (args.size() == 1 && args.get(0) instanceof String) {
+          String message = (String) args.get(0);
+          LOGGER.info(message);
+          return Optional.of("true");
+        } else {
+          logUserError("Error: `{}` expected 1 string param but got: {}", functionName, argsString);
+          return Optional.of("false");
+        }
+
       case "screenshot":
         final Optional<String> filename;
         final String response;
@@ -3035,8 +3045,10 @@ public class Minescript {
           //    (filename: str) -> int
           if (args.size() != 1 || !(args.get(0) instanceof String)) {
             logUserError(
-                "Error: `{}` expected one param of type int but got: {}", functionName, argsString);
-            return Optional.of("-1");
+                "Error: `{}` expected one param of type string but got: {}",
+                functionName,
+                argsString);
+            return Optional.of("null");
           }
           String blockpackFilename = (String) args.get(0);
           try {
@@ -3046,7 +3058,30 @@ public class Minescript {
             return Optional.of(Integer.toString(key));
           } catch (Exception e) {
             logException(e);
-            return Optional.of("-1");
+            return Optional.of("null");
+          }
+        }
+
+      case "blockpack_import_data":
+        {
+          // Python function signature:
+          //    (base64_data: str) -> int
+          if (args.size() != 1 || !(args.get(0) instanceof String)) {
+            logUserError(
+                "Error: `{}` expected one param of type string but got: {}",
+                functionName,
+                argsString);
+            return Optional.of("null");
+          }
+          String base64Data = (String) args.get(0);
+          try {
+            var blockpack = BlockPack.fromBase64EncodedString(base64Data);
+            int key = computeBlockPackKey(blockpack);
+            LOGGER.info("Mapped BlockPack[{}]: {}", key, blockpack.comments());
+            return Optional.of(Integer.toString(key));
+          } catch (Exception e) {
+            logException(e);
+            return Optional.of("null");
           }
         }
 
@@ -3077,6 +3112,32 @@ public class Minescript {
               String.format(
                   "[[%d,%d,%d],[%d,%d,%d]]",
                   bounds[0], bounds[1], bounds[2], bounds[3], bounds[4], bounds[5]));
+        }
+
+      case "blockpack_comments":
+        {
+          // Python function signature:
+          //    (blockpack_id) -> Dict[str, str]
+          OptionalInt value = args.isEmpty() ? OptionalInt.empty() : getStrictIntValue(args.get(0));
+          if (!value.isPresent()) {
+            logUserError(
+                "Error: `{}` expected one int param but got: {}", functionName, argsString);
+            return Optional.of("null");
+          }
+
+          int blockpackId = value.getAsInt();
+          var blockpack = blockpacks.get(blockpackId);
+          if (blockpack == null) {
+            logUserError(
+                "Error: `{}` Failed to find BlockPack[{}]: {}",
+                functionName,
+                blockpackId,
+                argsString);
+            return Optional.of("null");
+          }
+
+          var gson = new Gson();
+          return Optional.of(gson.toJson(blockpack.comments()));
         }
 
       case "blockpack_write_world":
@@ -3160,6 +3221,28 @@ public class Minescript {
             logException(e);
             return Optional.of("false");
           }
+        }
+
+      case "blockpack_export_data":
+        {
+          // Python function signature:
+          //    (blockpack_id: int) -> str
+          OptionalInt value =
+              (args.size() == 1) ? getStrictIntValue(args.get(0)) : OptionalInt.empty();
+          if (!value.isPresent()) {
+            logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
+            return Optional.of("null");
+          }
+          var blockpack = blockpacks.get(value.getAsInt());
+          if (blockpack == null) {
+            logUserError(
+                "Error: `{}` Failed to find BlockPack[{}] from which to export data: {}",
+                functionName,
+                value.getAsInt(),
+                argsString);
+            return Optional.of("null");
+          }
+          return Optional.of(String.format("\"%s\"", blockpack.toBase64EncodedString()));
         }
 
       case "blockpack_delete":

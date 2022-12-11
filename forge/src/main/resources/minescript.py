@@ -78,6 +78,20 @@ def chat(message: str):
   print(message)
 
 
+def log(message: str) -> bool:
+  """Sends the given message to latest.log.
+
+  Args:
+    message: string to send to the log
+
+  Returns:
+    True if message was logged successfully, False otherwise.
+  """
+  if not message:
+    return
+  CallScriptFunction("log", message)
+
+
 def screenshot(filename=None):
   """Takes a screenshot, similar to pressing the F2 key.
 
@@ -454,8 +468,19 @@ def blockpack_read_file(filename: str) -> int:
 
 
 # TODO(maxuser): add doc string
+# Takes a base64-encoded string. Returns a blockpack id.
+def blockpack_import_data(base64_data: str) -> int:
+  return CallScriptFunction("blockpack_import_data", base64_data)
+
+
+# TODO(maxuser): add doc string
 def blockpack_block_bounds(blockpack_id: int) -> (BlockPos, BlockPos):
   return CallScriptFunction("blockpack_block_bounds", blockpack_id)
+
+
+# TODO(maxuser): add doc string
+def blockpack_comments(blockpack_id: int) -> Dict[str, str]:
+  return CallScriptFunction("blockpack_comments", blockpack_id)
 
 
 # TODO(maxuser): add doc string
@@ -467,6 +492,12 @@ def blockpack_write_world(blockpack_id: int, offset: BlockPos = (0, 0, 0)) -> bo
 def blockpack_write_file(
     blockpack_id: int, filename: str) -> bool:
   return CallScriptFunction("blockpack_write_file", blockpack_id, filename)
+
+
+# TODO(maxuser): add doc string
+# Returns a base64-encoded string.
+def blockpack_export_data(blockpack_id: int) -> str:
+  return CallScriptFunction("blockpack_export_data", blockpack_id)
 
 
 # TODO(maxuser): add doc string
@@ -505,6 +536,14 @@ class BlockPack:
       raise BlockPackException()
     return BlockPack(blockpack_id)
 
+  # TODO(maxuser): add doc string
+  # Takes a base64-encoded string. Returns a blockpack id.
+  @classmethod
+  def import_data(cls, base64_data: str) -> 'BlockPack':
+    blockpack_id = blockpack_import_data(base64_data)
+    if blockpack_id is None:
+      raise BlockPackException()
+    return BlockPack(blockpack_id)
 
   # TODO(maxuser): add doc string
   def block_bounds(self) -> (BlockPos, BlockPos):
@@ -515,15 +554,32 @@ class BlockPack:
 
 
   # TODO(maxuser): add doc string
-  def write_world(self, offset: BlockPos = (0, 0, 0)) -> bool:
+  def comments(self) -> Dict[str, str]:
+    comments = blockpack_comments(self.id)
+    if comments is None:
+      raise BlockPackException()
+    return comments
+
+
+  # TODO(maxuser): add doc string
+  def write_world(self, offset: BlockPos = (0, 0, 0)):
     if not blockpack_write_world(self.id, offset):
       raise BlockPackException()
 
 
   # TODO(maxuser): add doc string
-  def write_file(self, filename: str) -> bool:
+  def write_file(self, filename: str):
     if not blockpack_write_file(self.id, filename):
       raise BlockPackException()
+
+
+  # TODO(maxuser): add doc string
+  # Returns a base64-encoded string.
+  def export_data(self) -> str:
+    base64_str = blockpack_export_data(self.id)
+    if base64_str is None:
+      raise BlockPackException()
+    return base64_str
 
 
   # TODO(maxuser): add doc string
