@@ -38,6 +38,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -188,9 +189,7 @@ public class Minescript {
   private static long lastConfigLoadTime = 0;
 
   private static boolean useBlockPackForUndo = true;
-
   private static boolean useBlockPackForCopy = true;
-  private static final Map<Integer, BlockPack> blockpacks = new ConcurrentHashMap<>();
 
   /** Loads config from {@code minescript/config.txt} if the file has changed since last loaded. */
   private static void loadConfig() {
@@ -803,12 +802,33 @@ public class Minescript {
     private Queue<String> jobCommandQueue = new ConcurrentLinkedQueue<String>();
     private Lock lock = new ReentrantLock(true); // true indicates a fair lock to avoid starvation
     private List<Runnable> atExitHandlers = new ArrayList<>();
+    private final AtomicInteger blockPackIdAllocator = new AtomicInteger(0);
+    private final Map<Integer, BlockPack> blockpacks = new ConcurrentHashMap<>();
 
     public Job(int jobId, String[] command, Task task, Consumer<Integer> doneCallback) {
       this.jobId = jobId;
       this.command = Arrays.copyOf(command, command.length);
       this.task = task;
       this.doneCallback = doneCallback;
+    }
+
+    public int retainBlockPack(BlockPack blockpack) {
+      int id = blockPackIdAllocator.incrementAndGet();
+      blockpacks.put(id, blockpack);
+      LOGGER.info("Mapped Job[{}] BlockPack[{}]: {}", jobId, id, blockpack.comments());
+      return id;
+    }
+
+    public BlockPack getBlockPackById(int id) {
+      return blockpacks.get(id);
+    }
+
+    public BlockPack releaseBlockPackById(int id) {
+      var blockpack = blockpacks.remove(id);
+      if (blockpack != null) {
+        LOGGER.info("Unmapped Job[{}] BlockPack[{}]: {}", jobId, id, blockpack.comments());
+      }
+      return blockpack;
     }
 
     public void addAtExitHandler(Runnable handler) {
@@ -970,6 +990,9 @@ public class Minescript {
         doneCallback.accept(jobId);
         for (Runnable handler : atExitHandlers) {
           handler.run();
+        }
+        for (int id : blockpacks.keySet()) {
+          releaseBlockPackById(id);
         }
       }
     }
@@ -2598,15 +2621,6 @@ public class Minescript {
     return Optional.of(intList);
   }
 
-  private static int computeBlockPackKey(BlockPack blockpack) {
-    int key;
-    do {
-      key = blockpack.hashCode() ^ (int) System.nanoTime();
-    } while (blockpacks.containsKey(key));
-    blockpacks.put(key, blockpack);
-    return key;
-  }
-
   /** Returns a JSON response string if a script function is called. */
   private static Optional<String> handleScriptFunction(
       Job job, long funcCallId, String functionName, List<?> args, String argsString) {
@@ -3034,8 +3048,7 @@ public class Minescript {
               blockPacker::setblock)) {}
           blockPacker.comments().putAll(comments);
           var blockpack = blockPacker.pack();
-          int key = computeBlockPackKey(blockpack);
-          LOGGER.info("Mapped BlockPack[{}]: {}", key, blockpack.comments());
+          int key = job.retainBlockPack(blockpack);
           return Optional.of(Integer.toString(key));
         }
 
@@ -3053,8 +3066,7 @@ public class Minescript {
           String blockpackFilename = (String) args.get(0);
           try {
             var blockpack = BlockPack.readZipFile(blockpackFilename);
-            int key = computeBlockPackKey(blockpack);
-            LOGGER.info("Mapped BlockPack[{}]: {}", key, blockpack.comments());
+            int key = job.retainBlockPack(blockpack);
             return Optional.of(Integer.toString(key));
           } catch (Exception e) {
             logException(e);
@@ -3076,8 +3088,7 @@ public class Minescript {
           String base64Data = (String) args.get(0);
           try {
             var blockpack = BlockPack.fromBase64EncodedString(base64Data);
-            int key = computeBlockPackKey(blockpack);
-            LOGGER.info("Mapped BlockPack[{}]: {}", key, blockpack.comments());
+            int key = job.retainBlockPack(blockpack);
             return Optional.of(Integer.toString(key));
           } catch (Exception e) {
             logException(e);
@@ -3097,7 +3108,7 @@ public class Minescript {
           }
 
           int blockpackId = value.getAsInt();
-          var blockpack = blockpacks.get(blockpackId);
+          var blockpack = job.getBlockPackById(blockpackId);
           if (blockpack == null) {
             logUserError(
                 "Error: `{}` Failed to find BlockPack[{}]: {}",
@@ -3126,7 +3137,7 @@ public class Minescript {
           }
 
           int blockpackId = value.getAsInt();
-          var blockpack = blockpacks.get(blockpackId);
+          var blockpack = job.getBlockPackById(blockpackId);
           if (blockpack == null) {
             logUserError(
                 "Error: `{}` Failed to find BlockPack[{}]: {}",
@@ -3167,7 +3178,7 @@ public class Minescript {
 
           var offset = list.get();
           int blockpackId = value.getAsInt();
-          var blockpack = blockpacks.get(blockpackId);
+          var blockpack = job.getBlockPackById(blockpackId);
           if (blockpack == null) {
             logUserError(
                 "Error: `{}` Failed to find BlockPack[{}] to write to world: {}",
@@ -3204,7 +3215,7 @@ public class Minescript {
           int blockpackId = value.getAsInt();
           String blockpackFilename = (String) args.get(1);
 
-          var blockpack = blockpacks.get(blockpackId);
+          var blockpack = job.getBlockPackById(blockpackId);
           if (blockpack == null) {
             logUserError(
                 "Error: `{}` Failed to find BlockPack[{}] to write to file: {}",
@@ -3233,7 +3244,7 @@ public class Minescript {
             logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
             return Optional.of("null");
           }
-          var blockpack = blockpacks.get(value.getAsInt());
+          var blockpack = job.getBlockPackById(value.getAsInt());
           if (blockpack == null) {
             logUserError(
                 "Error: `{}` Failed to find BlockPack[{}] from which to export data: {}",
@@ -3255,7 +3266,7 @@ public class Minescript {
             logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
             return Optional.of("false");
           }
-          var blockpack = blockpacks.remove(value.getAsInt());
+          var blockpack = job.releaseBlockPackById(value.getAsInt());
           if (blockpack == null) {
             logUserError(
                 "Error: `{}` Failed to find BlockPack[{}] to delete: {}",
@@ -3264,7 +3275,6 @@ public class Minescript {
                 argsString);
             return Optional.of("false");
           }
-          LOGGER.info("Unmapped BlockPack[{}]: {}", value.getAsInt(), blockpack.comments());
           return Optional.of("true");
         }
 
