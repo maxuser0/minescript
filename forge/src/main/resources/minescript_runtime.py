@@ -35,6 +35,7 @@ import sys
 import time
 import threading
 import traceback
+import _thread
 
 from threading import Lock
 from typing import Any, List, Set, Dict, Tuple, Optional, Callable
@@ -101,6 +102,7 @@ def _ScriptServiceLoop():
       if "retval" in reply:
         retval = reply["retval"]
         if retval == "exit!":
+          _thread.interrupt_main()
           break  # Break out of the service loop so that the process can exit.
 
     if func_call_id not in _script_function_calls:

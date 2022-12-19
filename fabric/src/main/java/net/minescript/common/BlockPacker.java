@@ -15,7 +15,7 @@ import java.util.TreeMap;
  *
  * <p>While {@code BlockPacker} manages a dynamic set of blocks, {@code BlockPack} is immutable.
  */
-public class BlockPacker {
+public class BlockPacker implements BlockPack.BlockConsumer {
   private final SortedMap<Long, Tile> tiles = new TreeMap<>();
 
   // Allocator for IDs of block types used across all tiles in this BlockPacker, serving as keys

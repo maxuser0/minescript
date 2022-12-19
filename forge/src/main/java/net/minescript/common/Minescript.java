@@ -792,6 +792,44 @@ public class Minescript {
     }
   }
 
+  /** Tracker for managing resources accessed by a script job. */
+  static class ResourceTracker<T> {
+    private final String resourceTypeName;
+    private final int jobId;
+    private final AtomicInteger idAllocator = new AtomicInteger(0);
+    private final Map<Integer, T> resources = new ConcurrentHashMap<>();
+
+    public ResourceTracker(Class<T> resourceType, int jobId) {
+      resourceTypeName = resourceType.getSimpleName();
+      this.jobId = jobId;
+    }
+
+    public int retain(T resource) {
+      int id = idAllocator.incrementAndGet();
+      resources.put(id, resource);
+      LOGGER.info("Mapped Job[{}] {}[{}]", jobId, resourceTypeName, id);
+      return id;
+    }
+
+    public T getById(int id) {
+      return resources.get(id);
+    }
+
+    public T releaseById(int id) {
+      var resource = resources.remove(id);
+      if (resource != null) {
+        LOGGER.info("Unmapped Job[{}] {}[{}]", jobId, resourceTypeName, id);
+      }
+      return resource;
+    }
+
+    public void releaseAll() {
+      for (int id : resources.keySet()) {
+        releaseById(id);
+      }
+    }
+  }
+
   static class Job implements JobControl {
     private final int jobId;
     private final String[] command;
@@ -802,33 +840,16 @@ public class Minescript {
     private Queue<String> jobCommandQueue = new ConcurrentLinkedQueue<String>();
     private Lock lock = new ReentrantLock(true); // true indicates a fair lock to avoid starvation
     private List<Runnable> atExitHandlers = new ArrayList<>();
-    private final AtomicInteger blockPackIdAllocator = new AtomicInteger(0);
-    private final Map<Integer, BlockPack> blockpacks = new ConcurrentHashMap<>();
+    private final ResourceTracker<BlockPack> blockpacks;
+    private final ResourceTracker<BlockPacker> blockpackers;
 
     public Job(int jobId, String[] command, Task task, Consumer<Integer> doneCallback) {
       this.jobId = jobId;
       this.command = Arrays.copyOf(command, command.length);
       this.task = task;
       this.doneCallback = doneCallback;
-    }
-
-    public int retainBlockPack(BlockPack blockpack) {
-      int id = blockPackIdAllocator.incrementAndGet();
-      blockpacks.put(id, blockpack);
-      LOGGER.info("Mapped Job[{}] BlockPack[{}]: {}", jobId, id, blockpack.comments());
-      return id;
-    }
-
-    public BlockPack getBlockPackById(int id) {
-      return blockpacks.get(id);
-    }
-
-    public BlockPack releaseBlockPackById(int id) {
-      var blockpack = blockpacks.remove(id);
-      if (blockpack != null) {
-        LOGGER.info("Unmapped Job[{}] BlockPack[{}]: {}", jobId, id, blockpack.comments());
-      }
-      return blockpack;
+      blockpacks = new ResourceTracker<>(BlockPack.class, jobId);
+      blockpackers = new ResourceTracker<>(BlockPacker.class, jobId);
     }
 
     public void addAtExitHandler(Runnable handler) {
@@ -991,9 +1012,8 @@ public class Minescript {
         for (Runnable handler : atExitHandlers) {
           handler.run();
         }
-        for (int id : blockpacks.keySet()) {
-          releaseBlockPackById(id);
-        }
+        blockpacks.releaseAll();
+        blockpackers.releaseAll();
       }
     }
 
@@ -2667,40 +2687,42 @@ public class Minescript {
         }
 
       case "getblocklist":
-        Supplier<Optional<String>> badArgsResponse =
-            () -> {
-              logUserError(
-                  "Error: `{}` expected a list of (x, y, z) positions but got: {}",
-                  functionName,
-                  argsString);
-              return Optional.of("null");
-            };
+        {
+          Supplier<Optional<String>> badArgsResponse =
+              () -> {
+                logUserError(
+                    "Error: `{}` expected a list of (x, y, z) positions but got: {}",
+                    functionName,
+                    argsString);
+                return Optional.of("null");
+              };
 
-        if (args.size() != 1 || !(args.get(0) instanceof List)) {
-          return badArgsResponse.get();
-        }
-        List<?> positions = (List<?>) args.get(0);
-        Level level = player.getCommandSenderWorld();
-        List<String> blocks = new ArrayList<>();
-        var pos = new BlockPos.MutableBlockPos();
-        for (var position : positions) {
-          if (!(position instanceof List)) {
+          if (args.size() != 1 || !(args.get(0) instanceof List)) {
             return badArgsResponse.get();
           }
-          List<?> coords = (List<?>) position;
-          if (coords.size() != 3
-              || !(coords.get(0) instanceof Number)
-              || !(coords.get(1) instanceof Number)
-              || !(coords.get(2) instanceof Number)) {
-            return badArgsResponse.get();
+          List<?> positions = (List<?>) args.get(0);
+          Level level = player.getCommandSenderWorld();
+          List<String> blocks = new ArrayList<>();
+          var pos = new BlockPos.MutableBlockPos();
+          for (var position : positions) {
+            if (!(position instanceof List)) {
+              return badArgsResponse.get();
+            }
+            List<?> coords = (List<?>) position;
+            if (coords.size() != 3
+                || !(coords.get(0) instanceof Number)
+                || !(coords.get(1) instanceof Number)
+                || !(coords.get(2) instanceof Number)) {
+              return badArgsResponse.get();
+            }
+            int x = ((Number) coords.get(0)).intValue();
+            int y = ((Number) coords.get(1)).intValue();
+            int z = ((Number) coords.get(2)).intValue();
+            Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, y, z)));
+            blocks.add(block.orElse(null));
           }
-          int x = ((Number) coords.get(0)).intValue();
-          int y = ((Number) coords.get(1)).intValue();
-          int z = ((Number) coords.get(2)).intValue();
-          Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, y, z)));
-          blocks.add(block.orElse(null));
+          return Optional.of(GSON.toJson(blocks));
         }
-        return Optional.of(GSON.toJson(blocks));
 
       case "register_chat_message_listener":
         if (!args.isEmpty()) {
@@ -3050,7 +3072,7 @@ public class Minescript {
               blockPacker::setblock)) {}
           blockPacker.comments().putAll(comments);
           var blockpack = blockPacker.pack();
-          int key = job.retainBlockPack(blockpack);
+          int key = job.blockpacks.retain(blockpack);
           return Optional.of(Integer.toString(key));
         }
 
@@ -3068,7 +3090,7 @@ public class Minescript {
           String blockpackFilename = (String) args.get(0);
           try {
             var blockpack = BlockPack.readZipFile(blockpackFilename);
-            int key = job.retainBlockPack(blockpack);
+            int key = job.blockpacks.retain(blockpack);
             return Optional.of(Integer.toString(key));
           } catch (Exception e) {
             logException(e);
@@ -3090,7 +3112,7 @@ public class Minescript {
           String base64Data = (String) args.get(0);
           try {
             var blockpack = BlockPack.fromBase64EncodedString(base64Data);
-            int key = job.retainBlockPack(blockpack);
+            int key = job.blockpacks.retain(blockpack);
             return Optional.of(Integer.toString(key));
           } catch (Exception e) {
             logException(e);
@@ -3110,7 +3132,7 @@ public class Minescript {
           }
 
           int blockpackId = value.getAsInt();
-          var blockpack = job.getBlockPackById(blockpackId);
+          var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
             logUserError(
                 "Error: `{}` Failed to find BlockPack[{}]: {}",
@@ -3139,7 +3161,7 @@ public class Minescript {
           }
 
           int blockpackId = value.getAsInt();
-          var blockpack = job.getBlockPackById(blockpackId);
+          var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
             logUserError(
                 "Error: `{}` Failed to find BlockPack[{}]: {}",
@@ -3180,7 +3202,7 @@ public class Minescript {
 
           var offset = list.get();
           int blockpackId = value.getAsInt();
-          var blockpack = job.getBlockPackById(blockpackId);
+          var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
             logUserError(
                 "Error: `{}` Failed to find BlockPack[{}] to write to world: {}",
@@ -3217,7 +3239,7 @@ public class Minescript {
           int blockpackId = value.getAsInt();
           String blockpackFilename = (String) args.get(1);
 
-          var blockpack = job.getBlockPackById(blockpackId);
+          var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
             logUserError(
                 "Error: `{}` Failed to find BlockPack[{}] to write to file: {}",
@@ -3246,7 +3268,7 @@ public class Minescript {
             logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
             return Optional.of("null");
           }
-          var blockpack = job.getBlockPackById(value.getAsInt());
+          var blockpack = job.blockpacks.getById(value.getAsInt());
           if (blockpack == null) {
             logUserError(
                 "Error: `{}` Failed to find BlockPack[{}] from which to export data: {}",
@@ -3268,10 +3290,234 @@ public class Minescript {
             logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
             return Optional.of("false");
           }
-          var blockpack = job.releaseBlockPackById(value.getAsInt());
+          var blockpack = job.blockpacks.releaseById(value.getAsInt());
           if (blockpack == null) {
             logUserError(
                 "Error: `{}` Failed to find BlockPack[{}] to delete: {}",
+                functionName,
+                value.getAsInt(),
+                argsString);
+            return Optional.of("false");
+          }
+          return Optional.of("true");
+        }
+
+      case "blockpacker_create":
+        // Python function signature:
+        //    () -> int
+        return Optional.of(Integer.toString(job.blockpackers.retain(new BlockPacker())));
+
+      case "blockpacker_setblock":
+        {
+          // Python function signature:
+          //    (blockpacker_id: int, pos: BlockPos, block_type: str) -> bool
+          if (args.size() != 3) {
+            logUserError("Error: `{}` expected 3 params but got: {}", functionName, argsString);
+            return Optional.of("false");
+          }
+
+          OptionalInt value = getStrictIntValue(args.get(0));
+          if (!value.isPresent()) {
+            logUserError(
+                "Error: `{}` expected first param to be int but got: {}", functionName, argsString);
+            return Optional.of("false");
+          }
+
+          Optional<List<Integer>> list = getStrictIntList(args.get(1));
+          if (list.isEmpty() || list.get().size() != 3) {
+            logUserError(
+                "Error: `{}` expected second param to be list of 3 ints but got: {}",
+                functionName,
+                argsString);
+            return Optional.of("false");
+          }
+          var pos = list.get();
+
+          var blockpacker = job.blockpackers.getById(value.getAsInt());
+          if (blockpacker == null) {
+            logUserError(
+                "Error: `{}` Failed to find BlockPacker[{}]: {}",
+                functionName,
+                value.getAsInt(),
+                argsString);
+            return Optional.of("false");
+          }
+
+          blockpacker.setblock(pos.get(0), pos.get(1), pos.get(2), args.get(2).toString());
+          return Optional.of("true");
+        }
+
+      case "blockpacker_fill":
+        {
+          // Python function signature:
+          //    (blockpacker_id: int, pos1: BlockPos, pos2: BlockPos, block_type: str) -> bool
+          if (args.size() != 4) {
+            logUserError("Error: `{}` expected 4 params but got: {}", functionName, argsString);
+            return Optional.of("false");
+          }
+
+          OptionalInt value = getStrictIntValue(args.get(0));
+          if (!value.isPresent()) {
+            logUserError(
+                "Error: `{}` expected first param to be int but got: {}", functionName, argsString);
+            return Optional.of("false");
+          }
+
+          Optional<List<Integer>> list1 = getStrictIntList(args.get(1));
+          if (list1.isEmpty() || list1.get().size() != 3) {
+            logUserError(
+                "Error: `{}` expected second param to be list of 3 ints but got: {}",
+                functionName,
+                argsString);
+            return Optional.of("false");
+          }
+          var pos1 = list1.get();
+
+          Optional<List<Integer>> list2 = getStrictIntList(args.get(2));
+          if (list2.isEmpty() || list2.get().size() != 3) {
+            logUserError(
+                "Error: `{}` expected third param to be list of 3 ints but got: {}",
+                functionName,
+                argsString);
+            return Optional.of("false");
+          }
+          var pos2 = list2.get();
+
+          var blockpacker = job.blockpackers.getById(value.getAsInt());
+          if (blockpacker == null) {
+            logUserError(
+                "Error: `{}` Failed to find BlockPacker[{}]: {}",
+                functionName,
+                value.getAsInt(),
+                argsString);
+            return Optional.of("false");
+          }
+
+          blockpacker.fill(
+              pos1.get(0),
+              pos1.get(1),
+              pos1.get(2),
+              pos2.get(0),
+              pos2.get(1),
+              pos2.get(2),
+              args.get(3).toString());
+          return Optional.of("true");
+        }
+
+      case "blockpacker_add_blockpack":
+        {
+          // Python function signature:
+          //    (blockpacker_id: int, blockpack_id: int, offset: BlockPos = (0, 0, 0)) -> bool
+          if (args.size() != 3) {
+            logUserError("Error: `{}` expected 3 params but got: {}", functionName, argsString);
+            return Optional.of("false");
+          }
+
+          OptionalInt value1 = getStrictIntValue(args.get(0));
+          if (!value1.isPresent()) {
+            logUserError(
+                "Error: `{}` expected first param to be int but got: {}", functionName, argsString);
+            return Optional.of("false");
+          }
+
+          OptionalInt value2 = getStrictIntValue(args.get(1));
+          if (!value2.isPresent()) {
+            logUserError(
+                "Error: `{}` expected second param to be int but got: {}",
+                functionName,
+                argsString);
+            return Optional.of("false");
+          }
+
+          Optional<List<Integer>> list = getStrictIntList(args.get(2));
+          if (list.isEmpty() || list.get().size() != 3) {
+            logUserError(
+                "Error: `{}` expected third param to be list of 3 ints but got: {}",
+                functionName,
+                argsString);
+            return Optional.of("false");
+          }
+          var offset = list.get();
+
+          var blockpacker = job.blockpackers.getById(value1.getAsInt());
+          if (blockpacker == null) {
+            logUserError(
+                "Error: `{}` Failed to find BlockPacker[{}]: {}",
+                functionName,
+                value1.getAsInt(),
+                argsString);
+            return Optional.of("false");
+          }
+
+          var blockpack = job.blockpacks.getById(value2.getAsInt());
+          if (blockpack == null) {
+            logUserError(
+                "Error: `{}` Failed to find BlockPack[{}]: {}",
+                functionName,
+                value2.getAsInt(),
+                argsString);
+            return Optional.of("false");
+          }
+
+          blockpack.getBlocksWithOffset(
+              false, offset.get(0), offset.get(1), offset.get(2), blockpacker);
+
+          return Optional.of("true");
+        }
+
+      case "blockpacker_pack":
+        {
+          // Python function signature:
+          //    (blockpacker_id: int, comments: Dict[str, str]) -> int
+          if (args.size() != 2) {
+            logUserError("Error: `{}` expected 2 params but got: {}", functionName, argsString);
+            return Optional.of("null");
+          }
+
+          OptionalInt value = getStrictIntValue(args.get(0));
+          if (!value.isPresent()) {
+            logUserError(
+                "Error: `{}` expected first param to be int but got: {}", functionName, argsString);
+            return Optional.of("null");
+          }
+
+          if (!(args.get(1) instanceof Map)) {
+            logUserError(
+                "Error: `{}` expected `comment` param to be a dictionary but got: {}",
+                functionName,
+                argsString);
+            return Optional.of("null");
+          }
+          var comments = (Map<String, String>) args.get(1);
+
+          var blockpacker = job.blockpackers.getById(value.getAsInt());
+          if (blockpacker == null) {
+            logUserError(
+                "Error: `{}` Failed to find BlockPacker[{}]: {}",
+                functionName,
+                value.getAsInt(),
+                argsString);
+            return Optional.of("null");
+          }
+
+          blockpacker.comments().putAll(comments);
+          return Optional.of(Integer.toString(job.blockpacks.retain(blockpacker.pack())));
+        }
+
+      case "blockpacker_delete":
+        {
+          // Python function signature:
+          //    (blockpacker_id: int) -> bool
+          OptionalInt value =
+              (args.size() == 1) ? getStrictIntValue(args.get(0)) : OptionalInt.empty();
+          if (!value.isPresent()) {
+            logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
+            return Optional.of("false");
+          }
+          var blockpacker = job.blockpackers.releaseById(value.getAsInt());
+          if (blockpacker == null) {
+            logUserError(
+                "Error: `{}` Failed to find BlockPacker[{}] to delete: {}",
                 functionName,
                 value.getAsInt(),
                 argsString);

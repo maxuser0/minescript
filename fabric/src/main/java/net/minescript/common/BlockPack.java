@@ -680,6 +680,12 @@ public class BlockPack {
     return new BlockPack(symbolMap, tiles, comments);
   }
 
+  public interface BlockConsumer {
+    void setblock(int x, int y, int z, String block);
+
+    void fill(int x1, int y1, int z1, int x2, int y2, int z2, String block);
+  }
+
   // TODO(maxuser): Replace getBlockCommands with general-purpose iterability of tiles in layers
   // (see #Layering below).
   public void getBlockCommands(boolean setblockOnly, Consumer<String> commandConsumer) {
@@ -692,16 +698,37 @@ public class BlockPack {
       int yOffset,
       int zOffset,
       Consumer<String> commandConsumer) {
+    getBlocksWithOffset(
+        setblockOnly,
+        xOffset,
+        yOffset,
+        zOffset,
+        new BlockConsumer() {
+          @Override
+          public void setblock(int x, int y, int z, String block) {
+            commandConsumer.accept(String.format("/setblock %d %d %d %s", x, y, z, block));
+          }
+
+          @Override
+          public void fill(int x1, int y1, int z1, int x2, int y2, int z2, String block) {
+            commandConsumer.accept(
+                String.format("/fill %d %d %d %d %d %d %s", x1, y1, z1, x2, y2, z2, block));
+          }
+        });
+  }
+
+  public void getBlocksWithOffset(
+      boolean setblockOnly, int xOffset, int yOffset, int zOffset, BlockConsumer blockConsumer) {
     for (Tile tile : tiles.values()) {
       // TODO(maxuser): Use tile.getBlockCommands(...) for the initial "stable blocks" layer, and
-      // tile.getBlockCommandsInAscendingYOrder(...) for the subsequent "unstable blocks" layer.
-      tile.getBlockCommandsInAscendingYOrder(
+      // tile.getBlocksInAscendingYOrder(...) for the subsequent "unstable blocks" layer.
+      tile.getBlocksInAscendingYOrder(
           setblockOnly,
           tile.xOffset + xOffset,
           tile.yOffset + yOffset,
           tile.zOffset + zOffset,
           symbolMap,
-          commandConsumer);
+          blockConsumer);
     }
   }
 
@@ -827,13 +854,13 @@ public class BlockPack {
       return coord;
     }
 
-    public void getBlockCommandsInAscendingYOrder(
+    public void getBlocksInAscendingYOrder(
         boolean setblockOnly,
         int xOffset,
         int yOffset,
         int zOffset,
         Map<Integer, BlockType> symbolMap,
-        Consumer<String> commandConsumer) {
+        BlockConsumer blockConsumer) {
       final int setblocksSize = setblocks.length;
       final int fillsSize = fills.length;
 
@@ -864,15 +891,12 @@ public class BlockPack {
             for (int x = x1; x <= x2; ++x) {
               for (int y = y1; y <= y2; ++y) {
                 for (int z = z1; z <= z2; ++z) {
-                  commandConsumer.accept(
-                      String.format("/setblock %d %d %d %s", x, y, z, blockType.symbol));
+                  blockConsumer.setblock(x, y, z, blockType.symbol);
                 }
               }
             }
           } else {
-            commandConsumer.accept(
-                String.format(
-                    "/fill %d %d %d %d %d %d %s", x1, y1, z1, x2, y2, z2, blockType.symbol));
+            blockConsumer.fill(x1, y1, z1, x2, y2, z2, blockType.symbol);
           }
           fillsPos += 3;
         }
@@ -886,7 +910,7 @@ public class BlockPack {
           int z = zOffset + coord[2];
           int blockTypeId = blockTypes[setblocks[i + 1]];
           BlockType blockType = symbolMap.get(blockTypeId);
-          commandConsumer.accept(String.format("/setblock %d %d %d %s", x, y, z, blockType.symbol));
+          blockConsumer.setblock(x, y, z, blockType.symbol);
           setblocksPos += 2;
         }
       }

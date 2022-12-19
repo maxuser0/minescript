@@ -505,14 +505,45 @@ def blockpack_delete(blockpack_id: int) -> bool:
   return CallScriptFunction("blockpack_delete", blockpack_id)
 
 
+# TODO(maxuser): add doc string
+def blockpacker_create() -> int:
+  return CallScriptFunction("blockpacker_create")
+
+
+# TODO(maxuser): add doc string
+def blockpacker_setblock(blockpacker_id: int, pos: BlockPos, block_type: str) -> bool:
+  return CallScriptFunction("blockpacker_setblock", blockpacker_id, pos, block_type)
+
+
+# TODO(maxuser): add doc string
+def blockpacker_fill(blockpacker_id: int, pos1: BlockPos, pos2: BlockPos, block_type: str) -> bool:
+  return CallScriptFunction("blockpacker_fill", blockpacker_id, pos1, pos2, block_type)
+
+
+# TODO(maxuser): add doc string
+def blockpacker_add_blockpack(
+    blockpacker_id: int, blockpack_id: int, offset: BlockPos = (0, 0, 0)) -> bool:
+  return CallScriptFunction("blockpacker_add_blockpack", blockpacker_id, blockpack_id, offset)
+
+
+# TODO(maxuser): add doc string
+def blockpacker_pack(blockpacker_id: int, comments: Dict[str, str]) -> int:
+  return CallScriptFunction("blockpacker_pack", blockpacker_id, comments)
+
+
+# TODO(maxuser): add doc string
+def blockpacker_delete(blockpacker_id: int) -> bool:
+  return CallScriptFunction("blockpacker_delete", blockpacker_id)
+
+
 class BlockPackException(Exception):
   pass
 
 
 class BlockPack:
   def __init__(self, java_generated_id: int):
-    """Do not call this directly. Use the classmethods read_world() or read_file() instead."""
-    self.id = java_generated_id
+    """Do not call the constructor directly. Use factory classmethods instead."""
+    self._id = java_generated_id
 
   # TODO(maxuser): add doc string
   @classmethod
@@ -547,7 +578,7 @@ class BlockPack:
 
   # TODO(maxuser): add doc string
   def block_bounds(self) -> (BlockPos, BlockPos):
-    bounds = blockpack_block_bounds(self.id)
+    bounds = blockpack_block_bounds(self._id)
     if bounds is None:
       raise BlockPackException()
     return bounds
@@ -555,7 +586,7 @@ class BlockPack:
 
   # TODO(maxuser): add doc string
   def comments(self) -> Dict[str, str]:
-    comments = blockpack_comments(self.id)
+    comments = blockpack_comments(self._id)
     if comments is None:
       raise BlockPackException()
     return comments
@@ -563,20 +594,20 @@ class BlockPack:
 
   # TODO(maxuser): add doc string
   def write_world(self, offset: BlockPos = (0, 0, 0)):
-    if not blockpack_write_world(self.id, offset):
+    if not blockpack_write_world(self._id, offset):
       raise BlockPackException()
 
 
   # TODO(maxuser): add doc string
   def write_file(self, filename: str):
-    if not blockpack_write_file(self.id, filename):
+    if not blockpack_write_file(self._id, filename):
       raise BlockPackException()
 
 
   # TODO(maxuser): add doc string
   # Returns a base64-encoded string.
   def export_data(self) -> str:
-    base64_str = blockpack_export_data(self.id)
+    base64_str = blockpack_export_data(self._id)
     if base64_str is None:
       raise BlockPackException()
     return base64_str
@@ -584,5 +615,40 @@ class BlockPack:
 
   # TODO(maxuser): add doc string
   def __del__(self):
-    if not blockpack_delete(self.id):
+    if not blockpack_delete(self._id):
       raise BlockPackException()
+
+
+class BlockPackerException(Exception):
+  pass
+
+
+class BlockPacker:
+  # TODO(maxuser): add doc string
+  def __init__(self):
+    self._id = blockpacker_create()
+
+  # TODO(maxuser): add doc string
+  def setblock(self, pos: BlockPos, block_type: str):
+    if not blockpacker_setblock(self._id, pos, block_type):
+      raise BlockPackerException()
+
+  # TODO(maxuser): add doc string
+  def fill(self, pos1: BlockPos, pos2: BlockPos, block_type: str):
+    if not blockpacker_fill(self._id, pos1, pos2, block_type):
+      raise BlockPackerException()
+
+  # TODO(maxuser): add doc string
+  def add_blockpack(self, blockpack: BlockPack, offset: BlockPos = (0, 0, 0)):
+    if not blockpacker_add_blockpack(self._id, blockpack._id, offset):
+      raise BlockPackerException()
+
+  # TODO(maxuser): add doc string
+  def pack(self, comments: Dict[str, str] = {}) -> BlockPack:
+    return BlockPack(blockpacker_pack(self._id, comments))
+
+  # TODO(maxuser): add doc string
+  def __del__(self):
+    if not blockpacker_delete(self._id):
+      raise BlockPackerException()
+
