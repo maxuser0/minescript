@@ -451,6 +451,10 @@ def unregister_chat_message_interceptor():
 
 
 BlockPos = Tuple[int, int, int] # (x, y, z) position in block space
+Rotation = Tuple[int, int, int, int, int, int, int, int, int]
+
+IDENTITY_ROTATION = (1, 0, 0, 0, 1, 0, 0, 0, 1)
+# TODO(maxuser): Define more stock rotations, e.g. ROTATE_XZ_90 and INVERT_X
 
 
 # TODO(maxuser): add doc string
@@ -522,8 +526,10 @@ def blockpacker_fill(blockpacker_id: int, pos1: BlockPos, pos2: BlockPos, block_
 
 # TODO(maxuser): add doc string
 def blockpacker_add_blockpack(
-    blockpacker_id: int, blockpack_id: int, offset: BlockPos = (0, 0, 0)) -> bool:
-  return CallScriptFunction("blockpacker_add_blockpack", blockpacker_id, blockpack_id, offset)
+    blockpacker_id: int, blockpack_id: int,
+    offset: BlockPos = (0, 0, 0), rotation: Rotation = IDENTITY_ROTATION) -> bool:
+  return CallScriptFunction(
+      "blockpacker_add_blockpack", blockpacker_id, blockpack_id, offset, rotation)
 
 
 # TODO(maxuser): add doc string
@@ -639,8 +645,10 @@ class BlockPacker:
       raise BlockPackerException()
 
   # TODO(maxuser): add doc string
-  def add_blockpack(self, blockpack: BlockPack, offset: BlockPos = (0, 0, 0)):
-    if not blockpacker_add_blockpack(self._id, blockpack._id, offset):
+  def add_blockpack(
+      self, blockpack: BlockPack,
+      offset: BlockPos = (0, 0, 0), rotation: Rotation = IDENTITY_ROTATION):
+    if not blockpacker_add_blockpack(self._id, blockpack._id, offset, rotation):
       raise BlockPackerException()
 
   # TODO(maxuser): add doc string

@@ -3407,9 +3407,11 @@ public class Minescript {
       case "blockpacker_add_blockpack":
         {
           // Python function signature:
-          //    (blockpacker_id: int, blockpack_id: int, offset: BlockPos = (0, 0, 0)) -> bool
-          if (args.size() != 3) {
-            logUserError("Error: `{}` expected 3 params but got: {}", functionName, argsString);
+          //    (blockpacker_id: int, blockpack_id: int,
+          //     rotation: Rotation = IDENTITY_ROTATION, offset: BlockPos = (0, 0, 0))
+          //    -> bool
+          if (args.size() != 4) {
+            logUserError("Error: `{}` expected 4 params but got: {}", functionName, argsString);
             return Optional.of("false");
           }
 
@@ -3429,15 +3431,37 @@ public class Minescript {
             return Optional.of("false");
           }
 
-          Optional<List<Integer>> list = getStrictIntList(args.get(2));
-          if (list.isEmpty() || list.get().size() != 3) {
+          Optional<List<Integer>> optList1 = getStrictIntList(args.get(2));
+          if (optList1.isEmpty() || optList1.get().size() != 3) {
             logUserError(
                 "Error: `{}` expected third param to be list of 3 ints but got: {}",
                 functionName,
                 argsString);
             return Optional.of("false");
           }
-          var offset = list.get();
+          var list1 = optList1.get();
+          int[] offset = {list1.get(0), list1.get(1), list1.get(2)};
+
+          Optional<List<Integer>> optList2 = getStrictIntList(args.get(3));
+          if (optList2.isEmpty() || optList2.get().size() != 9) {
+            logUserError(
+                "Error: `{}` expected fourth param to be list of 9 ints but got: {}",
+                functionName,
+                argsString);
+            return Optional.of("false");
+          }
+          var list2 = optList2.get();
+          int[] rotation = {
+            list2.get(0),
+            list2.get(1),
+            list2.get(2),
+            list2.get(3),
+            list2.get(4),
+            list2.get(5),
+            list2.get(6),
+            list2.get(7),
+            list2.get(8)
+          };
 
           var blockpacker = job.blockpackers.getById(value1.getAsInt());
           if (blockpacker == null) {
@@ -3459,8 +3483,60 @@ public class Minescript {
             return Optional.of("false");
           }
 
+          // Pass 0, 0, 0 for x, y, z offsets and apply offsets within setblock() and fill() methods
+          // of BlockPack.BlockConsumer so that translation is applied after rotations rather than
+          // before.
           blockpack.getBlocksWithOffset(
-              false, offset.get(0), offset.get(1), offset.get(2), blockpacker);
+              false,
+              0,
+              0,
+              0,
+              new BlockPack.BlockConsumer() {
+                // TODO(maxuser): Fix rotations for blocks that can face specific directions.
+                @Override
+                public void setblock(int x, int y, int z, String block) {
+                  blockpacker.setblock(
+                      rotation[0] * x + rotation[1] * y + rotation[2] * z + offset[0],
+                      rotation[3] * x + rotation[4] * y + rotation[5] * z + offset[1],
+                      rotation[6] * x + rotation[7] * y + rotation[8] * z + offset[2],
+                      block);
+                }
+
+                @Override
+                public void fill(int x1, int y1, int z1, int x2, int y2, int z2, String block) {
+                  int newX1 = rotation[0] * x1 + rotation[1] * y1 + rotation[2] * z1 + offset[0];
+                  int newY1 = rotation[3] * x1 + rotation[4] * y1 + rotation[5] * z1 + offset[1];
+                  int newZ1 = rotation[6] * x1 + rotation[7] * y1 + rotation[8] * z1 + offset[2];
+                  int newX2 = rotation[0] * x2 + rotation[1] * y2 + rotation[2] * z2 + offset[0];
+                  int newY2 = rotation[3] * x2 + rotation[4] * y2 + rotation[5] * z2 + offset[1];
+                  int newZ2 = rotation[6] * x2 + rotation[7] * y2 + rotation[8] * z2 + offset[2];
+                  int minX, maxX;
+                  if (newX1 < newX2) {
+                    minX = newX1;
+                    maxX = newX2;
+                  } else {
+                    maxX = newX1;
+                    minX = newX2;
+                  }
+                  int minY, maxY;
+                  if (newY1 < newY2) {
+                    minY = newY1;
+                    maxY = newY2;
+                  } else {
+                    maxY = newY1;
+                    minY = newY2;
+                  }
+                  int minZ, maxZ;
+                  if (newZ1 < newZ2) {
+                    minZ = newZ1;
+                    maxZ = newZ2;
+                  } else {
+                    maxZ = newZ1;
+                    minZ = newZ2;
+                  }
+                  blockpacker.fill(minX, minY, minZ, maxX, maxY, maxZ, block);
+                }
+              });
 
           return Optional.of("true");
         }
