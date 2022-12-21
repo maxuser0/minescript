@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -686,7 +687,69 @@ public class BlockPack {
     void fill(int x1, int y1, int z1, int x2, int y2, int z2, String block);
   }
 
-  // TODO(maxuser): Fix rotation for blocks that face specific directions, at least in x-z plane.
+  // vector[0] is x, vector[1] is z.
+  private static boolean mapDirectionToXZ(String direction, int[] vector) {
+    switch (direction) {
+      case "north":
+        vector[0] = 0;
+        vector[1] = -1;
+        return true;
+      case "south":
+        vector[0] = 0;
+        vector[1] = 1;
+        return true;
+      case "east":
+        vector[0] = 1;
+        vector[1] = 0;
+        return true;
+      case "west":
+        vector[0] = -1;
+        vector[1] = 0;
+        return true;
+    }
+    return false;
+  }
+
+  // vector[0] is x, vector[1] is z.
+  private static String mapXZToDirection(int x, int z) {
+    if (x == 0) {
+      switch (z) {
+        case -1:
+          return "north";
+        case 1:
+          return "south";
+      }
+    }
+    if (z == 0) {
+      switch (x) {
+        case -1:
+          return "west";
+        case 1:
+          return "east";
+      }
+    }
+    return null;
+  }
+
+  private static final Pattern BLOCK_FACING_RE = Pattern.compile("facing=([a-z]*)");
+
+  private static String reorientBlock(String block, int[] rotation) {
+    var match = BLOCK_FACING_RE.matcher(block);
+    if (match.find()) {
+      String direction = match.group(1);
+      int[] vector = new int[] {0, 0};
+      if (mapDirectionToXZ(direction, vector)) {
+        int newDirectionX = rotation[0] * vector[0] + rotation[2] * vector[1];
+        int newDirectionZ = rotation[6] * vector[0] + rotation[8] * vector[1];
+        String newDirection = mapXZToDirection(newDirectionX, newDirectionZ);
+        if (newDirection != null) {
+          return match.replaceFirst("facing=" + newDirection);
+        }
+      }
+    }
+    return block;
+  }
+
   public static class TransformedBlockConsumer implements BlockConsumer {
     private final int[] rotation;
     private final int[] offset;
@@ -717,6 +780,7 @@ public class BlockPack {
         x = newX;
         y = newY;
         z = newZ;
+        block = reorientBlock(block, rotation);
       }
       if (offset != null) {
         x += offset[0];
@@ -756,6 +820,7 @@ public class BlockPack {
           z2 = newZ1;
           z1 = newZ2;
         }
+        block = reorientBlock(block, rotation);
       }
       if (offset != null) {
         x1 += offset[0];
