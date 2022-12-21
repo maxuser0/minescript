@@ -460,10 +460,10 @@ IDENTITY_ROTATION = (1, 0, 0, 0, 1, 0, 0, 0, 1)
 # TODO(maxuser): add doc string
 def blockpack_read_world(
     pos1: BlockPos, pos2: BlockPos,
-    offset: BlockPos = (0, 0, 0),
-    comments: Dict[str, str] = {},
-    safety_limit: bool = True) -> int:
-  return CallScriptFunction("blockpack_read_world", pos1, pos2, offset, comments, safety_limit)
+    rotation: Rotation = None, offset: BlockPos = None,
+    comments: Dict[str, str] = {}, safety_limit: bool = True) -> int:
+  return CallScriptFunction(
+      "blockpack_read_world", pos1, pos2, rotation, offset, comments, safety_limit)
 
 
 # TODO(maxuser): add doc string
@@ -488,8 +488,9 @@ def blockpack_comments(blockpack_id: int) -> Dict[str, str]:
 
 
 # TODO(maxuser): add doc string
-def blockpack_write_world(blockpack_id: int, offset: BlockPos = (0, 0, 0)) -> bool:
-  return CallScriptFunction("blockpack_write_world", blockpack_id, offset)
+def blockpack_write_world(
+    blockpack_id: int, rotation: Rotation = None, offset: BlockPos = None) -> bool:
+  return CallScriptFunction("blockpack_write_world", blockpack_id, rotation, offset)
 
 
 # TODO(maxuser): add doc string
@@ -527,9 +528,9 @@ def blockpacker_fill(blockpacker_id: int, pos1: BlockPos, pos2: BlockPos, block_
 # TODO(maxuser): add doc string
 def blockpacker_add_blockpack(
     blockpacker_id: int, blockpack_id: int,
-    offset: BlockPos = (0, 0, 0), rotation: Rotation = IDENTITY_ROTATION) -> bool:
+    rotation: Rotation = None, offset: BlockPos = None) -> bool:
   return CallScriptFunction(
-      "blockpacker_add_blockpack", blockpacker_id, blockpack_id, offset, rotation)
+      "blockpacker_add_blockpack", blockpacker_id, blockpack_id, rotation, offset)
 
 
 # TODO(maxuser): add doc string
@@ -555,11 +556,10 @@ class BlockPack:
   @classmethod
   def read_world(
       cls,
-      pos1: BlockPos, pos2: BlockPos,
-      offset: BlockPos = (0, 0, 0),
-      comments: Dict[str, str] = {},
-      safety_limit: bool = True) -> 'BlockPack':
-    blockpack_id = blockpack_read_world(pos1, pos2, offset, comments, safety_limit)
+      pos1: BlockPos, pos2: BlockPos, *,
+      rotation: Rotation = None, offset: BlockPos = None,
+      comments: Dict[str, str] = {}, safety_limit: bool = True) -> 'BlockPack':
+    blockpack_id = blockpack_read_world(pos1, pos2, rotation, offset, comments, safety_limit)
     if blockpack_id is None:
       raise BlockPackException()
     return BlockPack(blockpack_id)
@@ -599,8 +599,8 @@ class BlockPack:
 
 
   # TODO(maxuser): add doc string
-  def write_world(self, offset: BlockPos = (0, 0, 0)):
-    if not blockpack_write_world(self._id, offset):
+  def write_world(self, *, rotation: Rotation = None, offset: BlockPos = None):
+    if not blockpack_write_world(self._id, rotation, offset):
       raise BlockPackException()
 
 
@@ -646,13 +646,12 @@ class BlockPacker:
 
   # TODO(maxuser): add doc string
   def add_blockpack(
-      self, blockpack: BlockPack,
-      offset: BlockPos = (0, 0, 0), rotation: Rotation = IDENTITY_ROTATION):
-    if not blockpacker_add_blockpack(self._id, blockpack._id, offset, rotation):
+      self, blockpack: BlockPack, *, rotation: Rotation = None, offset: BlockPos = None):
+    if not blockpacker_add_blockpack(self._id, blockpack._id, rotation, offset):
       raise BlockPackerException()
 
   # TODO(maxuser): add doc string
-  def pack(self, comments: Dict[str, str] = {}) -> BlockPack:
+  def pack(self, *, comments: Dict[str, str] = {}) -> BlockPack:
     return BlockPack(blockpacker_pack(self._id, comments))
 
   # TODO(maxuser): add doc string

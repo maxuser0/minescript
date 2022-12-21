@@ -42,6 +42,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -2646,6 +2647,23 @@ public class Minescript {
     var world = minecraft.level;
     var player = minecraft.player;
     var options = minecraft.options;
+
+    Consumer<Integer> numParamsErrorLogger =
+        (numParams) -> {
+          logUserError(
+              "Error: `{}` expected {} params but got: {}", functionName, numParams, argsString);
+        };
+
+    BiConsumer<String, String> paramTypeErrorLogger =
+        (param, expectedType) -> {
+          logUserError(
+              "Error: `{}` expected param `{}` to be {} but got: {}",
+              functionName,
+              param,
+              expectedType,
+              argsString);
+        };
+
     switch (functionName) {
       case "player_position":
         if (args.isEmpty()) {
@@ -3010,63 +3028,70 @@ public class Minescript {
       case "blockpack_read_world":
         {
           // Python function signature:
-          //    (pos1: BlockPos, pos2: BlockPos, offset: BlockPos = (0, 0, 0),
+          //    (pos1: BlockPos, pos2: BlockPos,
+          //     rotation: Rotation = None, offset: BlockPos = None,
           //     comments: Dict[str, str] = {}, safety_limit: bool = True) -> int
-          if (args.size() != 5) {
-            logUserError("Error: `{}` expected 5 params but got: {}", functionName, argsString);
-            return Optional.of("null");
-          }
-          Optional<List<Integer>> list0 = getStrictIntList(args.get(0));
-          Optional<List<Integer>> list1 = getStrictIntList(args.get(1));
-          Optional<List<Integer>> list2 = getStrictIntList(args.get(2));
-          if (list0.isEmpty()
-              || list1.isEmpty()
-              || list2.isEmpty()
-              || list0.get().size() != 3
-              || list1.get().size() != 3
-              || list2.get().size() != 3) {
-            logUserError(
-                "Error: `{}` expected first 3 params to be lists of int of size 3 but got: {}",
-                functionName,
-                argsString);
+          if (args.size() != 6) {
+            numParamsErrorLogger.accept(6);
             return Optional.of("null");
           }
 
-          if (!(args.get(3) instanceof Map)) {
-            logUserError(
-                "Error: `{}` expected `comment` param to be a dictionary but got: {}",
-                functionName,
-                argsString);
+          Optional<List<Integer>> list1 = getStrictIntList(args.get(0));
+          if (list1.isEmpty() || list1.get().size() != 3) {
+            paramTypeErrorLogger.accept("pos1", "a sequence of 3 ints");
             return Optional.of("null");
           }
-          var comments = (Map<String, String>) args.get(3);
 
-          if (!(args.get(4) instanceof Boolean)) {
-            logUserError(
-                "Error: `{}` expected `safety_limit` param to be bool but got: {}",
-                functionName,
-                argsString);
+          Optional<List<Integer>> list2 = getStrictIntList(args.get(1));
+          if (list2.isEmpty() || list2.get().size() != 3) {
+            paramTypeErrorLogger.accept("pos2", "a sequence of 3 ints");
             return Optional.of("null");
           }
-          boolean safetyLimit = (Boolean) args.get(4);
 
-          var pos0 = list0.get();
+          int[] rotation = null;
+          if (args.get(2) != null) {
+            Optional<List<Integer>> list = getStrictIntList(args.get(2));
+            if (list.isEmpty() || list.get().size() != 9) {
+              paramTypeErrorLogger.accept("rotation", "a sequence of 9 ints");
+              return Optional.of("null");
+            }
+            rotation = list.get().stream().mapToInt(Integer::intValue).toArray();
+          }
+
+          int[] offset = null;
+          if (args.get(3) != null) {
+            Optional<List<Integer>> list = getStrictIntList(args.get(3));
+            if (list.isEmpty() || list.get().size() != 3) {
+              paramTypeErrorLogger.accept("offset", "a sequence of 3 ints");
+              return Optional.of("null");
+            }
+            offset = list.get().stream().mapToInt(Integer::intValue).toArray();
+          }
+
+          if (!(args.get(4) instanceof Map)) {
+            paramTypeErrorLogger.accept("comment", "a dictionary");
+            return Optional.of("null");
+          }
+          var comments = (Map<String, String>) args.get(4);
+
+          if (!(args.get(5) instanceof Boolean)) {
+            paramTypeErrorLogger.accept("safety_limit", "bool");
+            return Optional.of("null");
+          }
+          boolean safetyLimit = (Boolean) args.get(5);
+
           var pos1 = list1.get();
-          var offset = list2.get();
+          var pos2 = list2.get();
           var blockPacker = new BlockPacker();
-          int[] nullRotation = null;
           if (!readBlocks(
-              pos0.get(0),
-              pos0.get(1),
-              pos0.get(2),
               pos1.get(0),
               pos1.get(1),
               pos1.get(2),
+              pos2.get(0),
+              pos2.get(1),
+              pos2.get(2),
               safetyLimit,
-              new BlockPack.TransformedBlockConsumer(
-                  nullRotation,
-                  new int[] {offset.get(0), offset.get(1), offset.get(2)},
-                  blockPacker))) {}
+              new BlockPack.TransformedBlockConsumer(rotation, offset, blockPacker))) {}
           blockPacker.comments().putAll(comments);
           var blockpack = blockPacker.pack();
           int key = job.blockpacks.retain(blockpack);
@@ -3175,30 +3200,39 @@ public class Minescript {
       case "blockpack_write_world":
         {
           // Python function signature:
-          //    (blockpack_id: int, offset: BlockPos = (0, 0, 0)) -> bool
-          OptionalInt value = args.isEmpty() ? OptionalInt.empty() : getStrictIntValue(args.get(0));
+          //    (blockpack_id: int, rotation: Rotation = None, offset: BlockPos = None) -> bool
+          if (args.size() != 3) {
+            numParamsErrorLogger.accept(3);
+            return Optional.of("false");
+          }
+
+          OptionalInt value = getStrictIntValue(args.get(0));
           if (!value.isPresent()) {
-            logUserError(
-                "Error: `{}` expected first param to be int but got: {}", functionName, argsString);
+            paramTypeErrorLogger.accept("blockpack_id", "int");
             return Optional.of("false");
           }
-
-          if (args.size() != 2) {
-            logUserError("Error: `{}` expected two params but got: {}", functionName, argsString);
-            return Optional.of("false");
-          }
-
-          Optional<List<Integer>> list = getStrictIntList(args.get(1));
-          if (list.isEmpty() || list.get().size() != 3) {
-            logUserError(
-                "Error: `{}` expected second param to be list of 3 ints but got: {}",
-                functionName,
-                argsString);
-            return Optional.of("false");
-          }
-
-          var offset = list.get();
           int blockpackId = value.getAsInt();
+
+          int[] rotation = null;
+          if (args.get(1) != null) {
+            Optional<List<Integer>> list = getStrictIntList(args.get(1));
+            if (list.isEmpty() || list.get().size() != 9) {
+              paramTypeErrorLogger.accept("rotation", "a sequence of 9 ints");
+              return Optional.of("false");
+            }
+            rotation = list.get().stream().mapToInt(Integer::intValue).toArray();
+          }
+
+          int[] offset = null;
+          if (args.get(2) != null) {
+            Optional<List<Integer>> list = getStrictIntList(args.get(2));
+            if (list.isEmpty() || list.get().size() != 3) {
+              paramTypeErrorLogger.accept("offset", "a sequence of 3 ints");
+              return Optional.of("false");
+            }
+            offset = list.get().stream().mapToInt(Integer::intValue).toArray();
+          }
+
           var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
             logUserError(
@@ -3209,12 +3243,7 @@ public class Minescript {
             return Optional.of("false");
           }
 
-          int[] nullRotation = null;
-          blockpack.getBlockCommands(
-              nullRotation,
-              new int[] {offset.get(0), offset.get(1), offset.get(2)},
-              job::enqueueStdout);
-
+          blockpack.getBlockCommands(rotation, offset, job::enqueueStdout);
           return Optional.of("true");
         }
 
@@ -3408,60 +3437,43 @@ public class Minescript {
         {
           // Python function signature:
           //    (blockpacker_id: int, blockpack_id: int,
-          //     rotation: Rotation = IDENTITY_ROTATION, offset: BlockPos = (0, 0, 0))
-          //    -> bool
+          //     rotation: Rotation = None, offset: BlockPos = None) -> bool
           if (args.size() != 4) {
-            logUserError("Error: `{}` expected 4 params but got: {}", functionName, argsString);
+            numParamsErrorLogger.accept(4);
             return Optional.of("false");
           }
 
           OptionalInt value1 = getStrictIntValue(args.get(0));
           if (!value1.isPresent()) {
-            logUserError(
-                "Error: `{}` expected first param to be int but got: {}", functionName, argsString);
+            paramTypeErrorLogger.accept("blockpacker_id", "int");
             return Optional.of("false");
           }
 
           OptionalInt value2 = getStrictIntValue(args.get(1));
           if (!value2.isPresent()) {
-            logUserError(
-                "Error: `{}` expected second param to be int but got: {}",
-                functionName,
-                argsString);
+            paramTypeErrorLogger.accept("blockpack_id", "int");
             return Optional.of("false");
           }
 
-          Optional<List<Integer>> optList1 = getStrictIntList(args.get(2));
-          if (optList1.isEmpty() || optList1.get().size() != 3) {
-            logUserError(
-                "Error: `{}` expected third param to be list of 3 ints but got: {}",
-                functionName,
-                argsString);
-            return Optional.of("false");
+          int[] rotation = null;
+          if (args.get(2) != null) {
+            Optional<List<Integer>> list = getStrictIntList(args.get(2));
+            if (list.isEmpty() || list.get().size() != 9) {
+              paramTypeErrorLogger.accept("rotation", "a sequence of 9 ints");
+              return Optional.of("false");
+            }
+            rotation = list.get().stream().mapToInt(Integer::intValue).toArray();
           }
-          var list1 = optList1.get();
-          int[] offset = {list1.get(0), list1.get(1), list1.get(2)};
 
-          Optional<List<Integer>> optList2 = getStrictIntList(args.get(3));
-          if (optList2.isEmpty() || optList2.get().size() != 9) {
-            logUserError(
-                "Error: `{}` expected fourth param to be list of 9 ints but got: {}",
-                functionName,
-                argsString);
-            return Optional.of("false");
+          int[] offset = null;
+          if (args.get(3) != null) {
+            Optional<List<Integer>> list = getStrictIntList(args.get(3));
+            if (list.isEmpty() || list.get().size() != 3) {
+              paramTypeErrorLogger.accept("offset", "a sequence of 3 ints");
+              return Optional.of("false");
+            }
+            offset = list.get().stream().mapToInt(Integer::intValue).toArray();
           }
-          var list2 = optList2.get();
-          int[] rotation = {
-            list2.get(0),
-            list2.get(1),
-            list2.get(2),
-            list2.get(3),
-            list2.get(4),
-            list2.get(5),
-            list2.get(6),
-            list2.get(7),
-            list2.get(8)
-          };
 
           var blockpacker = job.blockpackers.getById(value1.getAsInt());
           if (blockpacker == null) {
