@@ -687,7 +687,12 @@ public class BlockPack {
     void fill(int x1, int y1, int z1, int x2, int y2, int z2, String block);
   }
 
-  // vector[0] is x, vector[1] is z.
+  /**
+   * Map a direction ("north", "south", etc) to an (x, z) vector relative to (0, 0).
+   *
+   * <p>If {@code direction} is not "north", "south", "east", or "west", return false. Otherwise
+   * populate {@code vector} with x and z in positions 0 and 1, respectively, and return true.
+   */
   private static boolean mapDirectionToXZ(String direction, int[] vector) {
     switch (direction) {
       case "north":
@@ -710,7 +715,11 @@ public class BlockPack {
     return false;
   }
 
-  // vector[0] is x, vector[1] is z.
+  /**
+   * Map an (x, z) direction relative to (0, 0) to a direction: "north", "south", "east", "west".
+   *
+   * <p>If (x, z) is not a unit vector aligned with the x or z axes, return {@code null}.
+   */
   private static String mapXZToDirection(int x, int z) {
     if (x == 0) {
       switch (z) {
