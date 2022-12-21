@@ -774,12 +774,15 @@ public class Minescript {
 
     public synchronized void enqueueCommands(Queue<String> commandQueue) {
       undone = true;
+      int[] nullRotation = null;
+      int[] nullOffset = null;
       if (blockPackFilename == null) {
-        blockPacker.pack().getBlockCommands(false, commandQueue::add);
+        blockPacker.pack().getBlockCommands(nullRotation, nullOffset, commandQueue::add);
         blockPacker = null;
         blocks.clear();
       } else {
-        BlockPack.readZipFile(blockPackFilename).getBlockCommands(false, commandQueue::add);
+        BlockPack.readZipFile(blockPackFilename)
+            .getBlockCommands(nullRotation, nullOffset, commandQueue::add);
       }
     }
   }
@@ -1482,10 +1485,6 @@ public class Minescript {
     return Optional.of(blockType + blockAttrs);
   }
 
-  private interface BlockConsumer {
-    void acceptBlock(int x, int y, int z, String block);
-  }
-
   private static boolean readBlocks(
       int x0,
       int y0,
@@ -1493,11 +1492,8 @@ public class Minescript {
       int x1,
       int y1,
       int z1,
-      int xOffset,
-      int yOffset,
-      int zOffset,
       boolean safetyLimit,
-      BlockConsumer blockConsumer) {
+      BlockPack.BlockConsumer blockConsumer) {
     var minecraft = Minecraft.getInstance();
     var player = minecraft.player;
     if (player == null) {
@@ -1552,7 +1548,7 @@ public class Minescript {
           if (!blockState.isAir()) {
             Optional<String> block = blockStateToString(blockState);
             if (block.isPresent()) {
-              blockConsumer.acceptBlock(x + xOffset, y + yOffset, z + zOffset, block.get());
+              blockConsumer.setblock(x, y, z, block.get());
               numBlocks++;
             } else {
               logUserError("Unexpected BlockState format: {}", blockState.toString());
@@ -3058,6 +3054,7 @@ public class Minescript {
           var pos1 = list1.get();
           var offset = list2.get();
           var blockPacker = new BlockPacker();
+          int[] nullRotation = null;
           if (!readBlocks(
               pos0.get(0),
               pos0.get(1),
@@ -3065,11 +3062,11 @@ public class Minescript {
               pos1.get(0),
               pos1.get(1),
               pos1.get(2),
-              offset.get(0),
-              offset.get(1),
-              offset.get(2),
               safetyLimit,
-              blockPacker::setblock)) {}
+              new BlockPack.TransformedBlockConsumer(
+                  nullRotation,
+                  new int[] {offset.get(0), offset.get(1), offset.get(2)},
+                  blockPacker))) {}
           blockPacker.comments().putAll(comments);
           var blockpack = blockPacker.pack();
           int key = job.blockpacks.retain(blockpack);
@@ -3212,8 +3209,11 @@ public class Minescript {
             return Optional.of("false");
           }
 
-          blockpack.getBlockCommandsWithOffset(
-              false, offset.get(0), offset.get(1), offset.get(2), job::enqueueStdout);
+          int[] nullRotation = null;
+          blockpack.getBlockCommands(
+              nullRotation,
+              new int[] {offset.get(0), offset.get(1), offset.get(2)},
+              job::enqueueStdout);
 
           return Optional.of("true");
         }
@@ -3483,60 +3483,8 @@ public class Minescript {
             return Optional.of("false");
           }
 
-          // Pass 0, 0, 0 for x, y, z offsets and apply offsets within setblock() and fill() methods
-          // of BlockPack.BlockConsumer so that translation is applied after rotations rather than
-          // before.
-          blockpack.getBlocksWithOffset(
-              false,
-              0,
-              0,
-              0,
-              new BlockPack.BlockConsumer() {
-                // TODO(maxuser): Fix rotations for blocks that can face specific directions.
-                @Override
-                public void setblock(int x, int y, int z, String block) {
-                  blockpacker.setblock(
-                      rotation[0] * x + rotation[1] * y + rotation[2] * z + offset[0],
-                      rotation[3] * x + rotation[4] * y + rotation[5] * z + offset[1],
-                      rotation[6] * x + rotation[7] * y + rotation[8] * z + offset[2],
-                      block);
-                }
-
-                @Override
-                public void fill(int x1, int y1, int z1, int x2, int y2, int z2, String block) {
-                  int newX1 = rotation[0] * x1 + rotation[1] * y1 + rotation[2] * z1 + offset[0];
-                  int newY1 = rotation[3] * x1 + rotation[4] * y1 + rotation[5] * z1 + offset[1];
-                  int newZ1 = rotation[6] * x1 + rotation[7] * y1 + rotation[8] * z1 + offset[2];
-                  int newX2 = rotation[0] * x2 + rotation[1] * y2 + rotation[2] * z2 + offset[0];
-                  int newY2 = rotation[3] * x2 + rotation[4] * y2 + rotation[5] * z2 + offset[1];
-                  int newZ2 = rotation[6] * x2 + rotation[7] * y2 + rotation[8] * z2 + offset[2];
-                  int minX, maxX;
-                  if (newX1 < newX2) {
-                    minX = newX1;
-                    maxX = newX2;
-                  } else {
-                    maxX = newX1;
-                    minX = newX2;
-                  }
-                  int minY, maxY;
-                  if (newY1 < newY2) {
-                    minY = newY1;
-                    maxY = newY2;
-                  } else {
-                    maxY = newY1;
-                    minY = newY2;
-                  }
-                  int minZ, maxZ;
-                  if (newZ1 < newZ2) {
-                    minZ = newZ1;
-                    maxZ = newZ2;
-                  } else {
-                    maxZ = newZ1;
-                    minZ = newZ2;
-                  }
-                  blockpacker.fill(minX, minY, minZ, maxX, maxY, maxZ, block);
-                }
-              });
+          blockpack.getBlocks(
+              new BlockPack.TransformedBlockConsumer(rotation, offset, blockpacker));
 
           return Optional.of("true");
         }

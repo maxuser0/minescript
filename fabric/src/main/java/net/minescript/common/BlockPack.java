@@ -686,49 +686,116 @@ public class BlockPack {
     void fill(int x1, int y1, int z1, int x2, int y2, int z2, String block);
   }
 
+  // TODO(maxuser): Fix rotation for blocks that face specific directions, at least in x-z plane.
+  public static class TransformedBlockConsumer implements BlockConsumer {
+    private final int[] rotation;
+    private final int[] offset;
+    private final BlockConsumer blockConsumer;
+
+    /** BlockConsumer that transforms coordinates first through a rotation then a translation. */
+    public TransformedBlockConsumer(int[] rotation, int[] offset, BlockConsumer blockConsumer) {
+      if (rotation != null && rotation.length != 9) {
+        throw new IllegalArgumentException(
+            "Expected rotation to have 9 ints but got " + rotation.length);
+      }
+      if (offset != null && offset.length != 3) {
+        throw new IllegalArgumentException(
+            "Expected offset to have 3 ints but got " + offset.length);
+      }
+
+      this.rotation = rotation;
+      this.offset = offset;
+      this.blockConsumer = blockConsumer;
+    }
+
+    @Override
+    public void setblock(int x, int y, int z, String block) {
+      if (rotation != null) {
+        int newX = rotation[0] * x + rotation[1] * y + rotation[2] * z;
+        int newY = rotation[3] * x + rotation[4] * y + rotation[5] * z;
+        int newZ = rotation[6] * x + rotation[7] * y + rotation[8] * z;
+        x = newX;
+        y = newY;
+        z = newZ;
+      }
+      if (offset != null) {
+        x += offset[0];
+        y += offset[1];
+        z += offset[2];
+      }
+      blockConsumer.setblock(x, y, z, block);
+    }
+
+    @Override
+    public void fill(int x1, int y1, int z1, int x2, int y2, int z2, String block) {
+      if (rotation != null) {
+        int newX1 = rotation[0] * x1 + rotation[1] * y1 + rotation[2] * z1;
+        int newY1 = rotation[3] * x1 + rotation[4] * y1 + rotation[5] * z1;
+        int newZ1 = rotation[6] * x1 + rotation[7] * y1 + rotation[8] * z1;
+        int newX2 = rotation[0] * x2 + rotation[1] * y2 + rotation[2] * z2;
+        int newY2 = rotation[3] * x2 + rotation[4] * y2 + rotation[5] * z2;
+        int newZ2 = rotation[6] * x2 + rotation[7] * y2 + rotation[8] * z2;
+        if (newX1 < newX2) {
+          x1 = newX1;
+          x2 = newX2;
+        } else {
+          x2 = newX1;
+          x1 = newX2;
+        }
+        if (newY1 < newY2) {
+          y1 = newY1;
+          y2 = newY2;
+        } else {
+          y2 = newY1;
+          y1 = newY2;
+        }
+        if (newZ1 < newZ2) {
+          z1 = newZ1;
+          z2 = newZ2;
+        } else {
+          z2 = newZ1;
+          z1 = newZ2;
+        }
+      }
+      if (offset != null) {
+        x1 += offset[0];
+        y1 += offset[1];
+        z1 += offset[2];
+
+        x2 += offset[0];
+        y2 += offset[1];
+        z2 += offset[2];
+      }
+      blockConsumer.fill(x1, y1, z1, x2, y2, z2, block);
+    }
+  }
+
   // TODO(maxuser): Replace getBlockCommands with general-purpose iterability of tiles in layers
   // (see #Layering below).
-  public void getBlockCommands(boolean setblockOnly, Consumer<String> commandConsumer) {
-    getBlockCommandsWithOffset(setblockOnly, 0, 0, 0, commandConsumer);
+  public void getBlockCommands(int rotation[], int[] offset, Consumer<String> commandConsumer) {
+    getBlocks(
+        new TransformedBlockConsumer(
+            rotation,
+            offset,
+            new BlockConsumer() {
+              @Override
+              public void setblock(int x, int y, int z, String block) {
+                commandConsumer.accept(String.format("/setblock %d %d %d %s", x, y, z, block));
+              }
+
+              @Override
+              public void fill(int x1, int y1, int z1, int x2, int y2, int z2, String block) {
+                commandConsumer.accept(
+                    String.format("/fill %d %d %d %d %d %d %s", x1, y1, z1, x2, y2, z2, block));
+              }
+            }));
   }
 
-  public void getBlockCommandsWithOffset(
-      boolean setblockOnly,
-      int xOffset,
-      int yOffset,
-      int zOffset,
-      Consumer<String> commandConsumer) {
-    getBlocksWithOffset(
-        setblockOnly,
-        xOffset,
-        yOffset,
-        zOffset,
-        new BlockConsumer() {
-          @Override
-          public void setblock(int x, int y, int z, String block) {
-            commandConsumer.accept(String.format("/setblock %d %d %d %s", x, y, z, block));
-          }
-
-          @Override
-          public void fill(int x1, int y1, int z1, int x2, int y2, int z2, String block) {
-            commandConsumer.accept(
-                String.format("/fill %d %d %d %d %d %d %s", x1, y1, z1, x2, y2, z2, block));
-          }
-        });
-  }
-
-  public void getBlocksWithOffset(
-      boolean setblockOnly, int xOffset, int yOffset, int zOffset, BlockConsumer blockConsumer) {
+  public void getBlocks(BlockConsumer blockConsumer) {
     for (Tile tile : tiles.values()) {
       // TODO(maxuser): Use tile.getBlockCommands(...) for the initial "stable blocks" layer, and
       // tile.getBlocksInAscendingYOrder(...) for the subsequent "unstable blocks" layer.
-      tile.getBlocksInAscendingYOrder(
-          setblockOnly,
-          tile.xOffset + xOffset,
-          tile.yOffset + yOffset,
-          tile.zOffset + zOffset,
-          symbolMap,
-          blockConsumer);
+      tile.getBlocksInAscendingYOrder(symbolMap, blockConsumer);
     }
   }
 
@@ -855,12 +922,7 @@ public class BlockPack {
     }
 
     public void getBlocksInAscendingYOrder(
-        boolean setblockOnly,
-        int xOffset,
-        int yOffset,
-        int zOffset,
-        Map<Integer, BlockType> symbolMap,
-        BlockConsumer blockConsumer) {
+        Map<Integer, BlockType> symbolMap, BlockConsumer blockConsumer) {
       final int setblocksSize = setblocks.length;
       final int fillsSize = fills.length;
 
@@ -887,17 +949,7 @@ public class BlockPack {
           int z2 = zOffset + coord[2];
           int blockTypeId = blockTypes[fills[i + 2]];
           BlockType blockType = symbolMap.get(blockTypeId);
-          if (setblockOnly) {
-            for (int x = x1; x <= x2; ++x) {
-              for (int y = y1; y <= y2; ++y) {
-                for (int z = z1; z <= z2; ++z) {
-                  blockConsumer.setblock(x, y, z, blockType.symbol);
-                }
-              }
-            }
-          } else {
-            blockConsumer.fill(x1, y1, z1, x2, y2, z2, blockType.symbol);
-          }
+          blockConsumer.fill(x1, y1, z1, x2, y2, z2, blockType.symbol);
           fillsPos += 3;
         }
 
