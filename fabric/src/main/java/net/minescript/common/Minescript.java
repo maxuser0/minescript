@@ -57,6 +57,8 @@ import net.minecraft.client.util.ScreenshotRecorder;
 import net.minecraft.entity.Entity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.text.Text;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldAccess;
@@ -2652,6 +2654,14 @@ public class Minescript {
     return Optional.of(intList);
   }
 
+  private static double computeDistance(
+      double x1, double y1, double z1, double x2, double y2, double z2) {
+    double dx = x1 - x2;
+    double dy = y1 - y2;
+    double dz = z1 - z2;
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+
   /** Returns a JSON response string if a script function is called. */
   private static Optional<String> handleScriptFunction(
       Job job, long funcCallId, String functionName, List<?> args, String argsString) {
@@ -2993,6 +3003,47 @@ public class Minescript {
           logUserError(
               "Error: `{}` expected 2 number params but got: {}", functionName, argsString);
           return Optional.of("false");
+        }
+
+      case "player_get_targeted_block":
+        {
+          // See minecraft.client.gui.hud.DebugHud for implementation of F3 debug screen.
+          if (args.size() != 1) {
+            numParamsErrorLogger.accept(1);
+            return Optional.of("null");
+          }
+          if (!(args.get(0) instanceof Number)) {
+            paramTypeErrorLogger.accept("max_distance", "float");
+            return Optional.of("null");
+          }
+          double maxDistance = ((Number) args.get(0)).doubleValue();
+          var entity = minecraft.getCameraEntity();
+          var blockHit = entity.raycast(maxDistance, 0.0f, false);
+          if (blockHit.getType() == HitResult.Type.BLOCK) {
+            var hitResult = (BlockHitResult) blockHit;
+            var blockPos = hitResult.getBlockPos();
+            double playerDistance =
+                computeDistance(
+                    player.getX(),
+                    player.getY(),
+                    player.getZ(),
+                    blockPos.getX(),
+                    blockPos.getY(),
+                    blockPos.getZ());
+            World level = player.getEntityWorld();
+            Optional<String> block = blockStateToString(level.getBlockState(blockPos));
+            return Optional.of(
+                String.format(
+                    "[[%d,%d,%d],%f,\"%s\",%s]",
+                    blockPos.getX(),
+                    blockPos.getY(),
+                    blockPos.getZ(),
+                    playerDistance,
+                    hitResult.getSide(),
+                    block.map(str -> toJsonString(str)).orElse("null")));
+          } else {
+            return Optional.of("null");
+          }
         }
 
       case "players":

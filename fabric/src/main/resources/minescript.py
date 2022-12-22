@@ -339,6 +339,22 @@ def player_set_orientation(yaw: float, pitch: float):
   return CallScriptFunction("player_set_orientation", yaw, pitch)
 
 
+def player_get_targeted_block(max_distance: float = 20):
+  """Gets info about the nearest block, if any, in the local player's crosshairs.
+
+  Args:
+    max_distance: max distance from local player to look for blocks
+
+  Returns:
+    [[x, y, z], distance, side, block_description] if the local player has a
+    block in their crosshairs within `max_distance`, None otherwise.
+    `distance` (float) is calculated from the player to the targeted block;
+    `side` (str) is the direction that the targeted side of the block is facing
+    (e.g. "east"); `block_description` (str) describes the targeted block.
+  """
+  return CallScriptFunction("player_get_targeted_block", max_distance)
+
+
 def players():
   """Gets a list of nearby players and their attributes: name, position, velocity, etc."""
   return CallScriptFunction("players")

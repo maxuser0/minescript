@@ -36,6 +36,8 @@ forge_to_fabric_class_names = (
   ('net.minecraft.world.level.block.state.BlockState', 'net.minecraft.block.BlockState'),
   ('net.minecraft.world.level.chunk.ChunkAccess', 'net.minecraft.world.chunk.Chunk'),
   ('net.minecraft.world.level.chunk.ChunkSource', 'net.minecraft.world.chunk.ChunkManager'),
+  ('net.minecraft.world.phys.HitResult', 'net.minecraft.util.hit.HitResult'),
+  ('net.minecraft.world.phys.BlockHitResult', 'net.minecraft.util.hit.BlockHitResult'),
 )
 
 forge_to_fabric_member_names = (
@@ -60,6 +62,8 @@ forge_to_fabric_member_names = (
   ('entity.getDeltaMovement', 'entity.getVelocity'),
   ('entity.getXRot', 'entity.getPitch'),
   ('entity.getYRot', 'entity.getYaw'),
+  ('entity.pick', 'entity.raycast'),
+  ('hitResult.getDirection', 'hitResult.getSide'),
   ('inventory.getContainerSize', 'inventory.size'),
   ('inventory.getItem', 'inventory.getStack'),
   ('inventory.pickSlot', 'inventory.swapSlotWithHotbar'),
