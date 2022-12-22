@@ -79,9 +79,10 @@ def main(args):
 
   # BlockPacks (stored in .zip files) take precedence over legacy .txt files containing setblock
   # commands.
-  filename = os.path.join("minescript", "copies", label + ".zip")
-  if os.path.isfile(filename):
-    blockpack = BlockPack.read_file(filename)
+  blockpack_filename = os.path.join("minescript", "blockpacks", label + ".zip")
+  legacy_txt_filename = os.path.join("minescript", "copies", label + ".txt")
+  if os.path.isfile(blockpack_filename):
+    blockpack = BlockPack.read_file(blockpack_filename, relative_to_cwd=True)
     min_block, max_block = blockpack.block_bounds()
     dx = max_block[0] - min_block[0]
     dz = max_block[2] - min_block[2]
@@ -89,10 +90,10 @@ def main(args):
       return
     blockpack.write_world(offset=(x, y, z))
     del blockpack
-  else:
+  elif os.path.isfile(legacy_txt_filename):
+    paste_file = open(legacy_txt_filename)
     copy_command_re = re.compile(
         "# copy ([-0-9]+) ([-0-9]+) ([-0-9]+) ([-0-9]+) ([-0-9]+) ([-0-9]+)")
-    paste_file = open(os.path.join("minescript", "copies", label + ".txt"))
     for line in paste_file.readlines():
       line = line.rstrip()
       if line.startswith("#"):
@@ -132,6 +133,8 @@ def main(args):
             "but got the following instead:\n")
         echo(line)
         return
+  else:
+    echo(f"Error: blockpack file for `{label}` not found at {blockpack_filename}")
 
 if __name__ == "__main__":
   main(sys.argv[1:])

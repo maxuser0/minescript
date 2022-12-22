@@ -83,6 +83,11 @@ public class Minescript {
       LOGGER.info("Created minescript dir");
     }
 
+    final String blockpacksDir = Paths.get(MINESCRIPT_DIR, "blockpacks").toString();
+    if (new File(blockpacksDir).mkdir()) {
+      LOGGER.info("Created minescript blockpacks dir");
+    }
+
     var undoDir = new File(Paths.get(MINESCRIPT_DIR, "undo").toString());
     if (undoDir.exists()) {
       int numDeletedFiles = 0;

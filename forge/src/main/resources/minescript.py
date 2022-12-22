@@ -567,7 +567,9 @@ class BlockPack:
 
   # TODO(maxuser): add doc string
   @classmethod
-  def read_file(cls, filename: str) -> 'BlockPack':
+  def read_file(cls, filename: str, *, relative_to_cwd=False) -> 'BlockPack':
+    if not os.path.isabs(filename) and not relative_to_cwd:
+      filename = os.path.join("minescript", "blockpacks", filename)
     blockpack_id = blockpack_read_file(filename)
     if blockpack_id is None:
       raise BlockPackException()
@@ -605,7 +607,9 @@ class BlockPack:
 
 
   # TODO(maxuser): add doc string
-  def write_file(self, filename: str):
+  def write_file(self, filename: str, *, relative_to_cwd=False):
+    if not os.path.isabs(filename) and not relative_to_cwd:
+      filename = os.path.join("minescript", "blockpacks", filename)
     if not blockpack_write_file(self._id, filename):
       raise BlockPackException()
 

@@ -54,17 +54,17 @@ def main(args):
   else:
     label = args[6].replace("/", "_").replace("\\", "_").replace(" ", "_")
 
-  copies_dir = os.path.join("minescript", "copies")
-  if not os.path.exists(copies_dir):
-    os.makedirs(copies_dir)
+  blockpacks_dir = os.path.join("minescript", "blockpacks")
+  if not os.path.exists(blockpacks_dir):
+    os.makedirs(blockpacks_dir)
 
-  copy_file = os.path.join(copies_dir, label + ".zip")
+  copy_file = os.path.join(blockpacks_dir, label + ".zip")
 
   blockpack = BlockPack.read_world(
       (x1, y1, z1), (x2, y2, z2), offset=(-x1, -y1, -z1),
       comments={"name": label, "source command": f"copy {' '.join(sys.argv[1:])}"},
       safety_limit=safety_limit)
-  blockpack.write_file(copy_file)
+  blockpack.write_file(copy_file, relative_to_cwd=True)
   file_size_str = "{:,}".format(os.stat(copy_file).st_size)
   echo(
       f"Copied volume {abs(x1 - x2)} * {abs(y1 - y2)} * {abs(z1 - z2)} to "
