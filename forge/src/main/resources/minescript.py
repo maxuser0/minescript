@@ -453,8 +453,58 @@ def unregister_chat_message_interceptor():
 BlockPos = Tuple[int, int, int] # (x, y, z) position in block space
 Rotation = Tuple[int, int, int, int, int, int, int, int, int]
 
-IDENTITY_ROTATION = (1, 0, 0, 0, 1, 0, 0, 0, 1)
-# TODO(maxuser): Define more stock rotations, e.g. ROTATE_XZ_90 and INVERT_X
+class Rotations:
+  # Effectively no rotation.
+  IDENTITY = (1, 0, 0, 0, 1, 0, 0, 0, 1)
+
+  # Rotate 90 degrees about the x axis.
+  X_90 = (1, 0, 0, 0, 0, 1, 0, -1, 0)
+
+  # Rotate 180 degrees about the x axis.
+  X_180 = (1, 0, 0, 0, -1, 0, 0, 0, -1)
+
+  # Rotate 270 degrees about the x axis.
+  X_270 = (1, 0, 0, 0, 0, -1, 0, 1, 0)
+
+  # Rotate 90 degrees about the y axis.
+  Y_90 = (0, 0, 1, 0, 1, 0, -1, 0, 0)
+
+  # Rotate 180 degrees about the y axis.
+  Y_180 = (-1, 0, 0, 0, 1, 0, 0, 0, -1)
+
+  # Rotate 270 degrees about the y axis.
+  Y_270 = (0, 0, -1, 0, 1, 0, 1, 0, 0)
+
+  # Rotate 90 degrees about the z axis.
+  Z_90 = (0, 1, 0, -1, 0, 0, 0, 0, 1)
+
+  # Rotate 180 degrees about the z axis.
+  Z_180 = (-1, 0, 0, 0, -1, 0, 0, 0, 1)
+
+  # Rotate 270 degrees about the z axis.
+  Z_270 = (0, -1, 0, 1, 0, 0, 0, 0, 1)
+
+  # Invert the x coordinate (multiply by -1).
+  INVERT_X = (-1, 0, 0, 0, 1, 0, 0, 0, 1)
+
+  # Invert the y coordinate (multiply by -1).
+  INVERT_Y = (1, 0, 0, 0, -1, 0, 0, 0, 1)
+
+  # Invert the z coordinate (multiply by -1).
+  INVERT_Z = (1, 0, 0, 0, 1, 0, 0, 0, -1)
+
+
+def combine_rotations(rot1: Rotation, rot2: Rotation, /) -> Rotation:
+  return (
+      rot1[0] * rot2[0] + rot1[1] * rot2[3] + rot1[2] * rot2[6],
+      rot1[0] * rot2[1] + rot1[1] * rot2[4] + rot1[2] * rot2[7],
+      rot1[0] * rot2[2] + rot1[1] * rot2[5] + rot1[2] * rot2[8],
+      rot1[3] * rot2[0] + rot1[4] * rot2[3] + rot1[5] * rot2[6],
+      rot1[3] * rot2[1] + rot1[4] * rot2[4] + rot1[5] * rot2[7],
+      rot1[3] * rot2[2] + rot1[4] * rot2[5] + rot1[5] * rot2[8],
+      rot1[6] * rot2[0] + rot1[7] * rot2[3] + rot1[8] * rot2[6],
+      rot1[6] * rot2[1] + rot1[7] * rot2[4] + rot1[8] * rot2[7],
+      rot1[6] * rot2[2] + rot1[7] * rot2[5] + rot1[8] * rot2[8])
 
 
 # TODO(maxuser): add doc string
