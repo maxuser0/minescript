@@ -346,7 +346,7 @@ public class BlockPack {
     return Base64.getEncoder().encodeToString(toBytes());
   }
 
-  public void writeZipFile(String filename) {
+  public void writeZipFile(String filename) throws Exception {
     // Add ".zip" if filename doesn't already end with it.
     int dotZipIndex = filename.toLowerCase().lastIndexOf(".zip");
 
@@ -369,8 +369,6 @@ public class BlockPack {
       zipOut.setLevel(6);
       writeStream(dataOut);
       zipOut.closeEntry();
-    } catch (Exception e) {
-      throw new RuntimeException("Exception while writing BlockPack to " + filename, e);
     }
   }
 
@@ -594,7 +592,7 @@ public class BlockPack {
     return fromBytes(Base64.getDecoder().decode(base64));
   }
 
-  public static BlockPack readZipFile(String filename) {
+  public static BlockPack readZipFile(String filename) throws Exception {
     // Add ".zip" if filename doesn't already end with it.
     int dotZipIndex = filename.toLowerCase().lastIndexOf(".zip");
     if (dotZipIndex <= 0) {
@@ -613,11 +611,6 @@ public class BlockPack {
           }
         }
       }
-    } catch (Exception e) {
-      // This catch clause is widened from IOException to Exception because parse errors can lead to
-      // several different types of exceptions (e.g. indexing an array out of bounds), and it's
-      // useful to attach a message including the filename.
-      throw new RuntimeException("Exception while reading BlockPack from " + filename, e);
     }
     throw new IllegalArgumentException("Unable to read Blockpack from " + filename);
   }

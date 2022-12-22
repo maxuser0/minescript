@@ -653,9 +653,9 @@ public class Minescript {
     private volatile int originalJobId; // ID of the job that this undoes.
     private String[] originalCommand;
     private final long startTimeMillis;
-    private BlockPacker blockPacker = new BlockPacker();
+    private BlockPacker blockpacker = new BlockPacker();
     private final Set<Position> blocks = new HashSet<>();
-    private String blockPackFilename;
+    private String blockpackFilename;
     private boolean undone = false;
 
     // coords and pos are reused to avoid lots of small object instantiations.
@@ -707,11 +707,16 @@ public class Minescript {
       if (!blocks.isEmpty()) {
         // Write undo BlockPack to a file and clear in-memory commands queue.
         new File(UNDO_DIR).mkdirs();
-        blockPackFilename = Paths.get(UNDO_DIR, startTimeMillis + ".zip").toString();
-        blockPacker.comments().put("source command", "undo");
-        blockPacker.comments().put("command to undo", quoteCommand(originalCommand));
-        blockPacker.pack().writeZipFile(blockPackFilename);
-        blockPacker = null;
+        blockpackFilename = Paths.get(UNDO_DIR, startTimeMillis + ".zip").toString();
+        blockpacker.comments().put("source command", "undo");
+        blockpacker.comments().put("command to undo", quoteCommand(originalCommand));
+        var blockpack = blockpacker.pack();
+        try {
+          blockpack.writeZipFile(blockpackFilename);
+        } catch (Exception e) {
+          logException(e);
+        }
+        blockpacker = null;
         blocks.clear();
       }
     }
@@ -768,7 +773,7 @@ public class Minescript {
       // For a given position, add only the first block, because that's the
       // block that needs to be restored at that position during an undo operation.
       if (blocks.add(new Position(x, y, z))) {
-        blockPacker.setblock(x, y, z, block);
+        blockpacker.setblock(x, y, z, block);
       }
       return true;
     }
@@ -777,13 +782,17 @@ public class Minescript {
       undone = true;
       int[] nullRotation = null;
       int[] nullOffset = null;
-      if (blockPackFilename == null) {
-        blockPacker.pack().getBlockCommands(nullRotation, nullOffset, commandQueue::add);
-        blockPacker = null;
+      if (blockpackFilename == null) {
+        blockpacker.pack().getBlockCommands(nullRotation, nullOffset, commandQueue::add);
+        blockpacker = null;
         blocks.clear();
       } else {
-        BlockPack.readZipFile(blockPackFilename)
-            .getBlockCommands(nullRotation, nullOffset, commandQueue::add);
+        try {
+          BlockPack.readZipFile(blockpackFilename)
+              .getBlockCommands(nullRotation, nullOffset, commandQueue::add);
+        } catch (Exception e) {
+          logException(e);
+        }
       }
     }
   }
@@ -3082,7 +3091,7 @@ public class Minescript {
 
           var pos1 = list1.get();
           var pos2 = list2.get();
-          var blockPacker = new BlockPacker();
+          var blockpacker = new BlockPacker();
           if (!readBlocks(
               pos1.get(0),
               pos1.get(1),
@@ -3091,9 +3100,9 @@ public class Minescript {
               pos2.get(1),
               pos2.get(2),
               safetyLimit,
-              new BlockPack.TransformedBlockConsumer(rotation, offset, blockPacker))) {}
-          blockPacker.comments().putAll(comments);
-          var blockpack = blockPacker.pack();
+              new BlockPack.TransformedBlockConsumer(rotation, offset, blockpacker))) {}
+          blockpacker.comments().putAll(comments);
+          var blockpack = blockpacker.pack();
           int key = job.blockpacks.retain(blockpack);
           return Optional.of(Integer.toString(key));
         }
@@ -3115,7 +3124,7 @@ public class Minescript {
             int key = job.blockpacks.retain(blockpack);
             return Optional.of(Integer.toString(key));
           } catch (Exception e) {
-            logException(e);
+            logUserError("Error while reading blockpack {}: {}", blockpackFilename, e.getMessage());
             return Optional.of("null");
           }
         }
@@ -3282,7 +3291,7 @@ public class Minescript {
             blockpack.writeZipFile(blockpackFilename);
             return Optional.of("true");
           } catch (Exception e) {
-            logException(e);
+            logUserError("Error while writing blockpack {}: {}", blockpackFilename, e.getMessage());
             return Optional.of("false");
           }
         }
