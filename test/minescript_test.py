@@ -6,7 +6,7 @@ r"""minescript_test v3.0 from https://github.com/maxuser0/minescript
 Integration testing of script functions in minescript.py.
 
 Requires:
-  minescript v2.1
+  minescript v3.0
 
 Copy this file to the "minescript" directory within the
 "minecraft" directory and run it from within Minecraft with
@@ -20,6 +20,7 @@ among the tests.
 """
 
 import minescript
+import os
 import re
 import sys
 import time
@@ -108,14 +109,13 @@ all_tests.append(getblock_test)
 
 def copy_paste_test():
   minescript.execute(r"\copy ~ ~-1 ~ ~5 ~5 ~5 test")
-  ExpectMessage(r"Copied [0-9]+ blocks\.")
+  ExpectMessage(r"Copied volume .* to minescript/blockpacks/test.zip \(.* bytes\)\.")
 
   minescript.execute(r"\paste ~10 ~-1 ~ this_label_does_not_exist")
-  # TODO(maxuser): Improve this error message so it's more user friendly.
-  ExpectMessage(r"FileNotFoundError: .* No such file or directory: .*this_label_does_not_exist")
+  ExpectMessage(r"Error: blockpack file for `this_label_does_not_exist` not found.*")
 
   minescript.execute(r"\copy 0 0 0 1000 100 1000")
-  ExpectMessage("`copy` command exceeded soft limit")
+  ExpectMessage("`blockpack_read_world` exceeded soft limit of 1600 chunks")
 
   minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 no_limit")
   ExpectMessage("Not all chunks are loaded within the requested `copy` volume")
@@ -124,7 +124,8 @@ def copy_paste_test():
   ExpectMessage("Not all chunks are loaded within the requested `copy` volume")
 
   minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 test no_limit test")
-  ExpectMessage(r"Expected 6 params of type integer \(plus optional params.*")
+  ExpectMessage(
+      r"Error: copy command requires 6 params of type integer \(plus optional params.*")
 
   minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 no_limit no_limit")
   ExpectMessage("Not all chunks are loaded within the requested `copy` volume")
@@ -234,7 +235,35 @@ def player_test():
 all_tests.append(player_test)
 
 
-# TODO(maxuser): Add test for minescript.screenshot().
+def screenshot_test():
+  timestamp = int(time.time())
+  minescript.screenshot(f"screenshot_test_{timestamp}")
+  time.sleep(1) # Give a second for the screenshot to appear.
+  filename = os.path.join("screenshots", f"screenshot_test_{timestamp}.png")
+  ExpectTrue(os.path.isfile(filename))
+  os.remove(filename)
+
+all_tests.append(screenshot_test)
+
+
+def player_targeted_block_test():
+  # Record player orientation then look down for the targeted block test since player is likely to
+  # have ground beneath them. Lastly, restore player's original orientation.
+  yaw, pitch = minescript.player_orientation()
+  minescript.player_set_orientation(yaw, 90)
+  max_distance = 400
+  result = minescript.player_get_targeted_block(max_distance)
+  minescript.player_set_orientation(yaw, pitch)
+  ExpectTrue(result is not None)
+  ExpectEqual(len(result), 4)
+  ExpectEqual(len(result[0]), 3)
+  ExpectEqual([type(x) for x in result[0]], [int, int, int])
+  ExpectEqual(type(result[1]), float)
+  ExpectTrue(result[1] < max_distance)
+  ExpectEqual(result[2], "up") # We're looking at the "up" side since we're looking down.
+  ExpectEqual(type(result[3]), str)
+
+all_tests.append(player_targeted_block_test)
 
 
 if len(sys.argv) == 1:
