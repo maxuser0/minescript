@@ -3156,7 +3156,9 @@ public class Minescript {
               pos2.get(1),
               pos2.get(2),
               safetyLimit,
-              new BlockPack.TransformedBlockConsumer(rotation, offset, blockpacker))) {}
+              new BlockPack.TransformedBlockConsumer(rotation, offset, blockpacker))) {
+            return Optional.of("null");
+          }
           blockpacker.comments().putAll(comments);
           var blockpack = blockpacker.pack();
           int key = job.blockpacks.retain(blockpack);

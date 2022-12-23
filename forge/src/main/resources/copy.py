@@ -27,7 +27,7 @@ import minescript
 import os
 import sys
 
-from minescript import echo, BlockPack
+from minescript import echo, BlockPack, BlockPackException
 
 def main(args):
   if len(args) not in (6, 7, 8):
@@ -60,10 +60,14 @@ def main(args):
 
   copy_file = os.path.join(blockpacks_dir, label + ".zip")
 
-  blockpack = BlockPack.read_world(
-      (x1, y1, z1), (x2, y2, z2), offset=(-x1, -y1, -z1),
-      comments={"name": label, "source command": f"copy {' '.join(sys.argv[1:])}"},
-      safety_limit=safety_limit)
+  try:
+    blockpack = BlockPack.read_world(
+        (x1, y1, z1), (x2, y2, z2), offset=(-x1, -y1, -z1),
+        comments={"name": label, "source command": f"copy {' '.join(sys.argv[1:])}"},
+        safety_limit=safety_limit)
+  except BlockPackException:
+    # Error has already been printed to user's console, so nothing more to do here.
+    return
   blockpack.write_file(copy_file, relative_to_cwd=True)
   file_size_str = "{:,}".format(os.stat(copy_file).st_size)
   echo(

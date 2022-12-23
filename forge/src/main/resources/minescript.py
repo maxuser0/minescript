@@ -505,11 +505,22 @@ def combine_rotations(rot1: Rotation, rot2: Rotation, /) -> Rotation:
       rot1[6] * rot2[2] + rot1[7] * rot2[5] + rot1[8] * rot2[8])
 
 
-# TODO(maxuser): add doc string
 def blockpack_read_world(
     pos1: BlockPos, pos2: BlockPos,
     rotation: Rotation = None, offset: BlockPos = None,
     comments: Dict[str, str] = {}, safety_limit: bool = True) -> int:
+  """Creates a blockpack from blocks in the world within a rectangular volume.
+
+  Args:
+    pos1, pos2: opposing corners of a rectangular volume from which to read world blocks
+    rotation: rotation matrix to apply to block coordinates read from world
+    offset: offset to apply to block coordiantes (applied after rotation)
+    comments: key, value pairs to include in the new blockpack
+    safety_limit: if true, fail if requested volume spans more than 1600 chunks
+
+  Returns:
+    an int id associated with a new blockpack upon success, None otherwise
+  """
   return CallScriptFunction(
       "blockpack_read_world", pos1, pos2, rotation, offset, comments, safety_limit)
 
