@@ -1,4 +1,4 @@
-## Minescript v2.2 docs
+## Minescript v3.0 docs
 
 Table of contents:
 
@@ -373,7 +373,7 @@ Gets the items in the local player's inventory.
   plus `"nbt": str` if an item has NBT data and `"selected": True` for the
   selected item in the player's hand.
 
-Update in v2.2: introduced `"slot"` and `"selected"` entries in the returned
+Update in v3.0: introduced `"slot"` and `"selected"` entries in the returned
 dict, and `"nbt"` is populated only when NBT data is present. (In prior
 versions, `"nbt"` was always populated, with a value of `null` when NBT data
 was absent.)
@@ -398,7 +398,7 @@ player's hand.
 - If `done_callback` is `None`, returns the hotbar slot (0-8) that the
   inventory item was swapped into
 
-Since: v2.2
+Since: v3.0
 
 
 #### player_inventory_select_slot
@@ -416,7 +416,7 @@ Selects the given slot within the player's hotbar.
 
 - If `done_callback` is `None`, returns the previously selected hotbar slot
 
-Since: v2.2
+Since: v3.0
 
 
 #### player_press_forward

@@ -6,7 +6,7 @@
 # make edits to this file, make sure to save a backup copy when upgrading to a
 # new version of Minescript.
 
-"""minescript_runtime v2.2 distributed via Minescript jar file
+"""minescript_runtime v3.0 distributed via Minescript jar file
 
 Usage: import minescript_runtime  # from Python script
 
