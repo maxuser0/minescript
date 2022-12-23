@@ -40,7 +40,7 @@ x, y, z = minescript.player_position()
 
 # Set the block directly beneath your player:
 x, y, z = int(x), int(y), int(z)
-minescript.exec(f"setblock {x} {y-1} {z} yellow_concrete")
+minescript.execute(f"setblock {x} {y-1} {z} yellow_concrete")
 
 # Print the type of block at a particular location:
 minescript.echo(minescript.getblock(x, y, z))

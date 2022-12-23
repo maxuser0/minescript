@@ -1,6 +1,11 @@
 # Changelog
 
 ## v2.1
+- Add version-check flags to minescript_runtime.py ([27f65eb](https://github.com/maxuser0/minescript/commit/27f65ebf1d6bfb66ac48602cadc265309751b7fa))
+- Specify required deps in paste and minescript_test ([fdeb560](https://github.com/maxuser0/minescript/commit/fdeb5605b6633f35cde3bbf259a8670074cb3b03))
+- Add integration test: minescript_test.py ([e2ddd91](https://github.com/maxuser0/minescript/commit/e2ddd913977ea380769bdbc12b43f99b273f4e59))
+- Fix breakage in copy command when given 6 params ([6cfdc4b](https://github.com/maxuser0/minescript/commit/6cfdc4bb36a42b492ec71ace1f500cb2232ac243))
+- Add changelog for releases through v2.1 ([6da9368](https://github.com/maxuser0/minescript/commit/6da936832ed47dee9dfa13185a70d1a692922bb9))
 - Wrap command processing code in try/catch block ([8f05a4b](https://github.com/maxuser0/minescript/commit/8f05a4b32ba0423e14125f35881388c2ed528b14))
 - Fix bug when user enters backslash without command ([c3fd241](https://github.com/maxuser0/minescript/commit/c3fd2414801db6c0080dd14d34d5b5d4851fbf31))
 - Deprecate minescript.py's exec in favor of execute ([cc3aae7](https://github.com/maxuser0/minescript/commit/cc3aae74097367486a46b170db9efdf0f4731356))
