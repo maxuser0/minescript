@@ -525,80 +525,171 @@ def blockpack_read_world(
       "blockpack_read_world", pos1, pos2, rotation, offset, comments, safety_limit)
 
 
-# TODO(maxuser): add doc string
 def blockpack_read_file(filename: str) -> int:
+  """Reads a blockpack from a file.
+
+  Args:
+    filename: name of file to read; relative to Minecraft dir unless it's an absolute path
+        (".zip" is automatically appended to filename if it does not end with that extension)
+
+  Returns:
+    an int id associated with a blockpack upon success, None otherwise
+  """
   return CallScriptFunction("blockpack_read_file", filename)
 
 
-# TODO(maxuser): add doc string
-# Takes a base64-encoded string. Returns a blockpack id.
 def blockpack_import_data(base64_data: str) -> int:
+  """Creates a blockpack from base64-encoded serialized blockpack data.
+
+  Args:
+    base64_data: base64-encoded string containing serialization of blockpack data.
+
+  Returns:
+    an int id associated with a blockpack upon success, None otherwise
+  """
   return CallScriptFunction("blockpack_import_data", base64_data)
 
 
-# TODO(maxuser): add doc string
 def blockpack_block_bounds(blockpack_id: int) -> (BlockPos, BlockPos):
+  """Returns bounding coordinates of blocks in the blockpack associated with blockpack_id."""
   return CallScriptFunction("blockpack_block_bounds", blockpack_id)
 
 
-# TODO(maxuser): add doc string
 def blockpack_comments(blockpack_id: int) -> Dict[str, str]:
+  """Returns comments stored in the blockpack associated with blockpack_id."""
   return CallScriptFunction("blockpack_comments", blockpack_id)
 
 
-# TODO(maxuser): add doc string
 def blockpack_write_world(
     blockpack_id: int, rotation: Rotation = None, offset: BlockPos = None) -> bool:
+  """Writes blocks from a blockpack into the current world. Requires setblock and fill commands.
+
+  Args:
+    blockpack_id: id of a currently loaded blockpack
+    rotation: rotation matrix to apply to block coordinates before writing to world
+    offset: offset to apply to block coordiantes (applied after rotation)
+
+  Returns:
+    true upon success
+  """
   return CallScriptFunction("blockpack_write_world", blockpack_id, rotation, offset)
 
 
-# TODO(maxuser): add doc string
-def blockpack_write_file(
-    blockpack_id: int, filename: str) -> bool:
+def blockpack_write_file(blockpack_id: int, filename: str) -> bool:
+  """Writes a blockpack to a file.
+
+  Args:
+    blockpack_id: id of a currently loaded blockpack
+    filename: name of file to write; relative to Minecraft dir unless it's an absolute path
+        (".zip" is automatically appended to filename if it does not end with that extension)
+
+  Returns:
+    true upon success
+  """
   return CallScriptFunction("blockpack_write_file", blockpack_id, filename)
 
 
-# TODO(maxuser): add doc string
-# Returns a base64-encoded string.
 def blockpack_export_data(blockpack_id: int) -> str:
+  """Serializes a blockpack into a base64-encoded string.
+
+  Args:
+    blockpack_id: id of a currently loaded blockpack
+
+  Returns:
+    a base64-encoded string containing a serialized blockpack
+  """
   return CallScriptFunction("blockpack_export_data", blockpack_id)
 
 
-# TODO(maxuser): add doc string
 def blockpack_delete(blockpack_id: int) -> bool:
+  """Frees a currently loaded blockpack to be garbage collected.
+
+  Args:
+    blockpack_id: id of a currently loaded blockpack
+
+  Returns:
+    true upon success
+  """
   return CallScriptFunction("blockpack_delete", blockpack_id)
 
 
-# TODO(maxuser): add doc string
 def blockpacker_create() -> int:
+  """Creates a new, empty blockpacker.
+
+  Returns:
+    an int id associated with a new blockpacker
+  """
   return CallScriptFunction("blockpacker_create")
 
 
-# TODO(maxuser): add doc string
 def blockpacker_setblock(blockpacker_id: int, pos: BlockPos, block_type: str) -> bool:
+  """Sets a block within a currently loaded blockpacker.
+
+  Args:
+    blockpacker_id: id of a currently loaded blockpacker
+    pos: position of a block to set
+    block_type: block descriptor to set
+
+  Returns:
+    true upon success
+  """
   return CallScriptFunction("blockpacker_setblock", blockpacker_id, pos, block_type)
 
 
-# TODO(maxuser): add doc string
 def blockpacker_fill(blockpacker_id: int, pos1: BlockPos, pos2: BlockPos, block_type: str) -> bool:
+  """Fills blocks within a currently loaded blockpacker.
+
+  Args:
+    blockpacker_id: id of a currently loaded blockpacker
+    pos1, pos2: coordinates of opposing corners of a rectangular volume to fill
+    block_type: block descriptor to fill
+
+  Returns:
+    true upon success
+  """
   return CallScriptFunction("blockpacker_fill", blockpacker_id, pos1, pos2, block_type)
 
 
-# TODO(maxuser): add doc string
 def blockpacker_add_blockpack(
     blockpacker_id: int, blockpack_id: int,
     rotation: Rotation = None, offset: BlockPos = None) -> bool:
+  """Adds the blocks within a currently loaded blockpack into a blockpacker.
+
+  Args:
+    blockpacker_id: id of a blockpacker to receive blocks
+    blockpack_id: id of a blockpack from which to copy blocks
+    rotation: rotation matrix to apply to block coordinates before adding to blockpacker
+    offset: offset to apply to block coordiantes (applied after rotation)
+
+  Returns:
+    true upon success
+  """
   return CallScriptFunction(
       "blockpacker_add_blockpack", blockpacker_id, blockpack_id, rotation, offset)
 
 
-# TODO(maxuser): add doc string
 def blockpacker_pack(blockpacker_id: int, comments: Dict[str, str]) -> int:
+  """Packs blocks within a blockpacker into a new blockpack.
+
+  Args:
+    blockpacker_id: id of a currently loaded blockpacker
+    comments: key, value pairs to include in the new blockpack
+
+  Returns:
+    int id for a new blockpack containing a snapshot of blocks from the blockpacker
+  """
   return CallScriptFunction("blockpacker_pack", blockpacker_id, comments)
 
 
-# TODO(maxuser): add doc string
 def blockpacker_delete(blockpacker_id: int) -> bool:
+  """Frees a currently loaded blockpacker to be garbage collected.
+
+  Args:
+    blockpacker_id: id of a currently loaded blockpacker
+
+  Returns:
+    true upon success
+  """
   return CallScriptFunction("blockpacker_delete", blockpacker_id)
 
 
@@ -607,26 +698,56 @@ class BlockPackException(Exception):
 
 
 class BlockPack:
+  """BlockPack is an immutable and serializable collection of blocks.
+
+  A BlockPack can be read from or written to worlds, files, and serialized
+  bytes. Although BlockPacks are immutable and preserve position and
+  orientation of blocks, they can be rotated and offset when read from or
+  written to worlds.
+
+  For a mutable collection of blocks, see BlockPacker.
+  """
+
   def __init__(self, java_generated_id: int):
     """Do not call the constructor directly. Use factory classmethods instead."""
     self._id = java_generated_id
 
-  # TODO(maxuser): add doc string
   @classmethod
   def read_world(
       cls,
       pos1: BlockPos, pos2: BlockPos, *,
       rotation: Rotation = None, offset: BlockPos = None,
       comments: Dict[str, str] = {}, safety_limit: bool = True) -> 'BlockPack':
+    """Creates a blockpack from blocks in the world within a rectangular volume.
+
+    Args:
+      pos1, pos2: opposing corners of a rectangular volume from which to read world blocks
+      rotation: rotation matrix to apply to block coordinates read from world
+      offset: offset to apply to block coordiantes (applied after rotation)
+      comments: key, value pairs to include in the new blockpack
+      safety_limit: if true, fail if requested volume spans more than 1600 chunks
+
+    Returns:
+      a new BlockPack containing blocks read from the world
+    """
     blockpack_id = blockpack_read_world(pos1, pos2, rotation, offset, comments, safety_limit)
     if blockpack_id is None:
       raise BlockPackException()
     return BlockPack(blockpack_id)
 
 
-  # TODO(maxuser): add doc string
   @classmethod
   def read_file(cls, filename: str, *, relative_to_cwd=False) -> 'BlockPack':
+    """Reads a blockpack from a file.
+
+    Args:
+      filename: name of file relative to minescript/blockpacks dir unless it's an absolute path
+        (".zip" is automatically appended to filename if it does not end with that extension)
+      relative_to_cwd: if true, relative filename is taken to be relative to Minecraft dir
+
+    Returns:
+      a new BlockPack containing blocks read from the file
+    """
     if not os.path.isabs(filename) and not relative_to_cwd:
       filename = os.path.join("minescript", "blockpacks", filename)
     blockpack_id = blockpack_read_file(filename)
@@ -634,56 +755,76 @@ class BlockPack:
       raise BlockPackException()
     return BlockPack(blockpack_id)
 
-  # TODO(maxuser): add doc string
-  # Takes a base64-encoded string. Returns a blockpack id.
   @classmethod
   def import_data(cls, base64_data: str) -> 'BlockPack':
+    """Creates a blockpack from base64-encoded serialized blockpack data.
+
+    Args:
+      base64_data: base64-encoded string containing serialization of blockpack data.
+
+    Returns:
+      a new BlockPack containing blocks read from the base64-encoded data
+    """
     blockpack_id = blockpack_import_data(base64_data)
     if blockpack_id is None:
       raise BlockPackException()
     return BlockPack(blockpack_id)
 
-  # TODO(maxuser): add doc string
   def block_bounds(self) -> (BlockPos, BlockPos):
+    """Returns min and max bounding coordinates of blocks in this BlockPack."""
     bounds = blockpack_block_bounds(self._id)
     if bounds is None:
       raise BlockPackException()
     return bounds
 
 
-  # TODO(maxuser): add doc string
   def comments(self) -> Dict[str, str]:
+    """Returns comments stored in this BlockPack."""
     comments = blockpack_comments(self._id)
     if comments is None:
       raise BlockPackException()
     return comments
 
 
-  # TODO(maxuser): add doc string
   def write_world(self, *, rotation: Rotation = None, offset: BlockPos = None):
+    """Writes blocks from this BlockPack into the current world. Requires setblock, fill commands.
+
+    Args:
+      rotation: rotation matrix to apply to block coordinates before writing to world
+      offset: offset to apply to block coordiantes (applied after rotation)
+    """
     if not blockpack_write_world(self._id, rotation, offset):
       raise BlockPackException()
 
 
-  # TODO(maxuser): add doc string
   def write_file(self, filename: str, *, relative_to_cwd=False):
+    """Writes this BlockPack to a file.
+
+    Args:
+      filename: name of file relative to minescript/blockpacks dir unless it's an absolute path
+        (".zip" is automatically appended to filename if it does not end with that extension)
+      relative_to_cwd: if true, relative filename is taken to be relative to Minecraft dir
+    """
     if not os.path.isabs(filename) and not relative_to_cwd:
       filename = os.path.join("minescript", "blockpacks", filename)
     if not blockpack_write_file(self._id, filename):
       raise BlockPackException()
 
 
-  # TODO(maxuser): add doc string
-  # Returns a base64-encoded string.
   def export_data(self) -> str:
+    """Serializes this BlockPack into a base64-encoded string.
+
+    Returns:
+      a base64-encoded string containing this blockpack's data
+    """
     base64_str = blockpack_export_data(self._id)
     if base64_str is None:
       raise BlockPackException()
     return base64_str
 
 
-  # TODO(maxuser): add doc string
   def __del__(self):
+    """Frees this BlockPack to be garbage collected."""
     if not blockpack_delete(self._id):
       raise BlockPackException()
 
@@ -693,32 +834,67 @@ class BlockPackerException(Exception):
 
 
 class BlockPacker:
-  # TODO(maxuser): add doc string
+  """BlockPacker is a mutable collection of blocks.
+
+  Blocks can be added to a BlockPacker by calling setblock(...), fill(...),
+  and/or add_blockpack(...).  To serialize blocks or write them to a world, a
+  BlockPacker can be "packed" by calling pack() to create a compact snapshot of
+  the blocks contained in the BlockPacker in the form of a new BlockPack. A
+  BlockPacker continues to store the same blocks it had before being packed,
+  and more blocks can be added thereafter.
+
+  For a collection of blocks that is immutable and serializable, see BlockPack.
+  """
+
   def __init__(self):
+    """Creates a new, empty blockpacker."""
     self._id = blockpacker_create()
 
-  # TODO(maxuser): add doc string
   def setblock(self, pos: BlockPos, block_type: str):
+    """Sets a block within this BlockPacker.
+
+    Args:
+      pos: position of a block to set
+      block_type: block descriptor to set
+    """
     if not blockpacker_setblock(self._id, pos, block_type):
       raise BlockPackerException()
 
-  # TODO(maxuser): add doc string
   def fill(self, pos1: BlockPos, pos2: BlockPos, block_type: str):
+    """Fills blocks within this BlockPacker.
+
+    Args:
+      pos1, pos2: coordinates of opposing corners of a rectangular volume to fill
+      block_type: block descriptor to fill
+    """
     if not blockpacker_fill(self._id, pos1, pos2, block_type):
       raise BlockPackerException()
 
-  # TODO(maxuser): add doc string
   def add_blockpack(
       self, blockpack: BlockPack, *, rotation: Rotation = None, offset: BlockPos = None):
+    """Adds the blocks within a BlockPack into this BlockPacker.
+
+    Args:
+      blockpack: BlockPack from which to copy blocks
+      rotation: rotation matrix to apply to block coordinates before adding to blockpacker
+      offset: offset to apply to block coordiantes (applied after rotation)
+    """
     if not blockpacker_add_blockpack(self._id, blockpack._id, rotation, offset):
       raise BlockPackerException()
 
-  # TODO(maxuser): add doc string
   def pack(self, *, comments: Dict[str, str] = {}) -> BlockPack:
+    """Packs blocks within this BlockPacker into a new BlockPack.
+
+    Args:
+      comments: key, value pairs to include in the new BlockPack
+
+    Returns:
+      a new BlockPack containing a snapshot of blocks from this BlockPacker
+    """
     return BlockPack(blockpacker_pack(self._id, comments))
 
-  # TODO(maxuser): add doc string
   def __del__(self):
+    """Frees this BlockPacker to be garbage collected."""
     if not blockpacker_delete(self._id):
       raise BlockPackerException()
 
