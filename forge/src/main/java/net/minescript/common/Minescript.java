@@ -2489,14 +2489,15 @@ public class Minescript {
 
     var minecraft = Minecraft.getInstance();
     var player = minecraft.player;
+    var networkHandler = player.connection;
     if (message.startsWith("/")) {
       if (!areCommandsAllowed()) {
         LOGGER.info("Minecraft command blocked for server: {}", message); // [norewrite]
         return;
       }
-      player.commandUnsigned(message.substring(1));
+      networkHandler.sendUnsignedCommand(message.substring(1));
     } else {
-      player.chatSigned(message, null /* preview */);
+      networkHandler.sendChat(message);
     }
   }
 
