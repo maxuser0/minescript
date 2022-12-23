@@ -605,73 +605,84 @@ public class BlockPack {
       while ((zipEntry = zipIn.getNextEntry()) != null) {
         // Ignore the zip entries that don't end in ".blox".
         if (zipEntry.getName().toLowerCase().endsWith(".blox")) {
-          var blockPack = readStream(dataIn);
-          if (blockPack != null) {
-            return blockPack;
-          }
+          return readStream(dataIn);
         }
       }
     }
-    throw new IllegalArgumentException("Unable to read Blockpack from " + filename);
+    throw new IllegalArgumentException(
+        "Expected an entry ending with `.blox` in the zip archive, but no such entry found in "
+            + filename);
   }
 
   private static BlockPack readStream(DataInputStream dataIn) throws IOException {
-    String first8Bytes = readAsciiString(dataIn, 8);
-    if (!first8Bytes.equals(FILE_FORMAT_MAGIC_BYTES)) {
-      throw new IllegalArgumentException(
-          String.format(
-              "Expected first 8 bytes of blockpack data to be \"%s\" but got \"%s\"",
-              FILE_FORMAT_MAGIC_BYTES, first8Bytes));
-    }
-
-    // Track the chunks that are allowed only once.
-    Set<String> exhaustedChunks = new HashSet<>();
-
-    ChunkReader chunkReader = new ChunkReader(dataIn, "Head");
-    readHeadChunk(chunkReader.dataInputStream());
-    exhaustedChunks.add(chunkReader.chunkName());
-
-    Map<Integer, String> symbolMap = null;
-    SortedMap<Long, Tile> tiles = new TreeMap<>();
-    Map<String, String> comments = new HashMap<>();
-
-    chunkReader = new ChunkReader(dataIn);
-    while (!chunkReader.chunkName().equals("Done")) {
-      if (exhaustedChunks.contains(chunkReader.chunkName())) {
+    String op = null; // Name of current operation to faciliate better error reporting.
+    try {
+      op = "reading first 8 (magic) bytes";
+      String first8Bytes = readAsciiString(dataIn, 8);
+      if (!first8Bytes.equals(FILE_FORMAT_MAGIC_BYTES)) {
         throw new IllegalArgumentException(
             String.format(
-                "\"%s\" chunk appears more than once in blockpack", chunkReader.chunkName()));
+                "Expected first 8 bytes of blockpack data to be \"%s\" but got \"%s\"",
+                FILE_FORMAT_MAGIC_BYTES, first8Bytes));
       }
-      switch (chunkReader.chunkName()) {
-        case "Plte":
-          exhaustedChunks.add(chunkReader.chunkName());
-          symbolMap = readPaletteChunk(chunkReader.dataInputStream());
-          break;
 
-        case "Tile":
-          readTileChunk(chunkReader.dataInputStream(), tiles);
-          break;
+      // Track the chunks that are allowed only once.
+      Set<String> exhaustedChunks = new HashSet<>();
 
-        case "text":
-          readTextChunk(chunkReader.dataInputStream(), chunkReader.chunkLength(), comments);
-          break;
+      op = "reading blockpack `Head` chunk";
+      ChunkReader chunkReader = new ChunkReader(dataIn, "Head");
+      readHeadChunk(chunkReader.dataInputStream());
+      exhaustedChunks.add(chunkReader.chunkName());
 
-        default:
-          if (Character.isUpperCase(chunkReader.chunkName().charAt(0))) {
-            throw new IllegalArgumentException(
-                String.format(
-                    "Unrecognized critical chunk named \"%s\" in blockpack",
-                    chunkReader.chunkName()));
-          }
-      }
+      Map<Integer, String> symbolMap = null;
+      SortedMap<Long, Tile> tiles = new TreeMap<>();
+      Map<String, String> comments = new HashMap<>();
+
+      op = "reading blockpack chunk";
       chunkReader = new ChunkReader(dataIn);
-    }
+      while (!chunkReader.chunkName().equals("Done")) {
+        if (exhaustedChunks.contains(chunkReader.chunkName())) {
+          throw new IllegalArgumentException(
+              String.format(
+                  "\"%s\" chunk appears more than once in blockpack", chunkReader.chunkName()));
+        }
+        switch (chunkReader.chunkName()) {
+          case "Plte":
+            exhaustedChunks.add(chunkReader.chunkName());
+            symbolMap = readPaletteChunk(chunkReader.dataInputStream());
+            break;
 
-    if (symbolMap == null) {
-      throw new IllegalArgumentException("Required chunk \"Plte\" not found in blockpack");
-    }
+          case "Tile":
+            readTileChunk(chunkReader.dataInputStream(), tiles);
+            break;
 
-    return new BlockPack(symbolMap, tiles, comments);
+          case "text":
+            readTextChunk(chunkReader.dataInputStream(), chunkReader.chunkLength(), comments);
+            break;
+
+          default:
+            if (Character.isUpperCase(chunkReader.chunkName().charAt(0))) {
+              throw new IllegalArgumentException(
+                  String.format(
+                      "Unrecognized critical chunk named \"%s\" in blockpack",
+                      chunkReader.chunkName()));
+            }
+        }
+        chunkReader = new ChunkReader(dataIn);
+      }
+
+      if (symbolMap == null) {
+        throw new IllegalArgumentException("Required chunk \"Plte\" not found in blockpack");
+      }
+
+      return new BlockPack(symbolMap, tiles, comments);
+    } catch (IOException e) {
+      if (e.getMessage() == null) {
+        throw new IOException(e.getClass().getSimpleName() + " while " + op);
+      } else {
+        throw new IOException(e.getMessage() + " (while " + op + ")");
+      }
+    }
   }
 
   public interface BlockConsumer {
