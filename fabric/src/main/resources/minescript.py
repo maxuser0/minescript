@@ -36,24 +36,6 @@ def execute(command: str):
   print(command)
 
 
-# Alias the built-in exec as pyexec because exec gets redefined below.
-# TODO(maxuser): Remove this in minescript v3.0.
-pyexec = exec
-
-
-# TODO(maxuser): Remove this in minescript v3.0.
-def exec(command: str):
-  """Executes the given command.
-
-  @deprecated: Use minescript.execute to avoid conflict with built-in exec.
-
-  If command doesn't already start with a slash or backslash, automatically
-  prepends a slash. Ignores leading and trailing whitespace, and ignores empty
-  commands.
-  """
-  return execute(command)
-
-
 def echo(message: Any):
   """Echoes message to the chat.
 
