@@ -28,7 +28,7 @@ displayURL="https://minescript.net/" #optional
 # A file name (in the root of the mod JAR) containing a logo for display
 logoFile="minescript-logo.png" #optional
 # A text field displayed in the mod UI
-#credits="..." #optional
+credits="Special thanks to Spiderfffun for testing." #optional
 # A text field displayed in the mod UI
 authors="maxuser@minescript.net" #optional
 # The description text for the mod (multi line!) (#mandatory)
