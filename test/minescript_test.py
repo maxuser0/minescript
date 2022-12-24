@@ -77,14 +77,13 @@ def ChatCallback(message):
   message_lock_.acquire()
   messages_.append(message)
   message_lock_.release()
-minescript.register_chat_message_listener(ChatCallback)
 
 
-def ChatTest():
+def chat_test():
   minescript.chat("this is a chat message")
   ExpectMessage("<[^>]*> this is a chat message")
 
-all_tests.append(ChatTest)
+all_tests.append(chat_test)
 
 
 def player_position_test():
@@ -109,7 +108,9 @@ all_tests.append(getblock_test)
 
 def copy_paste_test():
   minescript.execute(r"\copy ~ ~-1 ~ ~5 ~5 ~5 test")
-  ExpectMessage(r"Copied volume .* to minescript/blockpacks/test.zip \(.* bytes\)\.")
+  ExpectMessage(
+      r"Copied volume .* to %s \(.* bytes\)\." %
+      os.path.join("minescript", "blockpacks", "test.zip"))
 
   minescript.execute(r"\paste ~10 ~-1 ~ this_label_does_not_exist")
   ExpectMessage(r"Error: blockpack file for `this_label_does_not_exist` not found.*")
@@ -265,21 +266,43 @@ def player_targeted_block_test():
 
 all_tests.append(player_targeted_block_test)
 
-
-if len(sys.argv) == 1:
+if "--list" in sys.argv[1:]:
   for test in all_tests:
-    current_test_ = test.__name__
-    try:
-      test()
-      minescript.flush()
-      PrintSuccess(f"PASSED")
-      messages_ = []
-    except Exception as e:
-      PrintFailure(traceback.format_exc())
-      minescript.flush()
-      sys.exit(1)
+    minescript.chat(f'|{{"text":"{test.__name__}","color":"green"}}')
+  sys.exit(0)
+
+explicit_tests = set()
+
+# Assume all explicitly listed tests should be run (and tests not listed should not be run), unless
+# `--exclude` is an arg in which case all explicitly listed tests should be skipped (and tests not
+# listed should be run).
+should_include = True
+for arg in sys.argv[1:]:
+  if arg == "--exclude":
+    should_include = False
+  else:
+    explicit_tests.add(arg)
+
+minescript.register_chat_message_listener(ChatCallback)
+num_tests_run = 0
+for test in all_tests:
+  current_test_ = test.__name__
+  if explicit_tests:
+    if not should_include and current_test_ in explicit_tests:
+      continue
+    if should_include and current_test_ not in explicit_tests:
+      continue
+  num_tests_run += 1
+  try:
+    test()
+    minescript.flush()
+    PrintSuccess(f"PASSED")
+    messages_ = []
+  except Exception as e:
+    PrintFailure(traceback.format_exc())
+    minescript.flush()
+    sys.exit(1)
 
 minescript.flush()
-num_tests = len(all_tests)
 current_test_ = "SUCCESS"
-PrintSuccess(f"All tests passed. ({num_tests}/{num_tests})")
+PrintSuccess(f"All tests passed. ({num_tests_run}/{num_tests_run})")
