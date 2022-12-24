@@ -61,3 +61,7 @@ All code, compiled or in source form, in the built mod jar is licensed as GPL
 v3 (specifically `SPDX-License-Identifier: GPL-3.0-only`). Sources within the
 `tools` directory that are not distributed in the mod jar and are not required
 for building or running the mod jar may be covered by a different license.
+
+## Credits
+
+Special thanks to **Spiderfffun** for extensive testing of v3.0 on Windows.

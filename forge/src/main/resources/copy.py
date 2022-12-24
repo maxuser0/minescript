@@ -71,7 +71,7 @@ def main(args):
   blockpack.write_file(copy_file, relative_to_cwd=True)
   file_size_str = "{:,}".format(os.stat(copy_file).st_size)
   echo(
-      f"Copied volume {abs(x1 - x2)} * {abs(y1 - y2)} * {abs(z1 - z2)} to "
+      f"Copied volume {abs(x1 - x2) + 1} * {abs(y1 - y2) + 1} * {abs(z1 - z2) + 1} to "
       f"{copy_file} ({file_size_str} bytes).")
   del blockpack
 
