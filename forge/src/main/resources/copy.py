@@ -9,7 +9,7 @@
 r"""copy v3.0 distributed via Minescript jar file
 
 Requires:
-  minescript v2.1
+  minescript v3.0
 
 Usage: \copy X1 Y1 Z1 X2 Y2 Z2 [LABEL] [no_limit]
 

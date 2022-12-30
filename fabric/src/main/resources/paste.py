@@ -9,7 +9,7 @@
 r"""paste v3.0 distributed via Minescript jar file
 
 Requires:
-  minescript v2.1
+  minescript v3.0
 
 Usage: \paste X Y Z [LABEL]
 
