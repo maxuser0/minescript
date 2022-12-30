@@ -239,31 +239,29 @@ minescript.echo("Note to self...")
 ```
 
 ### minescript module
+*Usage:* `import minescript  # from Python script`
 
-From a Python script in the **minescript** folder, import the `minescript`
-module:
-
-```
-import minescript
-```
+User-friendly API for scripts to make function calls into the
+Minescript mod.  This module should be imported by other
+scripts and not run directly.
 
 #### execute
-*Usage:* `execute(command: str)`
+*Usage:* <code>execute(command: str)</code>
 
-Executes the given Minecraft or Minescript command.
+Executes the given command.
 
-If command doesn't already start with a slash or backslash, automatically
+If `command` doesn't already start with a slash or backslash, automatically
 prepends a slash. Ignores leading and trailing whitespace, and ignores empty
 commands.
 
-*Note: This was named `exec` in Minescript 2.0. The old name is still available,
-but is deprecated and will be removed in a future version.*
+*Note: This was named `exec` in Minescript 2.0. The old name is no longer
+available in v3.0.*
 
 Since: v2.1
 
 
 #### echo
-*Usage:* `echo(message: Any)`
+*Usage:* <code>echo(message: Any)</code>
 
 Echoes message to the chat.
 
@@ -273,27 +271,42 @@ Since: v2.0
 
 
 #### chat
-*Usage:* `chat(message: str)`
+*Usage:* <code>chat(message: str)</code>
 
 Sends the given message to the chat.
 
-If message starts with a slash or backslash, automatically prepends a space
+If `message` starts with a slash or backslash, automatically prepends a space
 so that the message is sent as a chat and not executed as a command.  Ignores
 empty messages.
 
 Since: v2.0
 
 
+#### log
+*Usage:* <code>log(message: str) -> bool</code>
+
+Sends the given message to latest.log.
+
+*Args:*
+
+- `message`: string to send to the log
+
+*Returns:*
+
+- `True` if `message` was logged successfully.
+
+Since: v3.0
+
+
 #### screenshot
-*Usage:* `screenshot(filename=None)`
+*Usage:* <code>screenshot(filename=None) -> bool</code>
 
 Takes a screenshot, similar to pressing the F2 key.
 
 *Args:*
 
-- `filename`: if specified, screenshot filename relative to the screenshots
-  directory; ".png" extension is added to the screenshot file if it doesn't
-  already have a png extension.
+- `filename`: if specified, screenshot filename relative to the screenshots directory; ".png"
+    extension is added to the screenshot file if it doesn't already have a png extension.
 
 *Returns:*
 
@@ -303,7 +316,7 @@ Since: v2.1
 
 
 #### flush
-*Usage:* `flush()`
+*Usage:* <code>flush()</code>
 
 Wait for all previously issued script commands from this job to complete.
 
@@ -311,7 +324,7 @@ Since: v2.1
 
 
 #### player_name
-*Usage:* `player_name()`
+*Usage:* <code>player_name() -> str</code>
 
 Gets the local player's name.
 
@@ -319,98 +332,95 @@ Since: v2.1
 
 
 #### player_position
-*Usage:* `player_position(done_callback=None)`
+*Usage:* <code>player_position(done_callback=None) -> List[float]</code>
 
-Gets the local player’s position.
+Gets the local player's position.
 
 *Args:*
 
-- `done_callback`: if given, return immediately and call
-  done_callback(return_value) asynchronously when return_value is ready
+- `done_callback`: if given, return immediately and call `done_callback(return_value)`
+      asynchronously when `return_value` is ready
 
 *Returns:*
 
-- If `done_callback` is `None`, returns player’s position as [x, y, z]
-
-*Example:*
-```
-x, y, z = minescript.player_position()
-```
+- if `done_callback` is `None`, returns player's position as [x: float, y: float, z: float]
 
 
 #### player_hand_items
-*Usage:* `player_hand_items(done_callback=None)`
+*Usage:* <code>player_hand_items(done_callback=None) -> List[Dict[str, Any]]</code>
 
 Gets the items in the local player's hands.
 
 *Args:*
 
-- `done_callback`: if given, return immediately and call
-  `done_callback(return_value)` asynchronously when return_value is ready.
+- `done_callback`: if given, return immediately and call `done_callback(return_value)`
+      asynchronously when `return_value` is ready
 
 *Returns:*
 
-- If `done_callback` is `None`, returns items in player's inventory as list of
-  items where each item is a dict: `{"item": str, "count": int, "nbt": str}`
+- If `done_callback` is `None`, returns items in player's hands as a list of
+- `items where each item is a dict`: `{"item": str, "count": int}`, plus
+  `"nbt": str` if the item has NBT data; main-hand item is at list index 0,
+  off-hand item at index 1.
 
 Since: v2.0
 
 
 #### player_inventory
-*Usage:* `player_inventory(done_callback=None)`
+*Usage:* <code>player_inventory(done_callback=None) -> List[Dict[str, Any]]</code>
 
 Gets the items in the local player's inventory.
 
 *Args:*
 
-- `done_callback`: if given, return immediately and call
-  `done_callback(return_value)` asynchronously when return_value is ready
+- `done_callback`: if given, return immediately and call `done_callback(return_value)`
+      asynchronously when `return_value` is ready
 
 *Returns:*
 
-- If `done_callback` is `None`, returns items in player's inventory as list of
-  items where each item is a dict: `{"item": str, "count": int, "slot": int}`,
-  plus `"nbt": str` if an item has NBT data and `"selected": True` for the
-  selected item in the player's hand.
+- If `done_callback` is `None`, returns items in player's inventory as list
+- `of items where each item is a dict`: `{"item": str, "count": int, "slot":
+  int}`, plus `"nbt": str` if an item has NBT data and `"selected": True` for
+  the item selected in the player's main hand.
 
-Update in v3.0: introduced `"slot"` and `"selected"` entries in the returned
-dict, and `"nbt"` is populated only when NBT data is present. (In prior
-versions, `"nbt"` was always populated, with a value of `null` when NBT data
-was absent.)
+Update in v3.0:
+  Introduced `"slot"` and `"selected"` attributes in the returned
+  dict, and `"nbt"` is populated only when NBT data is present. (In prior
+  versions, `"nbt"` was always populated, with a value of `null` when NBT data
+  was absent.)
 
 Since: v2.0
 
 
 #### player_inventory_slot_to_hotbar
-*Usage:* `player_inventory_slot_to_hotbar(slot: int, done_callback=None)`
+*Usage:* <code>player_inventory_slot_to_hotbar(slot: int, done_callback=None) -> int</code>
 
-Swaps an inventory item into the hotbar and selects that hotbar slot into the
-player's hand.
+Swaps an inventory item into the hotbar.
 
 *Args:*
 
 - `slot`: inventory slot (9 or higher) to swap into the hotbar
-- `done_callback`: if given, return immediately and call
-  `done_callback(return_value)` asynchronously when return_value is ready
+- `done_callback`: if given, return immediately and call `done_callback(return_value)`
+      asynchronously when `return_value` is ready
 
 *Returns:*
 
-- If `done_callback` is `None`, returns the hotbar slot (0-8) that the
-  inventory item was swapped into
+- If `done_callback` is `None`, returns the hotbar slot (0-8) that the inventory
+  item was swapped into
 
 Since: v3.0
 
 
 #### player_inventory_select_slot
-*Usage:* `player_inventory_select_slot(slot: int, done_callback=None)`
+*Usage:* <code>player_inventory_select_slot(slot: int, done_callback=None) -> int</code>
 
 Selects the given slot within the player's hotbar.
 
 *Args:*
 
 - `slot`: hotbar slot (0-8) to select in the player's hand
-- `done_callback`: if given, return immediately and call
-  `done_callback(return_value)` asynchronously when return_value is ready
+- `done_callback`: if given, return immediately and call `done_callback(return_value)`
+      asynchronously when `return_value` is ready
 
 *Returns:*
 
@@ -420,9 +430,9 @@ Since: v3.0
 
 
 #### player_press_forward
-*Usage:* `player_press_forward(pressed: bool)`
+*Usage:* <code>player_press_forward(pressed: bool)</code>
 
-Starts/stops moving the local player forward, simulating press/release of the `w` key.
+Starts/stops moving the local player forward, simulating press/release of the 'w' key.
 
 *Args:*
 
@@ -432,9 +442,9 @@ Since: v2.1
 
 
 #### player_press_backward
-*Usage:* `player_press_backward(pressed: bool)`
+*Usage:* <code>player_press_backward(pressed: bool)</code>
 
-Starts/stops moving the local player backward, simulating press/release of the `s` key.
+Starts/stops moving the local player backward, simulating press/release of the 's' key.
 
 *Args:*
 
@@ -444,9 +454,9 @@ Since: v2.1
 
 
 #### player_press_left
-*Usage:* `player_press_left(pressed: bool)`
+*Usage:* <code>player_press_left(pressed: bool)</code>
 
-Starts/stops moving the local player to the left, simulating press/release of the `a` key.
+Starts/stops moving the local player to the left, simulating press/release of the 'a' key.
 
 *Args:*
 
@@ -456,9 +466,9 @@ Since: v2.1
 
 
 #### player_press_right
-*Usage:* `player_press_right(pressed: bool)`
+*Usage:* <code>player_press_right(pressed: bool)</code>
 
-Starts/stops moving the local player to the right, simulating press/release of the `d` key.
+Starts/stops moving the local player to the right, simulating press/release of the 'd' key.
 
 *Args:*
 
@@ -468,7 +478,7 @@ Since: v2.1
 
 
 #### player_press_jump
-*Usage:* `player_press_jump(pressed: bool)`
+*Usage:* <code>player_press_jump(pressed: bool)</code>
 
 Starts/stops the local player jumping, simulating press/release of the space key.
 
@@ -480,7 +490,7 @@ Since: v2.1
 
 
 #### player_press_sprint
-*Usage:* `player_press_sprint(pressed: bool)`
+*Usage:* <code>player_press_sprint(pressed: bool)</code>
 
 Starts/stops the local player sprinting, simulating press/release of the left control key.
 
@@ -492,7 +502,7 @@ Since: v2.1
 
 
 #### player_press_sneak
-*Usage:* `player_press_sneak(pressed: bool)`
+*Usage:* <code>player_press_sneak(pressed: bool)</code>
 
 Starts/stops the local player sneaking, simulating press/release of the left shift key.
 
@@ -504,7 +514,7 @@ Since: v2.1
 
 
 #### player_press_pick_item
-*Usage:* `player_press_pick_item(pressed: bool)`
+*Usage:* <code>player_press_pick_item(pressed: bool)</code>
 
 Starts/stops the local player picking an item, simulating press/release of the middle mouse button.
 
@@ -516,7 +526,7 @@ Since: v2.1
 
 
 #### player_press_use
-*Usage:* `player_press_use(pressed: bool)`
+*Usage:* <code>player_press_use(pressed: bool)</code>
 
 Starts/stops the local player using an item or selecting a block, simulating press/release of the right mouse button.
 
@@ -528,7 +538,7 @@ Since: v2.1
 
 
 #### player_press_attack
-*Usage:* `player_press_attack(pressed: bool)`
+*Usage:* <code>player_press_attack(pressed: bool)</code>
 
 Starts/stops the local player attacking or breaking a block, simulating press/release of the left mouse button.
 
@@ -540,9 +550,9 @@ Since: v2.1
 
 
 #### player_press_swap_hands
-*Usage:* `player_press_swap_hands(pressed: bool)`
+*Usage:* <code>player_press_swap_hands(pressed: bool)</code>
 
-Starts/stops moving the local player swapping hands, simulating press/release of the `f` key.
+Starts/stops moving the local player swapping hands, simulating press/release of the 'f' key.
 
 *Args:*
 
@@ -552,9 +562,9 @@ Since: v2.1
 
 
 #### player_press_drop
-*Usage:* `player_press_drop(pressed: bool)`
+*Usage:* <code>player_press_drop(pressed: bool)</code>
 
-Starts/stops the local player dropping an item, simulating press/release of the `q` key.
+Starts/stops the local player dropping an item, simulating press/release of the 'q' key.
 
 *Args:*
 
@@ -564,19 +574,19 @@ Since: v2.1
 
 
 #### player_orientation
-*Usage:* `player_orientation()`
+*Usage:* <code>player_orientation()</code>
 
 Gets the local player's orientation.
 
 *Returns:*
 
-- `(yaw: float, pitch: float)` as angles in degrees
+- (yaw: float, pitch: float) as angles in degrees
 
 Since: v2.1
 
 
 #### player_set_orientation
-*Usage:* `player_set_orientation(yaw: float, pitch: float)`
+*Usage:* <code>player_set_orientation(yaw: float, pitch: float)</code>
 
 Sets the local player's orientation.
 
@@ -587,57 +597,83 @@ Sets the local player's orientation.
 
 *Returns:*
 
-- `True` if successful
+- True if successful
 
 Since: v2.1
 
 
-#### players
-*Usage:* `players()`
+#### player_get_targeted_block
+*Usage:* <code>player_get_targeted_block(max_distance: float = 20)</code>
 
-Gets a list of nearby players and their attributes: name, position, velocity, etc.
+Gets info about the nearest block, if any, in the local player's crosshairs.
+
+*Args:*
+
+- `max_distance`: max distance from local player to look for blocks
+
+*Returns:*
+
+- [[x, y, z], distance, side, block_description] if the local player has a
+  block in their crosshairs within `max_distance`, `None` otherwise.
+  `distance` (float) is calculated from the player to the targeted block;
+  `side` (str) is the direction that the targeted side of the block is facing
+  (e.g. `"east"`); `block_description` (str) describes the targeted block.
+
+Since: v3.0
+
+
+#### players
+*Usage:* <code>players()</code>
+
+Gets a list of nearby players and their attributes.
+
+*Returns:*
+
+- List of players where each player is represented as a dict:
+  `{"name": str, "type": str, "position": [float, float, float], "yaw": float, "pitch": float,
+  "velocity": [float, float, float]}`
 
 Since: v2.1
 
 
 #### entities
-*Usage:* `entities()`
+*Usage:* <code>entities()</code>
 
-Gets a list of nearby entities and their attributes: name, position, velocity, etc.
+Gets a list of nearby entities and their attributes.
+
+*Returns:*
+
+- List of entities where each entity is represented as a dict:
+  `{"name": str, "type": str, "position": [float, float, float], "yaw": float, "pitch": float,
+  "velocity": [float, float, float]}`
 
 Since: v2.1
 
 
 #### getblock
-*Usage:* `getblock(x: int, y: int, z: int, done_callback=None)`
+*Usage:* <code>getblock(x: int, y: int, z: int, done_callback=None)</code>
 
 Gets the type of block at position (x, y, z).
 
 *Args:*
 
-- `done_callback`: if given, return immediately and call
-  `done_callback(return_value)` asynchronously when return_value is ready
+- `done_callback`: if given, return immediately and call `done_callback(return_value)`
+      asynchronously when `return_value` is ready
 
 *Returns:*
 
 - if `done_callback` is `None`, returns the block type at (x, y, z) as a string
 
-*Example:*
-
-```
-block_type = minescript.getblock(x, y, z)
-```
-
 
 #### getblocklist
-*Usage:* `getblocklist(positions: List[List[int]], done_callback=None)`
+*Usage:* <code>getblocklist(positions: List[List[int]], done_callback=None)</code>
 
 Gets the types of block at the specified [x, y, z] positions.
 
 *Args:*
 
-- `done_callback`: if given, return immediately and call
-  `done_callback(return_value)` asynchronously when return_value is ready
+- `done_callback`: if given, return immediately and call `done_callback(return_value)`
+      asynchronously when `return_value` is ready
 
 *Returns:*
 
@@ -647,21 +683,18 @@ Since: v2.1
 
 
 #### await_loaded_region
-*Usage:* `await_loaded_region(x1: int, z1: int, x2: int, z2: int, done_callback=None)`
+*Usage:* <code>await_loaded_region(x1: int, z1: int, x2: int, z2: int, done_callback=None)</code>
 
-Notifies the caller when all the chunks in the region from (x1, z1) to (x2, z2)
-are fully loaded. This function is useful for making sure that a region is
-fully loaded before setting or filling blocks within it.
+Notifies the caller when the region from (x1, z1) to (x2, z2) is loaded.
 
 *Args:*
 
-- `done_callback`: if given, return immediately and call
-  `done_callback(return_value)` asynchronously when return_value is ready
+- `done_callback`: if given, return immediately and call `done_callback(return_value)`
+      asynchronously when `return_value` is ready
 
 *Returns:*
 
-- if `done_callback` is `None`, returns `True` when the requested region is fully
-  loaded.
+- if `done_callback` is `None`, returns `True` when the requested region is fully loaded.
 
 *Examples:*
 
@@ -669,12 +702,12 @@ fully loaded before setting or filling blocks within it.
 call):
 
 ```
-print("About to wait for region to load...", file=sys.stderr)
+minescript.echo("About to wait for region to load...")
 
 # Load all chunks within (x, z) bounds (0, 0) and (320, 160):
 minescript.await_loaded_region(0, 0, 320, 160)
 
-print("Region finished loading.", file=sys.stderr)
+minescript.echo("Region finished loading.")
 ```
 
 [2] Continue doing work on the main thread while the region loads in the
@@ -688,39 +721,35 @@ lock = threading.Lock()
 
 def on_region_loaded(loaded):
   if loaded:
-    print("Region loaded ok.", file=sys.stderr)
+    minescript.echo("Region loaded ok.")
   else:
-    print("Region failed to load.", file=sys.stderr)
+    minescript.echo("Region failed to load.")
   lock.release()
 
 # Acquire the lock, to be released later by on_region_loaded().
 lock.acquire()
 
-# Calls on_region_loaded(...) when region finishes 
+# Calls on_region_loaded(...) when region finishes
 # loading all chunks within (x, z) bounds (0, 0)
 # and (320, 160):
 minescript.await_loaded_region(
     0, 0, 320, 160, on_region_loaded)
 
-print("Do other work while region loads...", file=sys.stderr)
+minescript.echo("Do other work while region loads...")
 
-print("Now wait for region to finish loading...", file=stderr)
+minescript.echo("Now wait for region to finish loading...")
 lock.acquire()
 
-print("Do more work now that region finished loading...", file=stderr)
+minescript.echo("Do more work now that region finished loading...")
 ```
 
 
 #### register_chat_message_listener
-*Usage:* `register_chat_message_listener(listener: Callable[[str], None])`
+*Usage:* <code>register_chat_message_listener(listener: Callable[[str], None])</code>
 
 Registers a listener for receiving chat messages. One listener allowed per job.
 
 Listener receives both incoming and outgoing chat messages.
-
-See also
-[`register_chat_message_interceptor()`](#register_chat_message_interceptor) for
-swallowing outgoing chat messages.
 
 *Args:*
 
@@ -728,21 +757,24 @@ swallowing outgoing chat messages.
 
 Since: v2.0
 
+See also:
+  [`register_chat_message_interceptor()`](#register_chat_message_interceptor) for swallowing outgoing chat messages
+
 
 #### unregister_chat_message_listener
-*Usage:* `unregister_chat_message_listener()`
+*Usage:* <code>unregister_chat_message_listener()</code>
 
 Unegisters a chat message listener, if any, for the currently running job.
 
 *Returns:*
 
-- `True` if successfully unregistered a listener, `False` otherwise.
+- `True` if successfully unregistered a listener.
 
 Since: v2.0
 
 
 #### register_chat_message_interceptor
-*Usage:* `register_chat_message_interceptor(interceptor: Callable[[str], None])`
+*Usage:* <code>register_chat_message_interceptor(interceptor: Callable[[str], None])</code>
 
 Registers an interceptor for swallowing chat messages.
 
@@ -752,23 +784,330 @@ decorate or post-process outgoing messages automatically before they're sent
 to the server.  Only one interceptor is allowed at a time within a Minecraft
 instance.
 
-See also [`register_chat_message_listener()`](#register_chat_message_listener)
-for non-destructive listening of chat messages.
-
 *Args:*
 
 - `interceptor`: callable that repeatedly accepts a string representing chat messages
 
 Since: v2.1
 
+See also:
+  [`register_chat_message_listener()`](#register_chat_message_listener) for non-destructive listening of chat messages
+
 
 #### unregister_chat_message_interceptor
-*Usage:* `unregister_chat_message_interceptor()`
+*Usage:* <code>unregister_chat_message_interceptor()</code>
 
 Unegisters the chat message interceptor, if one is currently registered.
 
 *Returns:*
 
-- `True` if successfully unregistered an interceptor, `False` otherwise.
+- `True` if successfully unregistered an interceptor.
 
 Since: v2.1
+
+
+#### BlockPos
+Tuple representing `(x: int, y: int, z: int)` position in block space.
+
+#### Rotation
+Tuple of 9 `int` values representing a flattened, row-major 3x3 rotation matrix.
+
+#### Rotations
+Common rotations for use with [`BlockPack`](#blockpack) and [`BlockPacker`](#blockpacker) methods.
+
+Since: v3.0
+
+
+#### Rotations.IDENTITY
+Effectively no rotation.
+
+#### Rotations.X_90
+Rotate 90 degrees about the x axis.
+
+#### Rotations.X_180
+Rotate 180 degrees about the x axis.
+
+#### Rotations.X_270
+Rotate 270 degrees about the x axis.
+
+#### Rotations.Y_90
+Rotate 90 degrees about the y axis.
+
+#### Rotations.Y_180
+Rotate 180 degrees about the y axis.
+
+#### Rotations.Y_270
+Rotate 270 degrees about the y axis.
+
+#### Rotations.Z_90
+Rotate 90 degrees about the z axis.
+
+#### Rotations.Z_180
+Rotate 180 degrees about the z axis.
+
+#### Rotations.Z_270
+Rotate 270 degrees about the z axis.
+
+#### Rotations.INVERT_X
+Invert the x coordinate (multiply by -1).
+
+#### Rotations.INVERT_Y
+Invert the y coordinate (multiply by -1).
+
+#### Rotations.INVERT_Z
+Invert the z coordinate (multiply by -1).
+
+#### combine_rotations
+*Usage:* <code>combine_rotations(rot1: [Rotation](#rotation), rot2: [Rotation](#rotation), /) -> [Rotation](#rotation)</code>
+
+Combines two rotation matrices into a single rotation matrix.
+
+Since: v3.0
+
+
+#### BlockPack
+BlockPack is an immutable and serializable collection of blocks.
+
+A blockpack can be read from or written to worlds, files, and serialized
+bytes. Although blockpacks are immutable and preserve position and
+orientation of blocks, they can be rotated and offset when read from or
+written to worlds.
+
+For a mutable collection of blocks, see [`BlockPacker`](#blockpacker).
+
+Since: v3.0
+
+
+#### BlockPack.read_world
+*Usage:* <code>@classmethod BlockPack.read_world(pos1: [BlockPos](#blockpos), pos2: [BlockPos](#blockpos), \*, rotation: [Rotation](#rotation) = None, offset: [BlockPos](#blockpos) = None, comments: Dict[str, str] = {}, safety_limit: bool = True) -> [BlockPack](#blockpack)</code>
+
+Creates a blockpack from blocks in the world within a rectangular volume.
+
+*Args:*
+
+- `pos1, pos2`: opposing corners of a rectangular volume from which to read world blocks
+- `rotation`: rotation matrix to apply to block coordinates read from world
+- `offset`: offset to apply to block coordiantes (applied after rotation)
+- `comments`: key, value pairs to include in the new blockpack
+- `safety_limit`: if `True`, fail if requested volume spans more than 1600 chunks
+
+*Returns:*
+
+- a new BlockPack containing blocks read from the world
+
+*Raises:*
+
+  `BlockPackException` if blockpack cannot be read
+
+
+#### BlockPack.read_file
+*Usage:* <code>@classmethod BlockPack.read_file(filename: str, \*, relative_to_cwd=False) -> [BlockPack](#blockpack)</code>
+
+Reads a blockpack from a file.
+
+*Args:*
+
+- `filename`: name of file relative to minescript/blockpacks dir unless it's an absolute path
+    (".zip" is automatically appended to filename if it does not end with that extension)
+- `relative_to_cwd`: if `True`, relative filename is taken to be relative to Minecraft dir
+
+*Returns:*
+
+- a new BlockPack containing blocks read from the file
+
+*Raises:*
+
+  `BlockPackException` if blockpack cannot be read
+
+
+#### BlockPack.import_data
+*Usage:* <code>@classmethod BlockPack.import_data(base64_data: str) -> [BlockPack](#blockpack)</code>
+
+Creates a blockpack from base64-encoded serialized blockpack data.
+
+*Args:*
+
+- `base64_data`: base64-encoded string containing serialization of blockpack data.
+
+*Returns:*
+
+- a new BlockPack containing blocks read from the base64-encoded data
+
+*Raises:*
+
+  `BlockPackException` if blockpack cannot be read
+
+
+#### BlockPack.block_bounds
+*Usage:* <code>BlockPack.block_bounds() -> (BlockPos, BlockPos)</code>
+
+Returns min and max bounding coordinates of blocks in this BlockPack.
+
+*Raises:*
+
+  `BlockPackException` if blockpack cannot be accessed
+
+
+#### BlockPack.comments
+*Usage:* <code>BlockPack.comments() -> Dict[str, str]</code>
+
+Returns comments stored in this BlockPack.
+
+*Raises:*
+
+  `BlockPackException` if blockpack cannot be accessed
+
+*Raises:*
+
+  `BlockPackException` if blockpack operation fails
+
+
+#### BlockPack.write_world
+*Usage:* <code>BlockPack.write_world(\*, rotation: [Rotation](#rotation) = None, offset: [BlockPos](#blockpos) = None)</code>
+
+Writes blocks from this BlockPack into the current world. Requires setblock, fill commands.
+
+*Args:*
+
+- `rotation`: rotation matrix to apply to block coordinates before writing to world
+- `offset`: offset to apply to block coordiantes (applied after rotation)
+
+*Raises:*
+
+  `BlockPackException` if blockpack operation fails
+
+
+#### BlockPack.write_file
+*Usage:* <code>BlockPack.write_file(filename: str, \*, relative_to_cwd=False)</code>
+
+Writes this BlockPack to a file.
+
+*Args:*
+
+- `filename`: name of file relative to minescript/blockpacks dir unless it's an absolute path
+    (".zip" is automatically appended to filename if it does not end with that extension)
+- `relative_to_cwd`: if `True`, relative filename is taken to be relative to Minecraft dir
+
+*Raises:*
+
+  `BlockPackException` if blockpack operation fails
+
+
+#### BlockPack.export_data
+*Usage:* <code>BlockPack.export_data() -> str</code>
+
+Serializes this BlockPack into a base64-encoded string.
+
+*Returns:*
+
+- a base64-encoded string containing this blockpack's data
+
+*Raises:*
+
+  `BlockPackException` if blockpack operation fails
+
+
+#### BlockPack.\_\_del\_\_
+*Usage:* <code>del blockpack</code>
+
+Frees this BlockPack to be garbage collected.
+
+*Raises:*
+
+  `BlockPackException` if blockpack operation fails
+
+
+#### BlockPacker
+BlockPacker is a mutable collection of blocks.
+
+Blocks can be added to a blockpacker by calling [`setblock(...)`](#blockpackersetblock), [`fill(...)`](#blockpackerfill),
+and/or [`add_blockpack(...)`](#blockpackeradd_blockpack).  To serialize blocks or write them to a world, a
+blockpacker can be "packed" by calling pack() to create a compact snapshot of
+the blocks contained in the blockpacker in the form of a new BlockPack. A
+blockpacker continues to store the same blocks it had before being packed,
+and more blocks can be added thereafter.
+
+For a collection of blocks that is immutable and serializable, see [`BlockPack`](#blockpack).
+
+Since: v3.0
+
+
+#### BlockPacker.\_\_init\_\_
+*Usage:* <code>BlockPacker()</code>
+
+Creates a new, empty blockpacker.
+
+#### BlockPacker.setblock
+*Usage:* <code>BlockPacker.setblock(pos: [BlockPos](#blockpos), block_type: str)</code>
+
+Sets a block within this BlockPacker.
+
+*Args:*
+
+- `pos`: position of a block to set
+- `block_type`: block descriptor to set
+
+*Raises:*
+
+  `BlockPackerException` if blockpacker operation fails
+
+
+#### BlockPacker.fill
+*Usage:* <code>BlockPacker.fill(pos1: [BlockPos](#blockpos), pos2: [BlockPos](#blockpos), block_type: str)</code>
+
+Fills blocks within this BlockPacker.
+
+*Args:*
+
+- `pos1, pos2`: coordinates of opposing corners of a rectangular volume to fill
+- `block_type`: block descriptor to fill
+
+*Raises:*
+
+  `BlockPackerException` if blockpacker operation fails
+
+
+#### BlockPacker.add_blockpack
+*Usage:* <code>BlockPacker.add_blockpack(blockpack: [BlockPack](#blockpack), \*, rotation: [Rotation](#rotation) = None, offset: [BlockPos](#blockpos) = None)</code>
+
+Adds the blocks within a BlockPack into this BlockPacker.
+
+*Args:*
+
+- `blockpack`: BlockPack from which to copy blocks
+- `rotation`: rotation matrix to apply to block coordinates before adding to blockpacker
+- `offset`: offset to apply to block coordiantes (applied after rotation)
+
+*Raises:*
+
+  `BlockPackerException` if blockpacker operation fails
+
+
+#### BlockPacker.pack
+*Usage:* <code>BlockPacker.pack(\*, comments: Dict[str, str] = {}) -> [BlockPack](#blockpack)</code>
+
+Packs blocks within this BlockPacker into a new BlockPack.
+
+*Args:*
+
+- `comments`: key, value pairs to include in the new BlockPack
+
+*Returns:*
+
+- a new BlockPack containing a snapshot of blocks from this BlockPacker
+
+*Raises:*
+
+  `BlockPackerException` if blockpacker operation fails
+
+
+#### BlockPacker.\_\_del\_\_
+*Usage:* <code>del blockpacker</code>
+
+Frees this BlockPacker to be garbage collected.
+
+*Raises:*
+
+  `BlockPackerException` if blockpacker operation fails
+
+
