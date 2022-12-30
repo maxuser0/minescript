@@ -133,7 +133,7 @@ def player_position(done_callback=None) -> List[float]:
         asynchronously when `return_value` is ready
 
   Returns:
-    if `done_callback` is `None`, returns player's position as [x, y, z]
+    if `done_callback` is `None`, returns player's position as [x: float, y: float, z: float]
   """
   if done_callback is None:
     return CallScriptFunction("player_position")
@@ -473,6 +473,52 @@ def await_loaded_region(x1: int, z1: int, x2: int, z2: int, done_callback=None):
 
   Returns:
     if `done_callback` is `None`, returns `True` when the requested region is fully loaded.
+
+  Examples:
+    [1] Don't do any work until the region is done loading (synchronous / blocking
+    call):
+
+    ```
+    minescript.echo("About to wait for region to load...")
+
+    # Load all chunks within (x, z) bounds (0, 0) and (320, 160):
+    minescript.await_loaded_region(0, 0, 320, 160)
+
+    minescript.echo("Region finished loading.")
+    ```
+
+    [2] Continue doing work on the main thread while the region loads in the
+    background (asynchronous / non-blocking call):
+
+    ```
+    import minescript
+    import threading
+
+    lock = threading.Lock()
+
+    def on_region_loaded(loaded):
+      if loaded:
+        minescript.echo("Region loaded ok.")
+      else:
+        minescript.echo("Region failed to load.")
+      lock.release()
+
+    # Acquire the lock, to be released later by on_region_loaded().
+    lock.acquire()
+
+    # Calls on_region_loaded(...) when region finishes
+    # loading all chunks within (x, z) bounds (0, 0)
+    # and (320, 160):
+    minescript.await_loaded_region(
+        0, 0, 320, 160, on_region_loaded)
+
+    minescript.echo("Do other work while region loads...")
+
+    minescript.echo("Now wait for region to finish loading...")
+    lock.acquire()
+
+    minescript.echo("Do more work now that region finished loading...")
+    ```
   """
   if done_callback is None:
     return CallScriptFunction("await_loaded_region", x1, z1, x2, z2)
@@ -542,11 +588,11 @@ def unregister_chat_message_interceptor():
 
 
 BlockPos = Tuple[int, int, int]
-"""Tuple representing (x: int, y: int, z: int) position in block space"""
+"""Tuple representing `(x: int, y: int, z: int)` position in block space."""
 
 
 Rotation = Tuple[int, int, int, int, int, int, int, int, int]
-"""Tuple representing a flattened 3x3 rotation matrix"""
+"""Tuple of 9 `int` values representing a flattened, row-major 3x3 rotation matrix."""
 
 
 class Rotations:
@@ -619,7 +665,7 @@ def blockpack_read_world(
     comments: Dict[str, str] = {}, safety_limit: bool = True) -> int:
   """Creates a blockpack from blocks in the world within a rectangular volume.
 
-  For a more user-friendly API, use the `BlockPack` class instead.
+  For a more user-friendly API, use the `BlockPack` class instead. (__internal__)
 
   Args:
     pos1, pos2: opposing corners of a rectangular volume from which to read world blocks
@@ -640,7 +686,7 @@ def blockpack_read_world(
 def blockpack_read_file(filename: str) -> int:
   """Reads a blockpack from a file.
 
-  For a more user-friendly API, use the `BlockPack` class instead.
+  For a more user-friendly API, use the `BlockPack` class instead. (__internal__)
 
   Args:
     filename: name of file to read; relative to Minecraft dir unless it's an absolute path
@@ -657,7 +703,7 @@ def blockpack_read_file(filename: str) -> int:
 def blockpack_import_data(base64_data: str) -> int:
   """Creates a blockpack from base64-encoded serialized blockpack data.
 
-  For a more user-friendly API, use the `BlockPack` class instead.
+  For a more user-friendly API, use the `BlockPack` class instead. (__internal__)
 
   Args:
     base64_data: base64-encoded string containing serialization of blockpack data.
@@ -673,7 +719,7 @@ def blockpack_import_data(base64_data: str) -> int:
 def blockpack_block_bounds(blockpack_id: int) -> (BlockPos, BlockPos):
   """Returns bounding coordinates of blocks in the blockpack associated with blockpack_id.
 
-  For a more user-friendly API, use the `BlockPack` class instead.
+  For a more user-friendly API, use the `BlockPack` class instead. (__internal__)
 
   Since: v3.0
   """
@@ -683,7 +729,7 @@ def blockpack_block_bounds(blockpack_id: int) -> (BlockPos, BlockPos):
 def blockpack_comments(blockpack_id: int) -> Dict[str, str]:
   """Returns comments stored in the blockpack associated with blockpack_id.
 
-  For a more user-friendly API, use the `BlockPack` class instead.
+  For a more user-friendly API, use the `BlockPack` class instead. (__internal__)
 
   Since: v3.0
   """
@@ -694,7 +740,7 @@ def blockpack_write_world(
     blockpack_id: int, rotation: Rotation = None, offset: BlockPos = None) -> bool:
   """Writes blocks from a blockpack into the current world. Requires setblock and fill commands.
 
-  For a more user-friendly API, use the `BlockPack` class instead.
+  For a more user-friendly API, use the `BlockPack` class instead. (__internal__)
 
   Args:
     blockpack_id: id of a currently loaded blockpack
@@ -712,7 +758,7 @@ def blockpack_write_world(
 def blockpack_write_file(blockpack_id: int, filename: str) -> bool:
   """Writes a blockpack to a file.
 
-  For a more user-friendly API, use the `BlockPack` class instead.
+  For a more user-friendly API, use the `BlockPack` class instead. (__internal__)
 
   Args:
     blockpack_id: id of a currently loaded blockpack
@@ -730,7 +776,7 @@ def blockpack_write_file(blockpack_id: int, filename: str) -> bool:
 def blockpack_export_data(blockpack_id: int) -> str:
   """Serializes a blockpack into a base64-encoded string.
 
-  For a more user-friendly API, use the `BlockPack` class instead.
+  For a more user-friendly API, use the `BlockPack` class instead. (__internal__)
 
   Args:
     blockpack_id: id of a currently loaded blockpack
@@ -746,7 +792,7 @@ def blockpack_export_data(blockpack_id: int) -> str:
 def blockpack_delete(blockpack_id: int) -> bool:
   """Frees a currently loaded blockpack to be garbage collected.
 
-  For a more user-friendly API, use the `BlockPack` class instead.
+  For a more user-friendly API, use the `BlockPack` class instead. (__internal__)
 
   Args:
     blockpack_id: id of a currently loaded blockpack
@@ -762,7 +808,7 @@ def blockpack_delete(blockpack_id: int) -> bool:
 def blockpacker_create() -> int:
   """Creates a new, empty blockpacker.
 
-  For a more user-friendly API, use the `BlockPacker` class instead.
+  For a more user-friendly API, use the `BlockPacker` class instead. (__internal__)
 
   Returns:
     an int id associated with a new blockpacker
@@ -775,7 +821,7 @@ def blockpacker_create() -> int:
 def blockpacker_setblock(blockpacker_id: int, pos: BlockPos, block_type: str) -> bool:
   """Sets a block within a currently loaded blockpacker.
 
-  For a more user-friendly API, use the `BlockPacker` class instead.
+  For a more user-friendly API, use the `BlockPacker` class instead. (__internal__)
 
   Args:
     blockpacker_id: id of a currently loaded blockpacker
@@ -793,7 +839,7 @@ def blockpacker_setblock(blockpacker_id: int, pos: BlockPos, block_type: str) ->
 def blockpacker_fill(blockpacker_id: int, pos1: BlockPos, pos2: BlockPos, block_type: str) -> bool:
   """Fills blocks within a currently loaded blockpacker.
 
-  For a more user-friendly API, use the `BlockPacker` class instead.
+  For a more user-friendly API, use the `BlockPacker` class instead. (__internal__)
 
   Args:
     blockpacker_id: id of a currently loaded blockpacker
@@ -813,7 +859,7 @@ def blockpacker_add_blockpack(
     rotation: Rotation = None, offset: BlockPos = None) -> bool:
   """Adds the blocks within a currently loaded blockpack into a blockpacker.
 
-  For a more user-friendly API, use the `BlockPacker` class instead.
+  For a more user-friendly API, use the `BlockPacker` class instead. (__internal__)
 
   Args:
     blockpacker_id: id of a blockpacker to receive blocks
@@ -833,7 +879,7 @@ def blockpacker_add_blockpack(
 def blockpacker_pack(blockpacker_id: int, comments: Dict[str, str]) -> int:
   """Packs blocks within a blockpacker into a new blockpack.
 
-  For a more user-friendly API, use the `BlockPacker` class instead.
+  For a more user-friendly API, use the `BlockPacker` class instead. (__internal__)
 
   Args:
     blockpacker_id: id of a currently loaded blockpacker
@@ -850,7 +896,7 @@ def blockpacker_pack(blockpacker_id: int, comments: Dict[str, str]) -> int:
 def blockpacker_delete(blockpacker_id: int) -> bool:
   """Frees a currently loaded blockpacker to be garbage collected.
 
-  For a more user-friendly API, use the `BlockPacker` class instead.
+  For a more user-friendly API, use the `BlockPacker` class instead. (__internal__)
 
   Args:
     blockpacker_id: id of a currently loaded blockpacker
@@ -870,18 +916,21 @@ class BlockPackException(Exception):
 class BlockPack:
   """BlockPack is an immutable and serializable collection of blocks.
 
-  A BlockPack can be read from or written to worlds, files, and serialized
-  bytes. Although BlockPacks are immutable and preserve position and
+  A blockpack can be read from or written to worlds, files, and serialized
+  bytes. Although blockpacks are immutable and preserve position and
   orientation of blocks, they can be rotated and offset when read from or
   written to worlds.
 
-  For a mutable collection of blocks, see BlockPacker.
+  For a mutable collection of blocks, see `BlockPacker`.
 
   Since: v3.0
   """
 
   def __init__(self, java_generated_id: int):
-    """Do not call the constructor directly. Use factory classmethods instead."""
+    """Do not call the constructor directly. Use factory classmethods instead.
+
+    (__internal__)
+    """
     self._id = java_generated_id
 
   @classmethod
@@ -1041,14 +1090,14 @@ class BlockPackerException(Exception):
 class BlockPacker:
   """BlockPacker is a mutable collection of blocks.
 
-  Blocks can be added to a BlockPacker by calling setblock(...), fill(...),
-  and/or add_blockpack(...).  To serialize blocks or write them to a world, a
-  BlockPacker can be "packed" by calling pack() to create a compact snapshot of
-  the blocks contained in the BlockPacker in the form of a new BlockPack. A
-  BlockPacker continues to store the same blocks it had before being packed,
+  Blocks can be added to a blockpacker by calling `setblock(...)`, `fill(...)`,
+  and/or `add_blockpack(...)`.  To serialize blocks or write them to a world, a
+  blockpacker can be "packed" by calling pack() to create a compact snapshot of
+  the blocks contained in the blockpacker in the form of a new BlockPack. A
+  blockpacker continues to store the same blocks it had before being packed,
   and more blocks can be added thereafter.
 
-  For a collection of blocks that is immutable and serializable, see BlockPack.
+  For a collection of blocks that is immutable and serializable, see `BlockPack`.
 
   Since: v3.0
   """
