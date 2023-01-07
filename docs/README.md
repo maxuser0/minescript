@@ -1,4 +1,4 @@
-## Minescript v3.0 docs
+## Minescript v3.1 docs
 
 Table of contents:
 

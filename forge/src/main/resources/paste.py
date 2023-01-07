@@ -6,7 +6,7 @@
 # make edits to this file, make sure to save a backup copy when upgrading to a
 # new version of Minescript.
 
-r"""paste v3.0 distributed via Minescript jar file
+r"""paste v3.1 distributed via Minescript jar file
 
 Requires:
   minescript v3.0
