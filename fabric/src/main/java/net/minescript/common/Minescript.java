@@ -2539,11 +2539,11 @@ public class Minescript {
       result.append(String.format("\"name\":%s,", toJsonString(entity.getName().getString())));
       result.append(String.format("\"type\":%s,", toJsonString(entity.getType().toString())));
       result.append(
-          String.format("\"position\":[%f,%f,%f],", entity.getX(), entity.getY(), entity.getZ()));
-      result.append(String.format("\"yaw\":%f,", entity.getYaw()));
-      result.append(String.format("\"pitch\":%f,", entity.getPitch()));
+          String.format("\"position\":[%s,%s,%s],", entity.getX(), entity.getY(), entity.getZ()));
+      result.append(String.format("\"yaw\":%s,", entity.getYaw()));
+      result.append(String.format("\"pitch\":%s,", entity.getPitch()));
       var v = entity.getVelocity();
-      result.append(String.format("\"velocity\":[%f,%f,%f]", v.x, v.y, v.z));
+      result.append(String.format("\"velocity\":[%s,%s,%s]", v.x, v.y, v.z));
       result.append("}");
     }
     result.append("]");
@@ -2691,7 +2691,7 @@ public class Minescript {
       case "player_position":
         if (args.isEmpty()) {
           return Optional.of(
-              String.format("[%f, %f, %f]", player.getX(), player.getY(), player.getZ()));
+              String.format("[%s, %s, %s]", player.getX(), player.getY(), player.getZ()));
         } else {
           logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
           return Optional.of("null");
@@ -2987,7 +2987,7 @@ public class Minescript {
 
       case "player_orientation":
         if (args.isEmpty()) {
-          return Optional.of(String.format("[%f, %f]", player.getYaw(), player.getPitch()));
+          return Optional.of(String.format("[%s, %s]", player.getYaw(), player.getPitch()));
         } else {
           logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
           return Optional.of("null");
@@ -3035,7 +3035,7 @@ public class Minescript {
             Optional<String> block = blockStateToString(level.getBlockState(blockPos));
             return Optional.of(
                 String.format(
-                    "[[%d,%d,%d],%f,\"%s\",%s]",
+                    "[[%d,%d,%d],%s,\"%s\",%s]",
                     blockPos.getX(),
                     blockPos.getY(),
                     blockPos.getZ(),
