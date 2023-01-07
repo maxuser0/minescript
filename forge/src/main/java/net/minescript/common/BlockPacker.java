@@ -45,9 +45,15 @@ public class BlockPacker implements BlockPack.BlockConsumer {
     // TODO(maxuser): Consider the following optimizations:
     // 1. look up blockType in typeMap only once, not once per block in the fill (definitely)
     // 2. compute intersections between the fill volume and tile boundaries (maybe)
-    for (int x = x1; x <= x2; x++) {
-      for (int y = y1; y <= y2; y++) {
-        for (int z = z1; z <= z2; z++) {
+    int minX = Math.min(x1, x2);
+    int maxX = Math.max(x1, x2);
+    int minY = Math.min(y1, y2);
+    int maxY = Math.max(y1, y2);
+    int minZ = Math.min(z1, z2);
+    int maxZ = Math.max(z1, z2);
+    for (int x = minX; x <= maxX; x++) {
+      for (int y = minY; y <= maxY; y++) {
+        for (int z = minZ; z <= maxZ; z++) {
           setblock(x, y, z, blockType);
         }
       }
