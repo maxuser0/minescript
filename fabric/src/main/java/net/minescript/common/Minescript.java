@@ -2655,6 +2655,18 @@ public class Minescript {
     return Optional.of(intList);
   }
 
+  private static Optional<List<String>> getStringList(Object object) {
+    if (!(object instanceof List)) {
+      return Optional.empty();
+    }
+    List<?> list = (List<?>) object;
+    List<String> stringList = new ArrayList<>();
+    for (var element : list) {
+      stringList.add(element.toString());
+    }
+    return Optional.of(stringList);
+  }
+
   private static double computeDistance(
       double x1, double y1, double z1, double x2, double y2, double z2) {
     double dx = x1 - x2;
@@ -3402,12 +3414,13 @@ public class Minescript {
         //    () -> int
         return Optional.of(Integer.toString(job.blockpackers.retain(new BlockPacker())));
 
-      case "blockpacker_setblock":
+      case "blockpacker_add_blocks":
         {
           // Python function signature:
-          //    (blockpacker_id: int, pos: BlockPos, block_type: str) -> bool
-          if (args.size() != 3) {
-            logUserError("Error: `{}` expected 3 params but got: {}", functionName, argsString);
+          //    (blockpacker_id: int, base_pos: BlockPos,
+          //     base64_setblocks: str, base64_fills: str, blocks: List[str]) -> bool
+          if (args.size() != 5) {
+            logUserError("Error: `{}` expected 5 params but got: {}", functionName, argsString);
             return Optional.of("false");
           }
 
@@ -3426,7 +3439,15 @@ public class Minescript {
                 argsString);
             return Optional.of("false");
           }
-          var pos = list.get();
+          var basePos = list.get();
+
+          String setblocksBase64 = args.get(2).toString();
+          String fillsBase64 = args.get(3).toString();
+          Optional<List<String>> blocks = getStringList(args.get(4));
+          if (blocks.isEmpty()) {
+            paramTypeErrorLogger.accept("blocks", "list of string");
+            return Optional.of("false");
+          }
 
           var blockpacker = job.blockpackers.getById(value.getAsInt());
           if (blockpacker == null) {
@@ -3438,64 +3459,13 @@ public class Minescript {
             return Optional.of("false");
           }
 
-          blockpacker.setblock(pos.get(0), pos.get(1), pos.get(2), args.get(2).toString());
-          return Optional.of("true");
-        }
-
-      case "blockpacker_fill":
-        {
-          // Python function signature:
-          //    (blockpacker_id: int, pos1: BlockPos, pos2: BlockPos, block_type: str) -> bool
-          if (args.size() != 4) {
-            logUserError("Error: `{}` expected 4 params but got: {}", functionName, argsString);
-            return Optional.of("false");
-          }
-
-          OptionalInt value = getStrictIntValue(args.get(0));
-          if (!value.isPresent()) {
-            logUserError(
-                "Error: `{}` expected first param to be int but got: {}", functionName, argsString);
-            return Optional.of("false");
-          }
-
-          Optional<List<Integer>> list1 = getStrictIntList(args.get(1));
-          if (list1.isEmpty() || list1.get().size() != 3) {
-            logUserError(
-                "Error: `{}` expected second param to be list of 3 ints but got: {}",
-                functionName,
-                argsString);
-            return Optional.of("false");
-          }
-          var pos1 = list1.get();
-
-          Optional<List<Integer>> list2 = getStrictIntList(args.get(2));
-          if (list2.isEmpty() || list2.get().size() != 3) {
-            logUserError(
-                "Error: `{}` expected third param to be list of 3 ints but got: {}",
-                functionName,
-                argsString);
-            return Optional.of("false");
-          }
-          var pos2 = list2.get();
-
-          var blockpacker = job.blockpackers.getById(value.getAsInt());
-          if (blockpacker == null) {
-            logUserError(
-                "Error: `{}` Failed to find BlockPacker[{}]: {}",
-                functionName,
-                value.getAsInt(),
-                argsString);
-            return Optional.of("false");
-          }
-
-          blockpacker.fill(
-              pos1.get(0),
-              pos1.get(1),
-              pos1.get(2),
-              pos2.get(0),
-              pos2.get(1),
-              pos2.get(2),
-              args.get(3).toString());
+          blockpacker.addBlocks(
+              basePos.get(0),
+              basePos.get(1),
+              basePos.get(2),
+              setblocksBase64,
+              fillsBase64,
+              blocks.get());
           return Optional.of("true");
         }
 

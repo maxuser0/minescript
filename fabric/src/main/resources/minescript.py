@@ -15,8 +15,10 @@ Minescript mod.  This module should be imported by other
 scripts and not run directly.
 """
 
+import base64
 import os
 import sys
+from array import array
 from minescript_runtime import CallScriptFunction, CallAsyncScriptFunction
 from typing import Any, List, Set, Dict, Tuple, Optional, Callable
 
@@ -818,40 +820,29 @@ def blockpacker_create() -> int:
   return CallScriptFunction("blockpacker_create")
 
 
-def blockpacker_setblock(blockpacker_id: int, pos: BlockPos, block_type: str) -> bool:
-  """Sets a block within a currently loaded blockpacker.
+def blockpacker_add_blocks(
+    blockpacker_id: int, offset: BlockPos,
+    base64_setblocks: str, base64_fills: str, blocks: List[str]) -> bool:
+  """Adds blocks from setblocks and fills arrays to a currently loaded blockpacker.
 
   For a more user-friendly API, use the `BlockPacker` class instead. (__internal__)
 
   Args:
     blockpacker_id: id of a currently loaded blockpacker
-    pos: position of a block to set
-    block_type: block descriptor to set
+    offset: offset from 16-bit positions in `base64_setblocks` and `base64_fills`
+    base64_setblocks: base64-encoded array of 16-bit signed ints where every 4 values are:
+      x, y, z relative to `offset` and index into `blocks` list
+    base64_fills: base64-encoded array of 16-bit signed ints where every 7 values are:
+      x1, y1, z1, x2, y2, z2 relative to `offset` and index into `blocks` list
+    blocks: types of blocks referenced from `base64_setblocks` and `base64_fills` arrays
 
   Returns:
     `True` upon success
 
-  Since: v3.0
+  Since: v3.1
   """
-  return CallScriptFunction("blockpacker_setblock", blockpacker_id, pos, block_type)
-
-
-def blockpacker_fill(blockpacker_id: int, pos1: BlockPos, pos2: BlockPos, block_type: str) -> bool:
-  """Fills blocks within a currently loaded blockpacker.
-
-  For a more user-friendly API, use the `BlockPacker` class instead. (__internal__)
-
-  Args:
-    blockpacker_id: id of a currently loaded blockpacker
-    pos1, pos2: coordinates of opposing corners of a rectangular volume to fill
-    block_type: block descriptor to fill
-
-  Returns:
-    `True` upon success
-
-  Since: v3.0
-  """
-  return CallScriptFunction("blockpacker_fill", blockpacker_id, pos1, pos2, block_type)
+  return CallScriptFunction(
+      "blockpacker_add_blocks", blockpacker_id, offset, base64_setblocks, base64_fills, blocks)
 
 
 def blockpacker_add_blockpack(
@@ -1087,6 +1078,15 @@ class BlockPackerException(Exception):
   pass
 
 
+def _pos_subtract(pos1: BlockPos, pos2: BlockPos) -> BlockPos:
+  """Returns pos1 minus pos2."""
+  return (pos1[0] - pos2[0], pos1[1] - pos2[1], pos1[2] - pos2[2])
+
+
+_SETBLOCKS_ARRAY_THRESHOLD = 4000
+_FILLS_ARRAY_THRESHOLD = 7000
+_BLOCKS_DICT_THRESHOLD = 1000
+
 class BlockPacker:
   """BlockPacker is a mutable collection of blocks.
 
@@ -1106,6 +1106,13 @@ class BlockPacker:
     """Creates a new, empty blockpacker."""
 
     self._id = blockpacker_create()
+    self.offset = None # offset for 16-bit positions recorded in setblocks and fills
+    self.setblocks = array("h")
+    self.fills = array("h")
+    self.blocks: Dict[str, int] = dict()
+
+  def _get_block_id(self, block_type: str) -> int:
+    return self.blocks.setdefault(block_type, len(self.blocks))
 
   def setblock(self, pos: BlockPos, block_type: str):
     """Sets a block within this BlockPacker.
@@ -1117,8 +1124,22 @@ class BlockPacker:
     Raises:
       `BlockPackerException` if blockpacker operation fails
     """
-    if not blockpacker_setblock(self._id, pos, block_type):
+    if self.offset is None:
+      self.offset = pos
+
+    relative_pos = _pos_subtract(pos, self.offset)
+    if max(relative_pos) > 32767 or min(relative_pos) < -32768:
+      echo(
+          f"Blocks within a Python-generated BlockPacker cannot span more than 32,767 blocks: "
+          f"{self.offset} -> {pos}")
       raise BlockPackerException()
+
+    self.setblocks.extend(relative_pos)
+    self.setblocks.append(self._get_block_id(block_type))
+
+    if (len(self.setblocks) > _SETBLOCKS_ARRAY_THRESHOLD or
+        len(self.blocks) > _BLOCKS_DICT_THRESHOLD):
+      self._flush_blocks()
 
   def fill(self, pos1: BlockPos, pos2: BlockPos, block_type: str):
     """Fills blocks within this BlockPacker.
@@ -1130,7 +1151,49 @@ class BlockPacker:
     Raises:
       `BlockPackerException` if blockpacker operation fails
     """
-    if not blockpacker_fill(self._id, pos1, pos2, block_type):
+    if self.offset is None:
+      self.offset = pos1
+
+    relative_pos1 = _pos_subtract(pos1, self.offset)
+    if max(relative_pos1) > 32767 or min(relative_pos1) < -32768:
+      echo(
+          f"Blocks within a Python-generated BlockPacker cannot span more than 32,767 blocks: "
+          f"{self.offset} -> {pos1}")
+      raise BlockPackerException()
+
+    relative_pos2 = _pos_subtract(pos2, self.offset)
+    if max(relative_pos2) > 32767 or min(relative_pos2) < -32768:
+      echo(
+          f"Blocks within a Python-generated BlockPacker cannot span more than 32,767 blocks: "
+          f"{self.offset} -> {pos2}")
+      raise BlockPackerException()
+
+    self.fills.extend(relative_pos1)
+    self.fills.extend(relative_pos2)
+    self.fills.append(self._get_block_id(block_type))
+
+    if (len(self.fills) > _FILLS_ARRAY_THRESHOLD or
+        len(self.blocks) > _BLOCKS_DICT_THRESHOLD):
+      self._flush_blocks()
+
+  def _flush_blocks(self):
+    if sys.byteorder != "big":
+      # Swap to network (big-endian) byte order.
+      self.setblocks.byteswap()
+      self.fills.byteswap()
+
+    ok = blockpacker_add_blocks(
+        self._id, self.offset,
+        base64.b64encode(self.setblocks.tobytes()).decode("utf-8"),
+        base64.b64encode(self.fills.tobytes()).decode("utf-8"),
+        list(self.blocks.keys()))
+
+    self.offset = None
+    self.setblocks = array("h")
+    self.fills = array("h")
+    self.blocks = dict()
+
+    if not ok:
       raise BlockPackerException()
 
   def add_blockpack(
@@ -1160,6 +1223,7 @@ class BlockPacker:
     Raises:
       `BlockPackerException` if blockpacker operation fails
     """
+    self._flush_blocks()
     return BlockPack(blockpacker_pack(self._id, comments))
 
   def __del__(self):

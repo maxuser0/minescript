@@ -4,8 +4,10 @@
 package net.minescript.common;
 
 import java.util.ArrayDeque;
+import java.util.Base64;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -39,6 +41,65 @@ public class BlockPacker implements BlockPack.BlockConsumer {
 
   public void enableDebug() {
     debug = true;
+  }
+
+  private static short[] convertBytesToShorts(byte[] bytes) {
+    if (bytes.length % 2 != 0) {
+      throw new IllegalArgumentException(
+          "Expected array with even number of bytes but got " + bytes.length);
+    }
+    short[] shorts = new short[bytes.length / 2];
+    for (int i = 0; i < shorts.length; i++) {
+      // Short bytes are in network byte order, i.e. big-endian.
+      shorts[i] = (short) ((bytes[i * 2] & 0xff) << 8 | (bytes[i * 2 + 1] & 0xff));
+    }
+    return shorts;
+  }
+
+  public void addBlocks(
+      int offsetX,
+      int offsetY,
+      int offsetZ,
+      String setblocksBase64,
+      String fillsBase64,
+      List<String> blocks) {
+    short[] setblocksArray = convertBytesToShorts(Base64.getDecoder().decode(setblocksBase64));
+    short[] fillsArray = convertBytesToShorts(Base64.getDecoder().decode(fillsBase64));
+    addBlocks(offsetX, offsetY, offsetZ, setblocksArray, fillsArray, blocks);
+  }
+
+  public void addBlocks(
+      int offsetX,
+      int offsetY,
+      int offsetZ,
+      short[] setblocksArray,
+      short[] fillsArray,
+      List<String> blocks) {
+    if (fillsArray.length % 7 != 0) {
+      throw new IllegalArgumentException(
+          "Expected `fills` array with length divisible by 7 but got " + fillsArray.length);
+    }
+    if (setblocksArray.length % 4 != 0) {
+      throw new IllegalArgumentException(
+          "Expected `setblocks` array with length divisible by 4 but got " + setblocksArray.length);
+    }
+    for (int i = 0; i < fillsArray.length; i += 7) {
+      fill(
+          offsetX + fillsArray[i],
+          offsetY + fillsArray[i + 1],
+          offsetZ + fillsArray[i + 2],
+          offsetX + fillsArray[i + 3],
+          offsetY + fillsArray[i + 4],
+          offsetZ + fillsArray[i + 5],
+          blocks.get(fillsArray[i + 6]));
+    }
+    for (int i = 0; i < setblocksArray.length; i += 4) {
+      setblock(
+          offsetX + setblocksArray[i],
+          offsetY + setblocksArray[i + 1],
+          offsetZ + setblocksArray[i + 2],
+          blocks.get(setblocksArray[i + 3]));
+    }
   }
 
   public void fill(int x1, int y1, int z1, int x2, int y2, int z2, String blockType) {
