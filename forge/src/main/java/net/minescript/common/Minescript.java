@@ -2711,6 +2711,39 @@ public class Minescript {
           return Optional.of("null");
         }
 
+      case "player_set_position":
+        {
+          if (args.size() < 3
+              || !(args.get(0) instanceof Number)
+              || !(args.get(1) instanceof Number)
+              || !(args.get(2) instanceof Number)) {
+            logUserError(
+                "Error: `{}` expected 3 to 5 number params but got: {}", functionName, argsString);
+            return Optional.of("false");
+          }
+          double x = ((Number) args.get(0)).doubleValue();
+          double y = ((Number) args.get(1)).doubleValue();
+          double z = ((Number) args.get(2)).doubleValue();
+          float yaw = player.getYRot();
+          float pitch = player.getXRot();
+          if (args.size() >= 4 && args.get(3) != null) {
+            if (!(args.get(3) instanceof Number)) {
+              paramTypeErrorLogger.accept("yaw", "float");
+              return Optional.of("false");
+            }
+            yaw = ((Number) args.get(3)).floatValue();
+          }
+          if (args.size() >= 5 && args.get(4) != null) {
+            if (!(args.get(4) instanceof Number)) {
+              paramTypeErrorLogger.accept("pitch", "float");
+              return Optional.of("false");
+            }
+            pitch = ((Number) args.get(4)).floatValue();
+          }
+          player.moveTo(x, y, z, yaw, pitch);
+          return Optional.of("true");
+        }
+
       case "player_name":
         if (args.isEmpty()) {
           return Optional.of(toJsonString(player.getName().getString()));

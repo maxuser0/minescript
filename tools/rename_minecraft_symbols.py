@@ -98,6 +98,7 @@ forge_to_fabric_member_names = (
   ('player.getYRot', 'player.getYaw'),
   ('player.setXRot', 'player.setPitch'),
   ('player.setYRot', 'player.setYaw'),
+  ('player.moveTo', 'player.refreshPositionAndAngles'),
   ('playerWorld.dimension', 'playerWorld.getDimension'),
   ('screen.onClose', 'screen.close'),
   ('serverData.ip', 'serverData.address'),

@@ -143,6 +143,20 @@ def player_position(done_callback=None) -> List[float]:
     CallAsyncScriptFunction("player_position", done_callback)
 
 
+def player_set_position(
+    x: float, y: float, z: float, yaw: float = None, pitch: float = None) -> bool:
+  """Sets the player's position, and optionally orientation.
+
+  Note that in survival mode the server may reject the new coordinates if they're too far
+  or require moving through walls.
+
+  Args:
+    x, y, z: position to try to move player to
+    yaw, pitch: if not None, player's new orientation
+  """
+  return CallScriptFunction("player_set_position", x, y, z, yaw, pitch)
+
+
 def player_hand_items(done_callback=None) -> List[Dict[str, Any]]:
   """Gets the items in the local player's hands.
 
