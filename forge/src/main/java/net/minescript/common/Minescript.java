@@ -3661,9 +3661,14 @@ public class Minescript {
       var player = minecraft.player;
       if (player != null && (!systemCommandQueue.isEmpty() || !jobs.getMap().isEmpty())) {
         Level level = player.getCommandSenderWorld();
-        for (int commandCount = 0; commandCount < minescriptCommandsPerCycle; ++commandCount) {
+        boolean hasCommand;
+        int iterations = 0;
+        do {
+          hasCommand = false;
+          ++iterations;
           String command = systemCommandQueue.poll();
           if (command != null) {
+            hasCommand = true;
             processMessage(command);
           }
           for (var job : jobs.getMap().values()) {
@@ -3671,6 +3676,7 @@ public class Minescript {
               try {
                 String jobCommand = job.commandQueue().poll();
                 if (jobCommand != null) {
+                  hasCommand = true;
                   jobs.getUndoForJob(job).ifPresent(u -> u.processCommandToUndo(level, jobCommand));
                   if (jobCommand.startsWith("?") && jobCommand.length() > 1) {
                     String[] functionCall = jobCommand.substring(1).split("\\s+", 3);
@@ -3704,7 +3710,7 @@ public class Minescript {
               }
             }
           }
-        }
+        } while (hasCommand && iterations < minescriptCommandsPerCycle);
       }
     }
   }
