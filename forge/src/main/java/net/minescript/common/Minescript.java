@@ -2512,10 +2512,8 @@ public class Minescript {
           String.format(
               "\"item\": \"%s\", \"count\": %d", itemStack.getItem(), itemStack.getCount()));
       if (nbt != null) {
-        out.append(
-            String.format(
-                ", \"nbt\": \"%s\"",
-                nbt.toString().replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")));
+        var gson = new Gson();
+        out.append(String.format(", \"nbt\": %s", gson.toJson(nbt.toString())));
       }
       if (slot.isPresent()) {
         out.append(String.format(", \"slot\": %d", slot.getAsInt()));
