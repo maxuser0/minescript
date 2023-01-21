@@ -30,6 +30,7 @@ forge_to_fabric_class_names = (
   ('net.minecraft.core.BlockPos', 'net.minecraft.util.math.BlockPos'),
   ('net.minecraft.network.chat.Component', 'net.minecraft.text.Text'),
   ('net.minecraft.world.entity.Entity', 'net.minecraft.entity.Entity'),
+  ('net.minecraft.world.entity.LivingEntity', 'net.minecraft.entity.LivingEntity'),
   ('net.minecraft.world.item.ItemStack', 'net.minecraft.item.ItemStack'),
   ('net.minecraft.world.level.Level', 'net.minecraft.world.World'),
   ('net.minecraft.world.level.LevelAccessor', 'net.minecraft.world.WorldAccess'),

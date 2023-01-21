@@ -420,13 +420,22 @@ def player_get_targeted_block(max_distance: float = 20):
   return CallScriptFunction("player_get_targeted_block", max_distance)
 
 
+def player_health() -> float:
+  """Gets the local player's health."""
+  return CallScriptFunction("player_health")
+
+
 def players():
   """Gets a list of nearby players and their attributes.
 
   Returns:
-    List of players where each player is represented as a dict:
-    `{"name": str, "type": str, "position": [float, float, float], "yaw": float, "pitch": float,
-    "velocity": [float, float, float]}`
+    List of players where each player is represented as a dict containing:
+    `"name": str, "health": float, "type": str,
+    "position": [float, float, float], "yaw": float, "pitch": float,
+    "velocity": [float, float, float]`
+
+  Update in v3.1:
+    Added `"health"` attribute.
 
   Since: v2.1
   """
@@ -437,9 +446,13 @@ def entities():
   """Gets a list of nearby entities and their attributes.
 
   Returns:
-    List of entities where each entity is represented as a dict:
-    `{"name": str, "type": str, "position": [float, float, float], "yaw": float, "pitch": float,
-    "velocity": [float, float, float]}`
+    List of entities where each entity is represented as a dict containing:
+    `"name": str, "health": float (living entities only), "type": str,
+    "position": [float, float, float], "yaw": float, "pitch": float,
+    "velocity": [float, float, float]`
+
+  Update in v3.1:
+    Added `"health"` attribute for living entities.
 
   Since: v2.1
   """

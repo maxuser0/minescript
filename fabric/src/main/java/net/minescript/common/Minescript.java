@@ -55,6 +55,7 @@ import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.client.util.ScreenshotRecorder;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.hit.BlockHitResult;
@@ -2513,8 +2514,7 @@ public class Minescript {
           String.format(
               "\"item\": \"%s\", \"count\": %d", itemStack.getItem(), itemStack.getCount()));
       if (nbt != null) {
-        var gson = new Gson();
-        out.append(String.format(", \"nbt\": %s", gson.toJson(nbt.toString())));
+        out.append(String.format(", \"nbt\": %s", GSON.toJson(nbt.toString())));
       }
       if (slot.isPresent()) {
         out.append(String.format(", \"slot\": %d", slot.getAsInt()));
@@ -2536,6 +2536,10 @@ public class Minescript {
       result.append("{");
       result.append(String.format("\"name\":%s,", toJsonString(entity.getName().getString())));
       result.append(String.format("\"type\":%s,", toJsonString(entity.getType().toString())));
+      if (entity instanceof LivingEntity) {
+        var livingEntity = (LivingEntity) entity;
+        result.append(String.format("\"health\":%s,", livingEntity.getHealth()));
+      }
       result.append(
           String.format("\"position\":[%s,%s,%s],", entity.getX(), entity.getY(), entity.getZ()));
       result.append(String.format("\"yaw\":%s,", entity.getYaw()));
@@ -3090,6 +3094,9 @@ public class Minescript {
           }
         }
 
+      case "player_health":
+        return Optional.of(String.format("%s", player.getHealth()));
+
       case "players":
         return Optional.of(entitiesToJsonString(world.getPlayers()));
 
@@ -3302,8 +3309,7 @@ public class Minescript {
             return Optional.of("null");
           }
 
-          var gson = new Gson();
-          return Optional.of(gson.toJson(blockpack.comments()));
+          return Optional.of(GSON.toJson(blockpack.comments()));
         }
 
       case "blockpack_write_world":
