@@ -14,7 +14,7 @@
 # and 'forge' subdirectories.
 #
 # Usage:
-#   tools/update_version_number.sh <old_version> <new_versio> --fork_docs|--nofork_docs -n
+#   tools/update_version_number.sh <old_version> <new_version> --fork_docs|--nofork_docs|--fork_docs_only -n
 #
 # Example:
 #   Update version number from 2.1 to 2.2 and fork docs from to docs/v2.1:
@@ -22,12 +22,16 @@
 
 old_version=${1:?"Error: old version number required."}
 new_version=${2:?"Error: new version number required."}
-fork_docs_arg=${3:?"Error: must specify --fork_docs or --nofork_docs"}
+fork_docs_arg=${3:?"Error: must specify --fork_docs or --nofork_docs or --fork_docs_only"}
 
 # Discard the fixed-position args.
 shift 3
 
-if [[ $fork_docs_arg = "--fork_docs" ]]; then
+fork_docs_only=0
+if [[ $fork_docs_arg = "--fork_docs_only" ]]; then
+  fork_docs=1
+  fork_docs_only=1
+elif [[ $fork_docs_arg = "--fork_docs" ]]; then
   fork_docs=1
 elif [[ $fork_docs_arg = "--nofork_docs" ]]; then
   fork_docs=0
@@ -107,18 +111,20 @@ else
   grep "^## Minescript v${old_version} docs$" docs/README.md
 fi
 
-for x in {fabric,forge}/gradle.properties; do
-    if [ $dry_run = 0 ]; then
-      sed -i '' -e "s/mod_version=${old_version_re}$/mod_version=${new_version}/" $x
-    else
-      grep -H "$old_version_re" $x
-    fi
-done
+if [ $fork_docs_only = 0 ]; then
+  for x in {fabric,forge}/gradle.properties; do
+      if [ $dry_run = 0 ]; then
+        sed -i '' -e "s/mod_version=${old_version_re}$/mod_version=${new_version}/" $x
+      else
+        grep -H "$old_version_re" $x
+      fi
+  done
 
-for x in $(tools/find_version_number.sh $old_version -l |grep '\.py$'); do
-    if [ $dry_run = 0 ]; then
-      sed -i '' -e "s/v${old_version_re} /v${new_version} /" $x
-    else
-      grep -H "v${old_version_re} " $x
-    fi
-done
+  for x in $(tools/find_version_number.sh $old_version -l |grep '\.py$'); do
+      if [ $dry_run = 0 ]; then
+        sed -i '' -e "s/v${old_version_re} /v${new_version} /" $x
+      else
+        grep -H "v${old_version_re} " $x
+      fi
+  done
+fi
