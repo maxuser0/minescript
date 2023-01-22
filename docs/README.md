@@ -346,6 +346,22 @@ Gets the local player's position.
 - if `done_callback` is `None`, returns player's position as [x: float, y: float, z: float]
 
 
+#### player_set_position
+*Usage:* <code>player_set_position(x: float, y: float, z: float, yaw: float = None, pitch: float = None) -> bool</code>
+
+Sets the player's position, and optionally orientation.
+
+Note that in survival mode the server may reject the new coordinates if they're too far
+or require moving through walls.
+
+*Args:*
+
+- `x, y, z`: position to try to move player to
+- `yaw, pitch`: if not None, player's new orientation
+
+Since: v3.1
+
+
 #### player_hand_items
 *Usage:* <code>player_hand_items(done_callback=None) -> List[Dict[str, Any]]</code>
 
@@ -622,6 +638,14 @@ Gets info about the nearest block, if any, in the local player's crosshairs.
 Since: v3.0
 
 
+#### player_health
+*Usage:* <code>player_health() -> float</code>
+
+Gets the local player's health.
+
+Since: v3.1
+
+
 #### players
 *Usage:* <code>players()</code>
 
@@ -629,9 +653,13 @@ Gets a list of nearby players and their attributes.
 
 *Returns:*
 
-- List of players where each player is represented as a dict:
-  `{"name": str, "type": str, "position": [float, float, float], "yaw": float, "pitch": float,
-  "velocity": [float, float, float]}`
+- List of players where each player is represented as a dict containing:
+  `"name": str, "health": float, "type": str,
+  "position": [float, float, float], "yaw": float, "pitch": float,
+  "velocity": [float, float, float]`
+
+Update in v3.1:
+  Added `"health"` attribute.
 
 Since: v2.1
 
@@ -643,9 +671,13 @@ Gets a list of nearby entities and their attributes.
 
 *Returns:*
 
-- List of entities where each entity is represented as a dict:
-  `{"name": str, "type": str, "position": [float, float, float], "yaw": float, "pitch": float,
-  "velocity": [float, float, float]}`
+- List of entities where each entity is represented as a dict containing:
+  `"name": str, "health": float (living entities only), "type": str,
+  "position": [float, float, float], "yaw": float, "pitch": float,
+  "velocity": [float, float, float]`
+
+Update in v3.1:
+  Added `"health"` attribute for living entities.
 
 Since: v2.1
 

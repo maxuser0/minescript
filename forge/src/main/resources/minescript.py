@@ -153,6 +153,8 @@ def player_set_position(
   Args:
     x, y, z: position to try to move player to
     yaw, pitch: if not None, player's new orientation
+
+  Since: v3.1
   """
   return CallScriptFunction("player_set_position", x, y, z, yaw, pitch)
 
@@ -421,7 +423,10 @@ def player_get_targeted_block(max_distance: float = 20):
 
 
 def player_health() -> float:
-  """Gets the local player's health."""
+  """Gets the local player's health.
+
+  Since: v3.1
+  """
   return CallScriptFunction("player_health")
 
 

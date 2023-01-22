@@ -102,11 +102,18 @@ def linkify_func_decl(func_decl: str, anchors: Dict[str, str]) -> str:
   return func_decl
 
 
+LEADING_SINGLE_UNDERSCORE_RE = re.compile("^_[^_]")
+
 def process_pydoc(code_entity: CodeEntity, pydoc: str, anchors: Dict[str, str]):
   if "(__internal__)" in pydoc:
     return
 
+  if code_entity and LEADING_SINGLE_UNDERSCORE_RE.match(code_entity.name):
+    return
+
   is_class_member = type(code_entity) is ClassMember
+  if is_class_member and LEADING_SINGLE_UNDERSCORE_RE.match(code_entity.classname):
+    return
 
   # List of rewrites from (start, end) indices in pydoc to a replacement string.
   anchor_rewrites: List[Tuple[int, int, str]] = []
