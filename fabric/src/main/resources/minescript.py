@@ -437,7 +437,8 @@ def players():
     List of players where each player is represented as a dict containing:
     `"name": str, "health": float, "type": str,
     "position": [float, float, float], "yaw": float, "pitch": float,
-    "velocity": [float, float, float]`
+    "velocity": [float, float, float]`. Additionally, the local player has
+    the attribute `"local": True`.
 
   Update in v3.1:
     Added `"health"` attribute.
@@ -454,7 +455,8 @@ def entities():
     List of entities where each entity is represented as a dict containing:
     `"name": str, "health": float (living entities only), "type": str,
     "position": [float, float, float], "yaw": float, "pitch": float,
-    "velocity": [float, float, float]`
+    "velocity": [float, float, float]`. Additionaly, living entities have
+    `"health": float` and the local player has `"local": True`.
 
   Update in v3.1:
     Added `"health"` attribute for living entities.

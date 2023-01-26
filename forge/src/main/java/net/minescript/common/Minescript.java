@@ -2527,6 +2527,8 @@ public class Minescript {
   }
 
   private static String entitiesToJsonString(Iterable<? extends Entity> entities) {
+    var minecraft = Minecraft.getInstance();
+    var player = minecraft.player;
     var result = new StringBuilder("[");
     for (var entity : entities) {
       if (result.length() > 1) {
@@ -2538,6 +2540,9 @@ public class Minescript {
       if (entity instanceof LivingEntity) {
         var livingEntity = (LivingEntity) entity;
         result.append(String.format("\"health\":%s,", livingEntity.getHealth()));
+      }
+      if (entity == player) {
+        result.append("\"local\":true,");
       }
       result.append(
           String.format("\"position\":[%s,%s,%s],", entity.getX(), entity.getY(), entity.getZ()));
