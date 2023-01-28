@@ -57,6 +57,7 @@ import net.minecraft.client.util.ScreenshotRecorder;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.text.Text;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
@@ -2527,7 +2528,8 @@ public class Minescript {
     }
   }
 
-  private static String entitiesToJsonString(Iterable<? extends Entity> entities) {
+  private static String entitiesToJsonString(
+      Iterable<? extends Entity> entities, boolean includeNbt) {
     var minecraft = MinecraftClient.getInstance();
     var player = minecraft.player;
     var result = new StringBuilder("[");
@@ -2551,6 +2553,10 @@ public class Minescript {
       result.append(String.format("\"pitch\":%s,", entity.getPitch()));
       var v = entity.getVelocity();
       result.append(String.format("\"velocity\":[%s,%s,%s]", v.x, v.y, v.z));
+      if (includeNbt) {
+        var nbt = new NbtCompound();
+        result.append(String.format(",\"nbt\":%s", toJsonString(entity.writeNbt(nbt).toString())));
+      }
       result.append("}");
     }
     result.append("]");
@@ -3103,10 +3109,32 @@ public class Minescript {
         return Optional.of(String.format("%s", player.getHealth()));
 
       case "players":
-        return Optional.of(entitiesToJsonString(world.getPlayers()));
+        {
+          if (args.size() != 1) {
+            numParamsErrorLogger.accept(1);
+            return Optional.of("null");
+          }
+          if (!(args.get(0) instanceof Boolean)) {
+            paramTypeErrorLogger.accept("nbt", "bool");
+            return Optional.of("null");
+          }
+          boolean nbt = (Boolean) args.get(0);
+          return Optional.of(entitiesToJsonString(world.getPlayers(), nbt));
+        }
 
       case "entities":
-        return Optional.of(entitiesToJsonString(world.getEntities()));
+        {
+          if (args.size() != 1) {
+            numParamsErrorLogger.accept(1);
+            return Optional.of("null");
+          }
+          if (!(args.get(0) instanceof Boolean)) {
+            paramTypeErrorLogger.accept("nbt", "bool");
+            return Optional.of("null");
+          }
+          boolean nbt = (Boolean) args.get(0);
+          return Optional.of(entitiesToJsonString(world.getEntities(), nbt));
+        }
 
       case "log":
         if (args.size() == 1 && args.get(0) instanceof String) {
