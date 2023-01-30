@@ -3136,6 +3136,25 @@ public class Minescript {
           return Optional.of(entitiesToJsonString(world.getEntities(), nbt));
         }
 
+      case "world_properties":
+        {
+          var levelProperties = world.getLevelProperties();
+          var difficulty = levelProperties.getDifficulty();
+          return Optional.of(
+              String.format(
+                  "{\"game_ticks\":%s,\"day_ticks\":%s,\"raining\":%s,\"thundering\":%s,"
+                      + "\"spawn\":[%s,%s,%s],\"hardcore\":%s,\"difficulty\":%s}",
+                  levelProperties.getTime(),
+                  levelProperties.getTimeOfDay(),
+                  levelProperties.isRaining(),
+                  levelProperties.isThundering(),
+                  levelProperties.getSpawnX(),
+                  levelProperties.getSpawnY(),
+                  levelProperties.getSpawnZ(),
+                  levelProperties.isHardcore(),
+                  toJsonString(difficulty.asString())));
+        }
+
       case "log":
         if (args.size() == 1 && args.get(0) instanceof String) {
           String message = (String) args.get(0);

@@ -473,6 +473,17 @@ def entities(*, nbt: bool = False):
   return CallScriptFunction("entities", nbt)
 
 
+def world_properties() -> Dict[str, Any]:
+  """Gets world properties.
+
+  Returns:
+    Dict containing: `"game_ticks": int, "day_ticks": int, "raining": bool,
+    "thundering": bool, "spawn": BlockPos, "hardcore": bool,
+    "difficulty": str`
+  """
+  return CallScriptFunction("world_properties")
+
+
 def getblock(x: int, y: int, z: int, done_callback=None):
   """Gets the type of block at position (x, y, z).
 

@@ -61,6 +61,7 @@ forge_to_fabric_member_names = (
   ('chatHud.addRecentChat', 'chatHud.addToMessageHistory'),
   ('chunkManager.getChunkNow', 'chunkManager.getWorldChunk'),
   ('chunkPos.getBlockAt', 'chunkPos.getBlockPos'),
+  ('difficulty.getSerializedName', 'difficulty.asString'),
   ('entity.getDeltaMovement', 'entity.getVelocity'),
   ('entity.getXRot', 'entity.getPitch'),
   ('entity.getYRot', 'entity.getYaw'),
@@ -107,6 +108,12 @@ forge_to_fabric_member_names = (
   ('serverData.ip', 'serverData.address'),
   ('world.entitiesForRendering', 'world.getEntities'),
   ('world.players', 'world.getPlayers'),
+  ('world.getLevelData', 'world.getLevelProperties'),
+  ('levelProperties.getGameTime', 'levelProperties.getTime'),
+  ('levelProperties.getDayTime', 'levelProperties.getTimeOfDay'),
+  ('levelProperties.getXSpawn', 'levelProperties.getSpawnX'),
+  ('levelProperties.getYSpawn', 'levelProperties.getSpawnY'),
+  ('levelProperties.getZSpawn', 'levelProperties.getSpawnZ'),
 )
 
 def Usage():
