@@ -647,39 +647,66 @@ Since: v3.1
 
 
 #### players
-*Usage:* <code>players()</code>
+*Usage:* <code>players(\*, nbt: bool = False)</code>
 
 Gets a list of nearby players and their attributes.
+
+*Args:*
+
+- `nbt`: if `True`, populate an `"nbt"` attribute for each returned player
 
 *Returns:*
 
 - List of players where each player is represented as a dict containing:
   `"name": str, "health": float, "type": str,
   "position": [float, float, float], "yaw": float, "pitch": float,
-  "velocity": [float, float, float]`
+  "velocity": [float, float, float]`. The local player has the attribute
+  `"local": True`. The`"nbt"` attribute is present if `nbt` arg is `True`.
 
 Update in v3.1:
-  Added `"health"` attribute.
+  Added `"health"` and `"local"` attributes, and `nbt` arg to output `"nbt"`
+  attribute.
 
 Since: v2.1
 
 
 #### entities
-*Usage:* <code>entities()</code>
+*Usage:* <code>entities(\*, nbt: bool = False)</code>
 
 Gets a list of nearby entities and their attributes.
+
+*Args:*
+
+- `nbt`: if `True`, populate an `"nbt"` attribute for each returned entity
 
 *Returns:*
 
 - List of entities where each entity is represented as a dict containing:
   `"name": str, "health": float (living entities only), "type": str,
   "position": [float, float, float], "yaw": float, "pitch": float,
-  "velocity": [float, float, float]`
+  "velocity": [float, float, float]`. Living entities have
+  `"health": float` and the local player has `"local": True`. The`"nbt"`
+  attribute is present if `nbt` arg is `True`.
 
 Update in v3.1:
-  Added `"health"` attribute for living entities.
+  Added `"health"` and `"local"` attributes, and `nbt` arg to output `"nbt"`
+  attribute.
 
 Since: v2.1
+
+
+#### world_properties
+*Usage:* <code>world_properties() -> Dict[str, Any]</code>
+
+Gets world properties.
+
+*Returns:*
+
+- Dict containing: `"game_ticks": int, "day_ticks": int, "raining": bool,
+  "thundering": bool, "spawn": BlockPos, "hardcore": bool,
+  "difficulty": str`
+
+Since: v3.1
 
 
 #### getblock

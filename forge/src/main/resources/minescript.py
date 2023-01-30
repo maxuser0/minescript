@@ -441,10 +441,11 @@ def players(*, nbt: bool = False):
     `"name": str, "health": float, "type": str,
     "position": [float, float, float], "yaw": float, "pitch": float,
     "velocity": [float, float, float]`. The local player has the attribute
-    `"local": True`. The`"nbt"` attribute is present if `nbt` is `True`.
+    `"local": True`. The`"nbt"` attribute is present if `nbt` arg is `True`.
 
   Update in v3.1:
-    Added `"health"` attribute and optional `"nbt"` attribute.
+    Added `"health"` and `"local"` attributes, and `nbt` arg to output `"nbt"`
+    attribute.
 
   Since: v2.1
   """
@@ -463,10 +464,11 @@ def entities(*, nbt: bool = False):
     "position": [float, float, float], "yaw": float, "pitch": float,
     "velocity": [float, float, float]`. Living entities have
     `"health": float` and the local player has `"local": True`. The`"nbt"`
-    attribute is present if `nbt` is `True`.
+    attribute is present if `nbt` arg is `True`.
 
   Update in v3.1:
-    Added `"health"` for living entities and optional `"nbt"` attribute.
+    Added `"health"` and `"local"` attributes, and `nbt` arg to output `"nbt"`
+    attribute.
 
   Since: v2.1
   """
@@ -480,6 +482,8 @@ def world_properties() -> Dict[str, Any]:
     Dict containing: `"game_ticks": int, "day_ticks": int, "raining": bool,
     "thundering": bool, "spawn": BlockPos, "hardcore": bool,
     "difficulty": str`
+
+  Since: v3.1
   """
   return CallScriptFunction("world_properties")
 
