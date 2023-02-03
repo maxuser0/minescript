@@ -81,6 +81,8 @@ public class Minescript {
     OVERWRITTE
   }
 
+  private static Thread worldListenerThread;
+
   public static void init() {
     LOGGER.info("Starting Minescript on OS: {}", System.getProperty("os.name"));
     if (new File(MINESCRIPT_DIR).mkdir()) {
@@ -121,7 +123,43 @@ public class Minescript {
       copyJarResourceToMinescriptDir("paste.py", FileOverwritePolicy.OVERWRITTE);
     }
 
+    worldListenerThread =
+        new Thread(Minescript::runWorldListenerThread, "minescript-world-listener");
+    worldListenerThread.start();
+
     loadConfig();
+  }
+
+  private static void runWorldListenerThread() {
+    final int millisToSleep = 1000;
+    var minecraft = Minecraft.getInstance();
+    boolean noWorld = (minecraft.level == null);
+    while (true) {
+      boolean noWorldNow = (minecraft.level == null);
+      if (noWorld != noWorldNow) {
+        if (noWorldNow) {
+          LOGGER.info("Exited world");
+          for (var job : jobs.getMap().values()) {
+            if (job.persistAtWorldExit()) {
+              job.respond(0, "\"world_exit!\"", true);
+            } else {
+              job.kill();
+            }
+          }
+        } else {
+          LOGGER.info("Entered world");
+          for (var job : jobs.getMap().values()) {
+            job.respond(0, "\"world_enter!\"", true);
+          }
+        }
+        noWorld = noWorldNow;
+      }
+      try {
+        Thread.sleep(millisToSleep);
+      } catch (InterruptedException e) {
+        logException(e);
+      }
+    }
   }
 
   private static Gson GSON = new Gson();
@@ -478,6 +516,8 @@ public class Minescript {
     void enqueueStderr(String messagePattern, Object... arguments);
 
     void logJobException(Exception e);
+
+    void persistAtWorldExit(boolean persist);
   }
 
   interface UndoableAction {
@@ -857,6 +897,7 @@ public class Minescript {
     private final String[] command;
     private final Task task;
     private Thread thread;
+    private boolean persistAtWorldExit = false;
     private volatile JobState state = JobState.NOT_STARTED;
     private Consumer<Integer> doneCallback;
     private Queue<String> jobCommandQueue = new ConcurrentLinkedQueue<String>();
@@ -914,6 +955,15 @@ public class Minescript {
       String logMessage = ParameterizedMessage.format(messagePattern, arguments);
       LOGGER.error("{}", logMessage);
       jobCommandQueue.add(formatAsJsonText(logMessage, "yellow"));
+    }
+
+    @Override
+    public void persistAtWorldExit(boolean persist) {
+      persistAtWorldExit = persist;
+    }
+
+    public boolean persistAtWorldExit() {
+      return persistAtWorldExit;
     }
 
     @Override
@@ -1122,7 +1172,16 @@ public class Minescript {
               break;
             }
             lastReadTime = System.currentTimeMillis();
-            jobControl.enqueueStdout(line);
+            switch (line) {
+              case "?0 persist!":
+                jobControl.persistAtWorldExit(true);
+                break;
+              case "?0 nopersist!":
+                jobControl.persistAtWorldExit(false);
+                break;
+              default:
+                jobControl.enqueueStdout(line);
+            }
           }
           if (stderrReader.ready()) {
             if ((line = stderrReader.readLine()) == null) {
@@ -1143,15 +1202,22 @@ public class Minescript {
         jobControl.enqueueStderr(e.getMessage());
         return -3;
       }
+
+      LOGGER.info("Exited script event loop for job `{}`", jobControl.toString());
+
       if (process == null) {
         return -4;
       }
       if (jobControl.state() == JobState.KILLED) {
+        LOGGER.info("Killing script process for job `{}`", jobControl.toString());
         process.destroy();
         return -5;
       }
       try {
-        return process.waitFor();
+        LOGGER.info("Waiting for script process to complete for job `{}`", jobControl.toString());
+        int result = process.waitFor();
+        LOGGER.info("Script process exited with {} for job `{}`", result, jobControl.toString());
+        return result;
       } catch (InterruptedException e) {
         jobControl.logJobException(e);
         return -6;
@@ -3143,10 +3209,14 @@ public class Minescript {
         {
           var levelProperties = world.getLevelData();
           var difficulty = levelProperties.getDifficulty();
+          var serverData = minecraft.getCurrentServer();
+          var serverName = serverData == null ? "null" : toJsonString(serverData.name);
+          var serverAddress = serverData == null ? "null" : toJsonString(serverData.ip);
           return Optional.of(
               String.format(
                   "{\"game_ticks\":%s,\"day_ticks\":%s,\"raining\":%s,\"thundering\":%s,"
-                      + "\"spawn\":[%s,%s,%s],\"hardcore\":%s,\"difficulty\":%s}",
+                      + "\"spawn\":[%s,%s,%s],\"hardcore\":%s,\"difficulty\":%s,"
+                      + "\"server_name\": %s,\"server_address\":%s}",
                   levelProperties.getGameTime(),
                   levelProperties.getDayTime(),
                   levelProperties.isRaining(),
@@ -3155,7 +3225,9 @@ public class Minescript {
                   levelProperties.getYSpawn(),
                   levelProperties.getZSpawn(),
                   levelProperties.isHardcore(),
-                  toJsonString(difficulty.getSerializedName())));
+                  toJsonString(difficulty.getSerializedName()),
+                  serverName,
+                  serverAddress));
         }
 
       case "log":

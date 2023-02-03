@@ -43,6 +43,7 @@ from typing import Any, List, Set, Dict, Tuple, Optional, Callable
 StringConsumer = Callable[[str], None]
 # Dict values: (function_name: str, on_value_handler: StringConsumer)
 _script_function_calls: Dict[int, Tuple[str, StringConsumer]] = dict()
+_script_function_calls_lock = threading.Lock()
 
 
 def CallAsyncScriptFunction(func_name: str, args: Tuple[Any, ...],
@@ -54,7 +55,8 @@ def CallAsyncScriptFunction(func_name: str, args: Tuple[Any, ...],
     retval_handler: callback invoked for each return value
   """
   func_call_id = time.time_ns()
-  _script_function_calls[func_call_id] = (func_name, retval_handler)
+  with _script_function_calls_lock:
+    _script_function_calls[func_call_id] = (func_name, retval_handler)
   print(f"?{func_call_id} {func_name} {json.dumps(args)}")
 
 
@@ -79,6 +81,8 @@ def CallScriptFunction(func_name: str, *args: Any) -> Any:
   lock.acquire()
   return retval_holder[0]
 
+world_exit_handler: Callable[[], None] = None
+world_enter_handler: Callable[[], None] = None
 
 def _ScriptServiceLoop():
   while True:
@@ -102,18 +106,23 @@ def _ScriptServiceLoop():
       if "retval" in reply:
         retval = reply["retval"]
         if retval == "exit!":
-          _thread.interrupt_main()
           break  # Break out of the service loop so that the process can exit.
-
-    if func_call_id not in _script_function_calls:
-      print(
-          f"minescript_runtime.py: fcid={func_call_id} not found in _script_function_calls",
-          file=sys.stderr)
+        elif retval == "world_exit!" and world_exit_handler is not None:
+          world_exit_handler()
+        elif retval == "world_enter!" and world_enter_handler is not None:
+          world_enter_handler()
       continue
-    func_name, retval_handler = _script_function_calls[func_call_id]
 
-    if "conn" in reply and reply["conn"] == "close":
-      del _script_function_calls[func_call_id]
+    with _script_function_calls_lock:
+      if func_call_id not in _script_function_calls:
+        print(
+            f"minescript_runtime.py: fcid={func_call_id} not found in _script_function_calls",
+            file=sys.stderr)
+        continue
+      func_name, retval_handler = _script_function_calls[func_call_id]
+
+      if "conn" in reply and reply["conn"] == "close":
+        del _script_function_calls[func_call_id]
 
     if "retval" in reply:
       retval = reply["retval"]

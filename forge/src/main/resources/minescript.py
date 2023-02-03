@@ -18,6 +18,8 @@ scripts and not run directly.
 import base64
 import os
 import sys
+import minescript_runtime
+
 from array import array
 from minescript_runtime import CallScriptFunction, CallAsyncScriptFunction
 from typing import Any, List, Set, Dict, Tuple, Optional, Callable
@@ -478,10 +480,12 @@ def entities(*, nbt: bool = False):
 def world_properties() -> Dict[str, Any]:
   """Gets world properties.
 
+  `"server_name"` and `"server_address"` are `None` for local worlds.
+
   Returns:
     Dict containing: `"game_ticks": int, "day_ticks": int, "raining": bool,
     "thundering": bool, "spawn": BlockPos, "hardcore": bool,
-    "difficulty": str`
+    "difficulty": str, "server_name": str, "server_address": str`
 
   Since: v3.1
   """
@@ -643,6 +647,44 @@ def unregister_chat_message_interceptor():
   Since: v2.1
   """
   CallScriptFunction("unregister_chat_message_interceptor")
+
+
+def on_world_exit(world_exit_handler: Callable[[], None]):
+  """Sets the handler for when the player exits a world.
+
+  A script's default behavior is for the world exit handler to kill the script.
+  Switching dimensions and dying do not qualify as exiting a world. Only one
+  handler per job can be specified at a time.
+
+  Passing a callable allows the script to keep running when the player exits
+  the world. Passing `None` is equivalent to the default behavior of the script
+  being killed on world exit.
+
+  Args:
+    world_exit_handler: callable to be invoked when the player exits a world.
+
+  Since: v3.1
+  """
+  minescript_runtime.world_exit_handler = world_exit_handler
+  if world_exit_handler is None:
+    print("?0 nopersist!")
+  else:
+    print("?0 persist!")
+
+
+def on_world_enter(world_enter_handler: Callable[[], None]):
+  """Sets the handler for when the player enters a world.
+
+  A script's default behavior is for the world enter handler to do nothing.
+  Switching dimensions and respawning do not qualify as entering a world. Only one
+  handler per job can be specified at a time.
+
+  Args:
+    world_enter_handler: callable to be invoked when the player enters a world.
+
+  Since: v3.1
+  """
+  minescript_runtime.world_enter_handler = world_enter_handler
 
 
 BlockPos = Tuple[int, int, int]
