@@ -480,12 +480,17 @@ def entities(*, nbt: bool = False):
 def world_properties() -> Dict[str, Any]:
   """Gets world properties.
 
-  `"server_name"` and `"server_address"` are `None` for local worlds.
+  If the current world is a multiplayer world loaded for the server list, then
+  the returned `name` and `address` attributes are the values as they appear in
+  the server list; otherwise the `name` is the name of the locally saved world
+  and `address` is `localhost"`.
+
+  `"day_ticks"` are the ticks associated with the day-night cycle.
 
   Returns:
     Dict containing: `"game_ticks": int, "day_ticks": int, "raining": bool,
     "thundering": bool, "spawn": BlockPos, "hardcore": bool,
-    "difficulty": str, "server_name": str, "server_address": str`
+    "difficulty": str, "name": str, "address": str`
 
   Since: v3.1
   """
@@ -647,44 +652,6 @@ def unregister_chat_message_interceptor():
   Since: v2.1
   """
   CallScriptFunction("unregister_chat_message_interceptor")
-
-
-def on_world_exit(world_exit_handler: Callable[[], None]):
-  """Sets the handler for when the player exits a world.
-
-  A script's default behavior is for the world exit handler to kill the script.
-  Switching dimensions and dying do not qualify as exiting a world. Only one
-  handler per job can be specified at a time.
-
-  Passing a callable allows the script to keep running when the player exits
-  the world. Passing `None` is equivalent to the default behavior of the script
-  being killed on world exit.
-
-  Args:
-    world_exit_handler: callable to be invoked when the player exits a world.
-
-  Since: v3.1
-  """
-  minescript_runtime.world_exit_handler = world_exit_handler
-  if world_exit_handler is None:
-    print("?0 nopersist!")
-  else:
-    print("?0 persist!")
-
-
-def on_world_enter(world_enter_handler: Callable[[], None]):
-  """Sets the handler for when the player enters a world.
-
-  A script's default behavior is for the world enter handler to do nothing.
-  Switching dimensions and respawning do not qualify as entering a world. Only one
-  handler per job can be specified at a time.
-
-  Args:
-    world_enter_handler: callable to be invoked when the player enters a world.
-
-  Since: v3.1
-  """
-  minescript_runtime.world_enter_handler = world_enter_handler
 
 
 BlockPos = Tuple[int, int, int]

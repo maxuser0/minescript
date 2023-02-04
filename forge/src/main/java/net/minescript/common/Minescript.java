@@ -39,6 +39,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -130,6 +131,8 @@ public class Minescript {
     loadConfig();
   }
 
+  private static AtomicBoolean autorunHandled = new AtomicBoolean(false);
+
   private static void runWorldListenerThread() {
     final int millisToSleep = 1000;
     var minecraft = Minecraft.getInstance();
@@ -140,17 +143,13 @@ public class Minescript {
         if (noWorldNow) {
           LOGGER.info("Exited world");
           for (var job : jobs.getMap().values()) {
-            if (job.persistAtWorldExit()) {
-              job.respond(0, "\"world_exit!\"", true);
-            } else {
-              job.kill();
-            }
+            job.kill();
           }
+          systemCommandQueue.clear();
         } else {
           LOGGER.info("Entered world");
-          for (var job : jobs.getMap().values()) {
-            job.respond(0, "\"world_enter!\"", true);
-          }
+          systemCommandQueue.clear();
+          autorunHandled.set(false);
         }
         noWorld = noWorldNow;
       }
@@ -229,8 +228,12 @@ public class Minescript {
 
   private static String pythonLocation = null;
 
-  private static final Pattern CONFIG_LINE_RE =
-      Pattern.compile("^([a-zA-Z0-9_]+) *= *\"?([^\"]*)\"?");
+  private static final Pattern CONFIG_LINE_RE = Pattern.compile("([^=]+)=(.*)");
+  private static final Pattern DOUBLE_QUOTED_STRING_RE = Pattern.compile("\"(.*)\"");
+  private static final Pattern CONFIG_AUTORUN_RE = Pattern.compile("autorun\\[(.*)\\]");
+
+  // Map from world name (or "*" for all) to a list of Minescript commands.
+  private static Map<String, List<String>> autorunCommands = new ConcurrentHashMap<>();
 
   private static final File configFile =
       new File(Paths.get(MINESCRIPT_DIR, "config.txt").toString());
@@ -252,6 +255,7 @@ public class Minescript {
       return;
     }
     lastConfigLoadTime = System.currentTimeMillis();
+    autorunCommands.clear();
 
     try (var reader = new BufferedReader(new FileReader(configFile.getPath()))) {
       String line;
@@ -261,9 +265,16 @@ public class Minescript {
           continue;
         }
         var match = CONFIG_LINE_RE.matcher(line);
-        if (match.find()) {
+        if (match.matches()) {
           String name = match.group(1);
           String value = match.group(2);
+
+          // Strip double quotes surrounding value if present.
+          match = DOUBLE_QUOTED_STRING_RE.matcher(value);
+          if (match.matches()) {
+            value = match.group(1);
+          }
+
           switch (name) {
             case "python":
               if (System.getProperty("os.name").startsWith("Windows")) {
@@ -323,8 +334,19 @@ public class Minescript {
               LOGGER.info("Setting minescript_use_blockpack_for_undo to {}", useBlockPackForUndo);
               break;
             default:
-              LOGGER.warn(
-                  "Unrecognized config var: {} = \"{}\" (\"{}\")", name, value, pythonLocation);
+              match = CONFIG_AUTORUN_RE.matcher(name);
+              if (match.matches()) {
+                String worldName = match.group(1);
+                synchronized (autorunCommands) {
+                  var commandList =
+                      autorunCommands.computeIfAbsent(worldName, k -> new ArrayList<String>());
+                  commandList.add(value);
+                }
+                LOGGER.info("Added autorun command `{}` for `{}`", value, worldName);
+              } else {
+                LOGGER.warn(
+                    "Unrecognized config var: {} = \"{}\" (\"{}\")", name, value, pythonLocation);
+              }
           }
         } else {
           LOGGER.warn("config.txt: unable parse config line: {}", line);
@@ -516,8 +538,6 @@ public class Minescript {
     void enqueueStderr(String messagePattern, Object... arguments);
 
     void logJobException(Exception e);
-
-    void persistAtWorldExit(boolean persist);
   }
 
   interface UndoableAction {
@@ -897,7 +917,6 @@ public class Minescript {
     private final String[] command;
     private final Task task;
     private Thread thread;
-    private boolean persistAtWorldExit = false;
     private volatile JobState state = JobState.NOT_STARTED;
     private Consumer<Integer> doneCallback;
     private Queue<String> jobCommandQueue = new ConcurrentLinkedQueue<String>();
@@ -955,15 +974,6 @@ public class Minescript {
       String logMessage = ParameterizedMessage.format(messagePattern, arguments);
       LOGGER.error("{}", logMessage);
       jobCommandQueue.add(formatAsJsonText(logMessage, "yellow"));
-    }
-
-    @Override
-    public void persistAtWorldExit(boolean persist) {
-      persistAtWorldExit = persist;
-    }
-
-    public boolean persistAtWorldExit() {
-      return persistAtWorldExit;
     }
 
     @Override
@@ -1172,16 +1182,7 @@ public class Minescript {
               break;
             }
             lastReadTime = System.currentTimeMillis();
-            switch (line) {
-              case "?0 persist!":
-                jobControl.persistAtWorldExit(true);
-                break;
-              case "?0 nopersist!":
-                jobControl.persistAtWorldExit(false);
-                break;
-              default:
-                jobControl.enqueueStdout(line);
-            }
+            jobControl.enqueueStdout(line);
           }
           if (stderrReader.ready()) {
             if ((line = stderrReader.readLine()) == null) {
@@ -2757,6 +2758,16 @@ public class Minescript {
     return Math.sqrt(dx * dx + dy * dy + dz * dz);
   }
 
+  public static String getWorldName() {
+    var minecraft = Minecraft.getInstance();
+    var serverData = minecraft.getCurrentServer();
+    var serverName = serverData == null ? null : serverData.name;
+    var server = minecraft.getSingleplayerServer();
+    var saveProperties = server == null ? null : server.getWorldData();
+    String saveName = saveProperties == null ? null : saveProperties.getLevelName();
+    return serverName == null ? saveName : serverName;
+  }
+
   /** Returns a JSON response string if a script function is called. */
   private static Optional<String> handleScriptFunction(
       Job job, long funcCallId, String functionName, List<?> args, String argsString) {
@@ -3210,13 +3221,12 @@ public class Minescript {
           var levelProperties = world.getLevelData();
           var difficulty = levelProperties.getDifficulty();
           var serverData = minecraft.getCurrentServer();
-          var serverName = serverData == null ? "null" : toJsonString(serverData.name);
-          var serverAddress = serverData == null ? "null" : toJsonString(serverData.ip);
+          var serverAddress = serverData == null ? "localhost" : serverData.ip;
           return Optional.of(
               String.format(
                   "{\"game_ticks\":%s,\"day_ticks\":%s,\"raining\":%s,\"thundering\":%s,"
                       + "\"spawn\":[%s,%s,%s],\"hardcore\":%s,\"difficulty\":%s,"
-                      + "\"server_name\": %s,\"server_address\":%s}",
+                      + "\"name\": %s,\"address\":%s}",
                   levelProperties.getGameTime(),
                   levelProperties.getDayTime(),
                   levelProperties.isRaining(),
@@ -3226,8 +3236,8 @@ public class Minescript {
                   levelProperties.getZSpawn(),
                   levelProperties.isHardcore(),
                   toJsonString(difficulty.getSerializedName()),
-                  serverName,
-                  serverAddress));
+                  toJsonString(getWorldName()),
+                  toJsonString(serverAddress)));
         }
 
       case "log":
@@ -3784,10 +3794,43 @@ public class Minescript {
     }
   }
 
+  public static void handleAutorun(String worldName) {
+    LOGGER.info("Handling autorun for world `{}`", worldName);
+    var commands = new ArrayList<String>();
+
+    var wildcardCommands = autorunCommands.get("*");
+    if (wildcardCommands != null) {
+      LOGGER.info(
+          "Matched {} command(s) with autorun[*] for world `{}`",
+          wildcardCommands.size(),
+          worldName);
+      commands.addAll(wildcardCommands);
+    }
+
+    var worldCommands = autorunCommands.get(worldName);
+    if (worldCommands != null) {
+      LOGGER.info("Matched {} command(s) with autorun[{}]", wildcardCommands.size(), worldName);
+      commands.addAll(worldCommands);
+    }
+
+    for (var command : commands) {
+      LOGGER.info("Running autorun command for world `{}`: {}", worldName, command);
+      processMessage(command);
+    }
+  }
+
   public static void onPlayerTick() {
     if (++playerTickEventCounter % minescriptTicksPerCycle == 0) {
       var minecraft = Minecraft.getInstance();
       var player = minecraft.player;
+
+      String worldName = getWorldName();
+      if (!autorunHandled.get() && worldName != null) {
+        loadConfig();
+        handleAutorun(worldName);
+        autorunHandled.set(true);
+      }
+
       if (player != null && (!systemCommandQueue.isEmpty() || !jobs.getMap().isEmpty())) {
         Level level = player.getCommandSenderWorld();
         boolean hasCommand;

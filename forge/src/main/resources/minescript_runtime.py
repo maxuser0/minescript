@@ -81,8 +81,6 @@ def CallScriptFunction(func_name: str, *args: Any) -> Any:
   lock.acquire()
   return retval_holder[0]
 
-world_exit_handler: Callable[[], None] = None
-world_enter_handler: Callable[[], None] = None
 
 def _ScriptServiceLoop():
   while True:
@@ -107,10 +105,6 @@ def _ScriptServiceLoop():
         retval = reply["retval"]
         if retval == "exit!":
           break  # Break out of the service loop so that the process can exit.
-        elif retval == "world_exit!" and world_exit_handler is not None:
-          world_exit_handler()
-        elif retval == "world_enter!" and world_enter_handler is not None:
-          world_enter_handler()
       continue
 
     with _script_function_calls_lock:
