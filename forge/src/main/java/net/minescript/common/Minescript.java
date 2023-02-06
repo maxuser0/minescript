@@ -28,6 +28,7 @@ import java.nio.file.Paths;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
@@ -1287,8 +1288,9 @@ public class Minescript {
 
     private final Deque<UndoableAction> undoStack = new ArrayDeque<>();
 
-    public void createSubprocess(String[] command) {
-      var job = new Job(allocateJobId(), command, new SubprocessTask(), this::removeJob);
+    public void createSubprocess(String[] command, List<Token> nextCommand) {
+      var job =
+          new Job(allocateJobId(), command, new SubprocessTask(), i -> finishJob(i, nextCommand));
       var undo = UndoableAction.create(job.jobId(), command);
       jobUndoMap.put(job.jobId(), undo);
       undoStack.addFirst(undo);
@@ -1321,7 +1323,11 @@ public class Minescript {
       }
 
       var undoJob =
-          new Job(allocateJobId(), undo.derivativeCommand(), new UndoTask(undo), this::removeJob);
+          new Job(
+              allocateJobId(),
+              undo.derivativeCommand(),
+              new UndoTask(undo),
+              i -> finishJob(i, Collections.emptyList()));
       jobMap.put(undoJob.jobId(), undoJob);
       undoJob.start();
     }
@@ -1333,12 +1339,13 @@ public class Minescript {
       return nextJobId++;
     }
 
-    private void removeJob(int jobId) {
+    private void finishJob(int jobId, List<Token> nextCommand) {
       var undo = jobUndoMap.remove(jobId);
       if (undo != null) {
         undo.onOriginalJobDone();
       }
       jobMap.remove(jobId);
+      runParsedMinescriptCommand(nextCommand);
     }
 
     public Map<Integer, Job> getMap() {
@@ -1745,14 +1752,36 @@ public class Minescript {
       loadConfig();
 
       List<Token> tokens = parseCommand(commandLine);
-      List<String> tokenStrings = tokens.stream().map(Token::toString).collect(Collectors.toList());
-      String[] command = tokenStrings.toArray(EMPTY_STRING_ARRAY);
-      if (command.length == 0) {
+
+      if (tokens.isEmpty()) {
         systemCommandQueue.add(
             "|{\"text\":\"Technoblade never dies.\",\"color\":\"dark_red\",\"bold\":true}");
         return;
       }
 
+      runParsedMinescriptCommand(tokens);
+
+    } catch (RuntimeException e) {
+      logException(e);
+    }
+  }
+
+  private static void runParsedMinescriptCommand(List<Token> tokens) {
+    if (tokens.isEmpty()) {
+      return;
+    }
+
+    try {
+      // Split the token list on the first semicolon token, if there is one.
+      int semicolonPos = tokens.indexOf(Token.semicolon());
+      List<Token> nextCommand = Collections.emptyList();
+      if (semicolonPos != -1) {
+        nextCommand = tokens.subList(semicolonPos + 1, tokens.size());
+        tokens = tokens.subList(0, semicolonPos);
+      }
+
+      List<String> tokenStrings = tokens.stream().map(Token::toString).collect(Collectors.toList());
+      String[] command = tokenStrings.toArray(EMPTY_STRING_ARRAY);
       command = substituteMinecraftVars(command);
 
       switch (command[0]) {
@@ -1762,6 +1791,7 @@ public class Minescript {
           } else {
             logUserError("Expected no params, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "suspend":
@@ -1775,6 +1805,7 @@ public class Minescript {
                 "Expected no params or 1 param of type integer, instead got `{}`",
                 getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "resume":
@@ -1787,6 +1818,7 @@ public class Minescript {
                 "Expected no params or 1 param of type integer, instead got `{}`",
                 getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "killjob":
@@ -1796,6 +1828,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "undo":
@@ -1806,6 +1839,7 @@ public class Minescript {
                 "Expected no params or 1 param of type integer, instead got `{}`",
                 getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "copy":
@@ -1848,6 +1882,7 @@ public class Minescript {
                   label = Optional.of(command[i]);
                 } else {
                   badArgsMessage.run();
+                  runParsedMinescriptCommand(nextCommand);
                   return;
                 }
               }
@@ -1856,6 +1891,7 @@ public class Minescript {
             } else {
               badArgsMessage.run();
             }
+            runParsedMinescriptCommand(nextCommand);
             return;
           }
 
@@ -1872,6 +1908,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "minescript_ticks_per_cycle":
@@ -1886,6 +1923,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "minescript_incremental_command_suggestions":
@@ -1897,6 +1935,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "minescript_script_function_debug_outptut":
@@ -1908,6 +1947,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "minescript_log_chunk_load_events":
@@ -1919,6 +1959,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "minescript_use_blockpack_for_copy":
@@ -1930,6 +1971,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "minescript_use_blockpack_for_undo":
@@ -1941,6 +1983,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "enable_minescript_on_chat_received_event":
@@ -1958,6 +2001,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "NullPointerException":
@@ -1979,10 +2023,11 @@ public class Minescript {
         if (!command[0].equals("ls")) {
           logUserError("No Minescript command named \"{}\"", command[0]);
         }
+        runParsedMinescriptCommand(nextCommand);
         return;
       }
 
-      jobs.createSubprocess(command);
+      jobs.createSubprocess(command, nextCommand);
 
     } catch (RuntimeException e) {
       logException(e);
