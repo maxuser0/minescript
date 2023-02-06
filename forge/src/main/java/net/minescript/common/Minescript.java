@@ -143,6 +143,7 @@ public class Minescript {
       boolean noWorldNow = (minecraft.level == null);
       if (noWorld != noWorldNow) {
         if (noWorldNow) {
+          autorunHandled.set(false);
           LOGGER.info("Exited world");
           for (var job : jobs.getMap().values()) {
             job.kill();
@@ -150,8 +151,6 @@ public class Minescript {
           systemCommandQueue.clear();
         } else {
           LOGGER.info("Entered world");
-          systemCommandQueue.clear();
-          autorunHandled.set(false);
         }
         noWorld = noWorldNow;
       }
@@ -3831,10 +3830,10 @@ public class Minescript {
       var player = minecraft.player;
 
       String worldName = getWorldName();
-      if (!autorunHandled.get() && worldName != null) {
+      if (!autorunHandled.getAndSet(true) && worldName != null) {
+        systemCommandQueue.clear();
         loadConfig();
         handleAutorun(worldName);
-        autorunHandled.set(true);
       }
 
       if (player != null && (!systemCommandQueue.isEmpty() || !jobs.getMap().isEmpty())) {
