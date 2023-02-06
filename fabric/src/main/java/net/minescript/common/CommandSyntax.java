@@ -70,7 +70,7 @@ public class CommandSyntax {
   public static class Token {
 
     public static enum Type {
-      ARG,
+      STRING,
       AND,
       OR,
       SEMICOLON
@@ -80,11 +80,11 @@ public class CommandSyntax {
     private static final Token OR_TOKEN = new Token(Type.OR);
     private static final Token SEMICOLON_TOKEN = new Token(Type.SEMICOLON);
 
-    private final Optional<String> arg;
+    private final Optional<String> string;
     private final Type type;
 
-    public static Token arg(String arg) {
-      return new Token(arg);
+    public static Token string(String string) {
+      return new Token(string);
     }
 
     public static Token and() {
@@ -106,8 +106,8 @@ public class CommandSyntax {
     @Override
     public String toString() {
       switch (type) {
-        case ARG:
-          return arg.get();
+        case STRING:
+          return string.get();
         case AND:
           return "&&";
         case OR:
@@ -119,14 +119,14 @@ public class CommandSyntax {
       }
     }
 
-    private Token(String arg) {
-      this.type = Type.ARG;
-      this.arg = Optional.of(arg);
+    private Token(String string) {
+      this.type = Type.STRING;
+      this.string = Optional.of(string);
     }
 
     private Token(Type type) {
       this.type = type;
-      this.arg = Optional.empty();
+      this.string = Optional.empty();
     }
   }
 
@@ -194,11 +194,11 @@ public class CommandSyntax {
                 } else if (literalArg.endsWith(";")) {
                   String argPrefix = arg.substring(0, arg.length() - 1);
                   if (!argPrefix.isEmpty()) {
-                    args.add(Token.arg(argPrefix));
+                    args.add(Token.string(argPrefix));
                   }
                   args.add(Token.semicolon());
                 } else {
-                  args.add(Token.arg(arg));
+                  args.add(Token.string(arg));
                 }
                 state = ParseState.SPACES_OUTSIDE_QUOTES;
                 break;
