@@ -3,6 +3,7 @@
 
 package net.minescript.common;
 
+import static net.minescript.common.CommandSyntax.Token;
 import static net.minescript.common.CommandSyntax.parseCommand;
 import static net.minescript.common.CommandSyntax.quoteCommand;
 import static net.minescript.common.CommandSyntax.quoteString;
@@ -47,6 +48,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ChatScreen;
@@ -1732,6 +1734,8 @@ public class Minescript {
     }
   }
 
+  public static final String[] EMPTY_STRING_ARRAY = {};
+
   private static void runMinescriptCommand(String commandLine) {
     try {
       if (!checkMinescriptDir()) {
@@ -1741,7 +1745,10 @@ public class Minescript {
       // Check if config needs to be reloaded.
       loadConfig();
 
-      String[] command = parseCommand(commandLine);
+      List<Token> tokens = parseCommand(commandLine);
+      List<String> tokenStrings =
+          tokens.stream().map(Token::toString).collect(Collectors.toList());
+      String[] command = tokenStrings.toArray(EMPTY_STRING_ARRAY);
       if (command.length == 0) {
         systemCommandQueue.add(
             "|{\"text\":\"Technoblade never dies.\",\"color\":\"dark_red\",\"bold\":true}");

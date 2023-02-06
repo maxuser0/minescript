@@ -5,10 +5,9 @@ package net.minescript.common;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class CommandSyntax {
-
-  private static final String[] EMPTY_STRING_ARRAY = {};
 
   private enum ParseState {
     START,
@@ -68,11 +67,81 @@ public class CommandSyntax {
     return buffer.toString();
   }
 
-  public static String[] parseCommand(String command) {
+  public static class Token {
+
+    public static enum Type {
+      ARG,
+      AND,
+      OR,
+      SEMICOLON
+    }
+
+    private static final Token AND_TOKEN = new Token(Type.AND);
+    private static final Token OR_TOKEN = new Token(Type.OR);
+    private static final Token SEMICOLON_TOKEN = new Token(Type.SEMICOLON);
+
+    private final Optional<String> arg;
+    private final Type type;
+
+    public static Token arg(String arg) {
+      return new Token(arg);
+    }
+
+    public static Token and() {
+      return AND_TOKEN;
+    }
+
+    public static Token or() {
+      return OR_TOKEN;
+    }
+
+    public static Token semicolon() {
+      return SEMICOLON_TOKEN;
+    }
+
+    public Type type() {
+      return type;
+    }
+
+    @Override
+    public String toString() {
+      switch (type) {
+        case ARG:
+          return arg.get();
+        case AND:
+          return "&&";
+        case OR:
+          return "||";
+        case SEMICOLON:
+          return ";";
+        default:
+          throw new IllegalStateException("Unsupported Token type: `" + type.toString() + "`");
+      }
+    }
+
+    private Token(String arg) {
+      this.type = Type.ARG;
+      this.arg = Optional.of(arg);
+    }
+
+    private Token(Type type) {
+      this.type = type;
+      this.arg = Optional.empty();
+    }
+  }
+
+  private static String consumeStringBuilder(StringBuilder builder) {
+    String s = builder.toString();
+    builder.setLength(0);
+    return s;
+  }
+
+  public static List<Token> parseCommand(String command) {
     command += " "; // add space for simpler termination of parsing
-    List<String> argv = new ArrayList<>();
+    List<Token> args = new ArrayList<>();
     var state = ParseState.START;
-    var buffer = new StringBuilder();
+    var argBuilder = new StringBuilder();
+    var literalArgBuilder = new StringBuilder(); // buffer for arg preserving literals like quotes
     char prevCh = '\0';
     for (int i = 0; i < command.length(); ++i) {
       char ch = command.charAt(i);
@@ -90,48 +159,70 @@ public class CommandSyntax {
               break;
             default:
               state = ParseState.WORD_OUTSIDE_QUOTES;
-              buffer.append(ch);
+              argBuilder.append(ch);
           }
+          literalArgBuilder.append(ch);
           break;
         case WORD_OUTSIDE_QUOTES:
           switch (ch) {
             case '\'':
               if (prevCh == '\\') {
-                buffer.setLength(buffer.length() - 1);
-                buffer.append(ch);
+                argBuilder.setLength(argBuilder.length() - 1);
+                argBuilder.append(ch);
               } else {
                 state = ParseState.INSIDE_SINGLE_QUOTES;
               }
+              literalArgBuilder.append(ch);
               break;
             case '"':
               if (prevCh == '\\') {
-                buffer.setLength(buffer.length() - 1);
-                buffer.append(ch);
+                argBuilder.setLength(argBuilder.length() - 1);
+                argBuilder.append(ch);
               } else {
                 state = ParseState.INSIDE_DOUBLE_QUOTES;
               }
+              literalArgBuilder.append(ch);
               break;
             case ' ':
-              argv.add(buffer.toString());
-              buffer.setLength(0);
-              state = ParseState.SPACES_OUTSIDE_QUOTES;
-              break;
+              {
+                String arg = consumeStringBuilder(argBuilder);
+                String literalArg = consumeStringBuilder(literalArgBuilder);
+                if (literalArg.equals("&&")) {
+                  args.add(Token.and());
+                } else if (literalArg.equals("||")) {
+                  args.add(Token.or());
+                } else if (literalArg.endsWith(";")) {
+                  String argPrefix = arg.substring(0, arg.length() - 1);
+                  if (!argPrefix.isEmpty()) {
+                    args.add(Token.arg(argPrefix));
+                  }
+                  args.add(Token.semicolon());
+                } else {
+                  args.add(Token.arg(arg));
+                }
+                state = ParseState.SPACES_OUTSIDE_QUOTES;
+                break;
+              }
             default:
-              buffer.append(ch);
+              argBuilder.append(ch);
+              literalArgBuilder.append(ch);
           }
           break;
         case SPACES_OUTSIDE_QUOTES:
           switch (ch) {
             case '\'':
               state = ParseState.INSIDE_SINGLE_QUOTES;
+              literalArgBuilder.append(ch);
               break;
             case '"':
               state = ParseState.INSIDE_DOUBLE_QUOTES;
+              literalArgBuilder.append(ch);
               break;
             case ' ':
               break;
             default:
-              buffer.append(ch);
+              argBuilder.append(ch);
+              literalArgBuilder.append(ch);
               state = ParseState.WORD_OUTSIDE_QUOTES;
           }
           break;
@@ -139,49 +230,57 @@ public class CommandSyntax {
           switch (ch) {
             case '\'':
               if (prevCh == '\\') {
-                buffer.setLength(buffer.length() - 1);
-                buffer.append(ch);
+                argBuilder.setLength(argBuilder.length() - 1);
+                argBuilder.append(ch);
               } else {
                 state = ParseState.WORD_OUTSIDE_QUOTES;
               }
               break;
             case 'n':
               if (prevCh == '\\') {
-                buffer.setLength(buffer.length() - 1);
-                buffer.append('\n');
+                argBuilder.setLength(argBuilder.length() - 1);
+                argBuilder.append('\n');
                 break;
               }
               // intentional fallthru
             default:
-              buffer.append(ch);
+              argBuilder.append(ch);
           }
+          literalArgBuilder.append(ch);
           break;
         case INSIDE_DOUBLE_QUOTES:
           switch (ch) {
             case '"':
               if (prevCh == '\\') {
-                buffer.setLength(buffer.length() - 1);
-                buffer.append(ch);
+                argBuilder.setLength(argBuilder.length() - 1);
+                argBuilder.append(ch);
               } else {
                 state = ParseState.WORD_OUTSIDE_QUOTES;
               }
               break;
             case 'n':
               if (prevCh == '\\') {
-                buffer.setLength(buffer.length() - 1);
-                buffer.append('\n');
+                argBuilder.setLength(argBuilder.length() - 1);
+                argBuilder.append('\n');
                 break;
               }
               // intentional fallthru
             default:
-              buffer.append(ch);
+              argBuilder.append(ch);
           }
+          literalArgBuilder.append(ch);
+          break;
       }
       prevCh = ch;
     }
-    if (buffer.length() > 0) {
-      argv.add(buffer.toString());
+    if (argBuilder.length() > 0) {
+      throw new IllegalStateException(
+          "Unexpected trailing characters when parsing command `"
+              + command.substring(0, command.length() - 1) // trailing space added above
+              + "`: `"
+              + argBuilder.toString()
+              + "`");
     }
-    return argv.toArray(EMPTY_STRING_ARRAY);
+    return args;
   }
 }
