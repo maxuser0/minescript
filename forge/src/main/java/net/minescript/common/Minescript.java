@@ -261,7 +261,29 @@ public class Minescript {
 
     try (var reader = new BufferedReader(new FileReader(configFile.getPath()))) {
       String line;
+      String continuedLine = null;
       while ((line = reader.readLine()) != null) {
+        line = line.stripLeading();
+
+        // Concatenate across lines ending with backslash. Interpret line ending with double
+        // backslash as escaped and treat it as a literal backslash.
+        if (line.endsWith("\\\\")) {
+          line = line.substring(0, line.length() - 1);
+        } else if (line.endsWith("\\")) {
+          line = line.substring(0, line.length() - 1);
+          if (continuedLine == null) {
+            continuedLine = line;
+          } else {
+            continuedLine += " " + line;
+          }
+          continue;
+        }
+
+        if (continuedLine != null) {
+          line = continuedLine + " " + line;
+          continuedLine = null;
+        }
+
         line = line.strip();
         if (line.isEmpty() || line.startsWith("#")) {
           continue;
@@ -336,18 +358,28 @@ public class Minescript {
               LOGGER.info("Setting minescript_use_blockpack_for_undo to {}", useBlockPackForUndo);
               break;
             default:
-              match = CONFIG_AUTORUN_RE.matcher(name);
-              if (match.matches()) {
-                String worldName = match.group(1);
-                synchronized (autorunCommands) {
-                  var commandList =
-                      autorunCommands.computeIfAbsent(worldName, k -> new ArrayList<String>());
-                  commandList.add(value);
+              {
+                match = CONFIG_AUTORUN_RE.matcher(name);
+                value = value.strip();
+                // Interpret commands that lack a slash or backslash prefix as Minescript commands
+                // by prepending a backslash.
+                String command =
+                    (value.startsWith("\\") || value.startsWith("/")) ? value : ("\\" + value);
+                if (match.matches()) {
+                  String worldName = match.group(1);
+                  synchronized (autorunCommands) {
+                    var commandList =
+                        autorunCommands.computeIfAbsent(worldName, k -> new ArrayList<String>());
+                    commandList.add(command);
+                  }
+                  LOGGER.info("Added autorun command `{}` for `{}`", command, worldName);
+                } else {
+                  LOGGER.warn(
+                      "Unrecognized config var: {} = \"{}\" (\"{}\")",
+                      name,
+                      command,
+                      pythonLocation);
                 }
-                LOGGER.info("Added autorun command `{}` for `{}`", value, worldName);
-              } else {
-                LOGGER.warn(
-                    "Unrecognized config var: {} = \"{}\" (\"{}\")", name, value, pythonLocation);
               }
           }
         } else {
@@ -1778,6 +1810,10 @@ public class Minescript {
       if (semicolonPos != -1) {
         nextCommand = tokens.subList(semicolonPos + 1, tokens.size());
         tokens = tokens.subList(0, semicolonPos);
+      }
+      if (tokens.isEmpty()) {
+        runParsedMinescriptCommand(nextCommand);
+        return;
       }
 
       List<String> tokenStrings = tokens.stream().map(Token::toString).collect(Collectors.toList());
