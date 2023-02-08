@@ -1,5 +1,63 @@
 # Changelog
 
+## v3.1
+
+### Major changes
+
+- New `autorun[world]=\command` configuration in `config.txt` to run commands
+  automatically when joining a world.
+  ([e135fa7](https://github.com/maxuser0/minescript/commit/e135fa733764c749ca6f8588a3271204a3c30099))
+  - The form of these config lines is:
+    `autorun[World Name]=\command_to_run with args`
+  - The special name `*` indicates that the command should be run when entering
+    all worlds:
+    `autorun[*]=\command_to_run with args` (backslash before the command name is optional)
+  - Lines ending with a single backslash are implicitly joined with the following
+    line, for example:
+    ```
+    autorun[*]=\
+      eval '"*** Welcome to %s ***" % world_properties()["name"]'; eval world_properties()
+    ```
+  - As in the previous example, multiple Minescript commands can now be
+    specified on the same line, separated by semicolons, to run them in
+    sequence (each command must finish before the next command begins). This
+    applies to both `autorun` commands in `config.txt` and the in-game chat.
+- Script jobs are now automatically killed when leaving a world.
+- New script function `world_properties()`; see [documentation](https://github.com/maxuser0/minescript/blob/22ba0feb5056fa2e4b606663f413716f316ea853/docs/README.md#world_properties)
+- NBT output for `players(nbt=True)` and `entities(nbt=True)`; see
+  [players](https://github.com/maxuser0/minescript/blob/22ba0feb5056fa2e4b606663f413716f316ea853/docs/README.md#players)
+  and
+  [entities](https://github.com/maxuser0/minescript/blob/22ba0feb5056fa2e4b606663f413716f316ea853/docs/README.md#entities)
+- Significant performance optimization of `BlockPacker.setblock(...)` and `BlockPacker.fill(...)`.
+- New script function `player_set_position(...)`; see [documentation](https://github.com/maxuser0/minescript/blob/22ba0feb5056fa2e4b606663f413716f316ea853/docs/README.md#player_set_position)
+- Fix locale-specific formatting of floats in JSON ([525e2c1](https://github.com/maxuser0/minescript/commit/525e2c1ce234bf7e1630bf061db12ccc1f4a4695))
+
+### Detailed changes
+
+- Fix typos in minescript.py, update docs/README.md ([22ba0fe](https://github.com/maxuser0/minescript/commit/22ba0feb5056fa2e4b606663f413716f316ea853))
+- Support multi-line config vars in config.txt ([5f2aa53](https://github.com/maxuser0/minescript/commit/5f2aa53e4b0a663c5cd26e3daafd6625c8e7c51b))
+- Support compound commands delimited by semicolons ([27f3480](https://github.com/maxuser0/minescript/commit/27f3480ad4cf2d3034e191be56bb91e12370da33))
+- Fix timing bug with autorun when entering world ([3953d37](https://github.com/maxuser0/minescript/commit/3953d37d688c06741e07272557901f19e4c519df))
+- Rename Token.Type.ARG to Token.Type.STRING ([697bf94](https://github.com/maxuser0/minescript/commit/697bf94718b1b15aea1b82c14405370a983be9b9))
+- Introduce tokenized command parsing for: && || ; ([513f852](https://github.com/maxuser0/minescript/commit/513f8522388598d0fadc6d7b805892db8def7798))
+- Implement autorun to run commands when join world ([e135fa7](https://github.com/maxuser0/minescript/commit/e135fa733764c749ca6f8588a3271204a3c30099))
+- Changes to job management and world exit handling ([a3a7ae7c](https://github.com/maxuser0/minescript/commit/a3a7ae7cfa1d29b5b640200366d7afb76e725c4c))
+- Update docs for v3.1 ([3b6e77b](https://github.com/maxuser0/minescript/commit/3b6e77b1ac858cc5f59c78f16710aa0f10e70bd6))
+- Add script function world_properties() ([f6dfb49](https://github.com/maxuser0/minescript/commit/f6dfb493cac11a18548fe6be6e8a65f61e081aee))
+- Optional NBT output for players() and entities() ([5e9492c](https://github.com/maxuser0/minescript/commit/5e9492c50fb45f2912ede4ed0af33294ba59a670))
+- Add "local" to local player in players/entities() ([cbdb692](https://github.com/maxuser0/minescript/commit/cbdb692ffe89793c0f1d3133a0c87785c35cd754))
+- Update docs for v3.1 ([ea95388](https://github.com/maxuser0/minescript/commit/ea9538883c3ec2b692593a07ef39daed1ad2a464))
+- Fork v3.0 docs to v3.1 ([61b4f3a](https://github.com/maxuser0/minescript/commit/61b4f3a7f0255cf81c13064820c5643f10036ad1))
+- Add functionality for reporting health ([f46967b](https://github.com/maxuser0/minescript/commit/f46967bf3223b0ebf92d5f2fc56a7366162ae699))
+- Fix formatting of NBT data as JSON in inventory ([3bddc19](https://github.com/maxuser0/minescript/commit/3bddc1976cc0821fa420f913edfaf37afd31dacd))
+- Optimize command loop to bail if no more commands ([8ed8b38](https://github.com/maxuser0/minescript/commit/8ed8b3825929d2ec0520a2e9dcbbef8385950ae4))
+- Add script function player_set_position ([d5e3063](https://github.com/maxuser0/minescript/commit/d5e3063c7adc6fa8216c08b76f231dda88141ba8))
+- Add script function blockpacker_add_blocks(...) ([24f7f71](https://github.com/maxuser0/minescript/commit/24f7f71027631b02954da8101d31fe5b290709c2))
+- Fix BlockPacker.fill so points can be in any order ([eebfde8](https://github.com/maxuser0/minescript/commit/eebfde8967706b9cd56d3ce9d13aa18d3d8fd5cf))
+- Fix locale-specific formatting of floats in JSON ([525e2c1](https://github.com/maxuser0/minescript/commit/525e2c1ce234bf7e1630bf061db12ccc1f4a4695))
+- Update copyright year for 2023 ([72e6a55](https://github.com/maxuser0/minescript/commit/72e6a551f453645e7a586c09b6c88401c654831b))
+- Update Minescript version from v3.0 to v3.1 ([f142925](https://github.com/maxuser0/minescript/commit/f1429256fda87b36b09499529aab69514f95c9c7))
+
 ## v3.0
 
 ### Major changes
@@ -15,6 +73,7 @@
 
 ### Detailed changes
 
+- Update CHANGELOG.md for v3.0 ([1be5136](https://github.com/maxuser0/minescript/commit/1be513661fe5f807cef5b3515fd67211e76a37be))
 - Update copy.py, paste.py requirements to v3.0 ([d52cf35](https://github.com/maxuser0/minescript/commit/d52cf35f4a8d93a74a24fd39fe3871e3ea062040))
 - Update minescript module section of docs/README.md ([2266eba](https://github.com/maxuser0/minescript/commit/2266eba23ea87f41885860c0fe1039cc2d28e597))
 - Fix off-by-one error in copy script's info message ([c132699](https://github.com/maxuser0/minescript/commit/c1326994d56a7e6f56a1430d1d3cd8b69c4703e4))
