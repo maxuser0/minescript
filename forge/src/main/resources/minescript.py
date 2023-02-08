@@ -480,10 +480,10 @@ def entities(*, nbt: bool = False):
 def world_properties() -> Dict[str, Any]:
   """Gets world properties.
 
-  If the current world is a multiplayer world loaded for the server list, then
+  If the current world is a multiplayer world loaded from the server list, then
   the returned `name` and `address` attributes are the values as they appear in
-  the server list; otherwise the `name` is the name of the locally saved world
-  and `address` is `localhost"`.
+  the server list; otherwise `name` is the name of the locally saved world and
+  `address` is `localhost`.
 
   `"day_ticks"` are the ticks associated with the day-night cycle.
 

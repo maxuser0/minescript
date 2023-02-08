@@ -700,11 +700,18 @@ Since: v2.1
 
 Gets world properties.
 
+If the current world is a multiplayer world loaded from the server list, then
+the returned `name` and `address` attributes are the values as they appear in
+the server list; otherwise `name` is the name of the locally saved world and
+`address` is `localhost`.
+
+`"day_ticks"` are the ticks associated with the day-night cycle.
+
 *Returns:*
 
 - Dict containing: `"game_ticks": int, "day_ticks": int, "raining": bool,
   "thundering": bool, "spawn": BlockPos, "hardcore": bool,
-  "difficulty": str`
+  "difficulty": str, "name": str, "address": str`
 
 Since: v3.1
 
