@@ -6,6 +6,7 @@ Table of contents:
     - [Command basics](#command-basics)
     - [General commands](#general-commands)
     - [Advanced commands](#advanced-commands)
+- [Configuration](#configuration)
 - [Python API](#python-api)
     - [Script input](#script-input)
     - [Script output](#script-output)
@@ -164,6 +165,40 @@ Default is false.
 
 Since: v2.0 (in prior versions, incremental command suggestions were
 unconditionally enabled)
+
+## Configuration
+
+The `minescript` directory contains a configuration file named `config.txt`.
+Lines of text in `config.txt` can take the following forms:
+
+- Lines containing configuration variables of the form: `NAME=VALUE`, e.g. `python="/usr/bin/python3"`.
+- Lines ending with a backslash (`\`) are interpreted as being joined with the
+  next line. Multiple consecutive lines ending in `\` are considered the same
+  line of configuration together with the subsequent line.
+- Lines beginning with `#` are comments that have no effect on Minescript behavior.
+- Blank lines have no effect on Minescript behavior.
+
+Config variable names:
+- `python` - file location of the Python interpreter (default for Windows is
+  `"%userprofile%\AppData\Local\Microsoft\WindowsApps\python3.exe"`, and
+  `"/usr/bin/python3"` for other operating systems)
+- `minescript_commands_per_cycle` (see [minescript_commands_per_cycle](#minescript_commands_per_cycle) command)
+- `minescript_ticks_per_cycle` (see [minescript_ticks_per_cycle](#minescript_ticks_per_cycle) command)
+- `minescript_incremental_command_suggestions` (see [minescript_incremental_command_suggestions](#minescript_incremental_command_suggestions) command; since v2.0)
+- `autorun[WORLD NAME]` - command to run when entering a world named `WORLD NAME` (since v3.1)
+  - The special name `*` indicates that the command should be run when entering
+    all worlds, e.g. `autorun[*]=print_motd` where `print_motd.py` is a script
+    that prints a "message of the day".
+  - Multiple `autorun[...]` config lines can be specified for the same world, or
+    for `*`, in which case all matching commands are run concurrently.
+  - A single `autorun[...]` config line can execute multiple commands in
+    sequence by separating commands with a semicolon (`;`), e.g. the following would
+    first run the script `print_motd.py` followed by `summarize_entities.py` which takes
+    a single argument (`50`):
+
+    ```
+    autorun[*]=print_motd; summarize_entities 50
+    ```
 
 ## Python API
 
