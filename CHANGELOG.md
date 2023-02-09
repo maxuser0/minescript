@@ -1,6 +1,141 @@
 # Changelog
 
+## v3.1
+
+### Major changes
+
+- New `autorun[world]=\command` configuration in `config.txt` to run commands
+  automatically when joining a world.
+  ([e135fa7](https://github.com/maxuser0/minescript/commit/e135fa733764c749ca6f8588a3271204a3c30099))
+  - The form of these config lines is:
+    `autorun[World Name]=\command_to_run with args`
+  - The special name `*` indicates that the command should be run when entering
+    all worlds:
+    `autorun[*]=\command_to_run with args` (backslash before the command name is optional)
+  - Lines ending with a single backslash are implicitly joined with the following
+    line, for example:
+    ```
+    autorun[*]=\
+      eval '"*** Welcome to %s ***" % world_properties()["name"]'; eval world_properties()
+    ```
+  - As in the previous example, multiple Minescript commands can now be
+    specified on the same line, separated by semicolons, to run them in
+    sequence (each command must finish before the next command begins). This
+    applies to both `autorun` commands in `config.txt` and the in-game chat.
+- Script jobs are now automatically killed when leaving a world.
+- New script function `world_properties()`; see [documentation](https://github.com/maxuser0/minescript/blob/22ba0feb5056fa2e4b606663f413716f316ea853/docs/README.md#world_properties)
+- NBT output for `players(nbt=True)` and `entities(nbt=True)`; see
+  [players](https://github.com/maxuser0/minescript/blob/22ba0feb5056fa2e4b606663f413716f316ea853/docs/README.md#players)
+  and
+  [entities](https://github.com/maxuser0/minescript/blob/22ba0feb5056fa2e4b606663f413716f316ea853/docs/README.md#entities)
+- Significant performance optimization of `BlockPacker.setblock(...)` and `BlockPacker.fill(...)`.
+- New script function `player_set_position(...)`; see [documentation](https://github.com/maxuser0/minescript/blob/22ba0feb5056fa2e4b606663f413716f316ea853/docs/README.md#player_set_position)
+- Fix locale-specific formatting of floats in JSON ([525e2c1](https://github.com/maxuser0/minescript/commit/525e2c1ce234bf7e1630bf061db12ccc1f4a4695))
+
+### Detailed changes
+
+- Fix typos in minescript.py, update docs/README.md ([22ba0fe](https://github.com/maxuser0/minescript/commit/22ba0feb5056fa2e4b606663f413716f316ea853))
+- Support multi-line config vars in config.txt ([5f2aa53](https://github.com/maxuser0/minescript/commit/5f2aa53e4b0a663c5cd26e3daafd6625c8e7c51b))
+- Support compound commands delimited by semicolons ([27f3480](https://github.com/maxuser0/minescript/commit/27f3480ad4cf2d3034e191be56bb91e12370da33))
+- Fix timing bug with autorun when entering world ([3953d37](https://github.com/maxuser0/minescript/commit/3953d37d688c06741e07272557901f19e4c519df))
+- Rename Token.Type.ARG to Token.Type.STRING ([697bf94](https://github.com/maxuser0/minescript/commit/697bf94718b1b15aea1b82c14405370a983be9b9))
+- Introduce tokenized command parsing for: && || ; ([513f852](https://github.com/maxuser0/minescript/commit/513f8522388598d0fadc6d7b805892db8def7798))
+- Implement autorun to run commands when join world ([e135fa7](https://github.com/maxuser0/minescript/commit/e135fa733764c749ca6f8588a3271204a3c30099))
+- Changes to job management and world exit handling ([a3a7ae7c](https://github.com/maxuser0/minescript/commit/a3a7ae7cfa1d29b5b640200366d7afb76e725c4c))
+- Update docs for v3.1 ([3b6e77b](https://github.com/maxuser0/minescript/commit/3b6e77b1ac858cc5f59c78f16710aa0f10e70bd6))
+- Add script function world_properties() ([f6dfb49](https://github.com/maxuser0/minescript/commit/f6dfb493cac11a18548fe6be6e8a65f61e081aee))
+- Optional NBT output for players() and entities() ([5e9492c](https://github.com/maxuser0/minescript/commit/5e9492c50fb45f2912ede4ed0af33294ba59a670))
+- Add "local" to local player in players/entities() ([cbdb692](https://github.com/maxuser0/minescript/commit/cbdb692ffe89793c0f1d3133a0c87785c35cd754))
+- Update docs for v3.1 ([ea95388](https://github.com/maxuser0/minescript/commit/ea9538883c3ec2b692593a07ef39daed1ad2a464))
+- Fork v3.0 docs to v3.1 ([61b4f3a](https://github.com/maxuser0/minescript/commit/61b4f3a7f0255cf81c13064820c5643f10036ad1))
+- Add functionality for reporting health ([f46967b](https://github.com/maxuser0/minescript/commit/f46967bf3223b0ebf92d5f2fc56a7366162ae699))
+- Fix formatting of NBT data as JSON in inventory ([3bddc19](https://github.com/maxuser0/minescript/commit/3bddc1976cc0821fa420f913edfaf37afd31dacd))
+- Optimize command loop to bail if no more commands ([8ed8b38](https://github.com/maxuser0/minescript/commit/8ed8b3825929d2ec0520a2e9dcbbef8385950ae4))
+- Add script function player_set_position ([d5e3063](https://github.com/maxuser0/minescript/commit/d5e3063c7adc6fa8216c08b76f231dda88141ba8))
+- Add script function blockpacker_add_blocks(...) ([24f7f71](https://github.com/maxuser0/minescript/commit/24f7f71027631b02954da8101d31fe5b290709c2))
+- Fix BlockPacker.fill so points can be in any order ([eebfde8](https://github.com/maxuser0/minescript/commit/eebfde8967706b9cd56d3ce9d13aa18d3d8fd5cf))
+- Fix locale-specific formatting of floats in JSON ([525e2c1](https://github.com/maxuser0/minescript/commit/525e2c1ce234bf7e1630bf061db12ccc1f4a4695))
+- Update copyright year for 2023 ([72e6a55](https://github.com/maxuser0/minescript/commit/72e6a551f453645e7a586c09b6c88401c654831b))
+- Update Minescript version from v3.0 to v3.1 ([f142925](https://github.com/maxuser0/minescript/commit/f1429256fda87b36b09499529aab69514f95c9c7))
+
+## v3.0
+
+### Major changes
+
+- Introducing blockpacks! Blockpacks are collections of blocks that can be serialized (saved to a file or sent across a network), rotated, flipped, and combined for complex builds made of reusable structures. See [documentation](https://github.com/maxuser0/minescript/blob/3d4ae355a20a660001c7c240fdd29c7bc58ae3be/fabric/src/main/resources/minescript.py#L700).
+- `copy`-`paste` and `undo` performance improved by up to 20x from earlier versions, using new implementation based on blockpacks
+- `copy` script now outputs zip files (zipped blockpacks) in `blockpacks` directory (previously txt files in `copies` directory)
+- New script functions:
+    - `player_inventory_slot_to_hotbar`: swaps an inventory item into the hotbar and selects that hotbar slot into the player's hand; see [documentation](https://github.com/maxuser0/minescript/blob/3d4ae355a20a660001c7c240fdd29c7bc58ae3be/fabric/src/main/resources/minescript.py#L159)
+    - `player_inventory_select_slot`: selects the given slot within the player's hotbar; see [documentation](https://github.com/maxuser0/minescript/blob/3d4ae355a20a660001c7c240fdd29c7bc58ae3be/fabric/src/main/resources/minescript.py#L177)
+    - `player_get_targeted_block`: gets info about the nearest block, if any, in the local player's crosshairs; see [documentation](https://github.com/maxuser0/minescript/blob/3d4ae355a20a660001c7c240fdd29c7bc58ae3be/fabric/src/main/resources/minescript.py#L324)
+- Removed script functions deprecated in v2.1: `pyexec`, `exec` (subsumed by `execute`)
+
+### Detailed changes
+
+- Update CHANGELOG.md for v3.0 ([1be5136](https://github.com/maxuser0/minescript/commit/1be513661fe5f807cef5b3515fd67211e76a37be))
+- Update copy.py, paste.py requirements to v3.0 ([d52cf35](https://github.com/maxuser0/minescript/commit/d52cf35f4a8d93a74a24fd39fe3871e3ea062040))
+- Update minescript module section of docs/README.md ([2266eba](https://github.com/maxuser0/minescript/commit/2266eba23ea87f41885860c0fe1039cc2d28e597))
+- Fix off-by-one error in copy script's info message ([c132699](https://github.com/maxuser0/minescript/commit/c1326994d56a7e6f56a1430d1d3cd8b69c4703e4))
+- Fix copy_paste_test, and other test improvements ([1d6384c](https://github.com/maxuser0/minescript/commit/1d6384cb35f35a18205746c2eee1a2b832f935cb))
+- Update tests for Minescript v3.0 ([0947d3e](https://github.com/maxuser0/minescript/commit/0947d3e30ff73196e0a95ff44e801ba14ad41a3b))
+- Update forge and fabric mods to mc1.19.3 ([1c895fb](https://github.com/maxuser0/minescript/commit/1c895fb99c078f8aba01586cfbb43f13c3e65c8e))
+- Update Minescript version from v2.2 to v3.0 ([c034b48](https://github.com/maxuser0/minescript/commit/c034b48733c8131322ff1eecdc7a792bf22a7c60))
+- Add docstrings for all blockpack, blockpacker code ([e5aaf1a](https://github.com/maxuser0/minescript/commit/e5aaf1ab8efb7ef43496fdce67b46d93fad6d34a))
+- Fix error handling of blockpack_read_world ([96f542f](https://github.com/maxuser0/minescript/commit/96f542f65a4f533343a2856f7c362bc65ff4a886))
+- Remove pyexec and exec functions in prep for v3.0 ([430fe08](https://github.com/maxuser0/minescript/commit/430fe082207c50b6a19e48d9b140e3795147ad69))
+- Clarify error messages when reading blockpacks ([2832338](https://github.com/maxuser0/minescript/commit/283233853274287ee5af41ad4517ef247516a2e1))
+- Add player_get_targeted_block(...) script function ([6d44c0e](https://github.com/maxuser0/minescript/commit/6d44c0e090c9273727741091600fde58c0791f04))
+- Add stock rotations and means of combining them ([8673227](https://github.com/maxuser0/minescript/commit/867322751e0e4082d03d1809c2ecc0ef129b3677))
+- Use blockpacks dir for copies and default location ([b368fab](https://github.com/maxuser0/minescript/commit/b368fab45363d773cc45337e2abe7cd74fcd28fe))
+- Improve handling of blockpack file IO errors ([0acbe35](https://github.com/maxuser0/minescript/commit/0acbe3557148aee6e0be1a9d34165f74f0d7a480))
+- Update javadoc: mapDirectionToXZ, mapXZToDirection ([46059c5](https://github.com/maxuser0/minescript/commit/46059c50e38f3b1d0c03b79af65639073f869222))
+- Support rotation of directional blocks in xz plane ([daf95f0](https://github.com/maxuser0/minescript/commit/daf95f01d79fb5cb543a993420533e68b4cb67ce))
+- Support rotation everywhere offset is supported ([f614cbb](https://github.com/maxuser0/minescript/commit/f614cbb945dd983505371bbdf131a2afbdea929a))
+- Merge BlockPack offset and rotation into transform ([e6924bc](https://github.com/maxuser0/minescript/commit/e6924bcbde2d03d02e1db538adb1e653985552d1))
+- Support rotations in BlockPacker.add_blockpack() ([a8d6c28](https://github.com/maxuser0/minescript/commit/a8d6c284b1f055b1b07d390388e27ab6e1bf736c))
+- Implement BlockPacker script API ([96b4bc7](https://github.com/maxuser0/minescript/commit/96b4bc79b75c7df78764498d7e45f48bc9af2fe0))
+- Track script-generated BlockPacks per script job ([89e7013](https://github.com/maxuser0/minescript/commit/89e70134934aea25070de13fd3624e2a55b4801b))
+- Support import/export of BlockPack data as base64 ([6470bc2](https://github.com/maxuser0/minescript/commit/6470bc28adc81642ac4e8f4f6650119094e88023))
+- Create copies dir as needed from copy.py ([608c0d9](https://github.com/maxuser0/minescript/commit/608c0d982bba801c5aae7d1a67a927dd70a7a3a2))
+- Re-implement copy & paste via Python BlockPack API ([2cf700e](https://github.com/maxuser0/minescript/commit/2cf700e1a20adddbf61102a633e3ad9766135b16))
+- Sync changes from fabric to forge sources ([785aaab](https://github.com/maxuser0/minescript/commit/785aaab1cfee85384a7ff853c84b1d7244c95f7a))
+- Fix crash bug when pressing backslash and space ([86a19b7](https://github.com/maxuser0/minescript/commit/86a19b70d7bb3a920e10b4c899113dc72ea0e0c9))
+- Implement undo command using BlockPack ([b2bf889](https://github.com/maxuser0/minescript/commit/b2bf88943e5cd56e79bb5b97f3a7dcc63ce23c91))
+- Merge branch 'main' into blockpack ([739db6a](https://github.com/maxuser0/minescript/commit/739db6ae8738a44b7304cd703149062be21bbb8e))
+- Add comments (string->string map) to BlockPack ([cddc540](https://github.com/maxuser0/minescript/commit/cddc5402c65f08cd38d8c7ff045b875321506d5c))
+- Make BlockPack.readStream(...) more robust ([495c8d4](https://github.com/maxuser0/minescript/commit/495c8d4a27c6fa0a4a525d4a9ffb153113eab70e))
+- Compute tile and block bounds in BlockPack ctor ([38cf073](https://github.com/maxuser0/minescript/commit/38cf0730c591b1267cbef4ab2c7ac936b689b3b2))
+- Change magic bytes, inner file extension to .blox ([916c4a2](https://github.com/maxuser0/minescript/commit/916c4a2aeae347cdd4b4400ce2a8d04cf26aed45))
+- Change BlockPack format to use extensible chunks ([caf3a7a](https://github.com/maxuser0/minescript/commit/caf3a7a9167877b826fa348fd99d8abefb522084))
+- Implement BlockPack writeFile and readFile ([676a07a](https://github.com/maxuser0/minescript/commit/676a07a28023d93db1f50df4a2af6af28f6b31a2))
+- Update BlockPack tile key, simplify implementation ([b434a16](https://github.com/maxuser0/minescript/commit/b434a162255678026b13f189f54a81af5489828c))
+- Implement BlockPack.getBlockCommands(...) ([313f6f3](https://github.com/maxuser0/minescript/commit/313f6f3f54812bc472168d39a67e5b875ce49011))
+- Replace symbolMap.containsKey/put with putIfAbsent ([d083ef3](https://github.com/maxuser0/minescript/commit/d083ef3005405b06b5ac282ccf2d5e5e3d32961c))
+- Use short[] for setblocks and fills in BlockPack ([b0a01a4](https://github.com/maxuser0/minescript/commit/b0a01a40b294015d04d9cb1e1d8755c6ad22bd2b))
+- Optimize BlockPack setblocks and fills space used ([61b035c](https://github.com/maxuser0/minescript/commit/61b035cd1c797b519a4cbe8cf8a5cfafcec9ca9b))
+- Add debugging info for measuring pack's byte size ([1593348](https://github.com/maxuser0/minescript/commit/1593348cc945ba5d26fc7d272af591fbef0342c4))
+- Initial (incomplete) impl of BlockPack.BlockType ([442ebd6](https://github.com/maxuser0/minescript/commit/442ebd67f3cdce7e9159cf04fa63e56721ce5314))
+- BlockPack.Tile.printBlockCommandsInAscendingYOrder ([1249cff](https://github.com/maxuser0/minescript/commit/1249cffeef4d1bafb145b69a4f72a4a96db1d138))
+- Introduce 2-level symbol table for block types ([5179643](https://github.com/maxuser0/minescript/commit/51796432b7a62394ca64f0a05f5063d4ebbda50f))
+- Reuse block type IDs for overwritten unique blocks ([bf319d1](https://github.com/maxuser0/minescript/commit/bf319d1857ffe0c4e60ee264a3e2786f5c659831))
+- Fix block-type frequencies in BlockPacker.Tile ([f5f7125](https://github.com/maxuser0/minescript/commit/f5f71256991375f7c205b0df153538ee1cbcf89b))
+- Allow BlockPacker to incrementally pack blocks ([260be62](https://github.com/maxuser0/minescript/commit/260be6239da58fe55976e3783652adbaaf497323))
+- Fix bug in BlockPacker.Tile.computeBlockCommands ([c73ed16](https://github.com/maxuser0/minescript/commit/c73ed16870fa7248fa176d629ce799824f2a41ea))
+- Fix formatting of javadoc in BlockPack\*.java ([67f6d2c](https://github.com/maxuser0/minescript/commit/67f6d2c3e04c2350f4562cefa407f305c3ca82ac))
+- Add copyright and GPL3 license to BlockPack\*.java ([3c6d5f5](https://github.com/maxuser0/minescript/commit/3c6d5f54bc8ee712bafcb3ac3325f60284fc7640))
+- Refactor Volume into BlockPacker and BlockPack ([2e38c6c](https://github.com/maxuser0/minescript/commit/2e38c6c25c18fac6056e0b6dcf941410a9a7924b))
+- Initial impl of Volume (to be renamed BlockPack) ([d07782e](https://github.com/maxuser0/minescript/commit/d07782e7a0bccd2bdddaa4321c04555671894e5c))
+- Allow paste command to parse fill commands ([89dd27c](https://github.com/maxuser0/minescript/commit/89dd27cf8513f101e64ed5a74e8b2645e2fe8f8e))
+- Document v2.2 changes in player_inventory behavior ([1a64dc5](https://github.com/maxuser0/minescript/commit/1a64dc5afdefbaabc0c3225330f78fd878244396))
+- Add script functions to manage inventory, hotbar ([15757ba](https://github.com/maxuser0/minescript/commit/15757ba3bd8bcadfe6de239a7d40d9cedd293c1b))
+- Update Minescript version to 2.2 ([49a6fc2](https://github.com/maxuser0/minescript/commit/49a6fc2339bb0a8872a364cfb0eac14059a7c172))
+- Rewrite "Previous version" only when forking docs ([1d1a153](https://github.com/maxuser0/minescript/commit/1d1a153bcc0b6413df590ef613b7da7440bda5d5))
+- Change terminology from "branch" to "fork" ([2967b04](https://github.com/maxuser0/minescript/commit/2967b04a9863c0a0fb0b7d6fc16ea77d92a1d954))
+- Merge fabric/forge test into single top-level test ([702d58f](https://github.com/maxuser0/minescript/commit/702d58fcc68ac8fa34eda5acf0e33aaf21231b10))
+
 ## v2.1
+- Additional changelog entries for v2.1 ([f5b9dc8](https://github.com/maxuser0/minescript/commit/f5b9dc8070e470b1cd7ec7005fd46809e2755f1a))
 - Add version-check flags to minescript_runtime.py ([27f65eb](https://github.com/maxuser0/minescript/commit/27f65ebf1d6bfb66ac48602cadc265309751b7fa))
 - Specify required deps in paste and minescript_test ([fdeb560](https://github.com/maxuser0/minescript/commit/fdeb5605b6633f35cde3bbf259a8670074cb3b03))
 - Add integration test: minescript_test.py ([e2ddd91](https://github.com/maxuser0/minescript/commit/e2ddd913977ea380769bdbc12b43f99b273f4e59))

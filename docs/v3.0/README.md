@@ -6,13 +6,14 @@ Table of contents:
     - [Command basics](#command-basics)
     - [General commands](#general-commands)
     - [Advanced commands](#advanced-commands)
-- [Configuration](#configuration)
 - [Python API](#python-api)
     - [Script input](#script-input)
     - [Script output](#script-output)
     - [minescript module](#minescript-module)
 
-Previous version: [v3.0](v3.0/README.md)
+Previous version: [v2.1](v2.1/README.md)
+
+Latest version: [latest](../README.md)
 
 ## In-game commands
 
@@ -165,40 +166,6 @@ Default is false.
 
 Since: v2.0 (in prior versions, incremental command suggestions were
 unconditionally enabled)
-
-## Configuration
-
-The `minescript` directory contains a configuration file named `config.txt`.
-Lines of text in `config.txt` can take the following forms:
-
-- Lines containing configuration variables of the form: `NAME=VALUE`, e.g. `python="/usr/bin/python3"`.
-- Lines ending with a backslash (`\`) are interpreted as being joined with the
-  next line. Multiple consecutive lines ending in `\` are considered the same
-  line of configuration together with the subsequent line.
-- Lines beginning with `#` are comments that have no effect on Minescript behavior.
-- Blank lines have no effect on Minescript behavior.
-
-Config variable names:
-- `python` - file location of the Python interpreter (default for Windows is
-  `"%userprofile%\AppData\Local\Microsoft\WindowsApps\python3.exe"`, and
-  `"/usr/bin/python3"` for other operating systems)
-- `minescript_commands_per_cycle` (see [minescript_commands_per_cycle](#minescript_commands_per_cycle) command)
-- `minescript_ticks_per_cycle` (see [minescript_ticks_per_cycle](#minescript_ticks_per_cycle) command)
-- `minescript_incremental_command_suggestions` (see [minescript_incremental_command_suggestions](#minescript_incremental_command_suggestions) command; since v2.0)
-- `autorun[WORLD NAME]` - command to run when entering a world named `WORLD NAME` (since v3.1)
-  - The special name `*` indicates that the command should be run when entering
-    all worlds, e.g. `autorun[*]=print_motd` where `print_motd.py` is a script
-    that prints a "message of the day".
-  - Multiple `autorun[...]` config lines can be specified for the same world, or
-    for `*`, in which case all matching commands are run concurrently.
-  - A single `autorun[...]` config line can execute multiple commands in
-    sequence by separating commands with a semicolon (`;`), e.g. the following would
-    first run the script `print_motd.py` followed by `summarize_entities.py` which takes
-    a single argument (`50`):
-
-    ```
-    autorun[*]=print_motd; summarize_entities 50
-    ```
 
 ## Python API
 
@@ -379,22 +346,6 @@ Gets the local player's position.
 *Returns:*
 
 - if `done_callback` is `None`, returns player's position as [x: float, y: float, z: float]
-
-
-#### player_set_position
-*Usage:* <code>player_set_position(x: float, y: float, z: float, yaw: float = None, pitch: float = None) -> bool</code>
-
-Sets the player's position, and optionally orientation.
-
-Note that in survival mode the server may reject the new coordinates if they're too far
-or require moving through walls.
-
-*Args:*
-
-- `x, y, z`: position to try to move player to
-- `yaw, pitch`: if not None, player's new orientation
-
-Since: v3.1
 
 
 #### player_hand_items
@@ -673,82 +624,32 @@ Gets info about the nearest block, if any, in the local player's crosshairs.
 Since: v3.0
 
 
-#### player_health
-*Usage:* <code>player_health() -> float</code>
-
-Gets the local player's health.
-
-Since: v3.1
-
-
 #### players
-*Usage:* <code>players(\*, nbt: bool = False)</code>
+*Usage:* <code>players()</code>
 
 Gets a list of nearby players and their attributes.
 
-*Args:*
-
-- `nbt`: if `True`, populate an `"nbt"` attribute for each returned player
-
 *Returns:*
 
-- List of players where each player is represented as a dict containing:
-  `"name": str, "health": float, "type": str,
-  "position": [float, float, float], "yaw": float, "pitch": float,
-  "velocity": [float, float, float]`. The local player has the attribute
-  `"local": True`. The`"nbt"` attribute is present if `nbt` arg is `True`.
-
-Update in v3.1:
-  Added `"health"` and `"local"` attributes, and `nbt` arg to output `"nbt"`
-  attribute.
+- List of players where each player is represented as a dict:
+  `{"name": str, "type": str, "position": [float, float, float], "yaw": float, "pitch": float,
+  "velocity": [float, float, float]}`
 
 Since: v2.1
 
 
 #### entities
-*Usage:* <code>entities(\*, nbt: bool = False)</code>
+*Usage:* <code>entities()</code>
 
 Gets a list of nearby entities and their attributes.
 
-*Args:*
-
-- `nbt`: if `True`, populate an `"nbt"` attribute for each returned entity
-
 *Returns:*
 
-- List of entities where each entity is represented as a dict containing:
-  `"name": str, "health": float (living entities only), "type": str,
-  "position": [float, float, float], "yaw": float, "pitch": float,
-  "velocity": [float, float, float]`. Living entities have
-  `"health": float` and the local player has `"local": True`. The`"nbt"`
-  attribute is present if `nbt` arg is `True`.
-
-Update in v3.1:
-  Added `"health"` and `"local"` attributes, and `nbt` arg to output `"nbt"`
-  attribute.
+- List of entities where each entity is represented as a dict:
+  `{"name": str, "type": str, "position": [float, float, float], "yaw": float, "pitch": float,
+  "velocity": [float, float, float]}`
 
 Since: v2.1
-
-
-#### world_properties
-*Usage:* <code>world_properties() -> Dict[str, Any]</code>
-
-Gets world properties.
-
-If the current world is a multiplayer world loaded from the server list, then
-the returned `name` and `address` attributes are the values as they appear in
-the server list; otherwise `name` is the name of the locally saved world and
-`address` is `localhost`.
-
-`"day_ticks"` are the ticks associated with the day-night cycle.
-
-*Returns:*
-
-- Dict containing: `"game_ticks": int, "day_ticks": int, "raining": bool,
-  "thundering": bool, "spawn": BlockPos, "hardcore": bool,
-  "difficulty": str, "name": str, "address": str`
-
-Since: v3.1
 
 
 #### getblock
