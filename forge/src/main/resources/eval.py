@@ -1,6 +1,11 @@
 # SPDX-FileCopyrightText: © 2022-2023 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: GPL-3.0-only
 
+# WARNING: This file is generated from the Minescript jar file. This file will
+# be overwritten automatically when Minescript updates to a new version. If you
+# make edits to this file, make sure to save a backup copy when upgrading to a
+# new version of Minescript.
+
 r"""eval v3.1 distributed via Minescript jar file
 
 Usage:
