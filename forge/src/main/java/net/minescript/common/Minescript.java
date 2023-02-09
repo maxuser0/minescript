@@ -125,6 +125,7 @@ public class Minescript {
       copyJarResourceToMinescriptDir("help.py", FileOverwritePolicy.OVERWRITTE);
       copyJarResourceToMinescriptDir("copy.py", FileOverwritePolicy.OVERWRITTE);
       copyJarResourceToMinescriptDir("paste.py", FileOverwritePolicy.OVERWRITTE);
+      copyJarResourceToMinescriptDir("eval.py", FileOverwritePolicy.OVERWRITTE);
     }
 
     worldListenerThread =
