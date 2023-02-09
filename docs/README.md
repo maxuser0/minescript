@@ -57,6 +57,37 @@ Prints documentation for the given script or command name.
 
 Since: v1.19.2
 
+#### eval
+*Usage:* `\eval PYTHON_CODE [LINE2 [LINE3 ...]]`
+
+Executes PYTHON_CODE (and optional subsequent lines LINE2, LINE3, etc) as
+either a Python expression (code that can appear on the right-hand side of an
+assignment, in which case the value is echoed to the chat screen) or Python
+statements (e.g. a `for` loop).
+
+Functions from [`minescript.py`](#minescript-module) are available automatically without
+qualification.
+
+*Examples:*
+
+- Print information about nearby entities to the chat screen:
+
+  ```
+  \eval "entities()"
+  ```
+
+- Print the names of nearby entities to the chat screen:
+
+  ```
+  \eval "for e in entities(): echo(e['name'])"
+  ```
+
+- Import `time` module, sleep 3 seconds, and take a screenshot:
+
+  ```
+  \eval "import time" "time.sleep(3)" "screenshot()"
+  ```
+
 #### copy
 *Usage:* `\copy  X1  Y1  Z1  X2  Y2  Z2  [LABEL] [no_limit]`
 
