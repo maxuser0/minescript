@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-# SPDX-FileCopyrightText: © 2022 Greg Christiana <maxuser@minescript.net>
+# SPDX-FileCopyrightText: © 2022-2023 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: MIT
 
 """Tool for renaming Java symbols between Forge and Fabric mappings.
@@ -28,8 +28,10 @@ forge_to_fabric_class_names = (
   ('net.minecraft.client.gui.screens.Screen', 'net.minecraft.client.gui.screen.Screen'),
   ('net.minecraft.client.player.LocalPlayer', 'net.minecraft.client.network.ClientPlayerEntity'),
   ('net.minecraft.core.BlockPos', 'net.minecraft.util.math.BlockPos'),
+  ('net.minecraft.nbt.CompoundTag', 'net.minecraft.nbt.NbtCompound'),
   ('net.minecraft.network.chat.Component', 'net.minecraft.text.Text'),
   ('net.minecraft.world.entity.Entity', 'net.minecraft.entity.Entity'),
+  ('net.minecraft.world.entity.LivingEntity', 'net.minecraft.entity.LivingEntity'),
   ('net.minecraft.world.item.ItemStack', 'net.minecraft.item.ItemStack'),
   ('net.minecraft.world.level.Level', 'net.minecraft.world.World'),
   ('net.minecraft.world.level.LevelAccessor', 'net.minecraft.world.WorldAccess'),
@@ -59,10 +61,12 @@ forge_to_fabric_member_names = (
   ('chatHud.addRecentChat', 'chatHud.addToMessageHistory'),
   ('chunkManager.getChunkNow', 'chunkManager.getWorldChunk'),
   ('chunkPos.getBlockAt', 'chunkPos.getBlockPos'),
+  ('difficulty.getSerializedName', 'difficulty.asString'),
   ('entity.getDeltaMovement', 'entity.getVelocity'),
   ('entity.getXRot', 'entity.getPitch'),
   ('entity.getYRot', 'entity.getYaw'),
   ('entity.pick', 'entity.raycast'),
+  ('entity.saveWithoutId', 'entity.writeNbt'),
   ('hitResult.getDirection', 'hitResult.getSide'),
   ('inventory.getContainerSize', 'inventory.size'),
   ('inventory.getItem', 'inventory.getStack'),
@@ -72,6 +76,7 @@ forge_to_fabric_member_names = (
   ('level.getChunkSource', 'level.getChunkManager'),
   ('minecraft.gameDirectory', 'minecraft.runDirectory'),
   ('minecraft.getCurrentServer', 'minecraft.getCurrentServerEntry'),
+  ('minecraft.getSingleplayerServer', 'minecraft.getServer'),
   ('minecraft.getMainRenderTarget', 'minecraft.getFramebuffer'),
   ('minecraft.gui.getChat', 'minecraft.inGameHud.getChatHud'),
   ('minecraft.level', 'minecraft.world'),
@@ -97,11 +102,19 @@ forge_to_fabric_member_names = (
   ('player.getYRot', 'player.getYaw'),
   ('player.setXRot', 'player.setPitch'),
   ('player.setYRot', 'player.setYaw'),
+  ('player.moveTo', 'player.refreshPositionAndAngles'),
   ('playerWorld.dimension', 'playerWorld.getDimension'),
   ('screen.onClose', 'screen.close'),
+  ('server.getWorldData', 'server.getSaveProperties'),
   ('serverData.ip', 'serverData.address'),
   ('world.entitiesForRendering', 'world.getEntities'),
   ('world.players', 'world.getPlayers'),
+  ('world.getLevelData', 'world.getLevelProperties'),
+  ('levelProperties.getGameTime', 'levelProperties.getTime'),
+  ('levelProperties.getDayTime', 'levelProperties.getTimeOfDay'),
+  ('levelProperties.getXSpawn', 'levelProperties.getSpawnX'),
+  ('levelProperties.getYSpawn', 'levelProperties.getSpawnY'),
+  ('levelProperties.getZSpawn', 'levelProperties.getSpawnZ'),
 )
 
 def Usage():

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: © 2022 Greg Christiana <maxuser@minescript.net>
+# SPDX-FileCopyrightText: © 2022-2023 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: GPL-3.0-only
 
 # WARNING: This file is generated from the Minescript jar file. This file will
@@ -6,7 +6,7 @@
 # make edits to this file, make sure to save a backup copy when upgrading to a
 # new version of Minescript.
 
-"""minescript_runtime v3.0 distributed via Minescript jar file
+"""minescript_runtime v3.1 distributed via Minescript jar file
 
 Usage: import minescript_runtime  # from Python script
 
@@ -43,6 +43,7 @@ from typing import Any, List, Set, Dict, Tuple, Optional, Callable
 StringConsumer = Callable[[str], None]
 # Dict values: (function_name: str, on_value_handler: StringConsumer)
 _script_function_calls: Dict[int, Tuple[str, StringConsumer]] = dict()
+_script_function_calls_lock = threading.Lock()
 
 
 def CallAsyncScriptFunction(func_name: str, args: Tuple[Any, ...],
@@ -54,7 +55,8 @@ def CallAsyncScriptFunction(func_name: str, args: Tuple[Any, ...],
     retval_handler: callback invoked for each return value
   """
   func_call_id = time.time_ns()
-  _script_function_calls[func_call_id] = (func_name, retval_handler)
+  with _script_function_calls_lock:
+    _script_function_calls[func_call_id] = (func_name, retval_handler)
   print(f"?{func_call_id} {func_name} {json.dumps(args)}")
 
 
@@ -102,18 +104,19 @@ def _ScriptServiceLoop():
       if "retval" in reply:
         retval = reply["retval"]
         if retval == "exit!":
-          _thread.interrupt_main()
           break  # Break out of the service loop so that the process can exit.
-
-    if func_call_id not in _script_function_calls:
-      print(
-          f"minescript_runtime.py: fcid={func_call_id} not found in _script_function_calls",
-          file=sys.stderr)
       continue
-    func_name, retval_handler = _script_function_calls[func_call_id]
 
-    if "conn" in reply and reply["conn"] == "close":
-      del _script_function_calls[func_call_id]
+    with _script_function_calls_lock:
+      if func_call_id not in _script_function_calls:
+        print(
+            f"minescript_runtime.py: fcid={func_call_id} not found in _script_function_calls",
+            file=sys.stderr)
+        continue
+      func_name, retval_handler = _script_function_calls[func_call_id]
+
+      if "conn" in reply and reply["conn"] == "close":
+        del _script_function_calls[func_call_id]
 
     if "retval" in reply:
       retval = reply["retval"]

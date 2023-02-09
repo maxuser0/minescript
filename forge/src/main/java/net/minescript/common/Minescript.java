@@ -1,8 +1,9 @@
-// SPDX-FileCopyrightText: © 2022 Greg Christiana <maxuser@minescript.net>
+// SPDX-FileCopyrightText: © 2022-2023 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
 package net.minescript.common;
 
+import static net.minescript.common.CommandSyntax.Token;
 import static net.minescript.common.CommandSyntax.parseCommand;
 import static net.minescript.common.CommandSyntax.quoteCommand;
 import static net.minescript.common.CommandSyntax.quoteString;
@@ -27,6 +28,7 @@ import java.nio.file.Paths;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
@@ -39,6 +41,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -47,6 +50,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
@@ -54,8 +58,10 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
@@ -78,6 +84,8 @@ public class Minescript {
     DO_NOT_OVERWRITE,
     OVERWRITTE
   }
+
+  private static Thread worldListenerThread;
 
   public static void init() {
     LOGGER.info("Starting Minescript on OS: {}", System.getProperty("os.name"));
@@ -119,7 +127,40 @@ public class Minescript {
       copyJarResourceToMinescriptDir("paste.py", FileOverwritePolicy.OVERWRITTE);
     }
 
+    worldListenerThread =
+        new Thread(Minescript::runWorldListenerThread, "minescript-world-listener");
+    worldListenerThread.start();
+
     loadConfig();
+  }
+
+  private static AtomicBoolean autorunHandled = new AtomicBoolean(false);
+
+  private static void runWorldListenerThread() {
+    final int millisToSleep = 1000;
+    var minecraft = Minecraft.getInstance();
+    boolean noWorld = (minecraft.level == null);
+    while (true) {
+      boolean noWorldNow = (minecraft.level == null);
+      if (noWorld != noWorldNow) {
+        if (noWorldNow) {
+          autorunHandled.set(false);
+          LOGGER.info("Exited world");
+          for (var job : jobs.getMap().values()) {
+            job.kill();
+          }
+          systemCommandQueue.clear();
+        } else {
+          LOGGER.info("Entered world");
+        }
+        noWorld = noWorldNow;
+      }
+      try {
+        Thread.sleep(millisToSleep);
+      } catch (InterruptedException e) {
+        logException(e);
+      }
+    }
   }
 
   private static Gson GSON = new Gson();
@@ -189,8 +230,12 @@ public class Minescript {
 
   private static String pythonLocation = null;
 
-  private static final Pattern CONFIG_LINE_RE =
-      Pattern.compile("^([a-zA-Z0-9_]+) *= *\"?([^\"]*)\"?");
+  private static final Pattern CONFIG_LINE_RE = Pattern.compile("([^=]+)=(.*)");
+  private static final Pattern DOUBLE_QUOTED_STRING_RE = Pattern.compile("\"(.*)\"");
+  private static final Pattern CONFIG_AUTORUN_RE = Pattern.compile("autorun\\[(.*)\\]");
+
+  // Map from world name (or "*" for all) to a list of Minescript commands.
+  private static Map<String, List<String>> autorunCommands = new ConcurrentHashMap<>();
 
   private static final File configFile =
       new File(Paths.get(MINESCRIPT_DIR, "config.txt").toString());
@@ -212,18 +257,48 @@ public class Minescript {
       return;
     }
     lastConfigLoadTime = System.currentTimeMillis();
+    autorunCommands.clear();
 
     try (var reader = new BufferedReader(new FileReader(configFile.getPath()))) {
       String line;
+      String continuedLine = null;
       while ((line = reader.readLine()) != null) {
+        line = line.stripLeading();
+
+        // Concatenate across lines ending with backslash. Interpret line ending with double
+        // backslash as escaped and treat it as a literal backslash.
+        if (line.endsWith("\\\\")) {
+          line = line.substring(0, line.length() - 1);
+        } else if (line.endsWith("\\")) {
+          line = line.substring(0, line.length() - 1);
+          if (continuedLine == null) {
+            continuedLine = line;
+          } else {
+            continuedLine += " " + line;
+          }
+          continue;
+        }
+
+        if (continuedLine != null) {
+          line = continuedLine + " " + line;
+          continuedLine = null;
+        }
+
         line = line.strip();
         if (line.isEmpty() || line.startsWith("#")) {
           continue;
         }
         var match = CONFIG_LINE_RE.matcher(line);
-        if (match.find()) {
+        if (match.matches()) {
           String name = match.group(1);
           String value = match.group(2);
+
+          // Strip double quotes surrounding value if present.
+          match = DOUBLE_QUOTED_STRING_RE.matcher(value);
+          if (match.matches()) {
+            value = match.group(1);
+          }
+
           switch (name) {
             case "python":
               if (System.getProperty("os.name").startsWith("Windows")) {
@@ -283,8 +358,29 @@ public class Minescript {
               LOGGER.info("Setting minescript_use_blockpack_for_undo to {}", useBlockPackForUndo);
               break;
             default:
-              LOGGER.warn(
-                  "Unrecognized config var: {} = \"{}\" (\"{}\")", name, value, pythonLocation);
+              {
+                match = CONFIG_AUTORUN_RE.matcher(name);
+                value = value.strip();
+                // Interpret commands that lack a slash or backslash prefix as Minescript commands
+                // by prepending a backslash.
+                String command =
+                    (value.startsWith("\\") || value.startsWith("/")) ? value : ("\\" + value);
+                if (match.matches()) {
+                  String worldName = match.group(1);
+                  synchronized (autorunCommands) {
+                    var commandList =
+                        autorunCommands.computeIfAbsent(worldName, k -> new ArrayList<String>());
+                    commandList.add(command);
+                  }
+                  LOGGER.info("Added autorun command `{}` for `{}`", command, worldName);
+                } else {
+                  LOGGER.warn(
+                      "Unrecognized config var: {} = \"{}\" (\"{}\")",
+                      name,
+                      command,
+                      pythonLocation);
+                }
+              }
           }
         } else {
           LOGGER.warn("config.txt: unable parse config line: {}", line);
@@ -1141,15 +1237,22 @@ public class Minescript {
         jobControl.enqueueStderr(e.getMessage());
         return -3;
       }
+
+      LOGGER.info("Exited script event loop for job `{}`", jobControl.toString());
+
       if (process == null) {
         return -4;
       }
       if (jobControl.state() == JobState.KILLED) {
+        LOGGER.info("Killing script process for job `{}`", jobControl.toString());
         process.destroy();
         return -5;
       }
       try {
-        return process.waitFor();
+        LOGGER.info("Waiting for script process to complete for job `{}`", jobControl.toString());
+        int result = process.waitFor();
+        LOGGER.info("Script process exited with {} for job `{}`", result, jobControl.toString());
+        return result;
       } catch (InterruptedException e) {
         jobControl.logJobException(e);
         return -6;
@@ -1217,8 +1320,9 @@ public class Minescript {
 
     private final Deque<UndoableAction> undoStack = new ArrayDeque<>();
 
-    public void createSubprocess(String[] command) {
-      var job = new Job(allocateJobId(), command, new SubprocessTask(), this::removeJob);
+    public void createSubprocess(String[] command, List<Token> nextCommand) {
+      var job =
+          new Job(allocateJobId(), command, new SubprocessTask(), i -> finishJob(i, nextCommand));
       var undo = UndoableAction.create(job.jobId(), command);
       jobUndoMap.put(job.jobId(), undo);
       undoStack.addFirst(undo);
@@ -1251,7 +1355,11 @@ public class Minescript {
       }
 
       var undoJob =
-          new Job(allocateJobId(), undo.derivativeCommand(), new UndoTask(undo), this::removeJob);
+          new Job(
+              allocateJobId(),
+              undo.derivativeCommand(),
+              new UndoTask(undo),
+              i -> finishJob(i, Collections.emptyList()));
       jobMap.put(undoJob.jobId(), undoJob);
       undoJob.start();
     }
@@ -1263,12 +1371,13 @@ public class Minescript {
       return nextJobId++;
     }
 
-    private void removeJob(int jobId) {
+    private void finishJob(int jobId, List<Token> nextCommand) {
       var undo = jobUndoMap.remove(jobId);
       if (undo != null) {
         undo.onOriginalJobDone();
       }
       jobMap.remove(jobId);
+      runParsedMinescriptCommand(nextCommand);
     }
 
     public Map<Integer, Job> getMap() {
@@ -1663,6 +1772,8 @@ public class Minescript {
     }
   }
 
+  public static final String[] EMPTY_STRING_ARRAY = {};
+
   private static void runMinescriptCommand(String commandLine) {
     try {
       if (!checkMinescriptDir()) {
@@ -1672,13 +1783,41 @@ public class Minescript {
       // Check if config needs to be reloaded.
       loadConfig();
 
-      String[] command = parseCommand(commandLine);
-      if (command.length == 0) {
+      List<Token> tokens = parseCommand(commandLine);
+
+      if (tokens.isEmpty()) {
         systemCommandQueue.add(
             "|{\"text\":\"Technoblade never dies.\",\"color\":\"dark_red\",\"bold\":true}");
         return;
       }
 
+      runParsedMinescriptCommand(tokens);
+
+    } catch (RuntimeException e) {
+      logException(e);
+    }
+  }
+
+  private static void runParsedMinescriptCommand(List<Token> tokens) {
+    if (tokens.isEmpty()) {
+      return;
+    }
+
+    try {
+      // Split the token list on the first semicolon token, if there is one.
+      int semicolonPos = tokens.indexOf(Token.semicolon());
+      List<Token> nextCommand = Collections.emptyList();
+      if (semicolonPos != -1) {
+        nextCommand = tokens.subList(semicolonPos + 1, tokens.size());
+        tokens = tokens.subList(0, semicolonPos);
+      }
+      if (tokens.isEmpty()) {
+        runParsedMinescriptCommand(nextCommand);
+        return;
+      }
+
+      List<String> tokenStrings = tokens.stream().map(Token::toString).collect(Collectors.toList());
+      String[] command = tokenStrings.toArray(EMPTY_STRING_ARRAY);
       command = substituteMinecraftVars(command);
 
       switch (command[0]) {
@@ -1688,6 +1827,7 @@ public class Minescript {
           } else {
             logUserError("Expected no params, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "suspend":
@@ -1701,6 +1841,7 @@ public class Minescript {
                 "Expected no params or 1 param of type integer, instead got `{}`",
                 getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "resume":
@@ -1713,6 +1854,7 @@ public class Minescript {
                 "Expected no params or 1 param of type integer, instead got `{}`",
                 getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "killjob":
@@ -1722,6 +1864,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "undo":
@@ -1732,6 +1875,7 @@ public class Minescript {
                 "Expected no params or 1 param of type integer, instead got `{}`",
                 getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "copy":
@@ -1774,6 +1918,7 @@ public class Minescript {
                   label = Optional.of(command[i]);
                 } else {
                   badArgsMessage.run();
+                  runParsedMinescriptCommand(nextCommand);
                   return;
                 }
               }
@@ -1782,6 +1927,7 @@ public class Minescript {
             } else {
               badArgsMessage.run();
             }
+            runParsedMinescriptCommand(nextCommand);
             return;
           }
 
@@ -1798,6 +1944,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "minescript_ticks_per_cycle":
@@ -1812,6 +1959,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "minescript_incremental_command_suggestions":
@@ -1823,6 +1971,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "minescript_script_function_debug_outptut":
@@ -1834,6 +1983,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "minescript_log_chunk_load_events":
@@ -1845,6 +1995,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "minescript_use_blockpack_for_copy":
@@ -1856,6 +2007,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "minescript_use_blockpack_for_undo":
@@ -1867,6 +2019,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "enable_minescript_on_chat_received_event":
@@ -1884,6 +2037,7 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
           return;
 
         case "NullPointerException":
@@ -1905,10 +2059,11 @@ public class Minescript {
         if (!command[0].equals("ls")) {
           logUserError("No Minescript command named \"{}\"", command[0]);
         }
+        runParsedMinescriptCommand(nextCommand);
         return;
       }
 
-      jobs.createSubprocess(command);
+      jobs.createSubprocess(command, nextCommand);
 
     } catch (RuntimeException e) {
       logException(e);
@@ -2511,10 +2666,7 @@ public class Minescript {
           String.format(
               "\"item\": \"%s\", \"count\": %d", itemStack.getItem(), itemStack.getCount()));
       if (nbt != null) {
-        out.append(
-            String.format(
-                ", \"nbt\": \"%s\"",
-                nbt.toString().replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")));
+        out.append(String.format(", \"nbt\": %s", GSON.toJson(nbt.toString())));
       }
       if (slot.isPresent()) {
         out.append(String.format(", \"slot\": %d", slot.getAsInt()));
@@ -2527,7 +2679,10 @@ public class Minescript {
     }
   }
 
-  private static String entitiesToJsonString(Iterable<? extends Entity> entities) {
+  private static String entitiesToJsonString(
+      Iterable<? extends Entity> entities, boolean includeNbt) {
+    var minecraft = Minecraft.getInstance();
+    var player = minecraft.player;
     var result = new StringBuilder("[");
     for (var entity : entities) {
       if (result.length() > 1) {
@@ -2536,12 +2691,24 @@ public class Minescript {
       result.append("{");
       result.append(String.format("\"name\":%s,", toJsonString(entity.getName().getString())));
       result.append(String.format("\"type\":%s,", toJsonString(entity.getType().toString())));
+      if (entity instanceof LivingEntity) {
+        var livingEntity = (LivingEntity) entity;
+        result.append(String.format("\"health\":%s,", livingEntity.getHealth()));
+      }
+      if (entity == player) {
+        result.append("\"local\":true,");
+      }
       result.append(
-          String.format("\"position\":[%f,%f,%f],", entity.getX(), entity.getY(), entity.getZ()));
-      result.append(String.format("\"yaw\":%f,", entity.getYRot()));
-      result.append(String.format("\"pitch\":%f,", entity.getXRot()));
+          String.format("\"position\":[%s,%s,%s],", entity.getX(), entity.getY(), entity.getZ()));
+      result.append(String.format("\"yaw\":%s,", entity.getYRot()));
+      result.append(String.format("\"pitch\":%s,", entity.getXRot()));
       var v = entity.getDeltaMovement();
-      result.append(String.format("\"velocity\":[%f,%f,%f]", v.x, v.y, v.z));
+      result.append(String.format("\"velocity\":[%s,%s,%s]", v.x, v.y, v.z));
+      if (includeNbt) {
+        var nbt = new CompoundTag();
+        result.append(
+            String.format(",\"nbt\":%s", toJsonString(entity.saveWithoutId(nbt).toString())));
+      }
       result.append("}");
     }
     result.append("]");
@@ -2656,12 +2823,34 @@ public class Minescript {
     return Optional.of(intList);
   }
 
+  private static Optional<List<String>> getStringList(Object object) {
+    if (!(object instanceof List)) {
+      return Optional.empty();
+    }
+    List<?> list = (List<?>) object;
+    List<String> stringList = new ArrayList<>();
+    for (var element : list) {
+      stringList.add(element.toString());
+    }
+    return Optional.of(stringList);
+  }
+
   private static double computeDistance(
       double x1, double y1, double z1, double x2, double y2, double z2) {
     double dx = x1 - x2;
     double dy = y1 - y2;
     double dz = z1 - z2;
     return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+
+  public static String getWorldName() {
+    var minecraft = Minecraft.getInstance();
+    var serverData = minecraft.getCurrentServer();
+    var serverName = serverData == null ? null : serverData.name;
+    var server = minecraft.getSingleplayerServer();
+    var saveProperties = server == null ? null : server.getWorldData();
+    String saveName = saveProperties == null ? null : saveProperties.getLevelName();
+    return serverName == null ? saveName : serverName;
   }
 
   /** Returns a JSON response string if a script function is called. */
@@ -2692,10 +2881,43 @@ public class Minescript {
       case "player_position":
         if (args.isEmpty()) {
           return Optional.of(
-              String.format("[%f, %f, %f]", player.getX(), player.getY(), player.getZ()));
+              String.format("[%s, %s, %s]", player.getX(), player.getY(), player.getZ()));
         } else {
           logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
           return Optional.of("null");
+        }
+
+      case "player_set_position":
+        {
+          if (args.size() < 3
+              || !(args.get(0) instanceof Number)
+              || !(args.get(1) instanceof Number)
+              || !(args.get(2) instanceof Number)) {
+            logUserError(
+                "Error: `{}` expected 3 to 5 number params but got: {}", functionName, argsString);
+            return Optional.of("false");
+          }
+          double x = ((Number) args.get(0)).doubleValue();
+          double y = ((Number) args.get(1)).doubleValue();
+          double z = ((Number) args.get(2)).doubleValue();
+          float yaw = player.getYRot();
+          float pitch = player.getXRot();
+          if (args.size() >= 4 && args.get(3) != null) {
+            if (!(args.get(3) instanceof Number)) {
+              paramTypeErrorLogger.accept("yaw", "float");
+              return Optional.of("false");
+            }
+            yaw = ((Number) args.get(3)).floatValue();
+          }
+          if (args.size() >= 5 && args.get(4) != null) {
+            if (!(args.get(4) instanceof Number)) {
+              paramTypeErrorLogger.accept("pitch", "float");
+              return Optional.of("false");
+            }
+            pitch = ((Number) args.get(4)).floatValue();
+          }
+          player.moveTo(x, y, z, yaw, pitch);
+          return Optional.of("true");
         }
 
       case "player_name":
@@ -2988,7 +3210,7 @@ public class Minescript {
 
       case "player_orientation":
         if (args.isEmpty()) {
-          return Optional.of(String.format("[%f, %f]", player.getYRot(), player.getXRot()));
+          return Optional.of(String.format("[%s, %s]", player.getYRot(), player.getXRot()));
         } else {
           logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
           return Optional.of("null");
@@ -3036,7 +3258,7 @@ public class Minescript {
             Optional<String> block = blockStateToString(level.getBlockState(blockPos));
             return Optional.of(
                 String.format(
-                    "[[%d,%d,%d],%f,\"%s\",%s]",
+                    "[[%d,%d,%d],%s,\"%s\",%s]",
                     blockPos.getX(),
                     blockPos.getY(),
                     blockPos.getZ(),
@@ -3048,11 +3270,60 @@ public class Minescript {
           }
         }
 
+      case "player_health":
+        return Optional.of(String.format("%s", player.getHealth()));
+
       case "players":
-        return Optional.of(entitiesToJsonString(world.players()));
+        {
+          if (args.size() != 1) {
+            numParamsErrorLogger.accept(1);
+            return Optional.of("null");
+          }
+          if (!(args.get(0) instanceof Boolean)) {
+            paramTypeErrorLogger.accept("nbt", "bool");
+            return Optional.of("null");
+          }
+          boolean nbt = (Boolean) args.get(0);
+          return Optional.of(entitiesToJsonString(world.players(), nbt));
+        }
 
       case "entities":
-        return Optional.of(entitiesToJsonString(world.entitiesForRendering()));
+        {
+          if (args.size() != 1) {
+            numParamsErrorLogger.accept(1);
+            return Optional.of("null");
+          }
+          if (!(args.get(0) instanceof Boolean)) {
+            paramTypeErrorLogger.accept("nbt", "bool");
+            return Optional.of("null");
+          }
+          boolean nbt = (Boolean) args.get(0);
+          return Optional.of(entitiesToJsonString(world.entitiesForRendering(), nbt));
+        }
+
+      case "world_properties":
+        {
+          var levelProperties = world.getLevelData();
+          var difficulty = levelProperties.getDifficulty();
+          var serverData = minecraft.getCurrentServer();
+          var serverAddress = serverData == null ? "localhost" : serverData.ip;
+          return Optional.of(
+              String.format(
+                  "{\"game_ticks\":%s,\"day_ticks\":%s,\"raining\":%s,\"thundering\":%s,"
+                      + "\"spawn\":[%s,%s,%s],\"hardcore\":%s,\"difficulty\":%s,"
+                      + "\"name\": %s,\"address\":%s}",
+                  levelProperties.getGameTime(),
+                  levelProperties.getDayTime(),
+                  levelProperties.isRaining(),
+                  levelProperties.isThundering(),
+                  levelProperties.getXSpawn(),
+                  levelProperties.getYSpawn(),
+                  levelProperties.getZSpawn(),
+                  levelProperties.isHardcore(),
+                  toJsonString(difficulty.getKey()),
+                  toJsonString(getWorldName()),
+                  toJsonString(serverAddress)));
+        }
 
       case "log":
         if (args.size() == 1 && args.get(0) instanceof String) {
@@ -3260,8 +3531,7 @@ public class Minescript {
             return Optional.of("null");
           }
 
-          var gson = new Gson();
-          return Optional.of(gson.toJson(blockpack.comments()));
+          return Optional.of(GSON.toJson(blockpack.comments()));
         }
 
       case "blockpack_write_world":
@@ -3403,12 +3673,13 @@ public class Minescript {
         //    () -> int
         return Optional.of(Integer.toString(job.blockpackers.retain(new BlockPacker())));
 
-      case "blockpacker_setblock":
+      case "blockpacker_add_blocks":
         {
           // Python function signature:
-          //    (blockpacker_id: int, pos: BlockPos, block_type: str) -> bool
-          if (args.size() != 3) {
-            logUserError("Error: `{}` expected 3 params but got: {}", functionName, argsString);
+          //    (blockpacker_id: int, base_pos: BlockPos,
+          //     base64_setblocks: str, base64_fills: str, blocks: List[str]) -> bool
+          if (args.size() != 5) {
+            logUserError("Error: `{}` expected 5 params but got: {}", functionName, argsString);
             return Optional.of("false");
           }
 
@@ -3427,7 +3698,15 @@ public class Minescript {
                 argsString);
             return Optional.of("false");
           }
-          var pos = list.get();
+          var basePos = list.get();
+
+          String setblocksBase64 = args.get(2).toString();
+          String fillsBase64 = args.get(3).toString();
+          Optional<List<String>> blocks = getStringList(args.get(4));
+          if (blocks.isEmpty()) {
+            paramTypeErrorLogger.accept("blocks", "list of string");
+            return Optional.of("false");
+          }
 
           var blockpacker = job.blockpackers.getById(value.getAsInt());
           if (blockpacker == null) {
@@ -3439,64 +3718,13 @@ public class Minescript {
             return Optional.of("false");
           }
 
-          blockpacker.setblock(pos.get(0), pos.get(1), pos.get(2), args.get(2).toString());
-          return Optional.of("true");
-        }
-
-      case "blockpacker_fill":
-        {
-          // Python function signature:
-          //    (blockpacker_id: int, pos1: BlockPos, pos2: BlockPos, block_type: str) -> bool
-          if (args.size() != 4) {
-            logUserError("Error: `{}` expected 4 params but got: {}", functionName, argsString);
-            return Optional.of("false");
-          }
-
-          OptionalInt value = getStrictIntValue(args.get(0));
-          if (!value.isPresent()) {
-            logUserError(
-                "Error: `{}` expected first param to be int but got: {}", functionName, argsString);
-            return Optional.of("false");
-          }
-
-          Optional<List<Integer>> list1 = getStrictIntList(args.get(1));
-          if (list1.isEmpty() || list1.get().size() != 3) {
-            logUserError(
-                "Error: `{}` expected second param to be list of 3 ints but got: {}",
-                functionName,
-                argsString);
-            return Optional.of("false");
-          }
-          var pos1 = list1.get();
-
-          Optional<List<Integer>> list2 = getStrictIntList(args.get(2));
-          if (list2.isEmpty() || list2.get().size() != 3) {
-            logUserError(
-                "Error: `{}` expected third param to be list of 3 ints but got: {}",
-                functionName,
-                argsString);
-            return Optional.of("false");
-          }
-          var pos2 = list2.get();
-
-          var blockpacker = job.blockpackers.getById(value.getAsInt());
-          if (blockpacker == null) {
-            logUserError(
-                "Error: `{}` Failed to find BlockPacker[{}]: {}",
-                functionName,
-                value.getAsInt(),
-                argsString);
-            return Optional.of("false");
-          }
-
-          blockpacker.fill(
-              pos1.get(0),
-              pos1.get(1),
-              pos1.get(2),
-              pos2.get(0),
-              pos2.get(1),
-              pos2.get(2),
-              args.get(3).toString());
+          blockpacker.addBlocks(
+              basePos.get(0),
+              basePos.get(1),
+              basePos.get(2),
+              setblocksBase64,
+              fillsBase64,
+              blocks.get());
           return Optional.of("true");
         }
 
@@ -3651,15 +3879,53 @@ public class Minescript {
     }
   }
 
+  public static void handleAutorun(String worldName) {
+    LOGGER.info("Handling autorun for world `{}`", worldName);
+    var commands = new ArrayList<String>();
+
+    var wildcardCommands = autorunCommands.get("*");
+    if (wildcardCommands != null) {
+      LOGGER.info(
+          "Matched {} command(s) with autorun[*] for world `{}`",
+          wildcardCommands.size(),
+          worldName);
+      commands.addAll(wildcardCommands);
+    }
+
+    var worldCommands = autorunCommands.get(worldName);
+    if (worldCommands != null) {
+      LOGGER.info("Matched {} command(s) with autorun[{}]", wildcardCommands.size(), worldName);
+      commands.addAll(worldCommands);
+    }
+
+    for (var command : commands) {
+      LOGGER.info("Running autorun command for world `{}`: {}", worldName, command);
+      processMessage(command);
+    }
+  }
+
   public static void onPlayerTick() {
     if (++playerTickEventCounter % minescriptTicksPerCycle == 0) {
       var minecraft = Minecraft.getInstance();
       var player = minecraft.player;
+
+      String worldName = getWorldName();
+      if (!autorunHandled.getAndSet(true) && worldName != null) {
+        systemCommandQueue.clear();
+        loadConfig();
+        handleAutorun(worldName);
+      }
+
       if (player != null && (!systemCommandQueue.isEmpty() || !jobs.getMap().isEmpty())) {
         Level level = player.getCommandSenderWorld();
-        for (int commandCount = 0; commandCount < minescriptCommandsPerCycle; ++commandCount) {
+        boolean hasCommand;
+        int iterations = 0;
+        do {
+          hasCommand = false;
+          ++iterations;
           String command = systemCommandQueue.poll();
           if (command != null) {
+            hasCommand = true;
             processMessage(command);
           }
           for (var job : jobs.getMap().values()) {
@@ -3667,6 +3933,7 @@ public class Minescript {
               try {
                 String jobCommand = job.commandQueue().poll();
                 if (jobCommand != null) {
+                  hasCommand = true;
                   jobs.getUndoForJob(job).ifPresent(u -> u.processCommandToUndo(level, jobCommand));
                   if (jobCommand.startsWith("?") && jobCommand.length() > 1) {
                     String[] functionCall = jobCommand.substring(1).split("\\s+", 3);
@@ -3700,7 +3967,7 @@ public class Minescript {
               }
             }
           }
-        }
+        } while (hasCommand && iterations < minescriptCommandsPerCycle);
       }
     }
   }
