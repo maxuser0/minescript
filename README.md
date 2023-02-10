@@ -64,4 +64,4 @@ for building or running the mod jar may be covered by a different license.
 
 ## Credits
 
-Special thanks to **Spiderfffun** for extensive testing of v3.0 on Windows.
+Special thanks to **Spiderfffun** and **Coolbou0427** for extensive testing on Windows.
