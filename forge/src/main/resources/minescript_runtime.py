@@ -44,6 +44,7 @@ StringConsumer = Callable[[str], None]
 # Dict values: (function_name: str, on_value_handler: StringConsumer)
 _script_function_calls: Dict[int, Tuple[str, StringConsumer]] = dict()
 _script_function_calls_lock = threading.Lock()
+_next_fcallid = 1000
 
 
 def CallAsyncScriptFunction(func_name: str, args: Tuple[Any, ...],
@@ -54,8 +55,10 @@ def CallAsyncScriptFunction(func_name: str, args: Tuple[Any, ...],
     func_name: name of Minescript function to call
     retval_handler: callback invoked for each return value
   """
-  func_call_id = time.time_ns()
+  global _next_fcallid
   with _script_function_calls_lock:
+    _next_fcallid += 1
+    func_call_id = _next_fcallid
     _script_function_calls[func_call_id] = (func_name, retval_handler)
   print(f"?{func_call_id} {func_name} {json.dumps(args)}")
 
