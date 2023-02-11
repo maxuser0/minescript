@@ -107,32 +107,37 @@ all_tests.append(getblock_test)
 
 
 def copy_paste_test():
-  minescript.execute(r"\copy ~ ~-1 ~ ~5 ~5 ~5 test")
-  ExpectMessage(
-      r"Copied volume .* to %s \(.* bytes\)\." %
-      os.path.join("minescript", "blockpacks", "test.zip"))
+  filename = os.path.join("minescript", "blockpacks", "test.zip")
+  try:
+    minescript.execute(r"\copy ~ ~-1 ~ ~5 ~5 ~5 test")
+    time.sleep(0.5) # give copy command some time to complete
+    ExpectTrue(os.path.isfile(filename))
+    ExpectMessage(
+        r"Copied volume .* to minescript.blockpacks.test.zip \(.* bytes\)\.")
 
-  minescript.execute(r"\paste ~10 ~-1 ~ this_label_does_not_exist")
-  ExpectMessage(r"Error: blockpack file for `this_label_does_not_exist` not found.*")
+    minescript.execute(r"\paste ~10 ~-1 ~ this_label_does_not_exist")
+    ExpectMessage(r"Error: blockpack file for `this_label_does_not_exist` not found.*")
 
-  minescript.execute(r"\copy 0 0 0 1000 100 1000")
-  ExpectMessage("`blockpack_read_world` exceeded soft limit of 1600 chunks")
+    minescript.execute(r"\copy 0 0 0 1000 100 1000")
+    ExpectMessage("`blockpack_read_world` exceeded soft limit of 1600 chunks")
 
-  minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 no_limit")
-  ExpectMessage("Not all chunks are loaded within the requested `copy` volume")
+    minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 no_limit")
+    ExpectMessage("Not all chunks are loaded within the requested `copy` volume")
 
-  minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 test no_limit")
-  ExpectMessage("Not all chunks are loaded within the requested `copy` volume")
+    minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 test no_limit")
+    ExpectMessage("Not all chunks are loaded within the requested `copy` volume")
 
-  minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 test no_limit test")
-  ExpectMessage(
-      r"Error: copy command requires 6 params of type integer \(plus optional params.*")
+    minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 test no_limit test")
+    ExpectMessage(
+        r"Error: copy command requires 6 params of type integer \(plus optional params.*")
 
-  minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 no_limit no_limit")
-  ExpectMessage("Not all chunks are loaded within the requested `copy` volume")
+    minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 no_limit no_limit")
+    ExpectMessage("Not all chunks are loaded within the requested `copy` volume")
 
-  minescript.execute(r"\copy ~10000 ~-1 ~ ~10005 ~5 ~5")
-  ExpectMessage("Not all chunks are loaded within the requested `copy` volume")
+    minescript.execute(r"\copy ~10000 ~-1 ~ ~10005 ~5 ~5")
+    ExpectMessage("Not all chunks are loaded within the requested `copy` volume")
+  finally:
+    os.remove(filename)
 
 all_tests.append(copy_paste_test)
 

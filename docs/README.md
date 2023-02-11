@@ -4,7 +4,7 @@ Table of contents:
 
 - [In-game commands](#in-game-commands)
     - [Command basics](#command-basics)
-    - [General commands](#general-commands)
+    - [Built-in commands](#built-in-commands)
     - [Advanced commands](#advanced-commands)
 - [Configuration](#configuration)
 - [Python API](#python-api)
@@ -42,7 +42,7 @@ coordinates.)
 Optional command parameters below are shown in square brackets like this:
 [EXAMPLE]. (But leave out the brackets when entering actual commands.)
 
-### General commands
+### Built-in commands
 
 #### ls
 *Usage:* `\ls`

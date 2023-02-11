@@ -23,6 +23,8 @@
     sequence (each command must finish before the next command begins). This
     applies to both `autorun` commands in `config.txt` and the in-game chat.
 - Script jobs are now automatically killed when leaving a world.
+- Fix bug with missing `fcid` (function call ID) on Windows ([9183285](https://github.com/maxuser0/minescript/commit/91832859731f100b562cf922e5ab3a5e1c476159))
+- New built-in script command `eval`; see [`eval.py`](https://github.com/maxuser0/minescript/blob/main/fabric/src/main/resources/eval.py)
 - New script function `world_properties()`; see [documentation](https://github.com/maxuser0/minescript/blob/22ba0feb5056fa2e4b606663f413716f316ea853/docs/README.md#world_properties)
 - NBT output for `players(nbt=True)` and `entities(nbt=True)`; see
   [players](https://github.com/maxuser0/minescript/blob/22ba0feb5056fa2e4b606663f413716f316ea853/docs/README.md#players)
@@ -34,6 +36,15 @@
 
 ### Detailed changes
 
+- Add Coolbou0427 to credits for testing on Windows ([957d5c2](https://github.com/maxuser0/minescript/commit/957d5c25159502560fd52ed7350157687173def3))
+- Fix copy_paste_test in minescript_test on Windows ([0261a14](https://github.com/maxuser0/minescript/commit/0261a14c4b3805e14db60c9183b56d62a9d19e8d))
+- Fix bug with missing func_call_id on Windows ([9183285](https://github.com/maxuser0/minescript/commit/91832859731f100b562cf922e5ab3a5e1c476159))
+- Update changelog with new built-in script eval.py ([cfc3a8e](https://github.com/maxuser0/minescript/commit/cfc3a8e967d38a590f1c209ff5367203e0ccfa3a))
+- Rename "General commands" to "Built-in commands" ([1e3f36f](https://github.com/maxuser0/minescript/commit/1e3f36fddfd405e550fc41d23c2358a3a4b086b2))
+- Add warning to eval.py about being overwritten ([fb91cce](https://github.com/maxuser0/minescript/commit/fb91cce08b3c3b286aa34923e1cd3975d92dfced))
+- Add eval.py to minescript jar as a built-in script ([5038381](https://github.com/maxuser0/minescript/commit/5038381340db4b28b1c1a562df0a783a431eb082))
+- Add Configuration section to docs ([9484164](https://github.com/maxuser0/minescript/commit/94841641f55ee6cb2d215f2981fedde0a75a4604))
+- Update CHANGELOG.md for v3.1 ([7314e5f](https://github.com/maxuser0/minescript/commit/7314e5f3362f4f947a61d14287304053e7cae7f1))
 - Fix typos in minescript.py, update docs/README.md ([22ba0fe](https://github.com/maxuser0/minescript/commit/22ba0feb5056fa2e4b606663f413716f316ea853))
 - Support multi-line config vars in config.txt ([5f2aa53](https://github.com/maxuser0/minescript/commit/5f2aa53e4b0a663c5cd26e3daafd6625c8e7c51b))
 - Support compound commands delimited by semicolons ([27f3480](https://github.com/maxuser0/minescript/commit/27f3480ad4cf2d3034e191be56bb91e12370da33))
