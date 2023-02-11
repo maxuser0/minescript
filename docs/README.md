@@ -210,6 +210,7 @@ Lines of text in `config.txt` can take the following forms:
 - Blank lines have no effect on Minescript behavior.
 
 Config variable names:
+
 - `python` - file location of the Python interpreter (default for Windows is
   `"%userprofile%\AppData\Local\Microsoft\WindowsApps\python3.exe"`, and
   `"/usr/bin/python3"` for other operating systems)
@@ -217,19 +218,20 @@ Config variable names:
 - `minescript_ticks_per_cycle` (see [minescript_ticks_per_cycle](#minescript_ticks_per_cycle) command)
 - `minescript_incremental_command_suggestions` (see [minescript_incremental_command_suggestions](#minescript_incremental_command_suggestions) command; since v2.0)
 - `autorun[WORLD NAME]` - command to run when entering a world named `WORLD NAME` (since v3.1)
-  - The special name `*` indicates that the command should be run when entering
-    all worlds, e.g. `autorun[*]=print_motd` where `print_motd.py` is a script
-    that prints a "message of the day".
-  - Multiple `autorun[...]` config lines can be specified for the same world, or
-    for `*`, in which case all matching commands are run concurrently.
-  - A single `autorun[...]` config line can execute multiple commands in
-    sequence by separating commands with a semicolon (`;`), e.g. the following would
-    first run the script `print_motd.py` followed by `summarize_entities.py` which takes
-    a single argument (`50`):
 
-    ```
-    autorun[*]=print_motd; summarize_entities 50
-    ```
+    - The special name `*` indicates that the command should be run when entering
+      all worlds, e.g. `autorun[*]=print_motd` where `print_motd.py` is a script
+      that prints a "message of the day".
+    - Multiple `autorun[...]` config lines can be specified for the same world, or
+      for `*`, in which case all matching commands are run concurrently.
+    - A single `autorun[...]` config line can execute multiple commands in
+      sequence by separating commands with a semicolon (`;`), e.g. the following would
+      first run the script `print_motd.py` followed by `summarize_entities.py` which takes
+      a single argument (`50`):
+
+      ```
+      autorun[*]=print_motd; summarize_entities 50
+      ```
 
 ## Python API
 
