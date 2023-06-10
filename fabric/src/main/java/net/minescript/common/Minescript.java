@@ -245,6 +245,9 @@ public class Minescript {
   private static boolean useBlockPackForUndo = true;
   private static boolean useBlockPackForCopy = true;
 
+  // Regex pattern for ignoring lines of output from stderr of Python scripts.
+  private static Pattern stderrChatIgnorePattern = Pattern.compile("^$");
+
   /** Loads config from {@code minescript/config.txt} if the file has changed since last loaded. */
   private static void loadConfig() {
     if (System.getProperty("os.name").startsWith("Windows")) {
@@ -357,6 +360,10 @@ public class Minescript {
             case "minescript_use_blockpack_for_undo":
               useBlockPackForUndo = Boolean.valueOf(value);
               LOGGER.info("Setting minescript_use_blockpack_for_undo to {}", useBlockPackForUndo);
+              break;
+            case "stderr_chat_ignore_pattern":
+              stderrChatIgnorePattern = Pattern.compile(value);
+              LOGGER.info("Setting stderr_chat_ignore_pattern to {}", value);
               break;
             default:
               {
@@ -1008,7 +1015,10 @@ public class Minescript {
     public void enqueueStderr(String messagePattern, Object... arguments) {
       String logMessage = ParameterizedMessage.format(messagePattern, arguments);
       LOGGER.error("{}", logMessage);
-      jobCommandQueue.add(formatAsJsonText(logMessage, "yellow"));
+      var match = stderrChatIgnorePattern.matcher(logMessage);
+      if (!match.find()) {
+        jobCommandQueue.add(formatAsJsonText(logMessage, "yellow"));
+      }
     }
 
     @Override
