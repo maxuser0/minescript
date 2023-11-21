@@ -62,6 +62,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.network.packet.c2s.play.PickFromInventoryC2SPacket;
 import net.minecraft.text.Text;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
@@ -3156,9 +3157,7 @@ public class Minescript {
               (args.size() == 1) ? getStrictIntValue(args.get(0)) : OptionalInt.empty();
           if (value.isPresent()) {
             int slot = value.getAsInt();
-            var inventory = player.getInventory();
-            inventory.swapSlotWithHotbar(slot);
-            return Optional.of(Integer.toString(inventory.selectedSlot));
+            minecraft.getNetworkHandler().sendPacket(new PickFromInventoryC2SPacket(slot));
           } else {
             logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
             return Optional.of("null");
