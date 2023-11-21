@@ -3158,6 +3158,7 @@ public class Minescript {
           if (value.isPresent()) {
             int slot = value.getAsInt();
             minecraft.getNetworkHandler().sendPacket(new PickFromInventoryC2SPacket(slot));
+            return Optional.of("null");
           } else {
             logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
             return Optional.of("null");
