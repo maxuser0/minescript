@@ -60,6 +60,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ServerboundPickItemPacket;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
@@ -3160,7 +3161,8 @@ public class Minescript {
           if (value.isPresent()) {
             int slot = value.getAsInt();
             var inventory = player.getInventory();
-            inventory.pickSlot(slot);
+            var connection = minecraft.getConnection();
+            connection.send(new ServerboundPickItemPacket(slot));
             return Optional.of(Integer.toString(inventory.selected));
           } else {
             logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);

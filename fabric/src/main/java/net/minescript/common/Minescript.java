@@ -3157,8 +3157,10 @@ public class Minescript {
               (args.size() == 1) ? getStrictIntValue(args.get(0)) : OptionalInt.empty();
           if (value.isPresent()) {
             int slot = value.getAsInt();
-            minecraft.getNetworkHandler().sendPacket(new PickFromInventoryC2SPacket(slot));
-            return Optional.of(Integer.toString(player.getInventory().selectedSlot));
+            var inventory = player.getInventory();
+            var connection = minecraft.getNetworkHandler();
+            connection.sendPacket(new PickFromInventoryC2SPacket(slot));
+            return Optional.of(Integer.toString(inventory.selectedSlot));
           } else {
             logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
             return Optional.of("null");
