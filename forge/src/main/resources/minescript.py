@@ -17,6 +17,7 @@ scripts and not run directly.
 
 import base64
 import os
+import queue
 import sys
 import minescript_runtime
 
@@ -592,6 +593,74 @@ def await_loaded_region(x1: int, z1: int, x2: int, z2: int, done_callback=None):
   else:
     CallAsyncScriptFunction(
         "await_loaded_region", (x1, z1, x2, z2), done_callback)
+
+
+class KeyEventListener:
+  """Listener for keyboard events.
+
+  Only one `KeyEventListener` can be instantiated at a time within a job.
+
+  Since: v3.2
+  """
+
+  def __init__(self):
+    # TODO(maxuser): Raise an exception if more than one listener is instantiated in this job.
+    self.queue = queue.Queue()
+    register_key_event_listener(self)
+
+  def get_key_event(self, block: bool = True, timeout: float = None) -> str:
+    """Gets the next key event in the queue.
+
+    Args:
+      block: if `True`, block until an event fires
+      timeout: timeout in seconds to wait for an event if `block` is `True`
+
+    Returns:
+      event dict: `{"key": int, "scanCode": int, "action": int, "modifiers": int,
+      "timeMillis": int, "screen": str}` where `action` is 0 for key up, 1 for
+      key down, and 2 for key repeat.
+
+    Raises:
+      `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
+      queue is empty.
+    """
+    return self.queue.get(block, timeout)
+
+  def __call__(self, result: str) -> None:
+    self.queue.put(result)
+
+  def __del__(self):
+    unregister_key_event_listener()
+
+
+def register_key_event_listener(listener: Callable[[str], None]) -> bool:
+  """Registers a listener for receiving keyboard events. One listener allowed per job.
+
+  For a more user-friendly API, use the `KeyEventListener` instead. (__internal__)
+
+  Args:
+    listener: callable that repeatedly accepts a string representing key events
+
+  Returns:
+    `True` if successfully registered the listener.
+
+  Since: v3.2
+  """
+  CallAsyncScriptFunction(
+      "register_key_event_listener", (), listener)
+
+
+def unregister_key_event_listener():
+  """Unegisters a key event listener, if any, for the currently running job.
+
+  For a more user-friendly API, use `KeyEventListener` instead. (__internal__)
+
+  Returns:
+    `True` if successfully unregistered a listener.
+
+  Since: v3.2
+  """
+  CallScriptFunction("unregister_key_event_listener")
 
 
 def register_chat_message_listener(listener: Callable[[str], None]):

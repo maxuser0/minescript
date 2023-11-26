@@ -2220,6 +2220,30 @@ public class Minescript {
     }
   }
 
+  public static void onKeyboardEvent(int key, int scanCode, int action, int modifiers) {
+    var minecraft = Minecraft.getInstance();
+    var screen = minecraft.screen;
+
+    var iter = keyEventListeners.entrySet().iterator();
+    String jsonText = null;
+    while (iter.hasNext()) {
+      var listener = iter.next();
+      if (jsonText == null) {
+        String screenTitle = screen == null ? null : screen.getTitle().getString();
+        long timeMillis = System.currentTimeMillis();
+        jsonText =
+            String.format(
+                "{\"key\": %d, \"scanCode\": %d, \"action\": %d, \"modifiers\": %d, "
+                    + "\"timeMillis\": %d, \"screen\": %s}",
+                key, scanCode, action, modifiers, timeMillis, toJsonString(screenTitle));
+      }
+      LOGGER.info("Forwarding key event to listener {}: {}", listener.getKey(), jsonText);
+      if (!listener.getValue().respond(jsonText, false)) {
+        iter.remove();
+      }
+    }
+  }
+
   private static MinescriptCommandHistory minescriptCommandHistory = new MinescriptCommandHistory();
   private static boolean incrementalCommandSuggestions = false;
 
@@ -2496,6 +2520,8 @@ public class Minescript {
   }
 
   private static ServerBlockList serverBlockList = new ServerBlockList();
+
+  private static Map<Integer, ScriptFunctionCall> keyEventListeners = new ConcurrentHashMap<>();
 
   private static Map<Integer, ScriptFunctionCall> clientChatReceivedEventListeners =
       new ConcurrentHashMap<>();
@@ -2995,6 +3021,34 @@ public class Minescript {
             blocks.add(block.orElse(null));
           }
           return Optional.of(GSON.toJson(blocks));
+        }
+
+      case "register_key_event_listener":
+        if (!args.isEmpty()) {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+        } else if (keyEventListeners.containsKey(job.jobId())) {
+          logUserError(
+              "Error: `{}` failed: listener already registered for job: {}",
+              functionName,
+              job.jobSummary());
+        } else {
+          keyEventListeners.put(job.jobId(), new ScriptFunctionCall(job, funcCallId));
+        }
+        return Optional.empty();
+
+      case "unregister_key_event_listener":
+        if (!args.isEmpty()) {
+          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          return Optional.of("false");
+        } else if (!keyEventListeners.containsKey(job.jobId())) {
+          logUserError(
+              "Error: `{}` has no listeners to unregister for job: {}",
+              functionName,
+              job.jobSummary());
+          return Optional.of("false");
+        } else {
+          keyEventListeners.remove(job.jobId());
+          return Optional.of("true");
         }
 
       case "register_chat_message_listener":
