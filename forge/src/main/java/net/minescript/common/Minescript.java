@@ -576,6 +576,8 @@ public class Minescript {
 
     boolean respond(long functionCallId, String returnValue, boolean finalReply);
 
+    void raiseException(long functionCallId, String exceptionType, String message);
+
     void enqueueStdout(String text);
 
     void enqueueStderr(String messagePattern, Object... arguments);
@@ -912,7 +914,11 @@ public class Minescript {
   interface Task {
     int run(String[] command, JobControl jobControl);
 
-    default boolean handleResponse(long functionCallId, String returnValue, boolean finalReply) {
+    default boolean sendResponse(long functionCallId, String returnValue, boolean finalReply) {
+      return false;
+    }
+
+    default boolean sendException(long functionCallId, String exceptionType, String message) {
       return false;
     }
   }
@@ -1000,11 +1006,16 @@ public class Minescript {
 
     @Override
     public boolean respond(long functionCallId, String returnValue, boolean finalReply) {
-      boolean result = task.handleResponse(functionCallId, returnValue, finalReply);
+      boolean result = task.sendResponse(functionCallId, returnValue, finalReply);
       if (functionCallId == 0 && "\"exit!\"".equals(returnValue)) {
         state = JobState.DONE;
       }
       return result;
+    }
+
+    @Override
+    public void raiseException(long functionCallId, String exceptionType, String message) {
+      task.sendException(functionCallId, exceptionType, message);
     }
 
     @Override
@@ -1180,6 +1191,10 @@ public class Minescript {
     public boolean respond(String returnValue, boolean finalReply) {
       return job.respond(funcCallId, returnValue, finalReply);
     }
+
+    public void raiseException(String exceptionType, String message) {
+      job.raiseException(funcCallId, exceptionType, message);
+    }
   }
 
   static class SubprocessTask implements Task {
@@ -1272,13 +1287,11 @@ public class Minescript {
     }
 
     @Override
-    public boolean handleResponse(long functionCallId, String returnValue, boolean finalReply) {
-      if (process == null || !process.isAlive() || stdinWriter == null) {
+    public boolean sendResponse(long functionCallId, String returnValue, boolean finalReply) {
+      if (!isReadyToRespond()) {
         return false;
       }
-
       try {
-        // TODO(maxuser): Escape strings in returnValue (or use JSON library).
         if (finalReply) {
           stdinWriter.write(
               String.format(
@@ -1292,9 +1305,32 @@ public class Minescript {
         stdinWriter.flush();
         return true;
       } catch (IOException e) {
-        // TODO(maxuser): Log the exception.
+        LOGGER.error("IOException in SubprocessTask sendResponse: {}", e.getMessage());
         return false;
       }
+    }
+
+    @Override
+    public boolean sendException(long functionCallId, String exceptionType, String message) {
+      if (!isReadyToRespond()) {
+        return false;
+      }
+      try {
+        stdinWriter.write(
+            String.format(
+                "{\"fcid\": %d, \"except\": {\"type\": %s, \"message\": %s}, \"conn\": \"close\"}",
+                functionCallId, toJsonString(exceptionType), toJsonString(message)));
+        stdinWriter.newLine();
+        stdinWriter.flush();
+        return true;
+      } catch (IOException e) {
+        LOGGER.error("IOException in SubprocessTask sendResponse: {}", e.getMessage());
+        return false;
+      }
+    }
+
+    private boolean isReadyToRespond() {
+      return process != null && process.isAlive() && stdinWriter != null;
     }
   }
 
@@ -3025,15 +3061,14 @@ public class Minescript {
 
       case "register_key_event_listener":
         if (!args.isEmpty()) {
-          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-        } else if (keyEventListeners.containsKey(job.jobId())) {
-          logUserError(
-              "Error: `{}` failed: listener already registered for job: {}",
-              functionName,
-              job.jobSummary());
-        } else {
-          keyEventListeners.put(job.jobId(), new ScriptFunctionCall(job, funcCallId));
+          throw new IllegalArgumentException("Expected no params but got: " + argsString);
         }
+        if (keyEventListeners.containsKey(job.jobId())) {
+          throw new IllegalStateException(
+              "Failed to create listener because a listener is already registered for job: "
+                  + job.jobSummary());
+        }
+        keyEventListeners.put(job.jobId(), new ScriptFunctionCall(job, funcCallId));
         return Optional.empty();
 
       case "unregister_key_event_listener":
@@ -3137,13 +3172,8 @@ public class Minescript {
           }
           return Optional.empty();
         } else {
-          // TODO(maxuser): Support raising exceptions through script functions, e.g.
-          // {"fcid": ..., "exception": "error message...", "conn": "close"}
-          logUserError(
-              "Error: `{}` expected 4 number params (x1, z1, x2, z2) but got: {}",
-              functionName,
-              argsString);
-          return Optional.of("false");
+          throw new IllegalArgumentException(
+              "Expected 4 number params (x1, z1, x2, z2) but got: " + argsString);
         }
 
       case "set_nickname":
@@ -4011,20 +4041,26 @@ public class Minescript {
                     var gson = new Gson();
                     List<?> args = gson.fromJson(argsString, ArrayList.class);
 
-                    // TODO(maxuser): Support raising exceptions from script functions, e.g.
-                    // {"fcid": ..., "exception": "error message...", "conn": "close"}
-                    Optional<String> response =
-                        handleScriptFunction(job, funcCallId, functionName, args, argsString);
-                    if (response.isPresent()) {
-                      job.respond(funcCallId, response.get(), true);
-                    }
-                    if (scriptFunctionDebugOutptut) {
-                      LOGGER.info(
-                          "(debug) Script function `{}`: {} / {}  ->  {}",
-                          functionName,
-                          toJsonString(argsString),
-                          args,
-                          response.orElse("<no response>"));
+                    try {
+                      Optional<String> response =
+                          handleScriptFunction(job, funcCallId, functionName, args, argsString);
+                      if (response.isPresent()) {
+                        job.respond(funcCallId, response.get(), true);
+                      }
+                      if (scriptFunctionDebugOutptut) {
+                        LOGGER.info(
+                            "(debug) Script function `{}`: {} / {}  ->  {}",
+                            functionName,
+                            toJsonString(argsString),
+                            args,
+                            response.orElse("<no response>"));
+                      }
+                    } catch (IllegalArgumentException e) {
+                      job.raiseException(funcCallId, "ValueError", e.getMessage());
+                    } catch (IllegalStateException e) {
+                      job.raiseException(funcCallId, "RuntimeError", e.getMessage());
+                    } catch (Exception e) {
+                      job.raiseException(funcCallId, "Exception", e.getMessage());
                     }
                   } else {
                     processMessage(jobCommand);

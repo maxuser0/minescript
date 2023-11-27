@@ -598,17 +598,18 @@ def await_loaded_region(x1: int, z1: int, x2: int, z2: int, done_callback=None):
 class KeyEventListener:
   """Listener for keyboard events.
 
-  Only one `KeyEventListener` can be instantiated at a time within a job.
+  Only one `KeyEventListener` can be instantiated at a time within a job. For a
+  list of key codes, see: https://www.glfw.org/docs/3.4/group__keys.html
 
   Since: v3.2
   """
 
   def __init__(self):
-    # TODO(maxuser): Raise an exception if more than one listener is instantiated in this job.
+    """Creates a `KeyEventListener` for listening to keyboard events."""
     self.queue = queue.Queue()
-    register_key_event_listener(self)
+    register_key_event_listener(self, self)
 
-  def get_key_event(self, block: bool = True, timeout: float = None) -> str:
+  def get(self, block: bool = True, timeout: float = None) -> str:
     """Gets the next key event in the queue.
 
     Args:
@@ -624,16 +625,21 @@ class KeyEventListener:
       `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
       queue is empty.
     """
-    return self.queue.get(block, timeout)
+    value = self.queue.get(block, timeout)
+    if isinstance(value, Exception):
+      raise value
+    return value
 
-  def __call__(self, result: str) -> None:
+  def __call__(self, result: Any) -> None:
     self.queue.put(result)
 
   def __del__(self):
     unregister_key_event_listener()
 
 
-def register_key_event_listener(listener: Callable[[str], None]) -> bool:
+def register_key_event_listener(
+    listener: Callable[[str], None],
+    exception_handler: Callable[[Exception], None] = None) -> bool:
   """Registers a listener for receiving keyboard events. One listener allowed per job.
 
   For a more user-friendly API, use the `KeyEventListener` instead. (__internal__)
@@ -641,13 +647,10 @@ def register_key_event_listener(listener: Callable[[str], None]) -> bool:
   Args:
     listener: callable that repeatedly accepts a string representing key events
 
-  Returns:
-    `True` if successfully registered the listener.
-
   Since: v3.2
   """
   CallAsyncScriptFunction(
-      "register_key_event_listener", (), listener)
+      "register_key_event_listener", (), listener, exception_handler)
 
 
 def unregister_key_event_listener():
