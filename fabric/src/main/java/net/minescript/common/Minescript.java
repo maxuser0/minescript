@@ -3085,16 +3085,14 @@ public class Minescript {
 
       case "register_chat_message_listener":
         if (!args.isEmpty()) {
-          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-        } else if (clientChatReceivedEventListeners.containsKey(job.jobId())) {
-          logUserError(
-              "Error: `{}` failed: listener already registered for job: {}",
-              functionName,
-              job.jobSummary());
-        } else {
-          clientChatReceivedEventListeners.put(
-              job.jobId(), new ScriptFunctionCall(job, funcCallId));
+          throw new IllegalArgumentException("Expected no params but got: " + argsString);
         }
+        if (clientChatReceivedEventListeners.containsKey(job.jobId())) {
+          throw new IllegalStateException(
+              "Failed to create listener because a listener is already registered for job: "
+                  + job.jobSummary());
+        }
+        clientChatReceivedEventListeners.put(job.jobId(), new ScriptFunctionCall(job, funcCallId));
         return Optional.empty();
 
       case "unregister_chat_message_listener":

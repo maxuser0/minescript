@@ -41,17 +41,17 @@ from threading import Lock
 from typing import Any, List, Set, Dict, Tuple, Optional, Callable
 
 AnyConsumer = Callable[[str], None]
-ExceptionConsumer = Callable[[Exception], None]
+ExceptionHandler = Callable[[Exception], None]
 
 # Dict values: (function_name: str, on_value_handler: AnyConsumer)
-_script_function_calls: Dict[int, Tuple[str, AnyConsumer, ExceptionConsumer]] = dict()
+_script_function_calls: Dict[int, Tuple[str, AnyConsumer, ExceptionHandler]] = dict()
 _script_function_calls_lock = threading.Lock()
 _next_fcallid = 1000
 
 
 def CallAsyncScriptFunction(func_name: str, args: Tuple[Any, ...],
                             retval_handler: AnyConsumer,
-                            exception_handler: ExceptionConsumer = None) -> None:
+                            exception_handler: ExceptionHandler = None) -> None:
   """Calls a script function, asynchronously streaming return value(s).
 
   Args:
