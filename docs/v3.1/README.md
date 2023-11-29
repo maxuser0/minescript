@@ -1,4 +1,4 @@
-## Minescript v3.2 docs
+## Minescript v3.1 docs
 
 Table of contents:
 
@@ -12,7 +12,9 @@ Table of contents:
     - [Script output](#script-output)
     - [minescript module](#minescript-module)
 
-Previous version: [v3.1](v3.1/README.md)
+Previous version: [v3.0](v3.0/README.md)
+
+Latest version: [latest](../README.md)
 
 ## In-game commands
 
