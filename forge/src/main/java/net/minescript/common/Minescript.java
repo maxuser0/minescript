@@ -56,7 +56,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.gui.screens.LevelLoadingScreen;
+import net.minecraft.client.gui.screens.ReceivingLevelScreen;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -2258,20 +2261,18 @@ public class Minescript {
 
   public static void onKeyboardEvent(int key, int scanCode, int action, int modifiers) {
     var minecraft = Minecraft.getInstance();
-    var screen = minecraft.screen;
-
     var iter = keyEventListeners.entrySet().iterator();
     String jsonText = null;
     while (iter.hasNext()) {
       var listener = iter.next();
       if (jsonText == null) {
-        String screenTitle = screen == null ? null : screen.getTitle().getString();
+        String screenName = getScreenName().orElse(null);
         long timeMillis = System.currentTimeMillis();
         jsonText =
             String.format(
                 "{\"key\": %d, \"scanCode\": %d, \"action\": %d, \"modifiers\": %d, "
                     + "\"timeMillis\": %d, \"screen\": %s}",
-                key, scanCode, action, modifiers, timeMillis, toJsonString(screenTitle));
+                key, scanCode, action, modifiers, timeMillis, toJsonString(screenName));
       }
       LOGGER.info("Forwarding key event to listener {}: {}", listener.getKey(), jsonText);
       if (!listener.getValue().respond(jsonText, false)) {
@@ -2926,6 +2927,30 @@ public class Minescript {
     var saveProperties = server == null ? null : server.getWorldData();
     String saveName = saveProperties == null ? null : saveProperties.getLevelName();
     return serverName == null ? saveName : serverName;
+  }
+
+  public static Optional<String> getScreenName() {
+    var minecraft = Minecraft.getInstance();
+    var screen = minecraft.screen;
+    if (screen == null) {
+      return Optional.empty();
+    }
+    String name = screen.getTitle().getString();
+    if (name.isEmpty()) {
+      if (screen instanceof CreativeModeInventoryScreen) {
+        name = "Creative Inventory";
+      } else if (screen instanceof LevelLoadingScreen) {
+        name = "Level Loading";
+      } else if (screen instanceof ReceivingLevelScreen) {
+        name = "Progess";
+      } else {
+        // The class name is not descriptive in production builds where symbols
+        // are obfuscated, but using the class name allows callers to
+        // differentiate untitled screen types from each other.
+        name = screen.getClass().getName();
+      }
+    }
+    return Optional.of(name);
   }
 
   /** Returns a JSON response string if a script function is called. */
@@ -3952,6 +3977,12 @@ public class Minescript {
           }
           return Optional.of("true");
         }
+
+      case "screen_name":
+        if (!args.isEmpty()) {
+          throw new IllegalArgumentException("Expected no params but got: " + argsString);
+        }
+        return Optional.of(toJsonString(getScreenName().orElse(null)));
 
       case "flush":
         if (args.isEmpty()) {

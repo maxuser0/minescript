@@ -654,7 +654,7 @@ def register_key_event_listener(
 
 
 def unregister_key_event_listener():
-  """Unegisters a key event listener, if any, for the currently running job.
+  """Unregisters a key event listener, if any, for the currently running job.
 
   For a more user-friendly API, use `KeyEventListener` instead. (__internal__)
 
@@ -732,7 +732,7 @@ def register_chat_message_listener(
 
 
 def unregister_chat_message_listener():
-  """Unegisters a chat message listener, if any, for the currently running job.
+  """Unregisters a chat message listener, if any, for the currently running job.
 
   For a more user-friendly API, use `ChatEventListener` instead.
 
@@ -766,7 +766,7 @@ def register_chat_message_interceptor(interceptor: Callable[[str], None]):
 
 
 def unregister_chat_message_interceptor():
-  """Unegisters the chat message interceptor, if one is currently registered.
+  """Unregisters the chat message interceptor, if one is currently registered.
 
   Returns:
     `True` if successfully unregistered an interceptor.
@@ -774,6 +774,17 @@ def unregister_chat_message_interceptor():
   Since: v2.1
   """
   CallScriptFunction("unregister_chat_message_interceptor")
+
+
+def screen_name():
+  """Gets the current GUI screen name, if there is one.
+
+  Returns:
+    Name of current screen (str) or `None` if no GUI screen is being displayed.
+
+  Since: v3.2
+  """
+  return CallScriptFunction("screen_name")
 
 
 BlockPos = Tuple[int, int, int]
