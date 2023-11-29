@@ -2121,11 +2121,11 @@ public class Minescript {
     }
   }
 
-  private static int minescriptTicksPerCycle = 3;
+  private static int minescriptTicksPerCycle = 1;
   private static int minescriptCommandsPerCycle = 15;
 
   private static int renderTickEventCounter = 0;
-  private static int playerTickEventCounter = 0;
+  private static int clientTickEventCounter = 0;
 
   private static int BACKSLASH_KEY = 92;
   private static int ESCAPE_KEY = 256;
@@ -2495,7 +2495,7 @@ public class Minescript {
       // TODO(maxuser): There appears to be a bug truncating the chat HUD command history. It might
       // be that onClientChat(...) can get called on a different thread from what other callers are
       // expecting, thereby corrupting the history. Verify whether this gets called on the same
-      // thread as onPlayerTick() or other events.
+      // thread as onClientWorldTick() or other events.
       chatHud.addRecentChat(message);
       cancel = true;
     }
@@ -4031,8 +4031,8 @@ public class Minescript {
     }
   }
 
-  public static void onPlayerTick() {
-    if (++playerTickEventCounter % minescriptTicksPerCycle == 0) {
+  public static void onClientWorldTick() {
+    if (++clientTickEventCounter % minescriptTicksPerCycle == 0) {
       var minecraft = Minecraft.getInstance();
       var player = minecraft.player;
 

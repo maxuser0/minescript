@@ -13,6 +13,7 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.level.ChunkEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.LogicalSide;
 import net.minecraftforge.fml.common.Mod;
 import net.minescript.common.Minescript;
 import org.apache.logging.log4j.LogManager;
@@ -72,7 +73,9 @@ public class MinescriptForgeMod {
   }
 
   @SubscribeEvent
-  public void onPlayerTick(TickEvent.PlayerTickEvent event) {
-    Minescript.onPlayerTick();
+  public void onWorldTick(TickEvent.LevelTickEvent event) {
+    if (event.side == LogicalSide.CLIENT && event.phase == TickEvent.Phase.START) {
+      Minescript.onClientWorldTick();
+    }
   }
 }
