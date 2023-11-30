@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: © 2022-2023 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: GPL-3.0-only
 
-r"""minescript_test v3.1 from https://github.com/maxuser0/minescript
+r"""minescript_test v3.2 from https://github.com/maxuser0/minescript
 
 Integration testing of script functions in minescript.py.
 

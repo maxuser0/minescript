@@ -56,10 +56,14 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.gui.screens.LevelLoadingScreen;
+import net.minecraft.client.gui.screens.ReceivingLevelScreen;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ServerboundPickItemPacket;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
@@ -575,6 +579,8 @@ public class Minescript {
 
     boolean respond(long functionCallId, String returnValue, boolean finalReply);
 
+    void raiseException(long functionCallId, String exceptionType, String message);
+
     void enqueueStdout(String text);
 
     void enqueueStderr(String messagePattern, Object... arguments);
@@ -911,7 +917,11 @@ public class Minescript {
   interface Task {
     int run(String[] command, JobControl jobControl);
 
-    default boolean handleResponse(long functionCallId, String returnValue, boolean finalReply) {
+    default boolean sendResponse(long functionCallId, String returnValue, boolean finalReply) {
+      return false;
+    }
+
+    default boolean sendException(long functionCallId, String exceptionType, String message) {
       return false;
     }
   }
@@ -999,11 +1009,16 @@ public class Minescript {
 
     @Override
     public boolean respond(long functionCallId, String returnValue, boolean finalReply) {
-      boolean result = task.handleResponse(functionCallId, returnValue, finalReply);
+      boolean result = task.sendResponse(functionCallId, returnValue, finalReply);
       if (functionCallId == 0 && "\"exit!\"".equals(returnValue)) {
         state = JobState.DONE;
       }
       return result;
+    }
+
+    @Override
+    public void raiseException(long functionCallId, String exceptionType, String message) {
+      task.sendException(functionCallId, exceptionType, message);
     }
 
     @Override
@@ -1179,6 +1194,10 @@ public class Minescript {
     public boolean respond(String returnValue, boolean finalReply) {
       return job.respond(funcCallId, returnValue, finalReply);
     }
+
+    public void raiseException(String exceptionType, String message) {
+      job.raiseException(funcCallId, exceptionType, message);
+    }
   }
 
   static class SubprocessTask implements Task {
@@ -1271,13 +1290,11 @@ public class Minescript {
     }
 
     @Override
-    public boolean handleResponse(long functionCallId, String returnValue, boolean finalReply) {
-      if (process == null || !process.isAlive() || stdinWriter == null) {
+    public boolean sendResponse(long functionCallId, String returnValue, boolean finalReply) {
+      if (!isReadyToRespond()) {
         return false;
       }
-
       try {
-        // TODO(maxuser): Escape strings in returnValue (or use JSON library).
         if (finalReply) {
           stdinWriter.write(
               String.format(
@@ -1291,9 +1308,32 @@ public class Minescript {
         stdinWriter.flush();
         return true;
       } catch (IOException e) {
-        // TODO(maxuser): Log the exception.
+        LOGGER.error("IOException in SubprocessTask sendResponse: {}", e.getMessage());
         return false;
       }
+    }
+
+    @Override
+    public boolean sendException(long functionCallId, String exceptionType, String message) {
+      if (!isReadyToRespond()) {
+        return false;
+      }
+      try {
+        stdinWriter.write(
+            String.format(
+                "{\"fcid\": %d, \"except\": {\"type\": %s, \"message\": %s}, \"conn\": \"close\"}",
+                functionCallId, toJsonString(exceptionType), toJsonString(message)));
+        stdinWriter.newLine();
+        stdinWriter.flush();
+        return true;
+      } catch (IOException e) {
+        LOGGER.error("IOException in SubprocessTask sendResponse: {}", e.getMessage());
+        return false;
+      }
+    }
+
+    private boolean isReadyToRespond() {
+      return process != null && process.isAlive() && stdinWriter != null;
     }
   }
 
@@ -2081,11 +2121,11 @@ public class Minescript {
     }
   }
 
-  private static int minescriptTicksPerCycle = 3;
+  private static int minescriptTicksPerCycle = 1;
   private static int minescriptCommandsPerCycle = 15;
 
   private static int renderTickEventCounter = 0;
-  private static int playerTickEventCounter = 0;
+  private static int clientTickEventCounter = 0;
 
   private static int BACKSLASH_KEY = 92;
   private static int ESCAPE_KEY = 256;
@@ -2216,6 +2256,28 @@ public class Minescript {
 
     private int lastCommandPosition() {
       return commandList.size() - 1;
+    }
+  }
+
+  public static void onKeyboardEvent(int key, int scanCode, int action, int modifiers) {
+    var minecraft = Minecraft.getInstance();
+    var iter = keyEventListeners.entrySet().iterator();
+    String jsonText = null;
+    while (iter.hasNext()) {
+      var listener = iter.next();
+      if (jsonText == null) {
+        String screenName = getScreenName().orElse(null);
+        long timeMillis = System.currentTimeMillis();
+        jsonText =
+            String.format(
+                "{\"key\": %d, \"scanCode\": %d, \"action\": %d, \"modifiers\": %d, "
+                    + "\"timeMillis\": %d, \"screen\": %s}",
+                key, scanCode, action, modifiers, timeMillis, toJsonString(screenName));
+      }
+      LOGGER.info("Forwarding key event to listener {}: {}", listener.getKey(), jsonText);
+      if (!listener.getValue().respond(jsonText, false)) {
+        iter.remove();
+      }
     }
   }
 
@@ -2433,7 +2495,7 @@ public class Minescript {
       // TODO(maxuser): There appears to be a bug truncating the chat HUD command history. It might
       // be that onClientChat(...) can get called on a different thread from what other callers are
       // expecting, thereby corrupting the history. Verify whether this gets called on the same
-      // thread as onPlayerTick() or other events.
+      // thread as onClientWorldTick() or other events.
       chatHud.addRecentChat(message);
       cancel = true;
     }
@@ -2495,6 +2557,8 @@ public class Minescript {
   }
 
   private static ServerBlockList serverBlockList = new ServerBlockList();
+
+  private static Map<Integer, ScriptFunctionCall> keyEventListeners = new ConcurrentHashMap<>();
 
   private static Map<Integer, ScriptFunctionCall> clientChatReceivedEventListeners =
       new ConcurrentHashMap<>();
@@ -2865,6 +2929,30 @@ public class Minescript {
     return serverName == null ? saveName : serverName;
   }
 
+  public static Optional<String> getScreenName() {
+    var minecraft = Minecraft.getInstance();
+    var screen = minecraft.screen;
+    if (screen == null) {
+      return Optional.empty();
+    }
+    String name = screen.getTitle().getString();
+    if (name.isEmpty()) {
+      if (screen instanceof CreativeModeInventoryScreen) {
+        name = "Creative Inventory";
+      } else if (screen instanceof LevelLoadingScreen) {
+        name = "L" + "evel Loading"; // Split literal to prevent symbol renaming.
+      } else if (screen instanceof ReceivingLevelScreen) {
+        name = "Progess";
+      } else {
+        // The class name is not descriptive in production builds where symbols
+        // are obfuscated, but using the class name allows callers to
+        // differentiate untitled screen types from each other.
+        name = screen.getClass().getName();
+      }
+    }
+    return Optional.of(name);
+  }
+
   /** Returns a JSON response string if a script function is called. */
   private static Optional<String> handleScriptFunction(
       Job job, long funcCallId, String functionName, List<?> args, String argsString) {
@@ -2996,18 +3084,43 @@ public class Minescript {
           return Optional.of(GSON.toJson(blocks));
         }
 
-      case "register_chat_message_listener":
+      case "register_key_event_listener":
+        if (!args.isEmpty()) {
+          throw new IllegalArgumentException("Expected no params but got: " + argsString);
+        }
+        if (keyEventListeners.containsKey(job.jobId())) {
+          throw new IllegalStateException(
+              "Failed to create listener because a listener is already registered for job: "
+                  + job.jobSummary());
+        }
+        keyEventListeners.put(job.jobId(), new ScriptFunctionCall(job, funcCallId));
+        return Optional.empty();
+
+      case "unregister_key_event_listener":
         if (!args.isEmpty()) {
           logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-        } else if (clientChatReceivedEventListeners.containsKey(job.jobId())) {
+          return Optional.of("false");
+        } else if (!keyEventListeners.containsKey(job.jobId())) {
           logUserError(
-              "Error: `{}` failed: listener already registered for job: {}",
+              "Error: `{}` has no listeners to unregister for job: {}",
               functionName,
               job.jobSummary());
+          return Optional.of("false");
         } else {
-          clientChatReceivedEventListeners.put(
-              job.jobId(), new ScriptFunctionCall(job, funcCallId));
+          keyEventListeners.remove(job.jobId());
+          return Optional.of("true");
         }
+
+      case "register_chat_message_listener":
+        if (!args.isEmpty()) {
+          throw new IllegalArgumentException("Expected no params but got: " + argsString);
+        }
+        if (clientChatReceivedEventListeners.containsKey(job.jobId())) {
+          throw new IllegalStateException(
+              "Failed to create listener because a listener is already registered for job: "
+                  + job.jobSummary());
+        }
+        clientChatReceivedEventListeners.put(job.jobId(), new ScriptFunctionCall(job, funcCallId));
         return Optional.empty();
 
       case "unregister_chat_message_listener":
@@ -3082,13 +3195,8 @@ public class Minescript {
           }
           return Optional.empty();
         } else {
-          // TODO(maxuser): Support raising exceptions through script functions, e.g.
-          // {"fcid": ..., "exception": "error message...", "conn": "close"}
-          logUserError(
-              "Error: `{}` expected 4 number params (x1, z1, x2, z2) but got: {}",
-              functionName,
-              argsString);
-          return Optional.of("false");
+          throw new IllegalArgumentException(
+              "Expected 4 number params (x1, z1, x2, z2) but got: " + argsString);
         }
 
       case "set_nickname":
@@ -3160,7 +3268,8 @@ public class Minescript {
           if (value.isPresent()) {
             int slot = value.getAsInt();
             var inventory = player.getInventory();
-            inventory.pickSlot(slot);
+            var connection = minecraft.getConnection();
+            connection.send(new ServerboundPickItemPacket(slot));
             return Optional.of(Integer.toString(inventory.selected));
           } else {
             logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
@@ -3869,6 +3978,12 @@ public class Minescript {
           return Optional.of("true");
         }
 
+      case "screen_name":
+        if (!args.isEmpty()) {
+          throw new IllegalArgumentException("Expected no params but got: " + argsString);
+        }
+        return Optional.of(toJsonString(getScreenName().orElse(null)));
+
       case "flush":
         if (args.isEmpty()) {
           return Optional.of("true");
@@ -3916,8 +4031,8 @@ public class Minescript {
     }
   }
 
-  public static void onPlayerTick() {
-    if (++playerTickEventCounter % minescriptTicksPerCycle == 0) {
+  public static void onClientWorldTick() {
+    if (++clientTickEventCounter % minescriptTicksPerCycle == 0) {
       var minecraft = Minecraft.getInstance();
       var player = minecraft.player;
 
@@ -3955,20 +4070,26 @@ public class Minescript {
                     var gson = new Gson();
                     List<?> args = gson.fromJson(argsString, ArrayList.class);
 
-                    // TODO(maxuser): Support raising exceptions from script functions, e.g.
-                    // {"fcid": ..., "exception": "error message...", "conn": "close"}
-                    Optional<String> response =
-                        handleScriptFunction(job, funcCallId, functionName, args, argsString);
-                    if (response.isPresent()) {
-                      job.respond(funcCallId, response.get(), true);
-                    }
-                    if (scriptFunctionDebugOutptut) {
-                      LOGGER.info(
-                          "(debug) Script function `{}`: {} / {}  ->  {}",
-                          functionName,
-                          toJsonString(argsString),
-                          args,
-                          response.orElse("<no response>"));
+                    try {
+                      Optional<String> response =
+                          handleScriptFunction(job, funcCallId, functionName, args, argsString);
+                      if (response.isPresent()) {
+                        job.respond(funcCallId, response.get(), true);
+                      }
+                      if (scriptFunctionDebugOutptut) {
+                        LOGGER.info(
+                            "(debug) Script function `{}`: {} / {}  ->  {}",
+                            functionName,
+                            toJsonString(argsString),
+                            args,
+                            response.orElse("<no response>"));
+                      }
+                    } catch (IllegalArgumentException e) {
+                      job.raiseException(funcCallId, "ValueError", e.getMessage());
+                    } catch (IllegalStateException e) {
+                      job.raiseException(funcCallId, "RuntimeError", e.getMessage());
+                    } catch (Exception e) {
+                      job.raiseException(funcCallId, "Exception", e.getMessage());
                     }
                   } else {
                     processMessage(jobCommand);
