@@ -12,8 +12,6 @@ Table of contents:
     - [Script output](#script-output)
     - [minescript module](#minescript-module)
 
-Previous version: [v3.1](v3.1/README.md)
-
 ## In-game commands
 
 ### Command basics

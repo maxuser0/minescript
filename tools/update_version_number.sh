@@ -86,19 +86,8 @@ if [ $fork_docs = 1 ]; then
 
     old_version_readme=$old_version_docs/README.md
     cp -p docs/README.md "$old_version_readme"
-
-    sed -i '' -e \
-        "s#^Previous version: \[v.*\](v.*/README.md)#Previous version: [v${old_version}](v${old_version}/README.md)#" docs/README.md
-
-    # Insert a blank line and "Latest version: ..." after "Previous version: ...".
-    sed -i '' -e '/^Previous version:/a \
-Latest version: [latest](../README.md)' "$old_version_readme"
-    sed -i '' -e '/^Previous version:/a \
-' "$old_version_readme"
-
   else
     echo mkdir "$old_version_docs" || (echo "$old_version_docs already exists." >&2; exit 7)
-    grep '^Previous version: \[v.*\](v.*/README.md)' docs/README.md
   fi
 fi
 
