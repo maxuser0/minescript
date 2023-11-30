@@ -1,5 +1,36 @@
 # Changelog
 
+## v3.2
+
+### Major changes
+
+- Support for Minecraft versions up to 1.20.2
+- Fix Forge bug where Minescript loop could run on the wrong thread and crash, and improve performance (especially with Fabric) by setting the default for `minescript_ticks_per_cycle` to run every tick rather than once every 3 ticks ([79613b1](https://github.com/maxuser0/minescript/commit/79613b14abf05691199139236f4b826265080f99))
+- Add script function `screen_name()` for getting the name of the currently displayed GUI screen, if any ([e40d52a](https://github.com/maxuser0/minescript/commit/e40d52a184d315cfa98549381074de49a07dbb20))
+- Introduce `ChatEventListener` Python class for more user-friendly handling of chat events ([83dd4aa](https://github.com/maxuser0/minescript/commit/83dd4aafb19a514d217132113c9ec102f1e92960))
+- Support propagation of Java exceptions to Python ([2c8692d](https://github.com/maxuser0/minescript/commit/2c8692d3c43891a8e0cbc0d43169598ec077d0a1))
+- Support for listening for keyboard events with `KeyEventListener` Python class ([b0163d3](https://github.com/maxuser0/minescript/commit/b0163d3f96afcefc42fc22b7bc4fb8b21d142f28))
+- Fix `player_inventory_slot_to_hotbar()` "ghost items" in survival mode ([c63fd27](https://github.com/maxuser0/minescript/commit/c63fd27b776e778365fd0fdbc0488377b4111c5c), [49ee542](https://github.com/maxuser0/minescript/commit/49ee542fe866ac9d5c9cbe2d1d6717a6ff84d5ac))
+
+### Detailed changes
+
+- Update MC version to 1.20.2 ([b4593a4](https://github.com/maxuser0/minescript/commit/b4593a4456120f02aecef9b92fbcd871fc627d6e))
+- Update Fabric, Forge to latest stable versions ([155ca0a](https://github.com/maxuser0/minescript/commit/155ca0a84ede036910b5435821a3e52fe59a29a6))
+- Update docs for v3.2 ([ca04b0b](https://github.com/maxuser0/minescript/commit/ca04b0bfe07bc31ea7f6d80e583c55dc7915df44))
+- Update Minescript version to 3.2 ([3f3d640](https://github.com/maxuser0/minescript/commit/3f3d640dbe0eabd838b0b97e4fa0fafd9959d939))
+- Fix Forge bug: ran Minescript loop at wrong times ([79613b1](https://github.com/maxuser0/minescript/commit/79613b14abf05691199139236f4b826265080f99))
+- Add script function: screen_name() ([e40d52a](https://github.com/maxuser0/minescript/commit/e40d52a184d315cfa98549381074de49a07dbb20))
+- Introduce ChatEventListener Python class ([83dd4aa](https://github.com/maxuser0/minescript/commit/83dd4aafb19a514d217132113c9ec102f1e92960))
+- Support propagation of Java exceptions to Python ([2c8692d](https://github.com/maxuser0/minescript/commit/2c8692d3c43891a8e0cbc0d43169598ec077d0a1))
+- Keyboard events: onKeyboardEvent, KeyEventListener ([b0163d3](https://github.com/maxuser0/minescript/commit/b0163d3f96afcefc42fc22b7bc4fb8b21d142f28))
+- Fix player_inventory_slot_to_hotbar() for forge ([c63fd27](https://github.com/maxuser0/minescript/commit/c63fd27b776e778365fd0fdbc0488377b4111c5c))
+- Fix minescript.player_inventory_slot_to_hotbar() (#6) ([49ee542](https://github.com/maxuser0/minescript/commit/49ee542fe866ac9d5c9cbe2d1d6717a6ff84d5ac))
+- Update forge, fabric from Minecraft 1.20 to 1.20.1 ([9c60981](https://github.com/maxuser0/minescript/commit/9c6098103c997e539ad7811b8348b093abe298ea))
+- Update to MC version 1.20 ([aaada38](https://github.com/maxuser0/minescript/commit/aaada3839cd66d9369482e890f97b2f888c89558))
+- Add stderr_chat_ignore_pattern variable to config ([bf8a861](https://github.com/maxuser0/minescript/commit/bf8a861465afb508a3f5753c079bc43984c6d868))
+- Update gradle.properties to mc1.19.4 ([42915e1](https://github.com/maxuser0/minescript/commit/42915e14bcb32fafd5dd537d7b04c604004b44d0))
+- Fix doc formatting for conversion to HTML ([c2d0f3c](https://github.com/maxuser0/minescript/commit/c2d0f3ca7c53d10e60a5271422a0c6e4b6f8a53a))
+
 ## v3.1
 
 ### Major changes
