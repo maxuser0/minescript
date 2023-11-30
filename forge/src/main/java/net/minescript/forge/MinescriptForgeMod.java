@@ -73,7 +73,7 @@ public class MinescriptForgeMod {
   }
 
   @SubscribeEvent
-  public void onWorldTick(TickEvent.LevelTickEvent event) {
+  public void onWorldTick(TickEvent.PlayerTickEvent event) {
     if (event.side == LogicalSide.CLIENT && event.phase == TickEvent.Phase.START) {
       Minescript.onClientWorldTick();
     }
