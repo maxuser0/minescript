@@ -64,7 +64,7 @@ forge_to_fabric_member_names = (
   ('chatEditBox.getCursorPosition', 'chatEditBox.getCursor'),
   ('chatEditBox.getValue', 'chatEditBox.getText'),
   ('chatEditBox.insertText', 'chatEditBox.write'),
-  ('chatEditBox.setCursorPosition', 'chatEditBox.setCursor'),
+  ('chatEditBox.setCursorPosition', 'chatEditBox.setSelectionStart'),
   ('chatEditBox.setTextColor', 'chatEditBox.setEditableColor'),
   ('chatEditBox.setValue', 'chatEditBox.setText'),
   ('chatHud.addRecentChat', 'chatHud.addToMessageHistory'),

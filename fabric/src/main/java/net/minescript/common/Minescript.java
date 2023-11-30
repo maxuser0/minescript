@@ -2309,7 +2309,7 @@ public class Minescript {
           if (previousCommand.isPresent()) {
             value = previousCommand.get();
             chatEditBox.setText(value);
-            chatEditBox.setCursor(value.length());
+            chatEditBox.setSelectionStart(value.length());
           }
           cancel = true;
         } else if (key == DOWN_ARROW_KEY) {
@@ -2317,7 +2317,7 @@ public class Minescript {
           if (nextCommand.isPresent()) {
             value = nextCommand.get();
             chatEditBox.setText(value);
-            chatEditBox.setCursor(value.length());
+            chatEditBox.setSelectionStart(value.length());
           }
           cancel = true;
         } else if (key == ENTER_KEY) {
@@ -2937,7 +2937,7 @@ public class Minescript {
       if (screen instanceof CreativeInventoryScreen) {
         name = "Creative Inventory";
       } else if (screen instanceof LevelLoadingScreen) {
-        name = "Level Loading";
+        name = "L" + "evel Loading"; // Split literal to prevent symbol renaming.
       } else if (screen instanceof ProgressScreen) {
         name = "Progess";
       } else {
