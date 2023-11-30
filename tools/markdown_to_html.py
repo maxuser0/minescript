@@ -28,9 +28,10 @@ for line in html_output.splitlines():
 
   # Add a line linking to the latest docs on GitHub above the table of contents.
   if "<p>Table of contents:</p>" in line:
-    print('<i>View docs for all versions of Minescript on')
     print(
-        '<a href="https://github.com/maxuser0/minescript/blob/main/docs/README.md">GitHub</a></i>.')
+        '<p><i>View docs for all versions of Minescript on '
+        '<a href="https://github.com/maxuser0/minescript/blob/main/docs/README.md">GitHub</a>'
+        '.</i></p>')
 
   line = line.replace("\\", "&#92;")
   print(line)
