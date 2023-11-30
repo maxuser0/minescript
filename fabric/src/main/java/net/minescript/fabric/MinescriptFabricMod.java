@@ -30,7 +30,7 @@ public final class MinescriptFabricMod implements ClientModInitializer {
         (world, chunk) -> Minescript.onChunkUnload(world, chunk));
 
     Minescript.init();
-    ClientTickEvents.START_WORLD_TICK.register(world -> Minescript.onPlayerTick());
+    ClientTickEvents.START_WORLD_TICK.register(world -> Minescript.onClientWorldTick());
     ScreenEvents.AFTER_INIT.register(this::afterInitScreen);
   }
 

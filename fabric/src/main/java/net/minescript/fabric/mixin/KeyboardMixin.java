@@ -27,7 +27,8 @@ public class KeyboardMixin {
 
   @Inject(at = @At("HEAD"), method = "onKey(JIIII)V", cancellable = true)
   private void keyPress(
-      long window, int key, int scancode, int action, int modifiers, CallbackInfo ci) {
+      long window, int key, int scanCode, int action, int modifiers, CallbackInfo ci) {
+    Minescript.onKeyboardEvent(key, scanCode, action, modifiers);
     var screen = MinecraftClient.getInstance().currentScreen;
     if (screen == null) {
       Minescript.onKeyInput(key);

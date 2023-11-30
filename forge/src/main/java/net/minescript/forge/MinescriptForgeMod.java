@@ -13,6 +13,7 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.world.ChunkEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.LogicalSide;
 import net.minecraftforge.fml.common.Mod;
 import net.minescript.common.Minescript;
 import org.apache.logging.log4j.LogManager;
@@ -43,7 +44,10 @@ public class MinescriptForgeMod {
   @SubscribeEvent
   public void onKeyInputEvent(InputEvent.KeyInputEvent event) {
     var key = event.getKey();
+    var scanCode = event.getScanCode();
     var action = event.getAction();
+    var modifiers = event.getModifiers();
+    Minescript.onKeyboardEvent(key, scanCode, action, modifiers);
     var screen = Minecraft.getInstance().screen;
     if (screen == null) {
       Minescript.onKeyInput(key);
@@ -52,7 +56,6 @@ public class MinescriptForgeMod {
         && Minescript.onKeyboardKeyPressed(screen, key)) {
       event.setCanceled(true);
     }
-    Minescript.onKeyInput(event.getKey());
   }
 
   @SubscribeEvent
@@ -70,7 +73,9 @@ public class MinescriptForgeMod {
   }
 
   @SubscribeEvent
-  public void onPlayerTick(TickEvent.PlayerTickEvent event) {
-    Minescript.onPlayerTick();
+  public void onWorldTick(TickEvent.PlayerTickEvent event) {
+    if (event.side == LogicalSide.CLIENT && event.phase == TickEvent.Phase.START) {
+      Minescript.onClientWorldTick();
+    }
   }
 }
