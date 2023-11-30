@@ -6,7 +6,7 @@
 # make edits to this file, make sure to save a backup copy when upgrading to a
 # new version of Minescript.
 
-"""minescript v3.1 distributed via Minescript jar file
+"""minescript v3.2 distributed via Minescript jar file
 
 Usage: import minescript  # from Python script
 
@@ -17,11 +17,12 @@ scripts and not run directly.
 
 import base64
 import os
+import queue
 import sys
 import minescript_runtime
 
 from array import array
-from minescript_runtime import CallScriptFunction, CallAsyncScriptFunction
+from minescript_runtime import CallScriptFunction, CallAsyncScriptFunction, ExceptionHandler
 from typing import Any, List, Set, Dict, Tuple, Optional, Callable
 
 
@@ -594,13 +595,132 @@ def await_loaded_region(x1: int, z1: int, x2: int, z2: int, done_callback=None):
         "await_loaded_region", (x1, z1, x2, z2), done_callback)
 
 
-def register_chat_message_listener(listener: Callable[[str], None]):
+class KeyEventListener:
+  """Listener for keyboard events.
+
+  Only one `KeyEventListener` can be instantiated at a time within a job. For a
+  list of key codes, see: https://www.glfw.org/docs/3.4/group__keys.html
+
+  Since: v3.2
+  """
+
+  def __init__(self):
+    """Creates a `KeyEventListener` for listening to keyboard events."""
+    self.queue = queue.Queue()
+    register_key_event_listener(self, self)
+
+  def get(self, block: bool = True, timeout: float = None) -> str:
+    """Gets the next key event in the queue.
+
+    Args:
+      block: if `True`, block until an event fires
+      timeout: timeout in seconds to wait for an event if `block` is `True`
+
+    Returns:
+      event dict: `{"key": int, "scanCode": int, "action": int, "modifiers": int,
+      "timeMillis": int, "screen": str}` where `action` is 0 for key up, 1 for
+      key down, and 2 for key repeat.
+
+    Raises:
+      `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
+      queue is empty.
+    """
+    value = self.queue.get(block, timeout)
+    if isinstance(value, Exception):
+      raise value
+    return value
+
+  def __call__(self, result: Any):
+    self.queue.put(result)
+
+  def __del__(self):
+    unregister_key_event_listener()
+
+
+def register_key_event_listener(
+    listener: Callable[[str], None], exception_handler: ExceptionHandler = None):
+  """Registers a listener for receiving keyboard events. One listener allowed per job.
+
+  For a more user-friendly API, use `KeyEventListener` instead. (__internal__)
+
+  Args:
+    listener: callable that repeatedly accepts a string representing key events
+    exception_handler: callable for handling an `Exception` thrown from Java (optional)
+
+  Since: v3.2
+  """
+  CallAsyncScriptFunction(
+      "register_key_event_listener", (), listener, exception_handler)
+
+
+def unregister_key_event_listener():
+  """Unregisters a key event listener, if any, for the currently running job.
+
+  For a more user-friendly API, use `KeyEventListener` instead. (__internal__)
+
+  Returns:
+    `True` if successfully unregistered a listener.
+
+  Since: v3.2
+  """
+  CallScriptFunction("unregister_key_event_listener")
+
+
+class ChatEventListener:
+  """Listener for chat message events.
+
+  Only one `ChatEventListener` can be instantiated at a time within a job.
+
+  Listener receives both incoming and outgoing chat messages.
+
+  Since: v3.2
+  """
+
+  def __init__(self):
+    """Creates a `ChatEventListener` to listen for chat messages."""
+    self.queue = queue.Queue()
+    register_chat_message_listener(self, self)
+
+  def get(self, block: bool = True, timeout: float = None) -> str:
+    """Gets the next chat event in the queue.
+
+    Args:
+      block: if `True`, block until an event fires
+      timeout: timeout in seconds to wait for an event if `block` is `True`
+
+    Returns:
+      message from chat (str)
+
+    Raises:
+      `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
+      queue is empty.
+    """
+    value = self.queue.get(block, timeout)
+    if isinstance(value, Exception):
+      raise value
+    return value
+
+  def __call__(self, result: Any):
+    self.queue.put(result)
+
+  def __del__(self):
+    unregister_chat_message_listener()
+
+
+def register_chat_message_listener(
+    listener: Callable[[str], None], exception_handler: ExceptionHandler = None):
   """Registers a listener for receiving chat messages. One listener allowed per job.
 
   Listener receives both incoming and outgoing chat messages.
 
+  For a more user-friendly API, use `ChatEventListener` instead.
+
   Args:
     listener: callable that repeatedly accepts a string representing chat messages
+    exception_handler: callable for handling an `Exception` thrown from Java (optional)
+
+  Update in v3.2:
+    Added optional arg `exception_handler`.
 
   Since: v2.0
 
@@ -612,7 +732,9 @@ def register_chat_message_listener(listener: Callable[[str], None]):
 
 
 def unregister_chat_message_listener():
-  """Unegisters a chat message listener, if any, for the currently running job.
+  """Unregisters a chat message listener, if any, for the currently running job.
+
+  For a more user-friendly API, use `ChatEventListener` instead.
 
   Returns:
     `True` if successfully unregistered a listener.
@@ -644,7 +766,7 @@ def register_chat_message_interceptor(interceptor: Callable[[str], None]):
 
 
 def unregister_chat_message_interceptor():
-  """Unegisters the chat message interceptor, if one is currently registered.
+  """Unregisters the chat message interceptor, if one is currently registered.
 
   Returns:
     `True` if successfully unregistered an interceptor.
@@ -652,6 +774,17 @@ def unregister_chat_message_interceptor():
   Since: v2.1
   """
   CallScriptFunction("unregister_chat_message_interceptor")
+
+
+def screen_name():
+  """Gets the current GUI screen name, if there is one.
+
+  Returns:
+    Name of current screen (str) or `None` if no GUI screen is being displayed.
+
+  Since: v3.2
+  """
+  return CallScriptFunction("screen_name")
 
 
 BlockPos = Tuple[int, int, int]

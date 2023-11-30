@@ -1,4 +1,4 @@
-## Minescript v3.2 docs
+## Minescript v3.1 docs
 
 Table of contents:
 
@@ -12,7 +12,9 @@ Table of contents:
     - [Script output](#script-output)
     - [minescript module](#minescript-module)
 
-Previous version: [v3.1](v3.1/README.md)
+Previous version: [v3.0](v3.0/README.md)
+
+Latest version: [latest](../README.md)
 
 ## In-game commands
 
@@ -181,7 +183,10 @@ Specifies the number of Minecraft game ticks to wait per Minecraft processing
 cycle. The lower the number, down to a minimum of 1, the faster the script will
 run.
 
-Default is 1 since v3.2. (Previously, default was 3.)
+***Note:*** *Setting this value too low will make Minecraft less responsive and
+possibly crash.*
+
+Default is 3.
 
 #### minescript_incremental_command_suggestions 
 *Usage:* `\minescript_incremental_command_suggestions  BOOL`
@@ -875,93 +880,16 @@ minescript.echo("Do more work now that region finished loading...")
 ```
 
 
-#### KeyEventListener
-Listener for keyboard events.
-
-Only one [`KeyEventListener`](#keyeventlistener) can be instantiated at a time within a job. For a
-list of key codes, see: https://www.glfw.org/docs/3.4/group__keys.html
-
-Since: v3.2
-
-
-#### KeyEventListener.\_\_init\_\_
-*Usage:* <code>KeyEventListener()</code>
-
-Creates a [`KeyEventListener`](#keyeventlistener) for listening to keyboard events.
-
-#### KeyEventListener.get
-*Usage:* <code>KeyEventListener.get(block: bool = True, timeout: float = None) -> str</code>
-
-Gets the next key event in the queue.
-
-*Args:*
-
-- `block`: if `True`, block until an event fires
-- `timeout`: timeout in seconds to wait for an event if `block` is `True`
-
-*Returns:*
-
-- event dict: `{"key": int, "scanCode": int, "action": int, "modifiers": int,
-  "timeMillis": int, "screen": str}` where `action` is 0 for key up, 1 for
-  key down, and 2 for key repeat.
-
-*Raises:*
-
-  `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
-  queue is empty.
-
-
-#### ChatEventListener
-Listener for chat message events.
-
-Only one [`ChatEventListener`](#chateventlistener) can be instantiated at a time within a job.
-
-Listener receives both incoming and outgoing chat messages.
-
-Since: v3.2
-
-
-#### ChatEventListener.\_\_init\_\_
-*Usage:* <code>ChatEventListener()</code>
-
-Creates a [`ChatEventListener`](#chateventlistener) to listen for chat messages.
-
-#### ChatEventListener.get
-*Usage:* <code>ChatEventListener.get(block: bool = True, timeout: float = None) -> str</code>
-
-Gets the next chat event in the queue.
-
-*Args:*
-
-- `block`: if `True`, block until an event fires
-- `timeout`: timeout in seconds to wait for an event if `block` is `True`
-
-*Returns:*
-
-- message from chat (str)
-
-*Raises:*
-
-  `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
-  queue is empty.
-
-
 #### register_chat_message_listener
-*Usage:* <code>register_chat_message_listener(listener: Callable[[str], None], exception_handler: ExceptionHandler = None)</code>
+*Usage:* <code>register_chat_message_listener(listener: Callable[[str], None])</code>
 
 Registers a listener for receiving chat messages. One listener allowed per job.
 
 Listener receives both incoming and outgoing chat messages.
 
-For a more user-friendly API, use [`ChatEventListener`](#chateventlistener) instead.
-
 *Args:*
 
 - `listener`: callable that repeatedly accepts a string representing chat messages
-- `exception_handler`: callable for handling an `Exception` thrown from Java (optional)
-
-Update in v3.2:
-  Added optional arg `exception_handler`.
 
 Since: v2.0
 
@@ -972,9 +900,7 @@ See also:
 #### unregister_chat_message_listener
 *Usage:* <code>unregister_chat_message_listener()</code>
 
-Unregisters a chat message listener, if any, for the currently running job.
-
-For a more user-friendly API, use [`ChatEventListener`](#chateventlistener) instead.
+Unegisters a chat message listener, if any, for the currently running job.
 
 *Returns:*
 
@@ -1007,25 +933,13 @@ See also:
 #### unregister_chat_message_interceptor
 *Usage:* <code>unregister_chat_message_interceptor()</code>
 
-Unregisters the chat message interceptor, if one is currently registered.
+Unegisters the chat message interceptor, if one is currently registered.
 
 *Returns:*
 
 - `True` if successfully unregistered an interceptor.
 
 Since: v2.1
-
-
-#### screen_name
-*Usage:* <code>screen_name()</code>
-
-Gets the current GUI screen name, if there is one.
-
-*Returns:*
-
-- Name of current screen (str) or `None` if no GUI screen is being displayed.
-
-Since: v3.2
 
 
 #### BlockPos

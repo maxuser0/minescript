@@ -6,7 +6,7 @@
 # make edits to this file, make sure to save a backup copy when upgrading to a
 # new version of Minescript.
 
-r"""eval v3.1 distributed via Minescript jar file
+r"""eval v3.2 distributed via Minescript jar file
 
 Usage:
   \eval <pythonCode> [<line2> [<line3> ...]]

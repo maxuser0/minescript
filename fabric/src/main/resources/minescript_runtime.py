@@ -6,7 +6,7 @@
 # make edits to this file, make sure to save a backup copy when upgrading to a
 # new version of Minescript.
 
-"""minescript_runtime v3.1 distributed via Minescript jar file
+"""minescript_runtime v3.2 distributed via Minescript jar file
 
 Usage: import minescript_runtime  # from Python script
 
@@ -40,15 +40,18 @@ import _thread
 from threading import Lock
 from typing import Any, List, Set, Dict, Tuple, Optional, Callable
 
-StringConsumer = Callable[[str], None]
-# Dict values: (function_name: str, on_value_handler: StringConsumer)
-_script_function_calls: Dict[int, Tuple[str, StringConsumer]] = dict()
+AnyConsumer = Callable[[str], None]
+ExceptionHandler = Callable[[Exception], None]
+
+# Dict values: (function_name: str, on_value_handler: AnyConsumer)
+_script_function_calls: Dict[int, Tuple[str, AnyConsumer, ExceptionHandler]] = dict()
 _script_function_calls_lock = threading.Lock()
 _next_fcallid = 1000
 
 
 def CallAsyncScriptFunction(func_name: str, args: Tuple[Any, ...],
-                            retval_handler: StringConsumer) -> None:
+                            retval_handler: AnyConsumer,
+                            exception_handler: ExceptionHandler = None) -> None:
   """Calls a script function, asynchronously streaming return value(s).
 
   Args:
@@ -59,7 +62,7 @@ def CallAsyncScriptFunction(func_name: str, args: Tuple[Any, ...],
   with _script_function_calls_lock:
     _next_fcallid += 1
     func_call_id = _next_fcallid
-    _script_function_calls[func_call_id] = (func_name, retval_handler)
+    _script_function_calls[func_call_id] = (func_name, retval_handler, exception_handler)
   print(f"?{func_call_id} {func_name} {json.dumps(args)}")
 
 
@@ -73,16 +76,25 @@ def CallScriptFunction(func_name: str, *args: Any) -> Any:
     script function's return value: number, string, list, or dict
   """
   retval_holder: List[Any] = []
+  exception_holder: List[Exception] = []
   lock = Lock()
   lock.acquire()
 
-  def WaitForReturnValue(retval: Any) -> None:
+  def HandleReturnValue(retval: Any) -> None:
     retval_holder.append(retval)
     lock.release()
 
-  CallAsyncScriptFunction(func_name, args, WaitForReturnValue)
+  def HandleException(exception: Exception) -> None:
+    exception_holder.append(exception)
+    lock.release()
+
+  CallAsyncScriptFunction(func_name, args, HandleReturnValue, HandleException)
   lock.acquire()
-  return retval_holder[0]
+
+  if exception_holder:
+    raise exception_holder[0]
+  if retval_holder:
+    return retval_holder[0]
 
 
 def _ScriptServiceLoop():
@@ -116,18 +128,25 @@ def _ScriptServiceLoop():
             f"minescript_runtime.py: fcid={func_call_id} not found in _script_function_calls",
             file=sys.stderr)
         continue
-      func_name, retval_handler = _script_function_calls[func_call_id]
+      func_name, retval_handler, exception_handler = _script_function_calls[func_call_id]
 
       if "conn" in reply and reply["conn"] == "close":
         del _script_function_calls[func_call_id]
 
-    if "retval" in reply:
+    if "except" in reply:
+      exception_type = reply["except"]["type"]
+      message = reply["except"]["message"]
+      if exception_handler is None:
+        print(f"{exception_type} in {func_name}: {message}", file=sys.stderr)
+      else:
+        exception_handler(eval(f"{exception_type}({repr(message)})"))
+    elif "retval" in reply:
       retval = reply["retval"]
       retval_handler(retval)
 
-    if "conn" not in reply and "retval" not in reply:
+    if "conn" not in reply and "retval" not in reply and "except" not in reply:
       print(
-          f"minescript_runtime.py: script function response has neither 'conn' nor 'retval': {reply}",
+          f"minescript_runtime.py: script function response missing 'conn', 'retval', and 'except': {reply}",
           file=sys.stderr)
 
 
