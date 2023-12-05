@@ -470,7 +470,7 @@ public class Minescript {
               + (match.group(1).equals("-") ? -1 : 1)
                   * (match.group(2).isEmpty() ? 0 : Integer.valueOf(match.group(2))));
     } else {
-      logUserError("Canont parse tilde-param: \"{}\"", param);
+      logUserError("Cannot parse tilde-param: \"{}\"", param);
       return String.valueOf((int) playerPosition);
     }
   }
@@ -2956,7 +2956,7 @@ public class Minescript {
       } else if (screen instanceof LevelLoadingScreen) {
         name = "L" + "evel Loading"; // Split literal to prevent symbol renaming.
       } else if (screen instanceof ProgressScreen) {
-        name = "Progess";
+        name = "Progress";
       } else {
         // The class name is not descriptive in production builds where symbols
         // are obfuscated, but using the class name allows callers to
