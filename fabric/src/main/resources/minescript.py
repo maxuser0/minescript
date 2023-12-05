@@ -786,6 +786,53 @@ def screen_name():
   """
   return CallScriptFunction("screen_name")
 
+def container_get_item(slot:int):
+  """Gets the item in a container slot if there is one.
+
+  Args:
+    slot: slot number
+
+  Returns:
+    `None` if there is no item in that slot, no inventory is open or an invalid inventory is open.
+    dictionary of item data if there is an item in that slot.
+
+  Since: v3.3
+  """
+  return CallScriptFunction("container_get_item", slot)
+
+def container_get_items():
+  """Gets all items in a container.
+
+  Returns:
+    list of dictionaries of item data.
+
+  Since: v3.3
+  """
+  return CallScriptFunction("container_get_items")
+
+def container_click_slot(slot:int):
+  """Simulates a Left-click on a slot in the opened Inventory, if any.
+
+  Args:
+    slot: slot number
+
+  Returns:
+    `True` if the slot was clicked.
+    'False' if the slot was not clicked.
+
+  Since: v3.3"""
+  return CallScriptFunction("container_click_slot", slot)
+
+def player_look_at_position(x,y,z):
+  """Rotates the camera to look at a position.
+
+  Args:
+    x: x position
+    y: y position
+    z: z position
+
+  Since: v3.3"""
+  CallScriptFunction("player_look_at_position", x, y, z)
 
 BlockPos = Tuple[int, int, int]
 """Tuple representing `(x: int, y: int, z: int)` position in block space."""

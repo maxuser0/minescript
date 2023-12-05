@@ -24,19 +24,7 @@ import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.OptionalInt;
-import java.util.Queue;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
@@ -50,6 +38,8 @@ import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ChatScreen;
@@ -57,19 +47,26 @@ import net.minecraft.client.gui.screen.LevelLoadingScreen;
 import net.minecraft.client.gui.screen.ProgressScreen;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.ingame.CreativeInventoryScreen;
+import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.client.util.ScreenshotRecorder;
+import net.minecraft.command.argument.EntityAnchorArgumentType;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.network.PacketByteBuf;
+import net.minecraft.network.packet.c2s.play.ClickSlotC2SPacket;
 import net.minecraft.network.packet.c2s.play.PickFromInventoryC2SPacket;
+import net.minecraft.screen.ScreenHandler;
+import net.minecraft.screen.slot.Slot;
 import net.minecraft.text.Text;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldAccess;
 import net.minecraft.world.chunk.Chunk;
@@ -2880,6 +2877,26 @@ public class Minescript {
     return OptionalInt.empty();
   }
 
+  private static OptionalDouble getStrictDoubleValue(Object object) {
+    if (!(object instanceof Number)) {
+      return OptionalDouble.empty();
+    }
+    Number number = (Number) object;
+    if (number instanceof Double) {
+      return OptionalDouble.of(number.doubleValue());
+    }
+    if (number instanceof Float) {
+      return OptionalDouble.of(number.doubleValue());
+    }
+    if (number instanceof Long) {
+      return OptionalDouble.of(number.doubleValue());
+    }
+    if (number instanceof Integer) {
+      return OptionalDouble.of(number.doubleValue());
+    }
+    return OptionalDouble.empty();
+  }
+
   private static Optional<List<Integer>> getStrictIntList(Object object) {
     if (!(object instanceof List)) {
       return Optional.empty();
@@ -3980,6 +3997,116 @@ public class Minescript {
           throw new IllegalArgumentException("Expected no params but got: " + argsString);
         }
         return Optional.of(toJsonString(getScreenName().orElse(null)));
+
+      case "container_get_item": // Item in slot in container
+      {
+        if (args.size() != 1) {
+          logUserError("Error: `{}` expected 1 param (slot id) but got: {}", functionName, argsString);
+          return Optional.empty();
+        }
+        Screen screen = minecraft.currentScreen;
+        int slot = getStrictIntValue(args.get(0)).getAsInt();
+        if (screen == null) {
+          logUserError("Error: `{}`: slot {} does not exist", functionName, slot);
+          return Optional.empty();
+        }
+        if (screen instanceof HandledScreen<?>) {
+          HandledScreen handledScreen = (HandledScreen) screen;
+          ScreenHandler screenHandler = handledScreen.getScreenHandler();
+          if (screenHandler.slots.size() <= slot) {
+            return Optional.empty();
+          }
+          ItemStack itemStack = screenHandler.slots.get(slot).getStack();
+          return Optional.of(itemStackToJsonString(itemStack, OptionalInt.of(slot), false));
+        } else {
+          return Optional.empty();
+        }
+      }
+
+      case "container_get_items": // List of Items in Chest
+      {
+        Screen screen = minecraft.currentScreen;
+        if (screen instanceof HandledScreen<?>) {
+          HandledScreen handledScreen = (HandledScreen) screen;
+          ScreenHandler screenHandler = handledScreen.getScreenHandler();
+          Slot[] items = screenHandler.slots.toArray(new Slot[0]);
+          StringBuilder resultString = new StringBuilder("[");
+          for (int i = 0; i < items.length; i++) {
+            ItemStack itemStack = items[i].getStack();
+            if (itemStack.isEmpty()) {
+              continue;
+            }
+            resultString.append(itemStackToJsonString(itemStack, OptionalInt.of(items[i].id), false));
+            if (i < items.length - 1) {
+              resultString.append(",");
+            }
+          }
+          resultString.append("]");
+          return Optional.of(resultString.toString());
+        } else {
+          return Optional.empty();
+        }
+      }
+
+      case "container_click_slot": // Click on slot in container
+      {
+        if (args.size() != 1) {
+          logUserError("Error: `{}` expected 1 param (slot id) but got: {}", functionName, argsString);
+          return Optional.empty();
+        }
+        Screen screen = minecraft.currentScreen;
+        int slot = getStrictIntValue(args.get(0)).getAsInt();
+        if (screen == null) {
+          return Optional.of("false");
+        }
+        if (screen instanceof HandledScreen<?>) {
+          HandledScreen handledScreen = (HandledScreen) screen;
+          ScreenHandler screenHandler = handledScreen.getScreenHandler();
+          if (screenHandler.slots.size() <= slot) {
+            logUserError("Error: `{}`: slot {} does not exist", functionName, slot);
+            return Optional.of("false");
+          }
+          //screenHandler.onSlotClick(slot, 0, SlotActionType.PICKUP, minecraft.player);
+          //screenHandler.sendContentUpdates();
+          PacketByteBuf buf = PacketByteBufs.create();
+          buf.writeByte(screenHandler.syncId);
+          buf.writeShort(slot);
+          buf.writeByte(0); // Button (0 for left click)
+          buf.writeShort(0); // Action type (0 for click)
+          buf.writeShort(0); // Mode (0 for normal)
+          buf.writeItemStack(screenHandler.getSlot(slot).getStack()); // Item stack
+          minecraft.getNetworkHandler().sendPacket(new ClickSlotC2SPacket(buf));
+          screenHandler.sendContentUpdates();
+          return Optional.of("true");
+        } else {
+          return Optional.of("false");
+        }
+      }
+
+      case "player_look_at_position": // Look at x, y, z
+      {
+        if (args.size() != 3) {
+          logUserError("Error: `{}` expected 3 params (x, y, z) but got: {}", functionName, argsString);
+          return Optional.empty();
+        }
+        OptionalDouble value1 = getStrictDoubleValue(args.get(0));
+        if (!value1.isPresent()) {
+          logUserError("Error: `{}` expected first param to be a number but got: {}", functionName, argsString);
+          return Optional.empty();
+        }
+        OptionalDouble value2 = getStrictDoubleValue(args.get(1));
+        if (!value2.isPresent()) {
+          logUserError("Error: `{}` expected second param to be a number but got: {}", functionName, argsString);
+          return Optional.empty();
+        }
+        OptionalDouble value3 = getStrictDoubleValue(args.get(2));
+        if (!value3.isPresent()) {
+          logUserError("Error: `{}` expected third param to be a number but got: {}", functionName, argsString);
+          return Optional.empty();
+        }
+        minecraft.player.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, new Vec3d(value1.getAsDouble(), value2.getAsDouble(), value3.getAsDouble()));
+        return Optional.empty();
+      }
 
       case "flush":
         if (args.isEmpty()) {
