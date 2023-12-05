@@ -39,7 +39,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
+import io.netty.buffer.Unpooled;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ChatScreen;
@@ -4068,7 +4068,7 @@ public class Minescript {
           }
           //screenHandler.onSlotClick(slot, 0, SlotActionType.PICKUP, minecraft.player);
           //screenHandler.sendContentUpdates();
-          PacketByteBuf buf = PacketByteBufs.create();
+          PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
           buf.writeByte(screenHandler.syncId);
           buf.writeShort(slot);
           buf.writeByte(0); // Button (0 for left click)
