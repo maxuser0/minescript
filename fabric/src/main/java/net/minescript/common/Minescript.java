@@ -4117,7 +4117,7 @@ public class Minescript {
           return Optional.empty();
         }
         minecraft.player.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, new Vec3d(value1.getAsDouble(), value2.getAsDouble(), value3.getAsDouble()));
-        return Optional.empty();
+        return Optional.of("true");
       }
 
       case "flush":
