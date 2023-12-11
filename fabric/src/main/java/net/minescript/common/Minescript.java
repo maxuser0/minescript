@@ -4073,7 +4073,7 @@ public class Minescript {
         }
       }
 
-      case "player_look_at_position": // Look at x, y, z
+      case "player_look_at": // Look at x, y, z
       {
         if (args.size() != 3) {
           throw new IllegalArgumentException("Error: `" + functionName + "` expected 3 params (x, y, z) but got: " + argsString);

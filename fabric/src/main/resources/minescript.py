@@ -810,7 +810,7 @@ def container_click_slot(slot: int):
   return CallScriptFunction("container_click_slot", slot)
 
 
-def player_look_at_position(x: float, y: float, z: float):
+def player_look_at(x: float, y: float, z: float):
   """Rotates the camera to look at a position.
 
   Args:
@@ -820,7 +820,7 @@ def player_look_at_position(x: float, y: float, z: float):
 
   Since: v3.3
   """
-  CallScriptFunction("player_look_at_position", x, y, z)
+  CallScriptFunction("player_look_at", x, y, z)
 
 
 BlockPos = Tuple[int, int, int]
