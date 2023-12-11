@@ -4010,33 +4010,11 @@ public class Minescript {
         }
         return Optional.of(toJsonString(getScreenName().orElse(null)));
 
-      case "container_get_item": // Item in slot in container
-      {
-        if (args.size() != 1) {
-          logUserError("Error: `{}` expected 1 param (slot id) but got: {}", functionName, argsString);
-          return Optional.empty();
-        }
-        Screen screen = minecraft.currentScreen;
-        int slot = getStrictIntValue(args.get(0)).getAsInt();
-        if (screen == null) {
-          logUserError("Error: `{}`: slot {} does not exist", functionName, slot);
-          return Optional.empty();
-        }
-        if (screen instanceof HandledScreen<?>) {
-          HandledScreen handledScreen = (HandledScreen) screen;
-          ScreenHandler screenHandler = handledScreen.getScreenHandler();
-          if (screenHandler.slots.size() <= slot) {
-            return Optional.empty();
-          }
-          ItemStack itemStack = screenHandler.slots.get(slot).getStack();
-          return Optional.of(itemStackToJsonString(itemStack, OptionalInt.of(slot), false));
-        } else {
-          return Optional.empty();
-        }
-      }
-
       case "container_get_items": // List of Items in Chest
       {
+        if (!args.isEmpty()){
+          throw new IllegalArgumentException("Expected no params but got: " + argsString);
+        }
         Screen screen = minecraft.currentScreen;
         if (screen instanceof HandledScreen<?>) {
           HandledScreen handledScreen = (HandledScreen) screen;
@@ -4056,15 +4034,14 @@ public class Minescript {
           resultString.append("]");
           return Optional.of(resultString.toString());
         } else {
-          return Optional.empty();
+          return Optional.of("null");
         }
       }
 
       case "container_click_slot": // Click on slot in container
       {
         if (args.size() != 1) {
-          logUserError("Error: `{}` expected 1 param (slot id) but got: {}", functionName, argsString);
-          return Optional.empty();
+          throw new IllegalArgumentException("Error: `" + functionName + "` expected 1 param (slot id) but got: " + argsString);
         }
         Screen screen = minecraft.currentScreen;
         int slot = getStrictIntValue(args.get(0)).getAsInt();
@@ -4087,7 +4064,8 @@ public class Minescript {
           buf.writeShort(0); // Action type (0 for click)
           buf.writeShort(0); // Mode (0 for normal)
           buf.writeItemStack(screenHandler.getSlot(slot).getStack()); // Item stack
-          minecraft.getNetworkHandler().sendPacket(new ClickSlotC2SPacket(buf));
+          var connection = minecraft.getNetworkHandler();
+          connection.sendPacket(new ClickSlotC2SPacket(buf));
           screenHandler.sendContentUpdates();
           return Optional.of("true");
         } else {
@@ -4098,25 +4076,15 @@ public class Minescript {
       case "player_look_at_position": // Look at x, y, z
       {
         if (args.size() != 3) {
-          logUserError("Error: `{}` expected 3 params (x, y, z) but got: {}", functionName, argsString);
-          return Optional.empty();
+          throw new IllegalArgumentException("Error: `" + functionName + "` expected 3 params (x, y, z) but got: " + argsString);
+        }
+        if (!(args.get(0) instanceof Number) || !(args.get(1) instanceof Number) || !(args.get(2) instanceof Number)) {
+          throw new IllegalArgumentException("Error: `" + functionName + "` expected 3 params (x, y, z) as numbers but got: " + argsString);
         }
         OptionalDouble value1 = getStrictDoubleValue(args.get(0));
-        if (!value1.isPresent()) {
-          logUserError("Error: `{}` expected first param to be a number but got: {}", functionName, argsString);
-          return Optional.empty();
-        }
         OptionalDouble value2 = getStrictDoubleValue(args.get(1));
-        if (!value2.isPresent()) {
-          logUserError("Error: `{}` expected second param to be a number but got: {}", functionName, argsString);
-          return Optional.empty();
-        }
         OptionalDouble value3 = getStrictDoubleValue(args.get(2));
-        if (!value3.isPresent()) {
-          logUserError("Error: `{}` expected third param to be a number but got: {}", functionName, argsString);
-          return Optional.empty();
-        }
-        minecraft.player.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, new Vec3d(value1.getAsDouble(), value2.getAsDouble(), value3.getAsDouble()));
+        player.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, new Vec3d(value1.getAsDouble(), value2.getAsDouble(), value3.getAsDouble()));
         return Optional.of("true");
       }
 
