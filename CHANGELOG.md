@@ -4,7 +4,7 @@
 
 ### Major changes
 
-- Support for Minecraft versions up to 1.20.2
+- Support for Minecraft versions up to 1.20.4
 - Fix Forge bug where Minescript loop could run on the wrong thread and crash, and improve performance (especially with Fabric) by setting the default for `minescript_ticks_per_cycle` to run every tick rather than once every 3 ticks ([79613b1](https://github.com/maxuser0/minescript/commit/79613b14abf05691199139236f4b826265080f99))
 - Add script function `screen_name()` for getting the name of the currently displayed GUI screen, if any ([e40d52a](https://github.com/maxuser0/minescript/commit/e40d52a184d315cfa98549381074de49a07dbb20))
 - Introduce `ChatEventListener` Python class for more user-friendly handling of chat events ([83dd4aa](https://github.com/maxuser0/minescript/commit/83dd4aafb19a514d217132113c9ec102f1e92960))
