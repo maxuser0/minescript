@@ -55,10 +55,10 @@ import io.netty.buffer.Unpooled;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ChatScreen;
-import net.minecraft.client.gui.screen.LevelLoadingScreen;
 import net.minecraft.client.gui.screen.ProgressScreen;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.ingame.CreativeInventoryScreen;
+import net.minecraft.client.gui.screen.LevelLoadingScreen;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.option.KeyBinding;
@@ -4021,15 +4021,15 @@ public class Minescript {
           ScreenHandler screenHandler = handledScreen.getScreenHandler();
           Slot[] items = screenHandler.slots.toArray(new Slot[0]);
           StringBuilder resultString = new StringBuilder("[");
-          for (int i = 0; i < items.length; i++) {
-            ItemStack itemStack = items[i].getStack();
+          for (Slot item : items) {
+            ItemStack itemStack = item.getStack();
+            if (resultString.length() > 1 && resultString.lastIndexOf(",") != resultString.length() - 1) {
+              resultString.append(",");
+            }
             if (itemStack.isEmpty()) {
               continue;
             }
-            resultString.append(itemStackToJsonString(itemStack, OptionalInt.of(items[i].id), false));
-            if (i < items.length - 1) {
-              resultString.append(",");
-            }
+            resultString.append(itemStackToJsonString(itemStack, OptionalInt.of(item.id), false));
           }
           resultString.append("]");
           return Optional.of(resultString.toString());
