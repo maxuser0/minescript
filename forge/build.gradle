@@ -162,6 +162,12 @@ dependencies {
   // http://www.gradle.org/docs/current/userguide/dependency_management.html
 }
 
+sourceSets.each {
+  def dir = layout.buildDirectory.dir("sourcesSets/$it.name")
+  it.output.resourcesDir = dir
+  it.java.destinationDirectory = dir
+}
+
 jar {
   // Exclude vim swap files:
   processResources.exclude('**/.*.swp')

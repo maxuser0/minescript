@@ -58,8 +58,8 @@ import net.minecraft.client.gui.screen.ChatScreen;
 import net.minecraft.client.gui.screen.ProgressScreen;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.ingame.CreativeInventoryScreen;
-import net.minecraft.client.gui.screen.LevelLoadingScreen;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
+import net.minecraft.client.gui.screen.world.LevelLoadingScreen;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
@@ -2720,7 +2720,7 @@ public class Minescript {
       var minecraft = MinecraftClient.getInstance();
       var chatHud = minecraft.inGameHud.getChatHud();
       if (message.startsWith("|{\"")) {
-        chatHud.addMessage(Text.Serializer.fromJson(message.substring(1)));
+        chatHud.addMessage(Text.Serialization.fromJson(message.substring(1)));
       } else {
         chatHud.addMessage(Text.of(message.substring(1)));
       }
