@@ -787,6 +787,44 @@ def screen_name():
   return CallScriptFunction("screen_name")
 
 
+def container_get_items():
+  """Gets all items in an open container (chest, furnace, etc. with slots).
+
+  Returns:
+    List of dictionaries of item data if a container's contents are displayed; `None` otherwise.
+
+  Since: v3.3
+  """
+  return CallScriptFunction("container_get_items")
+
+
+def container_click_slot(slot: int):
+  """Simulates a left click on a slot in an open container, if any.
+
+  Args:
+    slot: slot number to click
+
+  Returns:
+    `True` upon success
+
+  Since: v3.3
+  """
+  return CallScriptFunction("container_click_slot", slot)
+
+
+def player_look_at(x: float, y: float, z: float):
+  """Rotates the camera to look at a position.
+
+  Args:
+    x: x position
+    y: y position
+    z: z position
+
+  Since: v3.3
+  """
+  CallScriptFunction("player_look_at", x, y, z)
+
+
 BlockPos = Tuple[int, int, int]
 """Tuple representing `(x: int, y: int, z: int)` position in block space."""
 

@@ -788,11 +788,10 @@ def screen_name():
 
 
 def container_get_items():
-  """Gets all items in a container (chest, furnace, etc. with slots).
+  """Gets all items in an open container (chest, furnace, etc. with slots).
 
   Returns:
-    list of dictionaries of item data.
-    null if no inventory is found
+    List of dictionaries of item data if a container's contents are displayed; `None` otherwise.
 
   Since: v3.3
   """
@@ -800,10 +799,13 @@ def container_get_items():
 
 
 def container_click_slot(slot: int):
-  """Simulates a Left-click on a slot in the opened Inventory, if any.
+  """Simulates a left click on a slot in an open container, if any.
 
   Args:
-    slot: slot number
+    slot: slot number to click
+
+  Returns:
+    `True` upon success
 
   Since: v3.3
   """

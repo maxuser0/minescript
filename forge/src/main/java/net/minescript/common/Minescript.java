@@ -11,6 +11,7 @@ import static net.minescript.common.CommandSyntax.quoteString;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
 import com.mojang.blaze3d.platform.InputConstants;
+import io.netty.buffer.Unpooled;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -33,8 +34,10 @@ import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.Queue;
 import java.util.Set;
@@ -59,13 +62,19 @@ import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.LevelLoadingScreen;
 import net.minecraft.client.gui.screens.ReceivingLevelScreen;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
+import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.network.protocol.game.ServerboundPickItemPacket;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
@@ -73,6 +82,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
@@ -473,7 +483,7 @@ public class Minescript {
               + (match.group(1).equals("-") ? -1 : 1)
                   * (match.group(2).isEmpty() ? 0 : Integer.valueOf(match.group(2))));
     } else {
-      logUserError("Canont parse tilde-param: \"{}\"", param);
+      logUserError("Cannot parse tilde-param: \"{}\"", param);
       return String.valueOf((int) playerPosition);
     }
   }
@@ -2883,6 +2893,26 @@ public class Minescript {
     return OptionalInt.empty();
   }
 
+  private static OptionalDouble getStrictDoubleValue(Object object) {
+    if (!(object instanceof Number)) {
+      return OptionalDouble.empty();
+    }
+    Number number = (Number) object;
+    if (number instanceof Double) {
+      return OptionalDouble.of(number.doubleValue());
+    }
+    if (number instanceof Float) {
+      return OptionalDouble.of(number.doubleValue());
+    }
+    if (number instanceof Long) {
+      return OptionalDouble.of(number.doubleValue());
+    }
+    if (number instanceof Integer) {
+      return OptionalDouble.of(number.doubleValue());
+    }
+    return OptionalDouble.empty();
+  }
+
   private static Optional<List<Integer>> getStrictIntList(Object object) {
     if (!(object instanceof List)) {
       return Optional.empty();
@@ -2942,7 +2972,7 @@ public class Minescript {
       } else if (screen instanceof LevelLoadingScreen) {
         name = "L" + "evel Loading"; // Split literal to prevent symbol renaming.
       } else if (screen instanceof ReceivingLevelScreen) {
-        name = "Progess";
+        name = "Progress";
       } else {
         // The class name is not descriptive in production builds where symbols
         // are obfuscated, but using the class name allows callers to
@@ -3984,6 +4014,91 @@ public class Minescript {
         }
         return Optional.of(toJsonString(getScreenName().orElse(null)));
 
+      case "container_get_items": // List of Items in Chest
+        {
+          if (!args.isEmpty()) {
+            throw new IllegalArgumentException("Expected no params but got: " + argsString);
+          }
+          Screen screen = minecraft.screen;
+          if (screen instanceof AbstractContainerScreen<?>) {
+            AbstractContainerScreen handledScreen = (AbstractContainerScreen) screen;
+            AbstractContainerMenu screenHandler = handledScreen.getMenu();
+            Slot[] slots = screenHandler.slots.toArray(new Slot[0]);
+            StringBuilder resultString = new StringBuilder("[");
+            for (Slot slot : slots) {
+              ItemStack itemStack = slot.getItem();
+              if (itemStack.isEmpty()) {
+                continue;
+              }
+              if (resultString.length() > 1) {
+                resultString.append(",");
+              }
+              resultString.append(
+                  itemStackToJsonString(itemStack, OptionalInt.of(slot.index), false));
+            }
+            resultString.append("]");
+            return Optional.of(resultString.toString());
+          } else {
+            return Optional.of("null");
+          }
+        }
+
+      case "container_click_slot": // Click on slot in container
+        {
+          if (args.size() != 1) {
+            throw new IllegalArgumentException(
+                "Expected 1 param (slot: int) but got: " + argsString);
+          }
+          Screen screen = minecraft.screen;
+          int slotId = getStrictIntValue(args.get(0)).getAsInt();
+          if (screen == null || !(screen instanceof AbstractContainerScreen<?>)) {
+            return Optional.of("false");
+          }
+          AbstractContainerScreen handledScreen = (AbstractContainerScreen) screen;
+          AbstractContainerMenu screenHandler = handledScreen.getMenu();
+          if (slotId < 0 || slotId >= screenHandler.slots.size()) {
+            throw new IndexOutOfBoundsException(
+                "Slot "
+                    + slotId
+                    + " outside expected range: [0, "
+                    + (screenHandler.slots.size() - 1)
+                    + "]");
+          }
+          var slot = screenHandler.getSlot(slotId);
+          FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+          buf.writeByte(screenHandler.containerId);
+          buf.writeShort(slotId);
+          buf.writeByte(0); // Button (0 for left click)
+          buf.writeShort(0); // Action type (0 for click)
+          buf.writeShort(0); // Mode (0 for normal)
+          buf.writeItem(slot.getItem()); // Item stack
+          var connection = minecraft.getConnection();
+          connection.send(new ServerboundContainerClickPacket(buf));
+          screenHandler.broadcastChanges();
+          return Optional.of("true");
+        }
+
+      case "player_look_at": // Look at x, y, z
+        {
+          if (args.size() != 3) {
+            throw new IllegalArgumentException(
+                "Expected 3 params (x, y, z) but got: " + argsString);
+          }
+          if (!(args.get(0) instanceof Number)
+              || !(args.get(1) instanceof Number)
+              || !(args.get(2) instanceof Number)) {
+            throw new IllegalArgumentException(
+                "Expected 3 params (x, y, z) as numbers but got: " + argsString);
+          }
+          OptionalDouble value1 = getStrictDoubleValue(args.get(0));
+          OptionalDouble value2 = getStrictDoubleValue(args.get(1));
+          OptionalDouble value3 = getStrictDoubleValue(args.get(2));
+          player.lookAt(
+              EntityAnchorArgument.Anchor.EYES,
+              new Vec3(value1.getAsDouble(), value2.getAsDouble(), value3.getAsDouble()));
+          return Optional.of("true");
+        }
+
       case "flush":
         if (args.isEmpty()) {
           return Optional.of("true");
@@ -4084,7 +4199,9 @@ public class Minescript {
                             args,
                             response.orElse("<no response>"));
                       }
-                    } catch (IllegalArgumentException e) {
+                    } catch (IndexOutOfBoundsException e) {
+                      job.raiseException(funcCallId, "IndexError", e.getMessage());
+                    } catch (IllegalArgumentException | NoSuchElementException e) {
                       job.raiseException(funcCallId, "ValueError", e.getMessage());
                     } catch (IllegalStateException e) {
                       job.raiseException(funcCallId, "RuntimeError", e.getMessage());

@@ -19,6 +19,14 @@ import re
 import sys
 
 forge_to_fabric_class_names = (
+  ('net.minecraft.world.phys.Vec3', 'net.minecraft.util.math.Vec3d'),
+  ('net.minecraft.world.inventory.AbstractContainerMenu', 'net.minecraft.screen.ScreenHandler'),
+  ('net.minecraft.world.inventory.Slot', 'net.minecraft.screen.slot.Slot'),
+  ('net.minecraft.network.FriendlyByteBuf', 'net.minecraft.network.PacketByteBuf'),
+  ('net.minecraft.network.protocol.game.ServerboundContainerClickPacket',
+      'net.minecraft.network.packet.c2s.play.ClickSlotC2SPacket'),
+  ('net.minecraft.commands.arguments.EntityAnchorArgument', 'net.minecraft.command.argument.EntityAnchorArgumentType'),
+  ('net.minecraft.client.gui.screens.inventory.AbstractContainerScreen', 'net.minecraft.client.gui.screen.ingame.HandledScreen'),
   ('com.mojang.blaze3d.platform.InputConstants', 'net.minecraft.client.util.InputUtil'),
   ('net.minecraft.client.KeyMapping', 'net.minecraft.client.option.KeyBinding'),
   ('net.minecraft.client.Minecraft', 'net.minecraft.client.MinecraftClient'),
@@ -128,6 +136,13 @@ forge_to_fabric_member_names = (
   ('levelProperties.getXSpawn', 'levelProperties.getSpawnX'),
   ('levelProperties.getYSpawn', 'levelProperties.getSpawnY'),
   ('levelProperties.getZSpawn', 'levelProperties.getSpawnZ'),
+  ('buf.writeItem', 'buf.writeItemStack'),
+  ('slot.getItem', 'slot.getStack'),
+  ('slot.index', 'slot.id'),
+  ('screenHandler.containerId', 'screenHandler.syncId'),
+  ('screenHandler.broadcastChanges', 'screenHandler.sendContentUpdates'),
+  ('handledScreen.getMenu', 'handledScreen.getScreenHandler'),
+  ('EntityAnchorArgument.Anchor', 'EntityAnchorArgumentType.EntityAnchor')
 )
 
 def Usage():
