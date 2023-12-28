@@ -31,7 +31,7 @@ public class MinescriptForgeMod {
     LOGGER.info("(minescript) Minescript mod starting...");
     MinecraftForge.EVENT_BUS.register(this);
 
-    Minescript.init();
+    Minescript.init(new ForgePlatform());
   }
 
   @SubscribeEvent

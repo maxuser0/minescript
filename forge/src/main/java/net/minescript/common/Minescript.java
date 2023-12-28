@@ -99,9 +99,11 @@ public class Minescript {
     OVERWRITTE
   }
 
+  private static Platform platform;
   private static Thread worldListenerThread;
 
-  public static void init() {
+  public static void init(Platform platform) {
+    Minescript.platform = platform;
     LOGGER.info("Starting Minescript on OS: {}", System.getProperty("os.name"));
     if (new File(MINESCRIPT_DIR).mkdir()) {
       LOGGER.info("Created minescript dir");
@@ -2299,7 +2301,9 @@ public class Minescript {
     if (screen != null && screen instanceof ChatScreen) {
       var scriptCommandNames = getScriptCommandNamesWithBuiltins();
       try {
-        var chatEditBox = (EditBox) getField(screen, ChatScreen.class, "input", "f_95573_");
+        var chatEditBox =
+            (EditBox)
+                getField(screen, ChatScreen.class, "input", platform.getChatScreenInputFieldName());
         String value = chatEditBox.getValue();
         if (!value.startsWith("\\")) {
           minescriptCommandHistory.moveToEnd();

@@ -10,6 +10,7 @@ import static net.minescript.common.CommandSyntax.quoteString;
 
 import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
+import com.mojang.blaze3d.platform.InputConstants;
 import io.netty.buffer.Unpooled;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -53,36 +54,35 @@ import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import net.minecraft.block.BlockState;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.ChatScreen;
-import net.minecraft.client.gui.screen.ProgressScreen;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.screen.ingame.CreativeInventoryScreen;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.client.gui.screen.world.LevelLoadingScreen;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.util.InputUtil;
-import net.minecraft.client.util.ScreenshotRecorder;
-import net.minecraft.command.argument.EntityAnchorArgumentType;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.packet.c2s.play.ClickSlotC2SPacket;
-import net.minecraft.network.packet.c2s.play.PickFromInventoryC2SPacket;
-import net.minecraft.screen.ScreenHandler;
-import net.minecraft.screen.slot.Slot;
-import net.minecraft.text.Text;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.World;
-import net.minecraft.world.WorldAccess;
-import net.minecraft.world.chunk.Chunk;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.Screenshot;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.gui.screens.LevelLoadingScreen;
+import net.minecraft.client.gui.screens.ReceivingLevelScreen;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
+import net.minecraft.commands.arguments.EntityAnchorArgument;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
+import net.minecraft.network.protocol.game.ServerboundPickItemPacket;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
@@ -99,9 +99,11 @@ public class Minescript {
     OVERWRITTE
   }
 
+  private static Platform platform;
   private static Thread worldListenerThread;
 
-  public static void init() {
+  public static void init(Platform platform) {
+    Minescript.platform = platform;
     LOGGER.info("Starting Minescript on OS: {}", System.getProperty("os.name"));
     if (new File(MINESCRIPT_DIR).mkdir()) {
       LOGGER.info("Created minescript dir");
@@ -153,10 +155,10 @@ public class Minescript {
 
   private static void runWorldListenerThread() {
     final int millisToSleep = 1000;
-    var minecraft = MinecraftClient.getInstance();
-    boolean noWorld = (minecraft.world == null);
+    var minecraft = Minecraft.getInstance();
+    boolean noWorld = (minecraft.level == null);
     while (true) {
-      boolean noWorldNow = (minecraft.world == null);
+      boolean noWorldNow = (minecraft.level == null);
       if (noWorld != noWorldNow) {
         if (noWorldNow) {
           autorunHandled.set(false);
@@ -490,7 +492,7 @@ public class Minescript {
 
   private static String[] substituteMinecraftVars(String[] originalCommand) {
     String[] command = Arrays.copyOf(originalCommand, originalCommand.length);
-    var player = MinecraftClient.getInstance().player;
+    var player = Minecraft.getInstance().player;
     List<Integer> tildeParamPositions = new ArrayList<>();
     int consecutiveTildes = 0;
     for (int i = 0; i < command.length; ++i) {
@@ -607,7 +609,7 @@ public class Minescript {
 
     String[] derivativeCommand();
 
-    void processCommandToUndo(World level, String command);
+    void processCommandToUndo(Level level, String command);
 
     void enqueueCommands(Queue<String> commandQueue);
 
@@ -633,7 +635,7 @@ public class Minescript {
 
     // coords and pos are reused to avoid lots of small object instantiations.
     private int[] coords = new int[6];
-    private BlockPos.Mutable pos = new BlockPos.Mutable();
+    private BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 
     private static class Position {
       public final int x;
@@ -705,7 +707,7 @@ public class Minescript {
       return derivative;
     }
 
-    public synchronized void processCommandToUndo(World level, String command) {
+    public synchronized void processCommandToUndo(Level level, String command) {
       if (command.startsWith("/setblock ") && getSetblockCoords(command, coords)) {
         Optional<String> block =
             blockStateToString(level.getBlockState(pos.set(coords[0], coords[1], coords[2])));
@@ -787,7 +789,7 @@ public class Minescript {
 
     // coords and pos are reused to avoid lots of small object instantiations.
     private int[] coords = new int[6];
-    private BlockPos.Mutable pos = new BlockPos.Mutable();
+    private BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 
     private static class Position {
       public final int x;
@@ -859,7 +861,7 @@ public class Minescript {
       return derivative;
     }
 
-    public synchronized void processCommandToUndo(World level, String command) {
+    public synchronized void processCommandToUndo(Level level, String command) {
       if (command.startsWith("/setblock ") && getSetblockCoords(command, coords)) {
         Optional<String> block =
             blockStateToString(level.getBlockState(pos.set(coords[0], coords[1], coords[2])));
@@ -1681,7 +1683,7 @@ public class Minescript {
       int z1,
       boolean safetyLimit,
       BlockPack.BlockConsumer blockConsumer) {
-    var minecraft = MinecraftClient.getInstance();
+    var minecraft = Minecraft.getInstance();
     var player = minecraft.player;
     if (player == null) {
       logUserError("Unable to read blocks because player is null.");
@@ -1713,9 +1715,9 @@ public class Minescript {
       }
     }
 
-    World level = player.getEntityWorld();
+    Level level = player.getCommandSenderWorld();
 
-    var pos = new BlockPos.Mutable();
+    var pos = new BlockPos.MutableBlockPos();
     for (int x = xMin; x <= xMax; x += 16) {
       for (int z = zMin; z <= zMax; z += 16) {
         Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, 0, z)));
@@ -1750,7 +1752,7 @@ public class Minescript {
 
   private static void copyBlocks(
       int x0, int y0, int z0, int x1, int y1, int z1, Optional<String> label, boolean safetyLimit) {
-    var minecraft = MinecraftClient.getInstance();
+    var minecraft = Minecraft.getInstance();
     var player = minecraft.player;
     if (player == null) {
       logUserError("Unable to copy blocks because player is null.");
@@ -1781,9 +1783,9 @@ public class Minescript {
       }
     }
 
-    World level = player.getEntityWorld();
+    Level level = player.getCommandSenderWorld();
 
-    var pos = new BlockPos.Mutable();
+    var pos = new BlockPos.MutableBlockPos();
     for (int x = xMin; x <= xMax; x += 16) {
       for (int z = zMin; z <= zMax; z += 16) {
         Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, 0, z)));
@@ -2270,7 +2272,7 @@ public class Minescript {
   }
 
   public static void onKeyboardEvent(int key, int scanCode, int action, int modifiers) {
-    var minecraft = MinecraftClient.getInstance();
+    var minecraft = Minecraft.getInstance();
     var iter = keyEventListeners.entrySet().iterator();
     String jsonText = null;
     while (iter.hasNext()) {
@@ -2300,17 +2302,18 @@ public class Minescript {
       var scriptCommandNames = getScriptCommandNamesWithBuiltins();
       try {
         var chatEditBox =
-            (TextFieldWidget) getField(screen, ChatScreen.class, "chatField", "field_2382");
-        String value = chatEditBox.getText();
+            (EditBox)
+                getField(screen, ChatScreen.class, "input", platform.getChatScreenInputFieldName());
+        String value = chatEditBox.getValue();
         if (!value.startsWith("\\")) {
           minescriptCommandHistory.moveToEnd();
           if (key == ENTER_KEY
               && (customNickname != null || chatInterceptor != null)
               && !value.startsWith("/")) {
             cancel = true;
-            chatEditBox.setText("");
+            chatEditBox.setValue("");
             onClientChat(value);
-            screen.close();
+            screen.onClose();
           }
           return cancel;
         }
@@ -2318,29 +2321,29 @@ public class Minescript {
           Optional<String> previousCommand = minescriptCommandHistory.moveBackwardAndGet(value);
           if (previousCommand.isPresent()) {
             value = previousCommand.get();
-            chatEditBox.setText(value);
-            chatEditBox.setSelectionStart(value.length());
+            chatEditBox.setValue(value);
+            chatEditBox.setCursorPosition(value.length());
           }
           cancel = true;
         } else if (key == DOWN_ARROW_KEY) {
           Optional<String> nextCommand = minescriptCommandHistory.moveForwardAndGet();
           if (nextCommand.isPresent()) {
             value = nextCommand.get();
-            chatEditBox.setText(value);
-            chatEditBox.setSelectionStart(value.length());
+            chatEditBox.setValue(value);
+            chatEditBox.setCursorPosition(value.length());
           }
           cancel = true;
         } else if (key == ENTER_KEY) {
           cancel = true;
-          String text = chatEditBox.getText();
-          chatEditBox.setText("");
+          String text = chatEditBox.getValue();
+          chatEditBox.setValue("");
           onClientChat(text);
-          screen.close();
+          screen.onClose();
           return cancel;
         } else {
           minescriptCommandHistory.moveToEnd();
         }
-        int cursorPos = chatEditBox.getCursor();
+        int cursorPos = chatEditBox.getCursorPosition();
         if (key >= 32 && key < 127) {
           // TODO(maxuser): use chatEditBox.setSuggestion(String) to set suggestion?
           // TODO(maxuser): detect upper vs lower case properly
@@ -2359,20 +2362,20 @@ public class Minescript {
                           || commandSuggestions.size() > 1)
                       ? ""
                       : " ";
-              chatEditBox.write(
+              chatEditBox.insertText(
                   longestCommonPrefix(commandSuggestions).substring(command.length())
                       + maybeTrailingSpace);
               if (commandSuggestions.size() > 1) {
-                chatEditBox.setEditableColor(0x5ee8e8); // cyan for partial completion
+                chatEditBox.setTextColor(0x5ee8e8); // cyan for partial completion
               } else {
-                chatEditBox.setEditableColor(0x5ee85e); // green for full completion
+                chatEditBox.setTextColor(0x5ee85e); // green for full completion
               }
               commandSuggestions = new ArrayList<>();
               return cancel;
             }
           }
           if (scriptCommandNames.contains(command)) {
-            chatEditBox.setEditableColor(0x5ee85e); // green
+            chatEditBox.setTextColor(0x5ee85e); // green
             commandSuggestions = new ArrayList<>();
           } else {
             List<String> newCommandSuggestions = new ArrayList<>();
@@ -2393,9 +2396,9 @@ public class Minescript {
                 }
                 commandSuggestions = newCommandSuggestions;
               }
-              chatEditBox.setEditableColor(0x5ee8e8); // cyan
+              chatEditBox.setTextColor(0x5ee8e8); // cyan
             } else {
-              chatEditBox.setEditableColor(0xe85e5e); // red
+              chatEditBox.setTextColor(0xe85e5e); // red
               commandSuggestions = new ArrayList<>();
             }
           }
@@ -2411,8 +2414,8 @@ public class Minescript {
   private static boolean loggedMethodNameFallback = false;
 
   public static void onKeyInput(int key) {
-    var minecraft = MinecraftClient.getInstance();
-    var screen = minecraft.currentScreen;
+    var minecraft = Minecraft.getInstance();
+    var screen = minecraft.screen;
     if (screen == null && key == BACKSLASH_KEY) {
       minecraft.setScreen(new ChatScreen(""));
     }
@@ -2421,7 +2424,7 @@ public class Minescript {
   private static boolean enableMinescriptOnChatReceivedEvent = false;
   private static Pattern CHAT_WHISPER_MESSAGE_RE = Pattern.compile("You whisper to [^ :]+: (.*)");
 
-  public static boolean onClientChatReceived(Text message) {
+  public static boolean onClientChatReceived(Component message) {
     boolean cancel = false;
     String text = message.getString();
 
@@ -2461,7 +2464,7 @@ public class Minescript {
 
   private static boolean logChunkLoadEvents = false;
 
-  public static void onChunkLoad(WorldAccess chunkLevel, Chunk chunk) {
+  public static void onChunkLoad(LevelAccessor chunkLevel, ChunkAccess chunk) {
     int chunkX = chunk.getPos().x;
     int chunkZ = chunk.getPos().z;
     if (logChunkLoadEvents) {
@@ -2476,7 +2479,7 @@ public class Minescript {
     }
   }
 
-  public static void onChunkUnload(WorldAccess chunkLevel, Chunk chunk) {
+  public static void onChunkUnload(LevelAccessor chunkLevel, ChunkAccess chunk) {
     int chunkX = chunk.getPos().x;
     int chunkZ = chunk.getPos().z;
     if (logChunkLoadEvents) {
@@ -2501,13 +2504,13 @@ public class Minescript {
     } else if (customNickname != null && !message.startsWith("/")) {
       String tellrawCommand = "/tellraw @a " + String.format(customNickname, message);
       systemCommandQueue.add(tellrawCommand);
-      var minecraft = MinecraftClient.getInstance();
-      var chatHud = minecraft.inGameHud.getChatHud();
+      var minecraft = Minecraft.getInstance();
+      var chatHud = minecraft.gui.getChat();
       // TODO(maxuser): There appears to be a bug truncating the chat HUD command history. It might
       // be that onClientChat(...) can get called on a different thread from what other callers are
       // expecting, thereby corrupting the history. Verify whether this gets called on the same
       // thread as onClientWorldTick() or other events.
-      chatHud.addToMessageHistory(message);
+      chatHud.addRecentChat(message);
       cancel = true;
     }
     return cancel;
@@ -2578,7 +2581,7 @@ public class Minescript {
     // Map packed chunk (x, z) to boolean: true if chunk is loaded, false otherwise.
     private final Map<Long, Boolean> chunksToLoad = new ConcurrentHashMap<>();
 
-    // World with chunks to listen for. Store hash rather than reference to avoid memory leak.
+    // Level with chunks to listen for. Store hash rather than reference to avoid memory leak.
     private final int levelHashCode;
 
     private final Runnable doneCallback;
@@ -2586,8 +2589,8 @@ public class Minescript {
     private boolean suspended = false;
 
     public ChunkLoadEventListener(int x1, int z1, int x2, int z2, Runnable doneCallback) {
-      var minecraft = MinecraftClient.getInstance();
-      this.levelHashCode = minecraft.world.hashCode();
+      var minecraft = Minecraft.getInstance();
+      this.levelHashCode = minecraft.level.hashCode();
       LOGGER.info("listener chunk region in level {}: {} {} {} {}", levelHashCode, x1, z1, x2, z2);
       int chunkX1 = worldCoordToChunkCoord(x1);
       int chunkZ1 = worldCoordToChunkCoord(z1);
@@ -2618,8 +2621,8 @@ public class Minescript {
     }
 
     public synchronized void updateChunkStatuses() {
-      var minecraft = MinecraftClient.getInstance();
-      var level = minecraft.world;
+      var minecraft = Minecraft.getInstance();
+      var level = minecraft.level;
       if (level.hashCode() != this.levelHashCode) {
         LOGGER.info("chunk listener's world doesn't match current world; clearing listener");
         chunksToLoad.clear();
@@ -2627,11 +2630,11 @@ public class Minescript {
         return;
       }
       numUnloadedChunks = 0;
-      var chunkManager = level.getChunkManager();
+      var chunkManager = level.getChunkSource();
       for (var entry : chunksToLoad.entrySet()) {
         long packedChunkXZ = entry.getKey();
         int[] chunkCoords = unpackLong(packedChunkXZ);
-        boolean isLoaded = chunkManager.getWorldChunk(chunkCoords[0], chunkCoords[1]) != null;
+        boolean isLoaded = chunkManager.getChunkNow(chunkCoords[0], chunkCoords[1]) != null;
         entry.setValue(isLoaded);
         if (!isLoaded) {
           numUnloadedChunks++;
@@ -2641,7 +2644,7 @@ public class Minescript {
     }
 
     /** Returns true if the final outstanding chunk is loaded. */
-    public synchronized boolean onChunkLoaded(WorldAccess chunkLevel, int chunkX, int chunkZ) {
+    public synchronized boolean onChunkLoaded(LevelAccessor chunkLevel, int chunkX, int chunkZ) {
       if (suspended) {
         return false;
       }
@@ -2664,7 +2667,7 @@ public class Minescript {
       return false;
     }
 
-    public synchronized void onChunkUnloaded(WorldAccess chunkLevel, int chunkX, int chunkZ) {
+    public synchronized void onChunkUnloaded(LevelAccessor chunkLevel, int chunkX, int chunkZ) {
       if (suspended) {
         return;
       }
@@ -2699,10 +2702,10 @@ public class Minescript {
   private static Consumer<String> chatInterceptor = null;
 
   private static boolean areCommandsAllowed() {
-    var minecraft = MinecraftClient.getInstance();
-    var serverData = minecraft.getCurrentServerEntry();
+    var minecraft = Minecraft.getInstance();
+    var serverData = minecraft.getCurrentServer();
     return serverData == null
-        || serverBlockList.areCommandsAllowedForServer(serverData.name, serverData.address);
+        || serverBlockList.areCommandsAllowedForServer(serverData.name, serverData.ip);
   }
 
   private static void processMessage(String message) {
@@ -2718,27 +2721,27 @@ public class Minescript {
     }
 
     if (message.startsWith("|")) {
-      var minecraft = MinecraftClient.getInstance();
-      var chatHud = minecraft.inGameHud.getChatHud();
+      var minecraft = Minecraft.getInstance();
+      var chatHud = minecraft.gui.getChat();
       if (message.startsWith("|{\"")) {
-        chatHud.addMessage(Text.Serialization.fromJson(message.substring(1)));
+        chatHud.addMessage(Component.Serializer.fromJson(message.substring(1)));
       } else {
-        chatHud.addMessage(Text.of(message.substring(1)));
+        chatHud.addMessage(Component.nullToEmpty(message.substring(1)));
       }
       return;
     }
 
-    var minecraft = MinecraftClient.getInstance();
+    var minecraft = Minecraft.getInstance();
     var player = minecraft.player;
-    var networkHandler = player.networkHandler;
+    var networkHandler = player.connection;
     if (message.startsWith("/")) {
       if (!areCommandsAllowed()) {
         LOGGER.info("Minecraft command blocked for server: {}", message); // [norewrite]
         return;
       }
-      networkHandler.sendCommand(message.substring(1));
+      networkHandler.sendUnsignedCommand(message.substring(1));
     } else {
-      networkHandler.sendChatMessage(message);
+      networkHandler.sendChat(message);
     }
   }
 
@@ -2747,7 +2750,7 @@ public class Minescript {
     if (itemStack.getCount() == 0) {
       return "null";
     } else {
-      var nbt = itemStack.getNbt();
+      var nbt = itemStack.getTag();
       var out = new StringBuilder("{");
       out.append(
           String.format(
@@ -2768,7 +2771,7 @@ public class Minescript {
 
   private static String entitiesToJsonString(
       Iterable<? extends Entity> entities, boolean includeNbt) {
-    var minecraft = MinecraftClient.getInstance();
+    var minecraft = Minecraft.getInstance();
     var player = minecraft.player;
     var result = new StringBuilder("[");
     for (var entity : entities) {
@@ -2787,13 +2790,14 @@ public class Minescript {
       }
       result.append(
           String.format("\"position\":[%s,%s,%s],", entity.getX(), entity.getY(), entity.getZ()));
-      result.append(String.format("\"yaw\":%s,", entity.getYaw()));
-      result.append(String.format("\"pitch\":%s,", entity.getPitch()));
-      var v = entity.getVelocity();
+      result.append(String.format("\"yaw\":%s,", entity.getYRot()));
+      result.append(String.format("\"pitch\":%s,", entity.getXRot()));
+      var v = entity.getDeltaMovement();
       result.append(String.format("\"velocity\":[%s,%s,%s]", v.x, v.y, v.z));
       if (includeNbt) {
-        var nbt = new NbtCompound();
-        result.append(String.format(",\"nbt\":%s", toJsonString(entity.writeNbt(nbt).toString())));
+        var nbt = new CompoundTag();
+        result.append(
+            String.format(",\"nbt\":%s", toJsonString(entity.saveWithoutId(nbt).toString())));
       }
       result.append("}");
     }
@@ -2803,7 +2807,7 @@ public class Minescript {
 
   private static boolean scriptFunctionDebugOutptut = false;
 
-  private static final Map<KeyBinding, InputUtil.Key> boundKeys = new ConcurrentHashMap<>();
+  private static final Map<KeyMapping, InputConstants.Key> boundKeys = new ConcurrentHashMap<>();
 
   private static void lazyInitBoundKeys() {
     // The map of bound keys must be initialized lazily because
@@ -2813,46 +2817,49 @@ public class Minescript {
     }
 
     // TODO(maxuser): These default bindings do not track custom bindings. Use
-    // mixins to intercept KeyBinding constructor and setBoundKey method.
-    var minecraft = MinecraftClient.getInstance();
+    // mixins to intercept KeyMapping constructor and setBoundKey method.
+    var minecraft = Minecraft.getInstance();
+    boundKeys.put(minecraft.options.keyUp, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_W));
     boundKeys.put(
-        minecraft.options.forwardKey, InputUtil.Type.KEYSYM.createFromCode(GLFW.GLFW_KEY_W));
-    boundKeys.put(minecraft.options.backKey, InputUtil.Type.KEYSYM.createFromCode(GLFW.GLFW_KEY_S));
-    boundKeys.put(minecraft.options.leftKey, InputUtil.Type.KEYSYM.createFromCode(GLFW.GLFW_KEY_A));
+        minecraft.options.keyDown, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_S));
     boundKeys.put(
-        minecraft.options.rightKey, InputUtil.Type.KEYSYM.createFromCode(GLFW.GLFW_KEY_D));
+        minecraft.options.keyLeft, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_A));
     boundKeys.put(
-        minecraft.options.jumpKey, InputUtil.Type.KEYSYM.createFromCode(GLFW.GLFW_KEY_SPACE));
+        minecraft.options.keyRight, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_D));
     boundKeys.put(
-        minecraft.options.sprintKey,
-        InputUtil.Type.KEYSYM.createFromCode(GLFW.GLFW_KEY_LEFT_CONTROL));
+        minecraft.options.keyJump, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_SPACE));
     boundKeys.put(
-        minecraft.options.sneakKey, InputUtil.Type.KEYSYM.createFromCode(GLFW.GLFW_KEY_LEFT_SHIFT));
+        minecraft.options.keySprint,
+        InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_LEFT_CONTROL));
     boundKeys.put(
-        minecraft.options.pickItemKey,
-        InputUtil.Type.MOUSE.createFromCode(GLFW.GLFW_MOUSE_BUTTON_MIDDLE));
+        minecraft.options.keyShift,
+        InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_LEFT_SHIFT));
     boundKeys.put(
-        minecraft.options.useKey,
-        InputUtil.Type.MOUSE.createFromCode(GLFW.GLFW_MOUSE_BUTTON_RIGHT));
+        minecraft.options.keyPickItem,
+        InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_MIDDLE));
     boundKeys.put(
-        minecraft.options.attackKey,
-        InputUtil.Type.MOUSE.createFromCode(GLFW.GLFW_MOUSE_BUTTON_LEFT));
+        minecraft.options.keyUse,
+        InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_RIGHT));
     boundKeys.put(
-        minecraft.options.swapHandsKey, InputUtil.Type.KEYSYM.createFromCode(GLFW.GLFW_KEY_F));
-    boundKeys.put(minecraft.options.dropKey, InputUtil.Type.KEYSYM.createFromCode(GLFW.GLFW_KEY_Q));
+        minecraft.options.keyAttack,
+        InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_LEFT));
+    boundKeys.put(
+        minecraft.options.keySwapOffhand, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_F));
+    boundKeys.put(
+        minecraft.options.keyDrop, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_Q));
   }
 
   private static Optional<String> doPlayerAction(
-      String functionName, KeyBinding keyBinding, List<?> args, String argsString) {
+      String functionName, KeyMapping keyBinding, List<?> args, String argsString) {
     if (args.size() == 1 && args.get(0) instanceof Boolean) {
       lazyInitBoundKeys();
       boolean pressed = (Boolean) args.get(0);
       var key = boundKeys.get(keyBinding);
       if (pressed) {
-        KeyBinding.setKeyPressed(key, true);
-        KeyBinding.onKeyPressed(key);
+        KeyMapping.set(key, true);
+        KeyMapping.click(key);
       } else {
-        KeyBinding.setKeyPressed(key, false);
+        KeyMapping.set(key, false);
       }
       return Optional.of("true");
     } else {
@@ -2947,28 +2954,28 @@ public class Minescript {
   }
 
   public static String getWorldName() {
-    var minecraft = MinecraftClient.getInstance();
-    var serverData = minecraft.getCurrentServerEntry();
+    var minecraft = Minecraft.getInstance();
+    var serverData = minecraft.getCurrentServer();
     var serverName = serverData == null ? null : serverData.name;
-    var server = minecraft.getServer();
-    var saveProperties = server == null ? null : server.getSaveProperties();
+    var server = minecraft.getSingleplayerServer();
+    var saveProperties = server == null ? null : server.getWorldData();
     String saveName = saveProperties == null ? null : saveProperties.getLevelName();
     return serverName == null ? saveName : serverName;
   }
 
   public static Optional<String> getScreenName() {
-    var minecraft = MinecraftClient.getInstance();
-    var screen = minecraft.currentScreen;
+    var minecraft = Minecraft.getInstance();
+    var screen = minecraft.screen;
     if (screen == null) {
       return Optional.empty();
     }
     String name = screen.getTitle().getString();
     if (name.isEmpty()) {
-      if (screen instanceof CreativeInventoryScreen) {
+      if (screen instanceof CreativeModeInventoryScreen) {
         name = "Creative Inventory";
       } else if (screen instanceof LevelLoadingScreen) {
         name = "L" + "evel Loading"; // Split literal to prevent symbol renaming.
-      } else if (screen instanceof ProgressScreen) {
+      } else if (screen instanceof ReceivingLevelScreen) {
         name = "Progress";
       } else {
         // The class name is not descriptive in production builds where symbols
@@ -2983,8 +2990,8 @@ public class Minescript {
   /** Returns a JSON response string if a script function is called. */
   private static Optional<String> handleScriptFunction(
       Job job, long funcCallId, String functionName, List<?> args, String argsString) {
-    var minecraft = MinecraftClient.getInstance();
-    var world = minecraft.world;
+    var minecraft = Minecraft.getInstance();
+    var world = minecraft.level;
     var player = minecraft.player;
     var options = minecraft.options;
 
@@ -3027,8 +3034,8 @@ public class Minescript {
           double x = ((Number) args.get(0)).doubleValue();
           double y = ((Number) args.get(1)).doubleValue();
           double z = ((Number) args.get(2)).doubleValue();
-          float yaw = player.getYaw();
-          float pitch = player.getPitch();
+          float yaw = player.getYRot();
+          float pitch = player.getXRot();
           if (args.size() >= 4 && args.get(3) != null) {
             if (!(args.get(3) instanceof Number)) {
               paramTypeErrorLogger.accept("yaw", "float");
@@ -3043,7 +3050,7 @@ public class Minescript {
             }
             pitch = ((Number) args.get(4)).floatValue();
           }
-          player.refreshPositionAndAngles(x, y, z, yaw, pitch);
+          player.moveTo(x, y, z, yaw, pitch);
           return Optional.of("true");
         }
 
@@ -3060,7 +3067,7 @@ public class Minescript {
             && args.get(0) instanceof Number
             && args.get(1) instanceof Number
             && args.get(2) instanceof Number) {
-          World level = player.getEntityWorld();
+          Level level = player.getCommandSenderWorld();
           int arg0 = ((Number) args.get(0)).intValue();
           int arg1 = ((Number) args.get(1)).intValue();
           int arg2 = ((Number) args.get(2)).intValue();
@@ -3088,9 +3095,9 @@ public class Minescript {
             return badArgsResponse.get();
           }
           List<?> positions = (List<?>) args.get(0);
-          World level = player.getEntityWorld();
+          Level level = player.getCommandSenderWorld();
           List<String> blocks = new ArrayList<>();
-          var pos = new BlockPos.Mutable();
+          var pos = new BlockPos.MutableBlockPos();
           for (var position : positions) {
             if (!(position instanceof List)) {
               return badArgsResponse.get();
@@ -3254,7 +3261,7 @@ public class Minescript {
       case "player_hand_items":
         if (args.isEmpty()) {
           var result = new StringBuilder("[");
-          for (var itemStack : player.getHandItems()) {
+          for (var itemStack : player.getHandSlots()) {
             if (result.length() > 1) {
               result.append(",");
             }
@@ -3271,9 +3278,9 @@ public class Minescript {
         if (args.isEmpty()) {
           var inventory = player.getInventory();
           var result = new StringBuilder("[");
-          int selectedSlot = inventory.selectedSlot;
-          for (int i = 0; i < inventory.size(); i++) {
-            var itemStack = inventory.getStack(i);
+          int selectedSlot = inventory.selected;
+          for (int i = 0; i < inventory.getContainerSize(); i++) {
+            var itemStack = inventory.getItem(i);
             if (itemStack.getCount() > 0) {
               if (result.length() > 1) {
                 result.append(",");
@@ -3295,9 +3302,9 @@ public class Minescript {
           if (value.isPresent()) {
             int slot = value.getAsInt();
             var inventory = player.getInventory();
-            var connection = minecraft.getNetworkHandler();
-            connection.sendPacket(new PickFromInventoryC2SPacket(slot));
-            return Optional.of(Integer.toString(inventory.selectedSlot));
+            var connection = minecraft.getConnection();
+            connection.send(new ServerboundPickItemPacket(slot));
+            return Optional.of(Integer.toString(inventory.selected));
           } else {
             logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
             return Optional.of("null");
@@ -3311,8 +3318,8 @@ public class Minescript {
           if (value.isPresent()) {
             int slot = value.getAsInt();
             var inventory = player.getInventory();
-            var previouslySelectedSlot = inventory.selectedSlot;
-            inventory.selectedSlot = slot;
+            var previouslySelectedSlot = inventory.selected;
+            inventory.selected = slot;
             return Optional.of(Integer.toString(previouslySelectedSlot));
           } else {
             logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
@@ -3321,44 +3328,44 @@ public class Minescript {
         }
 
       case "player_press_forward":
-        return doPlayerAction(functionName, options.forwardKey, args, argsString);
+        return doPlayerAction(functionName, options.keyUp, args, argsString);
 
       case "player_press_backward":
-        return doPlayerAction(functionName, options.backKey, args, argsString);
+        return doPlayerAction(functionName, options.keyDown, args, argsString);
 
       case "player_press_left":
-        return doPlayerAction(functionName, options.leftKey, args, argsString);
+        return doPlayerAction(functionName, options.keyLeft, args, argsString);
 
       case "player_press_right":
-        return doPlayerAction(functionName, options.rightKey, args, argsString);
+        return doPlayerAction(functionName, options.keyRight, args, argsString);
 
       case "player_press_jump":
-        return doPlayerAction(functionName, options.jumpKey, args, argsString);
+        return doPlayerAction(functionName, options.keyJump, args, argsString);
 
       case "player_press_sprint":
-        return doPlayerAction(functionName, options.sprintKey, args, argsString);
+        return doPlayerAction(functionName, options.keySprint, args, argsString);
 
       case "player_press_sneak":
-        return doPlayerAction(functionName, options.sneakKey, args, argsString);
+        return doPlayerAction(functionName, options.keyShift, args, argsString);
 
       case "player_press_pick_item":
-        return doPlayerAction(functionName, options.pickItemKey, args, argsString);
+        return doPlayerAction(functionName, options.keyPickItem, args, argsString);
 
       case "player_press_use":
-        return doPlayerAction(functionName, options.useKey, args, argsString);
+        return doPlayerAction(functionName, options.keyUse, args, argsString);
 
       case "player_press_attack":
-        return doPlayerAction(functionName, options.attackKey, args, argsString);
+        return doPlayerAction(functionName, options.keyAttack, args, argsString);
 
       case "player_press_swap_hands":
-        return doPlayerAction(functionName, options.swapHandsKey, args, argsString);
+        return doPlayerAction(functionName, options.keySwapOffhand, args, argsString);
 
       case "player_press_drop":
-        return doPlayerAction(functionName, options.dropKey, args, argsString);
+        return doPlayerAction(functionName, options.keyDrop, args, argsString);
 
       case "player_orientation":
         if (args.isEmpty()) {
-          return Optional.of(String.format("[%s, %s]", player.getYaw(), player.getPitch()));
+          return Optional.of(String.format("[%s, %s]", player.getYRot(), player.getXRot()));
         } else {
           logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
           return Optional.of("null");
@@ -3368,8 +3375,8 @@ public class Minescript {
         if (args.size() == 2 && args.get(0) instanceof Number && args.get(1) instanceof Number) {
           Number yaw = (Number) args.get(0);
           Number pitch = (Number) args.get(1);
-          player.setYaw(yaw.floatValue() % 360.0f);
-          player.setPitch(pitch.floatValue() % 360.0f);
+          player.setYRot(yaw.floatValue() % 360.0f);
+          player.setXRot(pitch.floatValue() % 360.0f);
           return Optional.of("true");
         } else {
           logUserError(
@@ -3390,7 +3397,7 @@ public class Minescript {
           }
           double maxDistance = ((Number) args.get(0)).doubleValue();
           var entity = minecraft.getCameraEntity();
-          var blockHit = entity.raycast(maxDistance, 0.0f, false);
+          var blockHit = entity.pick(maxDistance, 0.0f, false);
           if (blockHit.getType() == HitResult.Type.BLOCK) {
             var hitResult = (BlockHitResult) blockHit;
             var blockPos = hitResult.getBlockPos();
@@ -3402,7 +3409,7 @@ public class Minescript {
                     blockPos.getX(),
                     blockPos.getY(),
                     blockPos.getZ());
-            World level = player.getEntityWorld();
+            Level level = player.getCommandSenderWorld();
             Optional<String> block = blockStateToString(level.getBlockState(blockPos));
             return Optional.of(
                 String.format(
@@ -3411,7 +3418,7 @@ public class Minescript {
                     blockPos.getY(),
                     blockPos.getZ(),
                     playerDistance,
-                    hitResult.getSide(),
+                    hitResult.getDirection(),
                     block.map(str -> toJsonString(str)).orElse("null")));
           } else {
             return Optional.of("null");
@@ -3432,7 +3439,7 @@ public class Minescript {
             return Optional.of("null");
           }
           boolean nbt = (Boolean) args.get(0);
-          return Optional.of(entitiesToJsonString(world.getPlayers(), nbt));
+          return Optional.of(entitiesToJsonString(world.players(), nbt));
         }
 
       case "entities":
@@ -3446,29 +3453,29 @@ public class Minescript {
             return Optional.of("null");
           }
           boolean nbt = (Boolean) args.get(0);
-          return Optional.of(entitiesToJsonString(world.getEntities(), nbt));
+          return Optional.of(entitiesToJsonString(world.entitiesForRendering(), nbt));
         }
 
       case "world_properties":
         {
-          var levelProperties = world.getLevelProperties();
+          var levelProperties = world.getLevelData();
           var difficulty = levelProperties.getDifficulty();
-          var serverData = minecraft.getCurrentServerEntry();
-          var serverAddress = serverData == null ? "localhost" : serverData.address;
+          var serverData = minecraft.getCurrentServer();
+          var serverAddress = serverData == null ? "localhost" : serverData.ip;
           return Optional.of(
               String.format(
                   "{\"game_ticks\":%s,\"day_ticks\":%s,\"raining\":%s,\"thundering\":%s,"
                       + "\"spawn\":[%s,%s,%s],\"hardcore\":%s,\"difficulty\":%s,"
                       + "\"name\": %s,\"address\":%s}",
-                  levelProperties.getTime(),
-                  levelProperties.getTimeOfDay(),
+                  levelProperties.getGameTime(),
+                  levelProperties.getDayTime(),
                   levelProperties.isRaining(),
                   levelProperties.isThundering(),
-                  levelProperties.getSpawnX(),
-                  levelProperties.getSpawnY(),
-                  levelProperties.getSpawnZ(),
+                  levelProperties.getXSpawn(),
+                  levelProperties.getYSpawn(),
+                  levelProperties.getZSpawn(),
                   levelProperties.isHardcore(),
-                  toJsonString(difficulty.asString()),
+                  toJsonString(difficulty.getSerializedName()),
                   toJsonString(getWorldName()),
                   toJsonString(serverAddress)));
         }
@@ -3501,10 +3508,10 @@ public class Minescript {
           response = "false";
         }
         if (filename != null) {
-          ScreenshotRecorder.saveScreenshot(
-              minecraft.runDirectory,
+          Screenshot.grab(
+              minecraft.gameDirectory,
               filename.orElse(null),
-              minecraft.getFramebuffer(),
+              minecraft.getMainRenderTarget(),
               message -> job.enqueueStderr(message.getString()));
         }
         return Optional.of(response);
@@ -4016,21 +4023,22 @@ public class Minescript {
           if (!args.isEmpty()) {
             throw new IllegalArgumentException("Expected no params but got: " + argsString);
           }
-          Screen screen = minecraft.currentScreen;
-          if (screen instanceof HandledScreen<?>) {
-            HandledScreen handledScreen = (HandledScreen) screen;
-            ScreenHandler screenHandler = handledScreen.getScreenHandler();
+          Screen screen = minecraft.screen;
+          if (screen instanceof AbstractContainerScreen<?>) {
+            AbstractContainerScreen handledScreen = (AbstractContainerScreen) screen;
+            AbstractContainerMenu screenHandler = handledScreen.getMenu();
             Slot[] slots = screenHandler.slots.toArray(new Slot[0]);
             StringBuilder resultString = new StringBuilder("[");
             for (Slot slot : slots) {
-              ItemStack itemStack = slot.getStack();
+              ItemStack itemStack = slot.getItem();
               if (itemStack.isEmpty()) {
                 continue;
               }
               if (resultString.length() > 1) {
                 resultString.append(",");
               }
-              resultString.append(itemStackToJsonString(itemStack, OptionalInt.of(slot.id), false));
+              resultString.append(
+                  itemStackToJsonString(itemStack, OptionalInt.of(slot.index), false));
             }
             resultString.append("]");
             return Optional.of(resultString.toString());
@@ -4045,13 +4053,13 @@ public class Minescript {
             throw new IllegalArgumentException(
                 "Expected 1 param (slot: int) but got: " + argsString);
           }
-          Screen screen = minecraft.currentScreen;
+          Screen screen = minecraft.screen;
           int slotId = getStrictIntValue(args.get(0)).getAsInt();
-          if (screen == null || !(screen instanceof HandledScreen<?>)) {
+          if (screen == null || !(screen instanceof AbstractContainerScreen<?>)) {
             return Optional.of("false");
           }
-          HandledScreen handledScreen = (HandledScreen) screen;
-          ScreenHandler screenHandler = handledScreen.getScreenHandler();
+          AbstractContainerScreen handledScreen = (AbstractContainerScreen) screen;
+          AbstractContainerMenu screenHandler = handledScreen.getMenu();
           if (slotId < 0 || slotId >= screenHandler.slots.size()) {
             throw new IndexOutOfBoundsException(
                 "Slot "
@@ -4061,16 +4069,16 @@ public class Minescript {
                     + "]");
           }
           var slot = screenHandler.getSlot(slotId);
-          PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
-          buf.writeByte(screenHandler.syncId);
+          FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+          buf.writeByte(screenHandler.containerId);
           buf.writeShort(slotId);
           buf.writeByte(0); // Button (0 for left click)
           buf.writeShort(0); // Action type (0 for click)
           buf.writeShort(0); // Mode (0 for normal)
-          buf.writeItemStack(slot.getStack()); // Item stack
-          var connection = minecraft.getNetworkHandler();
-          connection.sendPacket(new ClickSlotC2SPacket(buf));
-          screenHandler.sendContentUpdates();
+          buf.writeItem(slot.getItem()); // Item stack
+          var connection = minecraft.getConnection();
+          connection.send(new ServerboundContainerClickPacket(buf));
+          screenHandler.broadcastChanges();
           return Optional.of("true");
         }
 
@@ -4090,8 +4098,8 @@ public class Minescript {
           OptionalDouble value2 = getStrictDoubleValue(args.get(1));
           OptionalDouble value3 = getStrictDoubleValue(args.get(2));
           player.lookAt(
-              EntityAnchorArgumentType.EntityAnchor.EYES,
-              new Vec3d(value1.getAsDouble(), value2.getAsDouble(), value3.getAsDouble()));
+              EntityAnchorArgument.Anchor.EYES,
+              new Vec3(value1.getAsDouble(), value2.getAsDouble(), value3.getAsDouble()));
           return Optional.of("true");
         }
 
@@ -4144,7 +4152,7 @@ public class Minescript {
 
   public static void onClientWorldTick() {
     if (++clientTickEventCounter % minescriptTicksPerCycle == 0) {
-      var minecraft = MinecraftClient.getInstance();
+      var minecraft = Minecraft.getInstance();
       var player = minecraft.player;
 
       String worldName = getWorldName();
@@ -4155,7 +4163,7 @@ public class Minescript {
       }
 
       if (player != null && (!systemCommandQueue.isEmpty() || !jobs.getMap().isEmpty())) {
-        World level = player.getEntityWorld();
+        Level level = player.getCommandSenderWorld();
         boolean hasCommand;
         int iterations = 0;
         do {

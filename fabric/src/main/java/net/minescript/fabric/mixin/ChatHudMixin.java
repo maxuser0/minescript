@@ -3,10 +3,10 @@
 
 package net.minescript.fabric.mixin;
 
-import net.minecraft.client.gui.hud.ChatHud;
-import net.minecraft.client.gui.hud.MessageIndicator;
-import net.minecraft.network.message.MessageSignatureData;
-import net.minecraft.text.Text;
+import net.minecraft.client.GuiMessageTag;
+import net.minecraft.client.gui.components.ChatComponent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MessageSignature;
 import net.minescript.common.Minescript;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,18 +15,21 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(ChatHud.class)
+@Mixin(ChatComponent.class)
 public class ChatHudMixin {
   private static final Logger LOGGER = LoggerFactory.getLogger("ChatHudMixin");
 
   @Inject(
       at = @At("HEAD"),
       method =
-          "addMessage(Lnet/minecraft/text/Text;Lnet/minecraft/network/message/MessageSignatureData;Lnet/minecraft/client/gui/hud/MessageIndicator;)V",
+          "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/GuiMessageTag;)V",
       cancellable = true)
   private void addMessage(
-      Text message, MessageSignatureData signature, MessageIndicator indicator, CallbackInfo ci) {
-    if (Minescript.onClientChatReceived(message)) {
+      Component component,
+      MessageSignature messageSignature,
+      GuiMessageTag guiMessageTag,
+      CallbackInfo ci) {
+    if (Minescript.onClientChatReceived(component)) {
       ci.cancel();
     }
   }

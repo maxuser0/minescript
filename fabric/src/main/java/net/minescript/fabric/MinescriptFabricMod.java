@@ -10,9 +10,9 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.ChatScreen;
-import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.gui.screens.Screen;
 import net.minescript.common.Minescript;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,13 +29,12 @@ public final class MinescriptFabricMod implements ClientModInitializer {
     ClientChunkEvents.CHUNK_UNLOAD.register(
         (world, chunk) -> Minescript.onChunkUnload(world, chunk));
 
-    Minescript.init();
+    Minescript.init(new FabricPlatform());
     ClientTickEvents.START_WORLD_TICK.register(world -> Minescript.onClientWorldTick());
     ScreenEvents.AFTER_INIT.register(this::afterInitScreen);
   }
 
-  private void afterInitScreen(
-      MinecraftClient client, Screen screen, int windowWidth, int windowHeight) {
+  private void afterInitScreen(Minecraft client, Screen screen, int windowWidth, int windowHeight) {
     if (screen instanceof ChatScreen) {
       ScreenKeyboardEvents.allowKeyPress(screen)
           .register(

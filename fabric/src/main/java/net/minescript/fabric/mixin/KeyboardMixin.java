@@ -5,8 +5,8 @@ package net.minescript.fabric.mixin;
 
 import static net.minescript.common.Minescript.ENTER_KEY;
 
-import net.minecraft.client.Keyboard;
-import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.KeyboardHandler;
+import net.minecraft.client.Minecraft;
 import net.minescript.common.Minescript;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(Keyboard.class)
+@Mixin(KeyboardHandler.class)
 public class KeyboardMixin {
   private static final Logger LOGGER = LoggerFactory.getLogger("KeyboardMixin");
 
@@ -25,11 +25,11 @@ public class KeyboardMixin {
   private static int KEY_ACTION_REPEAT = 2;
   private static int KEY_ACTION_UP = 0;
 
-  @Inject(at = @At("HEAD"), method = "onKey(JIIII)V", cancellable = true)
+  @Inject(at = @At("HEAD"), method = "keyPress(JIIII)V", cancellable = true)
   private void keyPress(
       long window, int key, int scanCode, int action, int modifiers, CallbackInfo ci) {
     Minescript.onKeyboardEvent(key, scanCode, action, modifiers);
-    var screen = MinecraftClient.getInstance().currentScreen;
+    var screen = Minecraft.getInstance().screen;
     if (screen == null) {
       Minescript.onKeyInput(key);
     } else if (key == ENTER_KEY
