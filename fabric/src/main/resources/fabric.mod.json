@@ -3,10 +3,10 @@
   "id": "modid",
   "version": "${version}",
 
-  "name": "Minescript Mod",
-  "description": "Mod for scripting Minecraft using Python",
+  "name": "${mod_name}",
+  "description": "${description}",
   "authors": [
-    "maxuser@minescript.net"
+    "${mod_author}"
   ],
   "contact": {
     "homepage": "https://minescript.net/",
@@ -14,7 +14,7 @@
     "issues": "https://github.com/maxuser0/minescript/issues"
   },
 
-  "license": "GPL-3.0-only",
+  "license": "${license}",
   "icon": "assets/modid/minescript-logo.png",
 
   "environment": "client",
@@ -25,14 +25,14 @@
   },
 
   "mixins": [
-    "modid.mixins.json"
+    "minescript.fabric.mixins.json"
   ],
 
   "depends": {
-    "fabricloader": ">=0.15.2",
+    "fabricloader": ">=${fabric_loader_version}",
     "fabric": "*",
     "fabric-screen-api-v1": "*",
-    "minecraft": "~1.20.4",
+    "minecraft": "~${minecraft_version}",
     "java": ">=17"
   },
   "suggests": {

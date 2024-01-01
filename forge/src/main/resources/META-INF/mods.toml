@@ -15,10 +15,7 @@ license="GPL-3.0-only"
 [[mods]] #mandatory
 # The modid of the mod
 modId="minescript" #mandatory
-# The version number of the mod - there's a few well known ${} variables useable here or just hardcode it
-# ${file.jarVersion} will substitute the value of the Implementation-Version as read from the mod's JAR file metadata
-# see the associated build.gradle script for how to populate this completely automatically during a build
-version="${file.jarVersion}" #mandatory
+version="${version}" #mandatory
  # A display name for the mod
 displayName="Minescript" #mandatory
 # A URL to query for updates for this mod. See the JSON update specification https://mcforge.readthedocs.io/en/latest/gettingstarted/autoupdate/
@@ -39,7 +36,7 @@ Minescript is a platform for controlling and interacting with Minecraft using sc
 
 2. Write Python scripts in the minescript folder which will be created within your minecraft folder. (The minescript folder will be created automatically the first time you run Minecraft with the Minescript mod installed.)
 
-For example, a script named hello.py within the minescript folder will be accessible within Minecraft by pressing backslash ("\") and entering the name of the script within the chat (without the ".py" on the end), e.g. \hello. You can pass parameters to the hello command in Minecraft which are accessible within Python as sys.argv, and output from hello.py, e.g. via "print(...)", is interpreted just like a command entered within the Minecraft chat. E.g. "print('/time set day')" in your Python script will run "/time set day" as if it were entered by hand in the Minecraft chat.
+For example, a script named hello.py within the minescript folder will be accessible within Minecraft by pressing backslash ("\\") and entering the name of the script within the chat (without the ".py" on the end), e.g. \\hello. You can pass parameters to the hello command in Minecraft which are accessible within Python as sys.argv, and output from hello.py, e.g. via "print(...)", is interpreted just like a command entered within the Minecraft chat. E.g. "print('/time set day')" in your Python script will run "/time set day" as if it were entered by hand in the Minecraft chat.
 '''
 # A dependency - use the . to indicate dependency for a specific modid. Dependencies are optional.
 [[dependencies.minescript]] #optional
