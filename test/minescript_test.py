@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: © 2022-2023 Greg Christiana <maxuser@minescript.net>
+# SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: GPL-3.0-only
 
 r"""minescript_test v3.2 from https://github.com/maxuser0/minescript
