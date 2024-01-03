@@ -7,6 +7,7 @@ import static net.minescript.common.Minescript.ENTER_KEY;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
@@ -15,12 +16,14 @@ import net.minecraftforge.event.level.ChunkEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.LogicalSide;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minescript.common.Minescript;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-@Mod("minescript")
+@Mod(MinescriptForgeMod.MODID)
 public class MinescriptForgeMod {
+  public static final String MODID = "minescript";
   private static final Logger LOGGER = LogManager.getLogger();
 
   private static int KEY_ACTION_DOWN = 1;
@@ -30,8 +33,14 @@ public class MinescriptForgeMod {
   public MinescriptForgeMod() {
     LOGGER.info("(minescript) Minescript mod starting...");
     MinecraftForge.EVENT_BUS.register(this);
+  }
 
-    Minescript.init(new ForgePlatform());
+  @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
+  public static class ClientModEvents {
+    @SubscribeEvent
+    public static void onClientSetup(FMLClientSetupEvent event) {
+      Minescript.init(new ForgePlatform());
+    }
   }
 
   @SubscribeEvent
