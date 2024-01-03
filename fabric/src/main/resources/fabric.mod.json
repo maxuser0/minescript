@@ -19,8 +19,11 @@
 
   "environment": "client",
   "entrypoints": {
-    "client": [
+    "main": [
       "net.minescript.fabric.MinescriptFabricMod"
+    ],
+    "client": [
+      "net.minescript.fabric.MinescriptFabricClientMod"
     ]
   },
 
