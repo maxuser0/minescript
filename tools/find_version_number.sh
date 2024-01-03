@@ -13,7 +13,7 @@ if [ "$2" = "-l" ]; then
   shift
 fi
 
-find . -type f |
+find common -type f |
     grep -v /.gradle/ |
     grep -v /.git/ |
     grep -v /build/ |
