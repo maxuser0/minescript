@@ -139,7 +139,7 @@ public class Minescript {
       copyJarResourceToMinescriptDir("minescript.py", FileOverwritePolicy.OVERWRITTE);
       copyJarResourceToMinescriptDir("minescript_runtime.py", FileOverwritePolicy.OVERWRITTE);
       copyJarResourceToMinescriptDir("help.py", FileOverwritePolicy.OVERWRITTE);
-      copyJarResourceToMinescriptDir("copy.py", FileOverwritePolicy.OVERWRITTE);
+      copyJarResourceToMinescriptDir("copy_blocks.py", FileOverwritePolicy.OVERWRITTE);
       copyJarResourceToMinescriptDir("paste.py", FileOverwritePolicy.OVERWRITTE);
       copyJarResourceToMinescriptDir("eval.py", FileOverwritePolicy.OVERWRITTE);
     }
@@ -2109,6 +2109,12 @@ public class Minescript {
             String s = null;
             logUserError("Length of a null string is {}", s.length());
           }
+      }
+
+      // Rename "copy" to "copy_blocks" for backward compatibility since copy.py was renamed to
+      // copy_blocks.py.
+      if ("copy".equals(command[0])) {
+        command[0] = "copy_blocks";
       }
 
       if (!getScriptCommandNames().contains(command[0])) {
