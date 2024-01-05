@@ -14,7 +14,7 @@ license="${license}"
 # A list of mods - how many allowed here is determined by the individual mod loader
 [[mods]] #mandatory
 # The modid of the mod
-modId="minescript" #mandatory
+modId="${mod_id}" #mandatory
 version="${version}" #mandatory
  # A display name for the mod
 displayName="Minescript" #mandatory
@@ -38,6 +38,8 @@ Minescript is a platform for controlling and interacting with Minecraft using sc
 
 For example, a script named hello.py within the minescript folder will be accessible within Minecraft by pressing backslash ("\\") and entering the name of the script within the chat (without the ".py" on the end), e.g. \\hello. You can pass parameters to the hello command in Minecraft which are accessible within Python as sys.argv, and output from hello.py, e.g. via "print(...)", is interpreted just like a command entered within the Minecraft chat. E.g. "print('/time set day')" in your Python script will run "/time set day" as if it were entered by hand in the Minecraft chat.
 '''
+[[mixins]]
+config="${mod_id}.mixins.json"
 # A dependency - use the . to indicate dependency for a specific modid. Dependencies are optional.
 [[dependencies.minescript]] #optional
     # the modid of the dependency
