@@ -793,7 +793,7 @@ def container_get_items():
   Returns:
     List of dictionaries of item data if a container's contents are displayed; `None` otherwise.
 
-  Since: v3.3
+  Since: v4.0
   """
   return CallScriptFunction("container_get_items")
 
@@ -807,7 +807,7 @@ def container_click_slot(slot: int):
   Returns:
     `True` upon success
 
-  Since: v3.3
+  Since: v4.0
   """
   return CallScriptFunction("container_click_slot", slot)
 
@@ -820,7 +820,7 @@ def player_look_at(x: float, y: float, z: float):
     y: y position
     z: z position
 
-  Since: v3.3
+  Since: v4.0
   """
   CallScriptFunction("player_look_at", x, y, z)
 
