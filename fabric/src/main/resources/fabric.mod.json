@@ -28,6 +28,7 @@
   },
 
   "mixins": [
+    "minescript.mixins.json",
     "minescript.fabric.mixins.json"
   ],
 

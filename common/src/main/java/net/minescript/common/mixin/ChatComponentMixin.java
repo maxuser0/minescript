@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
-package net.minescript.fabric.mixin;
+package net.minescript.common.mixin;
 
 import net.minecraft.client.GuiMessageTag;
 import net.minecraft.client.gui.components.ChatComponent;
@@ -16,8 +16,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ChatComponent.class)
-public class ChatHudMixin {
-  private static final Logger LOGGER = LoggerFactory.getLogger("ChatHudMixin");
+public class ChatComponentMixin {
+  private static final Logger LOGGER = LoggerFactory.getLogger("ChatComponentMixin");
 
   @Inject(
       at = @At("HEAD"),
@@ -25,11 +25,8 @@ public class ChatHudMixin {
           "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/GuiMessageTag;)V",
       cancellable = true)
   private void addMessage(
-      Component component,
-      MessageSignature messageSignature,
-      GuiMessageTag guiMessageTag,
-      CallbackInfo ci) {
-    if (Minescript.onClientChatReceived(component)) {
+      Component message, MessageSignature signature, GuiMessageTag tag, CallbackInfo ci) {
+    if (Minescript.onClientChatReceived(message)) {
       ci.cancel();
     }
   }
