@@ -15,6 +15,7 @@ Minescript mod.  This module should be imported by other
 scripts and not run directly.
 """
 
+import asyncio
 import base64
 import os
 import queue
@@ -22,8 +23,12 @@ import sys
 import minescript_runtime
 
 from array import array
-from minescript_runtime import CallScriptFunction, CallAsyncScriptFunction, ExceptionHandler
-from typing import Any, List, Set, Dict, Tuple, Optional, Callable
+from minescript_runtime import (
+    await_script_function,
+    call_async_script_function,
+    send_script_function_request,
+    ExceptionHandler)
+from typing import Any, List, Set, Dict, Tuple, Optional, Callable, Awaitable
 
 
 def execute(command: str):
@@ -87,7 +92,7 @@ def log(message: str) -> bool:
   """
   if not message:
     return
-  CallScriptFunction("log", message)
+  await_script_function("log", message)
 
 
 def screenshot(filename=None) -> bool:
@@ -103,7 +108,7 @@ def screenshot(filename=None) -> bool:
   Since: v2.1
   """
   if filename is None:
-    return CallScriptFunction("screenshot")
+    return await_script_function("screenshot")
   else:
     if os.path.sep in filename:
       echo(f'Error: `screenshot` does not support filenames with "{os.path.sep}" character.')
@@ -111,7 +116,7 @@ def screenshot(filename=None) -> bool:
     else:
       if not filename.lower().endswith(".png"):
         filename += ".png"
-      return CallScriptFunction("screenshot", filename)
+      return await_script_function("screenshot", filename)
 
 
 def flush():
@@ -119,7 +124,7 @@ def flush():
 
   Since: v2.1
   """
-  return CallScriptFunction("flush")
+  return await_script_function("flush")
 
 
 def player_name() -> str:
@@ -127,23 +132,32 @@ def player_name() -> str:
 
   Since: v2.1
   """
-  return CallScriptFunction("player_name")
+  return await_script_function("player_name")
 
 
-def player_position(done_callback=None) -> List[float]:
+def player_position() -> List[float]:
   """Gets the local player's position.
 
-  Args:
-    done_callback: if given, return immediately and call `done_callback(return_value)`
-        asynchronously when `return_value` is ready
+  Returns:
+    player's position as [x: float, y: float, z: float]
+
+  Update in v4.0:
+    Removed `done_callback` arg. Use `async_player_position()` for async execution.
+  """
+  return await_script_function("player_position")
+
+
+def async_player_position() -> Awaitable[List[float]]:
+  """Gets the local player's position.
+
+  Similar to `player_position()`, but can be used with `await` and `asyncio`.
 
   Returns:
-    if `done_callback` is `None`, returns player's position as [x: float, y: float, z: float]
+    awaitable position of player as [x: float, y: float, z: float]
+
+  Since: v4.0
   """
-  if done_callback is None:
-    return CallScriptFunction("player_position")
-  else:
-    CallAsyncScriptFunction("player_position", done_callback)
+  return call_async_script_function("player_position")
 
 
 def player_set_position(
@@ -159,42 +173,69 @@ def player_set_position(
 
   Since: v3.1
   """
-  return CallScriptFunction("player_set_position", x, y, z, yaw, pitch)
+  return await_script_function("player_set_position", x, y, z, yaw, pitch)
 
 
-def player_hand_items(done_callback=None) -> List[Dict[str, Any]]:
-  """Gets the items in the local player's hands.
+def async_player_set_position(
+    x: float, y: float, z: float, yaw: float = None, pitch: float = None) -> Awaitable[bool]:
+  """Sets the player's position, and optionally orientation.
+
+  Note that in survival mode the server may reject the new coordinates if they're too far
+  or require moving through walls.
+
+  Similar to `player_set_position(...)`, but can be used with `await` and `asyncio`.
 
   Args:
-    done_callback: if given, return immediately and call `done_callback(return_value)`
-        asynchronously when `return_value` is ready
+    x, y, z: position to try to move player to
+    yaw, pitch: if not None, player's new orientation
+
+  Since: v4.0
+  """
+  return call_async_script_function("player_set_position", x, y, z, yaw, pitch)
+
+
+def player_hand_items() -> List[Dict[str, Any]]:
+  """Gets the items in the local player's hands.
 
   Returns:
-    If `done_callback` is `None`, returns items in player's hands as a list of
-    items where each item is a dict: `{"item": str, "count": int}`, plus
-    `"nbt": str` if the item has NBT data; main-hand item is at list index 0,
-    off-hand item at index 1.
+    Items in player's hands as a list of items where each item is a dict:
+    `{"item": str, "count": int}`, plus `"nbt": str` if the item has NBT data;
+    main-hand item is at list index 0, off-hand item at index 1.
+
+  Update in v4.0:
+    Removed `done_callback` arg. Use `async_player_hand_items()` for async execution.
 
   Since: v2.0
   """
-  if done_callback is None:
-    return CallScriptFunction("player_hand_items")
-  else:
-    CallAsyncScriptFunction("player_hand_items", done_callback)
+  return await_script_function("player_hand_items")
 
 
-def player_inventory(done_callback=None) -> List[Dict[str, Any]]:
-  """Gets the items in the local player's inventory.
-
-  Args:
-    done_callback: if given, return immediately and call `done_callback(return_value)`
-        asynchronously when `return_value` is ready
+def async_player_hand_items() -> Awaitable[List[Dict[str, Any]]]:
+  """Gets the items in the local player's hands.
 
   Returns:
-    If `done_callback` is `None`, returns items in player's inventory as list
-    of items where each item is a dict: `{"item": str, "count": int, "slot":
-    int}`, plus `"nbt": str` if an item has NBT data and `"selected": True` for
-    the item selected in the player's main hand.
+    Awaitable items in player's hands as a list of items where each item is a
+    dict: `{"item": str, "count": int}`, plus `"nbt": str` if the item has NBT
+    data; main-hand item is at list index 0, off-hand item at index 1.
+
+  Similar to `player_hand_items()`, but can be used with `await` and `asyncio`.
+
+  Since: v4.0
+  """
+  return call_async_script_function("player_hand_items")
+
+
+def player_inventory() -> List[Dict[str, Any]]:
+  """Gets the items in the local player's inventory.
+
+  Returns:
+    Items in player's inventory as list of items where each item is a dict:
+    `{"item": str, "count": int, "slot": int}`, plus `"nbt": str` if an item
+    has NBT data and `"selected": True` for the item selected in the player's
+    main hand.
+
+  Update in v4.0:
+    Removed `done_callback` arg. Use `async_player_inventory()` for async execution.
 
   Update in v3.0:
     Introduced `"slot"` and `"selected"` attributes in the returned
@@ -204,49 +245,90 @@ def player_inventory(done_callback=None) -> List[Dict[str, Any]]:
 
   Since: v2.0
   """
-  if done_callback is None:
-    return CallScriptFunction("player_inventory")
-  else:
-    CallAsyncScriptFunction("player_inventory", done_callback)
+  return await_script_function("player_inventory")
 
 
-def player_inventory_slot_to_hotbar(slot: int, done_callback=None) -> int:
+def async_player_inventory() -> Awaitable[List[Dict[str, Any]]]:
+  """Gets the items in the local player's inventory.
+
+  Similar to `player_inventory()`, but can be used with `await` and `asyncio`.
+
+  Returns:
+    Awaitable items in player's inventory as list of items where each item is a
+    dict: `{"item": str, "count": int, "slot": int}`, plus `"nbt": str` if an
+    item has NBT data and `"selected": True` for the item selected in the
+    player's main hand.
+
+  Since: v4.0
+  """
+  return call_async_script_function("player_inventory")
+
+
+def player_inventory_slot_to_hotbar(slot: int) -> int:
   """Swaps an inventory item into the hotbar.
 
   Args:
     slot: inventory slot (9 or higher) to swap into the hotbar
-    done_callback: if given, return immediately and call `done_callback(return_value)`
-        asynchronously when `return_value` is ready
 
   Returns:
-    If `done_callback` is `None`, returns the hotbar slot (0-8) that the inventory
-    item was swapped into
+    hotbar slot (0-8) into which the inventory item was swapped
+
+  Update in v4.0:
+    Removed `done_callback` arg. Use `async_player_inventory_slot_to_hotbar(...)
+    for async execution.
 
   Since: v3.0
   """
-  if done_callback is None:
-    return CallScriptFunction("player_inventory_slot_to_hotbar", slot)
-  else:
-    CallAsyncScriptFunction("player_inventory_slot_to_hotbar", (slot,), done_callback)
+  return await_script_function("player_inventory_slot_to_hotbar", slot)
 
 
-def player_inventory_select_slot(slot: int, done_callback=None) -> int:
+def async_player_inventory_slot_to_hotbar(slot: int) -> Awaitable[int]:
+  """Swaps an inventory item into the hotbar.
+
+  Similar to `player_inventory_slot_to_hotbar(...)`, but can be used with `await` and `asyncio`.
+
+  Args:
+    slot: inventory slot (9 or higher) to swap into the hotbar
+
+  Returns:
+    awaitable hotbar slot (0-8) into which the inventory item is swapped
+
+  Since: v4.0
+  """
+  return call_async_script_function("player_inventory_slot_to_hotbar", slot)
+
+
+def player_inventory_select_slot(slot: int) -> int:
   """Selects the given slot within the player's hotbar.
 
   Args:
     slot: hotbar slot (0-8) to select in the player's hand
-    done_callback: if given, return immediately and call `done_callback(return_value)`
-        asynchronously when `return_value` is ready
 
   Returns:
-    If `done_callback` is `None`, returns the previously selected hotbar slot
+    previously selected hotbar slot
+
+  Update in v4.0:
+    Removed `done_callback` arg. Use `async_player_inventory_select_slot(...)` for async execution.
 
   Since: v3.0
   """
-  if done_callback is None:
-    return CallScriptFunction("player_inventory_select_slot", slot)
-  else:
-    CallAsyncScriptFunction("player_inventory_select_slot", (slot,), done_callback)
+  return await_script_function("player_inventory_select_slot", slot)
+
+
+def async_player_inventory_select_slot(slot: int) -> Awaitable[int]:
+  """Selects the given slot within the player's hotbar.
+
+  Similar to `player_inventory_select_slot(...)`, but can be used with `await` and `asyncio`.
+
+  Args:
+    slot: hotbar slot (0-8) to select in the player's hand
+
+  Returns:
+    awaitable of previously selected hotbar slot
+
+  Since: v4.0
+  """
+  return call_async_script_function("player_inventory_select_slot", slot)
 
 
 def player_press_forward(pressed: bool):
@@ -257,7 +339,7 @@ def player_press_forward(pressed: bool):
 
   Since: v2.1
   """
-  return CallScriptFunction("player_press_forward", pressed)
+  return await_script_function("player_press_forward", pressed)
 
 
 def player_press_backward(pressed: bool):
@@ -268,7 +350,7 @@ def player_press_backward(pressed: bool):
 
   Since: v2.1
   """
-  return CallScriptFunction("player_press_backward", pressed)
+  return await_script_function("player_press_backward", pressed)
 
 
 def player_press_left(pressed: bool):
@@ -279,7 +361,7 @@ def player_press_left(pressed: bool):
 
   Since: v2.1
   """
-  return CallScriptFunction("player_press_left", pressed)
+  return await_script_function("player_press_left", pressed)
 
 
 def player_press_right(pressed: bool):
@@ -290,7 +372,7 @@ def player_press_right(pressed: bool):
 
   Since: v2.1
   """
-  return CallScriptFunction("player_press_right", pressed)
+  return await_script_function("player_press_right", pressed)
 
 
 def player_press_jump(pressed: bool):
@@ -301,7 +383,7 @@ def player_press_jump(pressed: bool):
 
   Since: v2.1
   """
-  return CallScriptFunction("player_press_jump", pressed)
+  return await_script_function("player_press_jump", pressed)
 
 
 def player_press_sprint(pressed: bool):
@@ -312,7 +394,7 @@ def player_press_sprint(pressed: bool):
 
   Since: v2.1
   """
-  return CallScriptFunction("player_press_sprint", pressed)
+  return await_script_function("player_press_sprint", pressed)
 
 
 def player_press_sneak(pressed: bool):
@@ -323,7 +405,7 @@ def player_press_sneak(pressed: bool):
 
   Since: v2.1
   """
-  return CallScriptFunction("player_press_sneak", pressed)
+  return await_script_function("player_press_sneak", pressed)
 
 
 def player_press_pick_item(pressed: bool):
@@ -334,7 +416,7 @@ def player_press_pick_item(pressed: bool):
 
   Since: v2.1
   """
-  return CallScriptFunction("player_press_pick_item", pressed)
+  return await_script_function("player_press_pick_item", pressed)
 
 
 def player_press_use(pressed: bool):
@@ -345,7 +427,7 @@ def player_press_use(pressed: bool):
 
   Since: v2.1
   """
-  return CallScriptFunction("player_press_use", pressed)
+  return await_script_function("player_press_use", pressed)
 
 
 def player_press_attack(pressed: bool):
@@ -356,7 +438,7 @@ def player_press_attack(pressed: bool):
 
   Since: v2.1
   """
-  return CallScriptFunction("player_press_attack", pressed)
+  return await_script_function("player_press_attack", pressed)
 
 
 def player_press_swap_hands(pressed: bool):
@@ -367,7 +449,7 @@ def player_press_swap_hands(pressed: bool):
 
   Since: v2.1
   """
-  return CallScriptFunction("player_press_swap_hands", pressed)
+  return await_script_function("player_press_swap_hands", pressed)
 
 
 def player_press_drop(pressed: bool):
@@ -378,7 +460,7 @@ def player_press_drop(pressed: bool):
 
   Since: v2.1
   """
-  return CallScriptFunction("player_press_drop", pressed)
+  return await_script_function("player_press_drop", pressed)
 
 
 def player_orientation():
@@ -389,7 +471,7 @@ def player_orientation():
 
   Since: v2.1
   """
-  return CallScriptFunction("player_orientation")
+  return await_script_function("player_orientation")
 
 
 def player_set_orientation(yaw: float, pitch: float):
@@ -404,7 +486,7 @@ def player_set_orientation(yaw: float, pitch: float):
 
   Since: v2.1
   """
-  return CallScriptFunction("player_set_orientation", yaw, pitch)
+  return await_script_function("player_set_orientation", yaw, pitch)
 
 
 def player_get_targeted_block(max_distance: float = 20):
@@ -422,7 +504,7 @@ def player_get_targeted_block(max_distance: float = 20):
 
   Since: v3.0
   """
-  return CallScriptFunction("player_get_targeted_block", max_distance)
+  return await_script_function("player_get_targeted_block", max_distance)
 
 
 def player_health() -> float:
@@ -430,7 +512,7 @@ def player_health() -> float:
 
   Since: v3.1
   """
-  return CallScriptFunction("player_health")
+  return await_script_function("player_health")
 
 
 def players(*, nbt: bool = False):
@@ -452,7 +534,7 @@ def players(*, nbt: bool = False):
 
   Since: v2.1
   """
-  return CallScriptFunction("players", nbt)
+  return await_script_function("players", nbt)
 
 
 def entities(*, nbt: bool = False):
@@ -475,7 +557,7 @@ def entities(*, nbt: bool = False):
 
   Since: v2.1
   """
-  return CallScriptFunction("entities", nbt)
+  return await_script_function("entities", nbt)
 
 
 def world_properties() -> Dict[str, Any]:
@@ -495,57 +577,80 @@ def world_properties() -> Dict[str, Any]:
 
   Since: v3.1
   """
-  return CallScriptFunction("world_properties")
+  return await_script_function("world_properties")
 
 
-def getblock(x: int, y: int, z: int, done_callback=None):
+def getblock(x: int, y: int, z: int) -> str:
   """Gets the type of block at position (x, y, z).
 
   Args:
-    done_callback: if given, return immediately and call `done_callback(return_value)`
-        asynchronously when `return_value` is ready
+    x, y, z: position of block to get
 
   Returns:
-    if `done_callback` is `None`, returns the block type at (x, y, z) as a string
+    block type at (x, y, z) as a string
   """
-  if done_callback is None:
-    return CallScriptFunction("getblock", x, y, z)
-  else:
-    CallAsyncScriptFunction("getblock", (x, y, z), done_callback)
+  return await_script_function("getblock", x, y, z)
 
 
-def getblocklist(positions: List[List[int]], done_callback=None):
+def async_getblock(x: int, y: int, z: int) -> Awaitable[str]:
+  """Gets the type of block at position (x, y, z).
+
+  Similar to `getblock(...)`, but can be used with `await` and `asyncio`.
+
+  Args:
+    x, y, z: position of block to get
+
+  Returns:
+    awaitable block type at (x, y, z) as a string
+
+  Since: v4.0
+  """
+  return call_async_script_function("getblock", x, y, z)
+
+
+def getblocklist(positions: List[List[int]]) -> List[str]:
   """Gets the types of block at the specified [x, y, z] positions.
 
   Args:
-    done_callback: if given, return immediately and call `done_callback(return_value)`
-        asynchronously when `return_value` is ready
+    list of positions as lists of x, y, z int coordinates, e.g. [[0, 0, 0], [0, 0, 1]]
 
   Returns:
-    if `done_callback` is `None`, returns the block types at given positions as list of strings
+    block types at given positions as list of strings
+
+  Update in v4.0:
+    Removed `done_callback` arg. Use `async_getblocklist(...)` for async execution.
 
   Since: v2.1
   """
-  if done_callback is None:
-    return CallScriptFunction("getblocklist", positions)
-  else:
-    CallAsyncScriptFunction("getblocklist", (positions,), done_callback)
+  return await_script_function("getblocklist", positions)
 
 
-def await_loaded_region(x1: int, z1: int, x2: int, z2: int, done_callback=None):
+def async_getblocklist(positions: List[List[int]]) -> Awaitable[List[str]]:
+  """Gets the types of block at the specified [x, y, z] positions.
+
+  Similar to `getblocklist(...)`, but can be used with `await` and `asyncio`.
+
+  Args:
+    awaitable list of positions as lists of x, y, z int coordinates, e.g. [[0, 0, 0], [0, 0, 1]]
+
+  Returns:
+    awaitable block types at given positions as list of strings
+
+  Since: v4.0
+  """
+  return call_async_script_function("getblocklist", positions)
+
+
+def await_loaded_region(x1: int, z1: int, x2: int, z2: int) -> bool:
   """Notifies the caller when the region from (x1, z1) to (x2, z2) is loaded.
 
   Args:
-    done_callback: if given, return immediately and call `done_callback(return_value)`
-        asynchronously when `return_value` is ready
+    x1, z1, x2, z2: bounds of the region for awaiting loaded chunks
 
   Returns:
-    if `done_callback` is `None`, returns `True` when the requested region is fully loaded.
+    `True` if the requested region is fully loaded upon return.
 
   Examples:
-    [1] Don't do any work until the region is done loading (synchronous / blocking
-    call):
-
     ```
     minescript.echo("About to wait for region to load...")
 
@@ -555,44 +660,10 @@ def await_loaded_region(x1: int, z1: int, x2: int, z2: int, done_callback=None):
     minescript.echo("Region finished loading.")
     ```
 
-    [2] Continue doing work on the main thread while the region loads in the
-    background (asynchronous / non-blocking call):
-
-    ```
-    import minescript
-    import threading
-
-    lock = threading.Lock()
-
-    def on_region_loaded(loaded):
-      if loaded:
-        minescript.echo("Region loaded ok.")
-      else:
-        minescript.echo("Region failed to load.")
-      lock.release()
-
-    # Acquire the lock, to be released later by on_region_loaded().
-    lock.acquire()
-
-    # Calls on_region_loaded(...) when region finishes
-    # loading all chunks within (x, z) bounds (0, 0)
-    # and (320, 160):
-    minescript.await_loaded_region(
-        0, 0, 320, 160, on_region_loaded)
-
-    minescript.echo("Do other work while region loads...")
-
-    minescript.echo("Now wait for region to finish loading...")
-    lock.acquire()
-
-    minescript.echo("Do more work now that region finished loading...")
-    ```
+  Update in v4.0:
+    Removed `done_callback` arg. Call now always blocks until region is loaded.
   """
-  if done_callback is None:
-    return CallScriptFunction("await_loaded_region", x1, z1, x2, z2)
-  else:
-    CallAsyncScriptFunction(
-        "await_loaded_region", (x1, z1, x2, z2), done_callback)
+  return await_script_function("await_loaded_region", x1, z1, x2, z2)
 
 
 class KeyEventListener:
@@ -649,8 +720,7 @@ def register_key_event_listener(
 
   Since: v3.2
   """
-  CallAsyncScriptFunction(
-      "register_key_event_listener", (), listener, exception_handler)
+  send_script_function_request("register_key_event_listener", (), listener, exception_handler)
 
 
 def unregister_key_event_listener():
@@ -663,7 +733,7 @@ def unregister_key_event_listener():
 
   Since: v3.2
   """
-  CallScriptFunction("unregister_key_event_listener")
+  await_script_function("unregister_key_event_listener")
 
 
 class ChatEventListener:
@@ -689,7 +759,7 @@ class ChatEventListener:
       timeout: timeout in seconds to wait for an event if `block` is `True`
 
     Returns:
-      message from chat (str)
+      message from chat
 
     Raises:
       `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
@@ -727,8 +797,7 @@ def register_chat_message_listener(
   See also:
     `register_chat_message_interceptor()` for swallowing outgoing chat messages
   """
-  CallAsyncScriptFunction(
-      "register_chat_message_listener", (), listener)
+  send_script_function_request("register_chat_message_listener", (), listener)
 
 
 def unregister_chat_message_listener():
@@ -741,7 +810,7 @@ def unregister_chat_message_listener():
 
   Since: v2.0
   """
-  CallScriptFunction("unregister_chat_message_listener")
+  await_script_function("unregister_chat_message_listener")
 
 
 def register_chat_message_interceptor(interceptor: Callable[[str], None]):
@@ -761,8 +830,7 @@ def register_chat_message_interceptor(interceptor: Callable[[str], None]):
   See also:
     `register_chat_message_listener()` for non-destructive listening of chat messages
   """
-  CallAsyncScriptFunction(
-      "register_chat_message_interceptor", (), interceptor)
+  send_script_function_request("register_chat_message_interceptor", (), interceptor)
 
 
 def unregister_chat_message_interceptor():
@@ -773,10 +841,10 @@ def unregister_chat_message_interceptor():
 
   Since: v2.1
   """
-  CallScriptFunction("unregister_chat_message_interceptor")
+  await_script_function("unregister_chat_message_interceptor")
 
 
-def screen_name():
+def screen_name() -> str:
   """Gets the current GUI screen name, if there is one.
 
   Returns:
@@ -784,7 +852,7 @@ def screen_name():
 
   Since: v3.2
   """
-  return CallScriptFunction("screen_name")
+  return await_script_function("screen_name")
 
 
 def container_get_items():
@@ -795,10 +863,10 @@ def container_get_items():
 
   Since: v4.0
   """
-  return CallScriptFunction("container_get_items")
+  return await_script_function("container_get_items")
 
 
-def container_click_slot(slot: int):
+def container_click_slot(slot: int) -> bool:
   """Simulates a left click on a slot in an open container, if any.
 
   Args:
@@ -809,7 +877,7 @@ def container_click_slot(slot: int):
 
   Since: v4.0
   """
-  return CallScriptFunction("container_click_slot", slot)
+  return await_script_function("container_click_slot", slot)
 
 
 def player_look_at(x: float, y: float, z: float):
@@ -822,7 +890,7 @@ def player_look_at(x: float, y: float, z: float):
 
   Since: v4.0
   """
-  CallScriptFunction("player_look_at", x, y, z)
+  await_script_function("player_look_at", x, y, z)
 
 
 BlockPos = Tuple[int, int, int]
@@ -917,7 +985,7 @@ def blockpack_read_world(
 
   Since: v3.0
   """
-  return CallScriptFunction(
+  return await_script_function(
       "blockpack_read_world", pos1, pos2, rotation, offset, comments, safety_limit)
 
 
@@ -935,7 +1003,7 @@ def blockpack_read_file(filename: str) -> int:
 
   Since: v3.0
   """
-  return CallScriptFunction("blockpack_read_file", filename)
+  return await_script_function("blockpack_read_file", filename)
 
 
 def blockpack_import_data(base64_data: str) -> int:
@@ -951,7 +1019,7 @@ def blockpack_import_data(base64_data: str) -> int:
 
   Since: v3.0
   """
-  return CallScriptFunction("blockpack_import_data", base64_data)
+  return await_script_function("blockpack_import_data", base64_data)
 
 
 def blockpack_block_bounds(blockpack_id: int) -> (BlockPos, BlockPos):
@@ -961,7 +1029,7 @@ def blockpack_block_bounds(blockpack_id: int) -> (BlockPos, BlockPos):
 
   Since: v3.0
   """
-  return CallScriptFunction("blockpack_block_bounds", blockpack_id)
+  return await_script_function("blockpack_block_bounds", blockpack_id)
 
 
 def blockpack_comments(blockpack_id: int) -> Dict[str, str]:
@@ -971,7 +1039,7 @@ def blockpack_comments(blockpack_id: int) -> Dict[str, str]:
 
   Since: v3.0
   """
-  return CallScriptFunction("blockpack_comments", blockpack_id)
+  return await_script_function("blockpack_comments", blockpack_id)
 
 
 def blockpack_write_world(
@@ -990,7 +1058,7 @@ def blockpack_write_world(
 
   Since: v3.0
   """
-  return CallScriptFunction("blockpack_write_world", blockpack_id, rotation, offset)
+  return await_script_function("blockpack_write_world", blockpack_id, rotation, offset)
 
 
 def blockpack_write_file(blockpack_id: int, filename: str) -> bool:
@@ -1008,7 +1076,7 @@ def blockpack_write_file(blockpack_id: int, filename: str) -> bool:
 
   Since: v3.0
   """
-  return CallScriptFunction("blockpack_write_file", blockpack_id, filename)
+  return await_script_function("blockpack_write_file", blockpack_id, filename)
 
 
 def blockpack_export_data(blockpack_id: int) -> str:
@@ -1024,7 +1092,7 @@ def blockpack_export_data(blockpack_id: int) -> str:
 
   Since: v3.0
   """
-  return CallScriptFunction("blockpack_export_data", blockpack_id)
+  return await_script_function("blockpack_export_data", blockpack_id)
 
 
 def blockpack_delete(blockpack_id: int) -> bool:
@@ -1040,7 +1108,7 @@ def blockpack_delete(blockpack_id: int) -> bool:
 
   Since: v3.0
   """
-  return CallScriptFunction("blockpack_delete", blockpack_id)
+  return await_script_function("blockpack_delete", blockpack_id)
 
 
 def blockpacker_create() -> int:
@@ -1053,7 +1121,7 @@ def blockpacker_create() -> int:
 
   Since: v3.0
   """
-  return CallScriptFunction("blockpacker_create")
+  return await_script_function("blockpacker_create")
 
 
 def blockpacker_add_blocks(
@@ -1077,7 +1145,7 @@ def blockpacker_add_blocks(
 
   Since: v3.1
   """
-  return CallScriptFunction(
+  return await_script_function(
       "blockpacker_add_blocks", blockpacker_id, offset, base64_setblocks, base64_fills, blocks)
 
 
@@ -1099,7 +1167,7 @@ def blockpacker_add_blockpack(
 
   Since: v3.0
   """
-  return CallScriptFunction(
+  return await_script_function(
       "blockpacker_add_blockpack", blockpacker_id, blockpack_id, rotation, offset)
 
 
@@ -1117,7 +1185,7 @@ def blockpacker_pack(blockpacker_id: int, comments: Dict[str, str]) -> int:
 
   Since: v3.0
   """
-  return CallScriptFunction("blockpacker_pack", blockpacker_id, comments)
+  return await_script_function("blockpacker_pack", blockpacker_id, comments)
 
 
 def blockpacker_delete(blockpacker_id: int) -> bool:
@@ -1133,7 +1201,7 @@ def blockpacker_delete(blockpacker_id: int) -> bool:
 
   Since: v3.0
   """
-  return CallScriptFunction("blockpacker_delete", blockpacker_id)
+  return await_script_function("blockpacker_delete", blockpacker_id)
 
 
 class BlockPackException(Exception):

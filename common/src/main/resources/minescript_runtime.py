@@ -13,21 +13,10 @@ Usage: import minescript_runtime  # from Python script
 Low-level interface and runtime for scripts to make function
 calls into the Minescript mod. Most users should import
 minescript.py instead for an API that is more user friendly.
-
-CallScriptFunction(func_name):
-  Makes a function call into the Minescript runtime, blocking
-  execution until returning a value. The return value may be a
-  string, numeric, or composite data such as a JSON array or
-  structure.
-
-CallAsyncScriptFunction(func_name, retval_handler):
-  Makes a function call into the Minescript runtime, returning a
-  value or stream of values asynchronously by invoking
-  retval_handler(value), potentially multiple times. The number
-  of times that the Minescript runtime calls
-  retval_handler(value) is specific to each function.
 """
 
+import asyncio
+import concurrent.futures
 import json
 import os
 import re
@@ -37,8 +26,7 @@ import threading
 import traceback
 import _thread
 
-from threading import Lock
-from typing import Any, List, Set, Dict, Tuple, Optional, Callable
+from typing import Any, List, Set, Dict, Tuple, Optional, Callable, Awaitable
 
 AnyConsumer = Callable[[str], None]
 ExceptionHandler = Callable[[Exception], None]
@@ -47,16 +35,20 @@ ExceptionHandler = Callable[[Exception], None]
 _script_function_calls: Dict[int, Tuple[str, AnyConsumer, ExceptionHandler]] = dict()
 _script_function_calls_lock = threading.Lock()
 _next_fcallid = 1000
+_thread_pool = concurrent.futures.ThreadPoolExecutor()  # ThreadPool for coroutines
 
 
-def CallAsyncScriptFunction(func_name: str, args: Tuple[Any, ...],
-                            retval_handler: AnyConsumer,
-                            exception_handler: ExceptionHandler = None) -> None:
-  """Calls a script function, asynchronously streaming return value(s).
+def send_script_function_request(func_name: str, args: Tuple[Any, ...],
+                                 retval_handler: AnyConsumer,
+                                 exception_handler: ExceptionHandler = None) -> None:
+  """Sends a request for a script function, asynchronously streaming return value(s) or exception.
+
+  If `exception_handler` is invoked, `retval_handler` will no longer be called.
 
   Args:
     func_name: name of Minescript function to call
     retval_handler: callback invoked for each return value
+    exception_handler: callback invoked if an exception is raised
   """
   global _next_fcallid
   with _script_function_calls_lock:
@@ -66,8 +58,8 @@ def CallAsyncScriptFunction(func_name: str, args: Tuple[Any, ...],
   print(f"?{func_call_id} {func_name} {json.dumps(args)}")
 
 
-def CallScriptFunction(func_name: str, *args: Any) -> Any:
-  """Calls a script function and returns the function's return value.
+async def call_async_script_function(func_name: str, *args: Any) -> Awaitable[Any]:
+  """Calls a script function and awaits the function's return value.
 
   Args:
     func_name: name of Minescript function to call
@@ -77,7 +69,7 @@ def CallScriptFunction(func_name: str, *args: Any) -> Any:
   """
   retval_holder: List[Any] = []
   exception_holder: List[Exception] = []
-  lock = Lock()
+  lock = threading.Lock()
   lock.acquire()
 
   def HandleReturnValue(retval: Any) -> None:
@@ -88,7 +80,40 @@ def CallScriptFunction(func_name: str, *args: Any) -> Any:
     exception_holder.append(exception)
     lock.release()
 
-  CallAsyncScriptFunction(func_name, args, HandleReturnValue, HandleException)
+  send_script_function_request(func_name, args, HandleReturnValue, HandleException)
+
+  loop = asyncio.get_event_loop()
+  await loop.run_in_executor(_thread_pool, lock.acquire)
+
+  if exception_holder:
+    raise exception_holder[0]
+  if retval_holder:
+    return retval_holder[0]
+
+
+def await_script_function(func_name: str, *args: Any) -> Any:
+  """Calls a script function and returns the function's return value.
+
+  Args:
+    func_name: name of Minescript function to call
+
+  Returns:
+    script function's return value: number, string, list, or dict
+  """
+  retval_holder: List[Any] = []
+  exception_holder: List[Exception] = []
+  lock = threading.Lock()
+  lock.acquire()
+
+  def HandleReturnValue(retval: Any) -> None:
+    retval_holder.append(retval)
+    lock.release()
+
+  def HandleException(exception: Exception) -> None:
+    exception_holder.append(exception)
+    lock.release()
+
+  send_script_function_request(func_name, args, HandleReturnValue, HandleException)
   lock.acquire()
 
   if exception_holder:
