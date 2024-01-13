@@ -135,6 +135,18 @@ public class Minescript {
           "Current version ({}) does not match last run version ({})",
           currentVersion,
           lastRunVersion);
+      // copy.py was renamed to copy_blocks.py in Minescript 4.0 to avoid conflict with the built-in
+      // copy module. Delete the obsolete script if it exists.
+      var obsoleteCopyScript = new File(Paths.get(MINESCRIPT_DIR, "copy.py").toString());
+      if (obsoleteCopyScript.exists()) {
+        if (obsoleteCopyScript.delete()) {
+          LOGGER.info(
+              "Deleted obsolete script `{}` which has been renamed to `copy_blocks.py`",
+              obsoleteCopyScript.getPath());
+        } else {
+          LOGGER.warn("Failed to delete obsolete script `{}`", obsoleteCopyScript.getPath());
+        }
+      }
       copyJarResourceToMinescriptDir("version.txt", FileOverwritePolicy.OVERWRITTE);
       copyJarResourceToMinescriptDir("minescript.py", FileOverwritePolicy.OVERWRITTE);
       copyJarResourceToMinescriptDir("minescript_runtime.py", FileOverwritePolicy.OVERWRITTE);
