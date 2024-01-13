@@ -1079,8 +1079,8 @@ public class Minescript {
         if (lock.tryLock(timeoutSeconds, TimeUnit.SECONDS)) {
           state = JobState.SUSPENDED;
           for (var entry : chunkLoadEventListeners.entrySet()) {
-            if (entry.getValue() == jobId) {
-              var listener = entry.getKey();
+            if (entry.getKey().jobId == jobId) {
+              var listener = entry.getValue();
               listener.suspend();
             }
           }
@@ -1107,12 +1107,12 @@ public class Minescript {
         var iter = chunkLoadEventListeners.entrySet().iterator();
         while (iter.hasNext()) {
           var entry = iter.next();
-          if (entry.getValue() == jobId) {
-            var listener = entry.getKey();
+          if (entry.getKey().jobId == jobId) {
+            var listener = entry.getValue();
             listener.resume();
             listener.updateChunkStatuses();
-            if (listener.isFinished()) {
-              listener.onFinished();
+            if (listener.isFullyLoaded()) {
+              listener.onFinished(true);
               iter.remove();
             }
           }
@@ -2476,9 +2476,9 @@ public class Minescript {
     if (logChunkLoadEvents) {
       LOGGER.info("world {} chunk loaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
     }
-    var iter = chunkLoadEventListeners.keySet().iterator();
+    var iter = chunkLoadEventListeners.entrySet().iterator();
     while (iter.hasNext()) {
-      var listener = iter.next();
+      var listener = iter.next().getValue();
       if (listener.onChunkLoaded(chunkLevel, chunkX, chunkZ)) {
         iter.remove();
       }
@@ -2491,7 +2491,8 @@ public class Minescript {
     if (logChunkLoadEvents) {
       LOGGER.info("world {} chunk unloaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
     }
-    for (var listener : chunkLoadEventListeners.keySet()) {
+    for (var entry : chunkLoadEventListeners.entrySet()) {
+      var listener = entry.getValue();
       listener.onChunkUnloaded(chunkLevel, chunkX, chunkZ);
     }
   }
@@ -2584,17 +2585,23 @@ public class Minescript {
       new ConcurrentHashMap<>();
 
   public static class ChunkLoadEventListener {
+
+    interface DoneCallback {
+      void done(boolean success);
+    }
+
     // Map packed chunk (x, z) to boolean: true if chunk is loaded, false otherwise.
     private final Map<Long, Boolean> chunksToLoad = new ConcurrentHashMap<>();
 
     // Level with chunks to listen for. Store hash rather than reference to avoid memory leak.
     private final int levelHashCode;
 
-    private final Runnable doneCallback;
+    private final DoneCallback doneCallback;
     private int numUnloadedChunks = 0;
     private boolean suspended = false;
+    private boolean finished = false;
 
-    public ChunkLoadEventListener(int x1, int z1, int x2, int z2, Runnable doneCallback) {
+    public ChunkLoadEventListener(int x1, int z1, int x2, int z2, DoneCallback doneCallback) {
       var minecraft = Minecraft.getInstance();
       this.levelHashCode = minecraft.level.hashCode();
       LOGGER.info("listener chunk region in level {}: {} {} {} {}", levelHashCode, x1, z1, x2, z2);
@@ -2666,7 +2673,7 @@ public class Minescript {
         LOGGER.info("listener chunk loaded for level {}: {} {}", levelHashCode, chunkX, chunkZ);
         numUnloadedChunks--;
         if (numUnloadedChunks == 0) {
-          onFinished();
+          onFinished(true);
           return true;
         }
       }
@@ -2690,19 +2697,27 @@ public class Minescript {
       }
     }
 
-    public synchronized boolean isFinished() {
+    public synchronized boolean isFullyLoaded() {
       return numUnloadedChunks == 0;
     }
 
-    /** To be called when all requested chunks are loaded. */
-    public synchronized void onFinished() {
-      doneCallback.run();
+    /** To be called when either all requested chunks are loaded or operation is cancelled. */
+    public synchronized void onFinished(boolean success) {
+      if (finished) {
+        LOGGER.warn(
+            "ChunkLoadEventListener already finished; finished again with {}",
+            success ? "success" : "failure");
+        return;
+      }
+      finished = true;
+      doneCallback.done(success);
     }
   }
 
-  // Integer value represents the ID of the job that spawned this listener.
-  private static Map<ChunkLoadEventListener, Integer> chunkLoadEventListeners =
-      new ConcurrentHashMap<ChunkLoadEventListener, Integer>();
+  private record JobFunctionCallId(int jobId, long funcCallId) {}
+
+  private static Map<JobFunctionCallId, ChunkLoadEventListener> chunkLoadEventListeners =
+      new ConcurrentHashMap<JobFunctionCallId, ChunkLoadEventListener>();
 
   private static String customNickname = null;
   private static Consumer<String> chatInterceptor = null;
@@ -3226,12 +3241,29 @@ public class Minescript {
                   arg1.intValue(),
                   arg2.intValue(),
                   arg3.intValue(),
-                  () -> job.respond(funcCallId, "true", true));
+                  (boolean success) -> job.respond(funcCallId, String.valueOf(success), true));
           listener.updateChunkStatuses();
-          if (listener.isFinished()) {
-            listener.onFinished();
+          if (listener.isFullyLoaded()) {
+            listener.onFinished(true);
           } else {
-            chunkLoadEventListeners.put(listener, job.jobId());
+            chunkLoadEventListeners.put(new JobFunctionCallId(job.jobId, funcCallId), listener);
+
+            // TODO(maxuser): Generalize cancellation of long-running functions at job exit. When
+            // such functions complete naturally, they should be cleared from at-exit handlers.
+            job.addAtExitHandler(
+                () -> {
+                  var chunkListener =
+                      chunkLoadEventListeners.remove(
+                          new JobFunctionCallId(job.jobId(), funcCallId));
+                  if (chunkListener != null) {
+                    chunkListener.onFinished(false);
+                    LOGGER.info(
+                        "Cancelled function call {} for \"{}\" at job exit: {}",
+                        funcCallId,
+                        functionName,
+                        job.jobSummary());
+                  }
+                });
           }
           return Optional.empty();
         } else {
@@ -4116,6 +4148,45 @@ public class Minescript {
           logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
           return Optional.of("false");
         }
+
+      case "cancelfn!":
+        var cancelfnRetval = Optional.of("\"cancelfn!\"");
+        if (funcCallId != 0) {
+          LOGGER.error(
+              "Internal error while cancelling function: funcCallId = 0 but got {} in job: {}",
+              funcCallId,
+              job.jobSummary());
+          return cancelfnRetval;
+        }
+        if (args.size() != 2
+            || !(args.get(0) instanceof Number)
+            || !(args.get(1) instanceof String)) {
+          LOGGER.error(
+              "Internal error while cancelling function: expected [int, str] but got {} in job: {}",
+              argsString,
+              job.jobSummary());
+          return cancelfnRetval;
+        }
+        long funcIdToCancel = ((Number) args.get(0)).longValue();
+        String funcName = (String) args.get(1);
+        // TODO(maxuser): Generalize script function call cancellation beyond chunk load listeners.
+        var listener =
+            chunkLoadEventListeners.remove(new JobFunctionCallId(job.jobId(), funcIdToCancel));
+        if (listener == null) {
+          LOGGER.warn(
+              "Failed to find operation to cancel: funcCallId {} for \"{}\" in job: {}",
+              funcIdToCancel,
+              funcName,
+              job.jobSummary());
+        } else {
+          listener.onFinished(false);
+          LOGGER.info(
+              "Cancelled function call {} for \"{}\" in job: {}",
+              funcIdToCancel,
+              funcName,
+              job.jobSummary());
+        }
+        return cancelfnRetval;
 
       case "exit!":
         if (funcCallId == 0) {

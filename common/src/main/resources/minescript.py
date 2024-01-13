@@ -92,7 +92,7 @@ def log(message: str) -> bool:
   """
   if not message:
     return
-  await_script_function("log", message)
+  await_script_function("log", (message,))
 
 
 def screenshot(filename=None) -> bool:
@@ -108,7 +108,7 @@ def screenshot(filename=None) -> bool:
   Since: v2.1
   """
   if filename is None:
-    return await_script_function("screenshot")
+    return await_script_function("screenshot", ())
   else:
     if os.path.sep in filename:
       echo(f'Error: `screenshot` does not support filenames with "{os.path.sep}" character.')
@@ -116,7 +116,7 @@ def screenshot(filename=None) -> bool:
     else:
       if not filename.lower().endswith(".png"):
         filename += ".png"
-      return await_script_function("screenshot", filename)
+      return await_script_function("screenshot", (filename,))
 
 
 def flush():
@@ -124,7 +124,7 @@ def flush():
 
   Since: v2.1
   """
-  return await_script_function("flush")
+  return await_script_function("flush", ())
 
 
 def player_name() -> str:
@@ -132,7 +132,7 @@ def player_name() -> str:
 
   Since: v2.1
   """
-  return await_script_function("player_name")
+  return await_script_function("player_name", ())
 
 
 def player_position() -> List[float]:
@@ -144,7 +144,7 @@ def player_position() -> List[float]:
   Update in v4.0:
     Removed `done_callback` arg. Use `async_player_position()` for async execution.
   """
-  return await_script_function("player_position")
+  return await_script_function("player_position", ())
 
 
 def async_player_position() -> Awaitable[List[float]]:
@@ -157,7 +157,7 @@ def async_player_position() -> Awaitable[List[float]]:
 
   Since: v4.0
   """
-  return call_async_script_function("player_position")
+  return call_async_script_function("player_position", ())
 
 
 def player_set_position(
@@ -173,7 +173,7 @@ def player_set_position(
 
   Since: v3.1
   """
-  return await_script_function("player_set_position", x, y, z, yaw, pitch)
+  return await_script_function("player_set_position", (x, y, z, yaw, pitch))
 
 
 def async_player_set_position(
@@ -191,7 +191,7 @@ def async_player_set_position(
 
   Since: v4.0
   """
-  return call_async_script_function("player_set_position", x, y, z, yaw, pitch)
+  return call_async_script_function("player_set_position", (x, y, z, yaw, pitch))
 
 
 def player_hand_items() -> List[Dict[str, Any]]:
@@ -207,7 +207,7 @@ def player_hand_items() -> List[Dict[str, Any]]:
 
   Since: v2.0
   """
-  return await_script_function("player_hand_items")
+  return await_script_function("player_hand_items", ())
 
 
 def async_player_hand_items() -> Awaitable[List[Dict[str, Any]]]:
@@ -222,7 +222,7 @@ def async_player_hand_items() -> Awaitable[List[Dict[str, Any]]]:
 
   Since: v4.0
   """
-  return call_async_script_function("player_hand_items")
+  return call_async_script_function("player_hand_items", ())
 
 
 def player_inventory() -> List[Dict[str, Any]]:
@@ -245,7 +245,7 @@ def player_inventory() -> List[Dict[str, Any]]:
 
   Since: v2.0
   """
-  return await_script_function("player_inventory")
+  return await_script_function("player_inventory", ())
 
 
 def async_player_inventory() -> Awaitable[List[Dict[str, Any]]]:
@@ -261,7 +261,7 @@ def async_player_inventory() -> Awaitable[List[Dict[str, Any]]]:
 
   Since: v4.0
   """
-  return call_async_script_function("player_inventory")
+  return call_async_script_function("player_inventory", ())
 
 
 def player_inventory_slot_to_hotbar(slot: int) -> int:
@@ -279,7 +279,7 @@ def player_inventory_slot_to_hotbar(slot: int) -> int:
 
   Since: v3.0
   """
-  return await_script_function("player_inventory_slot_to_hotbar", slot)
+  return await_script_function("player_inventory_slot_to_hotbar", (slot,))
 
 
 def async_player_inventory_slot_to_hotbar(slot: int) -> Awaitable[int]:
@@ -312,7 +312,7 @@ def player_inventory_select_slot(slot: int) -> int:
 
   Since: v3.0
   """
-  return await_script_function("player_inventory_select_slot", slot)
+  return await_script_function("player_inventory_select_slot", (slot,))
 
 
 def async_player_inventory_select_slot(slot: int) -> Awaitable[int]:
@@ -339,7 +339,7 @@ def player_press_forward(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_forward", pressed)
+  return await_script_function("player_press_forward", (pressed,))
 
 
 def player_press_backward(pressed: bool):
@@ -350,7 +350,7 @@ def player_press_backward(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_backward", pressed)
+  return await_script_function("player_press_backward", (pressed,))
 
 
 def player_press_left(pressed: bool):
@@ -361,7 +361,7 @@ def player_press_left(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_left", pressed)
+  return await_script_function("player_press_left", (pressed,))
 
 
 def player_press_right(pressed: bool):
@@ -372,7 +372,7 @@ def player_press_right(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_right", pressed)
+  return await_script_function("player_press_right", (pressed,))
 
 
 def player_press_jump(pressed: bool):
@@ -383,7 +383,7 @@ def player_press_jump(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_jump", pressed)
+  return await_script_function("player_press_jump", (pressed,))
 
 
 def player_press_sprint(pressed: bool):
@@ -394,7 +394,7 @@ def player_press_sprint(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_sprint", pressed)
+  return await_script_function("player_press_sprint", (pressed,))
 
 
 def player_press_sneak(pressed: bool):
@@ -405,7 +405,7 @@ def player_press_sneak(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_sneak", pressed)
+  return await_script_function("player_press_sneak", (pressed,))
 
 
 def player_press_pick_item(pressed: bool):
@@ -416,7 +416,7 @@ def player_press_pick_item(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_pick_item", pressed)
+  return await_script_function("player_press_pick_item", (pressed,))
 
 
 def player_press_use(pressed: bool):
@@ -427,7 +427,7 @@ def player_press_use(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_use", pressed)
+  return await_script_function("player_press_use", (pressed,))
 
 
 def player_press_attack(pressed: bool):
@@ -438,7 +438,7 @@ def player_press_attack(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_attack", pressed)
+  return await_script_function("player_press_attack", (pressed,))
 
 
 def player_press_swap_hands(pressed: bool):
@@ -449,7 +449,7 @@ def player_press_swap_hands(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_swap_hands", pressed)
+  return await_script_function("player_press_swap_hands", (pressed,))
 
 
 def player_press_drop(pressed: bool):
@@ -460,7 +460,7 @@ def player_press_drop(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_drop", pressed)
+  return await_script_function("player_press_drop", (pressed,))
 
 
 def player_orientation():
@@ -471,7 +471,7 @@ def player_orientation():
 
   Since: v2.1
   """
-  return await_script_function("player_orientation")
+  return await_script_function("player_orientation", ())
 
 
 def player_set_orientation(yaw: float, pitch: float):
@@ -486,7 +486,7 @@ def player_set_orientation(yaw: float, pitch: float):
 
   Since: v2.1
   """
-  return await_script_function("player_set_orientation", yaw, pitch)
+  return await_script_function("player_set_orientation", (yaw, pitch))
 
 
 def player_get_targeted_block(max_distance: float = 20):
@@ -504,7 +504,7 @@ def player_get_targeted_block(max_distance: float = 20):
 
   Since: v3.0
   """
-  return await_script_function("player_get_targeted_block", max_distance)
+  return await_script_function("player_get_targeted_block", (max_distance,))
 
 
 def player_health() -> float:
@@ -512,7 +512,7 @@ def player_health() -> float:
 
   Since: v3.1
   """
-  return await_script_function("player_health")
+  return await_script_function("player_health", ())
 
 
 def players(*, nbt: bool = False):
@@ -534,7 +534,7 @@ def players(*, nbt: bool = False):
 
   Since: v2.1
   """
-  return await_script_function("players", nbt)
+  return await_script_function("players", (nbt,))
 
 
 def entities(*, nbt: bool = False):
@@ -557,7 +557,7 @@ def entities(*, nbt: bool = False):
 
   Since: v2.1
   """
-  return await_script_function("entities", nbt)
+  return await_script_function("entities", (nbt,))
 
 
 def world_properties() -> Dict[str, Any]:
@@ -577,7 +577,7 @@ def world_properties() -> Dict[str, Any]:
 
   Since: v3.1
   """
-  return await_script_function("world_properties")
+  return await_script_function("world_properties", ())
 
 
 def getblock(x: int, y: int, z: int) -> str:
@@ -589,7 +589,7 @@ def getblock(x: int, y: int, z: int) -> str:
   Returns:
     block type at (x, y, z) as a string
   """
-  return await_script_function("getblock", x, y, z)
+  return await_script_function("getblock", (x, y, z))
 
 
 def async_getblock(x: int, y: int, z: int) -> Awaitable[str]:
@@ -605,7 +605,7 @@ def async_getblock(x: int, y: int, z: int) -> Awaitable[str]:
 
   Since: v4.0
   """
-  return call_async_script_function("getblock", x, y, z)
+  return call_async_script_function("getblock", (x, y, z))
 
 
 def getblocklist(positions: List[List[int]]) -> List[str]:
@@ -622,7 +622,7 @@ def getblocklist(positions: List[List[int]]) -> List[str]:
 
   Since: v2.1
   """
-  return await_script_function("getblocklist", positions)
+  return await_script_function("getblocklist", (positions,))
 
 
 def async_getblocklist(positions: List[List[int]]) -> Awaitable[List[str]]:
@@ -638,32 +638,27 @@ def async_getblocklist(positions: List[List[int]]) -> Awaitable[List[str]]:
 
   Since: v4.0
   """
-  return call_async_script_function("getblocklist", positions)
+  return call_async_script_function("getblocklist", (positions,))
 
 
-def await_loaded_region(x1: int, z1: int, x2: int, z2: int) -> bool:
-  """Notifies the caller when the region from (x1, z1) to (x2, z2) is loaded.
+def await_loaded_region(x1: int, z1: int, x2: int, z2: int, timeout: float = None) -> bool:
+  """Waits for chunks to load in the region from (x1, z1) to (x2, z2).
 
   Args:
     x1, z1, x2, z2: bounds of the region for awaiting loaded chunks
+    timeout: if specified, timeout in seconds to wait for the region to load
 
   Returns:
-    `True` if the requested region is fully loaded upon return.
-
-  Examples:
-    ```
-    minescript.echo("About to wait for region to load...")
-
-    # Load all chunks within (x, z) bounds (0, 0) and (320, 160):
-    minescript.await_loaded_region(0, 0, 320, 160)
-
-    minescript.echo("Region finished loading.")
-    ```
+    `True` if the requested region has fully loaded.
 
   Update in v4.0:
-    Removed `done_callback` arg. Call now always blocks until region is loaded.
+    Removed `done_callback` arg. Call now always blocks until region is loaded
+    or timeout (if specified) is reached.
   """
-  return await_script_function("await_loaded_region", x1, z1, x2, z2)
+  try:
+    return await_script_function("await_loaded_region", (x1, z1, x2, z2), timeout=timeout)
+  except TimeoutError:
+    return False
 
 
 class KeyEventListener:
@@ -733,7 +728,7 @@ def unregister_key_event_listener():
 
   Since: v3.2
   """
-  await_script_function("unregister_key_event_listener")
+  await_script_function("unregister_key_event_listener", ())
 
 
 class ChatEventListener:
@@ -810,7 +805,7 @@ def unregister_chat_message_listener():
 
   Since: v2.0
   """
-  await_script_function("unregister_chat_message_listener")
+  await_script_function("unregister_chat_message_listener", ())
 
 
 def register_chat_message_interceptor(interceptor: Callable[[str], None]):
@@ -841,7 +836,7 @@ def unregister_chat_message_interceptor():
 
   Since: v2.1
   """
-  await_script_function("unregister_chat_message_interceptor")
+  await_script_function("unregister_chat_message_interceptor", ())
 
 
 def screen_name() -> str:
@@ -852,7 +847,7 @@ def screen_name() -> str:
 
   Since: v3.2
   """
-  return await_script_function("screen_name")
+  return await_script_function("screen_name", ())
 
 
 def container_get_items():
@@ -863,7 +858,7 @@ def container_get_items():
 
   Since: v4.0
   """
-  return await_script_function("container_get_items")
+  return await_script_function("container_get_items", ())
 
 
 def container_click_slot(slot: int) -> bool:
@@ -877,7 +872,7 @@ def container_click_slot(slot: int) -> bool:
 
   Since: v4.0
   """
-  return await_script_function("container_click_slot", slot)
+  return await_script_function("container_click_slot", (slot,))
 
 
 def player_look_at(x: float, y: float, z: float):
@@ -890,7 +885,7 @@ def player_look_at(x: float, y: float, z: float):
 
   Since: v4.0
   """
-  await_script_function("player_look_at", x, y, z)
+  await_script_function("player_look_at", (x, y, z))
 
 
 BlockPos = Tuple[int, int, int]
@@ -986,7 +981,7 @@ def blockpack_read_world(
   Since: v3.0
   """
   return await_script_function(
-      "blockpack_read_world", pos1, pos2, rotation, offset, comments, safety_limit)
+      "blockpack_read_world", (pos1, pos2, rotation, offset, comments, safety_limit))
 
 
 def blockpack_read_file(filename: str) -> int:
@@ -1003,7 +998,7 @@ def blockpack_read_file(filename: str) -> int:
 
   Since: v3.0
   """
-  return await_script_function("blockpack_read_file", filename)
+  return await_script_function("blockpack_read_file", (filename,))
 
 
 def blockpack_import_data(base64_data: str) -> int:
@@ -1019,7 +1014,7 @@ def blockpack_import_data(base64_data: str) -> int:
 
   Since: v3.0
   """
-  return await_script_function("blockpack_import_data", base64_data)
+  return await_script_function("blockpack_import_data", (base64_data,))
 
 
 def blockpack_block_bounds(blockpack_id: int) -> (BlockPos, BlockPos):
@@ -1029,7 +1024,7 @@ def blockpack_block_bounds(blockpack_id: int) -> (BlockPos, BlockPos):
 
   Since: v3.0
   """
-  return await_script_function("blockpack_block_bounds", blockpack_id)
+  return await_script_function("blockpack_block_bounds", (blockpack_id,))
 
 
 def blockpack_comments(blockpack_id: int) -> Dict[str, str]:
@@ -1039,7 +1034,7 @@ def blockpack_comments(blockpack_id: int) -> Dict[str, str]:
 
   Since: v3.0
   """
-  return await_script_function("blockpack_comments", blockpack_id)
+  return await_script_function("blockpack_comments", (blockpack_id,))
 
 
 def blockpack_write_world(
@@ -1058,7 +1053,7 @@ def blockpack_write_world(
 
   Since: v3.0
   """
-  return await_script_function("blockpack_write_world", blockpack_id, rotation, offset)
+  return await_script_function("blockpack_write_world", (blockpack_id, rotation, offset))
 
 
 def blockpack_write_file(blockpack_id: int, filename: str) -> bool:
@@ -1076,7 +1071,7 @@ def blockpack_write_file(blockpack_id: int, filename: str) -> bool:
 
   Since: v3.0
   """
-  return await_script_function("blockpack_write_file", blockpack_id, filename)
+  return await_script_function("blockpack_write_file", (blockpack_id, filename))
 
 
 def blockpack_export_data(blockpack_id: int) -> str:
@@ -1092,7 +1087,7 @@ def blockpack_export_data(blockpack_id: int) -> str:
 
   Since: v3.0
   """
-  return await_script_function("blockpack_export_data", blockpack_id)
+  return await_script_function("blockpack_export_data", (blockpack_id,))
 
 
 def blockpack_delete(blockpack_id: int) -> bool:
@@ -1108,7 +1103,7 @@ def blockpack_delete(blockpack_id: int) -> bool:
 
   Since: v3.0
   """
-  return await_script_function("blockpack_delete", blockpack_id)
+  return await_script_function("blockpack_delete", (blockpack_id,))
 
 
 def blockpacker_create() -> int:
@@ -1121,7 +1116,7 @@ def blockpacker_create() -> int:
 
   Since: v3.0
   """
-  return await_script_function("blockpacker_create")
+  return await_script_function("blockpacker_create", ())
 
 
 def blockpacker_add_blocks(
@@ -1146,7 +1141,7 @@ def blockpacker_add_blocks(
   Since: v3.1
   """
   return await_script_function(
-      "blockpacker_add_blocks", blockpacker_id, offset, base64_setblocks, base64_fills, blocks)
+      "blockpacker_add_blocks", (blockpacker_id, offset, base64_setblocks, base64_fills, blocks))
 
 
 def blockpacker_add_blockpack(
@@ -1168,7 +1163,7 @@ def blockpacker_add_blockpack(
   Since: v3.0
   """
   return await_script_function(
-      "blockpacker_add_blockpack", blockpacker_id, blockpack_id, rotation, offset)
+      "blockpacker_add_blockpack", (blockpacker_id, blockpack_id, rotation, offset))
 
 
 def blockpacker_pack(blockpacker_id: int, comments: Dict[str, str]) -> int:
@@ -1185,7 +1180,7 @@ def blockpacker_pack(blockpacker_id: int, comments: Dict[str, str]) -> int:
 
   Since: v3.0
   """
-  return await_script_function("blockpacker_pack", blockpacker_id, comments)
+  return await_script_function("blockpacker_pack", (blockpacker_id, comments))
 
 
 def blockpacker_delete(blockpacker_id: int) -> bool:
@@ -1201,7 +1196,7 @@ def blockpacker_delete(blockpacker_id: int) -> bool:
 
   Since: v3.0
   """
-  return await_script_function("blockpacker_delete", blockpacker_id)
+  return await_script_function("blockpacker_delete", (blockpacker_id,))
 
 
 class BlockPackException(Exception):

@@ -147,11 +147,10 @@ def await_loaded_region_test():
   xoffset = 10000
   zoffset = 10000
   minescript.execute(f"/tp @p {x + xoffset} {y} {z + zoffset}")
-  # TODO(maxuser): Support timeout in await_loaded_region(...). Use timeout=5 here.
-  minescript.echo(f"Running await_loaded_region(...); should take a few seconds...")
+  minescript.echo(f"Running await_loaded_region(...) with 5 second timeout")
   start_time = time.time()
   loaded = minescript.await_loaded_region(
-      x + xoffset, z + zoffset, x + xoffset + 1, z + zoffset + 1)
+      x + xoffset, z + zoffset, x + xoffset + 1, z + zoffset + 1, timeout=5)
   try:
     t = time.time() - start_time
     minescript.echo(f"await_loaded_region(...) completed in {t} seconds.")

@@ -40,7 +40,7 @@ _thread_pool = concurrent.futures.ThreadPoolExecutor()  # ThreadPool for corouti
 
 def send_script_function_request(func_name: str, args: Tuple[Any, ...],
                                  retval_handler: AnyConsumer,
-                                 exception_handler: ExceptionHandler = None) -> None:
+                                 exception_handler: ExceptionHandler = None) -> int:
   """Sends a request for a script function, asynchronously streaming return value(s) or exception.
 
   If `exception_handler` is invoked, `retval_handler` will no longer be called.
@@ -49,6 +49,9 @@ def send_script_function_request(func_name: str, args: Tuple[Any, ...],
     func_name: name of Minescript function to call
     retval_handler: callback invoked for each return value
     exception_handler: callback invoked if an exception is raised
+
+  Returns:
+    function call ID
   """
   global _next_fcallid
   with _script_function_calls_lock:
@@ -56,9 +59,10 @@ def send_script_function_request(func_name: str, args: Tuple[Any, ...],
     func_call_id = _next_fcallid
     _script_function_calls[func_call_id] = (func_name, retval_handler, exception_handler)
   print(f"?{func_call_id} {func_name} {json.dumps(args)}")
+  return func_call_id
 
 
-async def call_async_script_function(func_name: str, *args: Any) -> Awaitable[Any]:
+async def call_async_script_function(func_name: str, args: Tuple[Any, ...]) -> Awaitable[Any]:
   """Calls a script function and awaits the function's return value.
 
   Args:
@@ -91,11 +95,12 @@ async def call_async_script_function(func_name: str, *args: Any) -> Awaitable[An
     return retval_holder[0]
 
 
-def await_script_function(func_name: str, *args: Any) -> Any:
+def await_script_function(func_name: str, args: Tuple[Any, ...], timeout: float = None) -> Any:
   """Calls a script function and returns the function's return value.
 
   Args:
     func_name: name of Minescript function to call
+    timeout: if specified, timeout in seconds to wait for the script function to complete
 
   Returns:
     script function's return value: number, string, list, or dict
@@ -113,8 +118,13 @@ def await_script_function(func_name: str, *args: Any) -> Any:
     exception_holder.append(exception)
     lock.release()
 
-  send_script_function_request(func_name, args, HandleReturnValue, HandleException)
-  lock.acquire()
+  func_call_id = send_script_function_request(func_name, args, HandleReturnValue, HandleException)
+  locked = lock.acquire(timeout=(-1 if timeout is None else timeout))
+  if not locked:
+    # Special pseudo-function for cancelling the function call.
+    cancel_args = (func_call_id, func_name)
+    print(f"?0 cancelfn! {json.dumps(cancel_args)}")
+    raise TimeoutError(f'Timeout after {timeout} seconds')
 
   if exception_holder:
     raise exception_holder[0]
