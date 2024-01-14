@@ -50,11 +50,25 @@ def expect_true(expr):
   if not expr:
     raise TestFailure(f"Failed expectation: {expr}")
 
+def expect_false(expr):
+  if expr:
+    raise TestFailure(f"Failed expectation: not {expr}")
+
+def expect_contains(container, element):
+  if element not in container:
+    raise TestFailure(f"Failed expectation: {element} not in {container}")
+
 def expect_equal(a, b):
   if a == b:
     print_success(f"Success: {a} == {b}")
   else:
     raise TestFailure(f"Failed equality: {a} != {b}")
+
+def expect_gt(a, b):
+  if a > b:
+    print_success(f"Success: {a} > {b}")
+  else:
+    raise TestFailure(f"Failed comparison: {a} <= {b} (expected >)")
 
 def expect_message(message):
   expected_message_re = re.compile(message)
@@ -78,23 +92,28 @@ def drain_message_queue():
   except queue.Empty:
     pass
 
+def test(test_func):
+  all_tests.append(test_func)
+  return test_func
 
+
+# BEGIN TESTS
+
+@test
 def chat_test():
   minescript.chat("this is a chat message")
   expect_message("<[^>]*> this is a chat message")
 
-all_tests.append(chat_test)
 
-
+@test
 def player_position_test():
   pos = minescript.player_position()
   x, y, z = pos
   x, y, z = int(x), int(y), int(z)
   print_success(f"got position: {x} {y} {z}")
 
-all_tests.append(player_position_test)
 
-
+@test
 def getblock_test():
   block = minescript.getblock(0, 0, 0)
   print_success(f"block at 0 0 0: {repr(block)}")
@@ -103,9 +122,8 @@ def getblock_test():
   block = minescript.getblock(x, y - 1, z)
   print_success(f"block under player: {repr(block)}")
 
-all_tests.append(getblock_test)
 
-
+@test
 def copy_paste_test():
   filename = os.path.join("minescript", "blockpacks", "test.zip")
   try:
@@ -139,9 +157,18 @@ def copy_paste_test():
   finally:
     os.remove(filename)
 
-all_tests.append(copy_paste_test)
+
+@test
+def blockpack_test():
+  pos1 = [int(p) for p in minescript.player_position()]
+  pos2 = [p + 50 for p in pos1]
+  blockpack = minescript.BlockPack.read_world(
+      pos1, pos2, comments={"hello": "world", "foo": "bar"})
+  comments = blockpack.comments()
+  expect_equal({"hello": "world", "foo": "bar"}, comments)
 
 
+@test
 def await_loaded_region_test():
   x, y, z = [int(p) for p in minescript.player_position()]
   xoffset = 10000
@@ -159,21 +186,21 @@ def await_loaded_region_test():
     minescript.execute(f"/tp @p {x} {y} {z}")
     minescript.flush()
 
-all_tests.append(await_loaded_region_test)
+  loaded = minescript.await_loaded_region(999990, 999990, 999999, 999999, timeout=0.01)
+  expect_false(loaded)
 
 
+@test
 def player_hand_items_test():
   expect_equal(list, type(minescript.player_hand_items()))
 
-all_tests.append(player_hand_items_test)
 
-
+@test
 def player_inventory_test():
   expect_equal(list, type(minescript.player_inventory()))
 
-all_tests.append(player_inventory_test)
 
-
+@test
 def player_test():
   name = minescript.player_name()
   expect_true(name)
@@ -181,16 +208,33 @@ def player_test():
   x, y, z = minescript.player_position()
   yaw, pitch = minescript.player_orientation()
 
-  players = minescript.players()
+  players = minescript.players(nbt=True)
+  for p in players:
+    expect_contains(p, "name")
+    expect_contains(p, "type")
+    expect_contains(p, "health")
+    expect_contains(p, "position")
+    expect_contains(p, "yaw")
+    expect_contains(p, "pitch")
+    expect_contains(p, "velocity")
+    expect_contains(p, "nbt")
   players_with_my_name = [
       (p["name"], p["position"], p["yaw"], p["pitch"]) for p in filter(lambda p: p["name"] == name,
       players)]
   expect_equal(players_with_my_name, [(name, [x, y, z], yaw, pitch)])
 
-  entities = minescript.entities()
+  entities = minescript.entities(nbt=True)
+  for e in entities:
+    expect_contains(e, "name")
+    expect_contains(e, "type")
+    expect_contains(e, "position")
+    expect_contains(e, "yaw")
+    expect_contains(e, "pitch")
+    expect_contains(e, "velocity")
+    expect_contains(e, "nbt")
   entities_with_my_name = [
-      (e["name"], e["position"], e["yaw"], e["pitch"]) for e in filter(lambda e: e["name"] == name,
-      entities)]
+      (e["name"], e["position"], e["yaw"], e["pitch"])
+      for e in filter(lambda e: e["name"] == name, entities)]
   expect_equal(entities_with_my_name, [(name, [x, y, z], yaw, pitch)])
 
   # yaw == 0 <-> look +z-axis
@@ -233,9 +277,8 @@ def player_test():
   x1, y1, z1 = minescript.player_position()
   expect_true(x0 < x1)
 
-all_tests.append(player_test)
 
-
+@test
 def screenshot_test():
   timestamp = int(time.time())
   minescript.screenshot(f"screenshot_test_{timestamp}")
@@ -244,9 +287,8 @@ def screenshot_test():
   expect_true(os.path.isfile(filename))
   os.remove(filename)
 
-all_tests.append(screenshot_test)
 
-
+@test
 def player_targeted_block_test():
   # Record player orientation then look down for the targeted block test since player is likely to
   # have ground beneath them. Lastly, restore player's original orientation.
@@ -263,8 +305,6 @@ def player_targeted_block_test():
   expect_true(result[1] < max_distance)
   expect_equal(result[2], "up") # We're looking at the "up" side since we're looking down.
   expect_equal(type(result[3]), str)
-
-all_tests.append(player_targeted_block_test)
 
 async def do_async_functions() -> str:
   player_pos, hand_items, inventory = await asyncio.gather(
@@ -300,6 +340,7 @@ def do_blocking_functions() -> str:
 
   return f"hand_items={hand_items}, inventory={inventory}"
 
+@test
 def async_function_test():
   start_time = time.time()
   async_result = asyncio.run(do_async_functions())
@@ -313,7 +354,50 @@ def async_function_test():
   expect_true(async_time < blocking_time)
   print_success(f"async_time ({async_time:.4f} sec) < blocking_time ({blocking_time:.4f} sec)")
 
-all_tests.append(async_function_test)
+
+@test
+def player_health_test():
+  health = minescript.player_health()
+  expect_equal(float, type(health))
+  expect_gt(health, 0)
+
+
+@test
+def player_look_at_test():
+  # Save original orientation.
+  yaw, pitch = minescript.player_orientation()
+
+  # Look in the +x direction.
+  pos = [int(p) for p in minescript.player_position()]
+  pos[0] += 1
+  pos[1] += 1
+  minescript.player_look_at(*pos)
+
+  # Restore original orientation.
+  minescript.player_set_orientation(yaw, pitch)
+
+@test
+def screen_name_test():
+  # Assume that no GUI screen is active while test is running.
+  name = minescript.screen_name()
+  expect_equal(None, name)
+
+
+@test
+def world_properties_test():
+  props = minescript.world_properties()
+  expect_equal(len(props), 9)
+  expect_contains(props, "game_ticks")
+  expect_contains(props, "day_ticks")
+  expect_contains(props, "raining")
+  expect_contains(props, "thundering")
+  expect_contains(props, "spawn")
+  expect_contains(props, "hardcore")
+  expect_contains(props, "difficulty")
+  expect_contains(props, "name")
+  expect_contains(props, "address")
+
+# END TESTS
 
 
 if "--list" in sys.argv[1:]:

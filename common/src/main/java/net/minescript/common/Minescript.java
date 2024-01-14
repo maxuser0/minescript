@@ -10,6 +10,12 @@ import static net.minescript.common.CommandSyntax.quoteString;
 
 import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import com.mojang.blaze3d.platform.InputConstants;
 import io.netty.buffer.Unpooled;
 import java.io.BufferedReader;
@@ -192,11 +198,7 @@ public class Minescript {
     }
   }
 
-  private static Gson GSON = new Gson();
-
-  private static String toJsonString(String s) {
-    return GSON.toJson(s);
-  }
+  private static Gson GSON = new GsonBuilder().serializeNulls().create();
 
   private static String getCurrentVersion() {
     try (var in = Minescript.class.getResourceAsStream("/version.txt");
@@ -601,7 +603,7 @@ public class Minescript {
 
     Queue<String> commandQueue();
 
-    boolean respond(long functionCallId, String returnValue, boolean finalReply);
+    boolean respond(long functionCallId, JsonElement returnValue, boolean finalReply);
 
     void raiseException(long functionCallId, String exceptionType, String message);
 
@@ -941,7 +943,7 @@ public class Minescript {
   interface Task {
     int run(String[] command, JobControl jobControl);
 
-    default boolean sendResponse(long functionCallId, String returnValue, boolean finalReply) {
+    default boolean sendResponse(long functionCallId, JsonElement returnValue, boolean finalReply) {
       return false;
     }
 
@@ -1032,9 +1034,13 @@ public class Minescript {
     }
 
     @Override
-    public boolean respond(long functionCallId, String returnValue, boolean finalReply) {
+    public boolean respond(long functionCallId, JsonElement returnValue, boolean finalReply) {
       boolean result = task.sendResponse(functionCallId, returnValue, finalReply);
-      if (functionCallId == 0 && "\"exit!\"".equals(returnValue)) {
+      if (functionCallId == 0
+          && returnValue.isJsonPrimitive()
+          && returnValue instanceof JsonPrimitive primitive
+          && primitive.isString()
+          && primitive.getAsString().equals("exit!")) {
         state = JobState.DONE;
       }
       return result;
@@ -1215,7 +1221,7 @@ public class Minescript {
       this.funcCallId = funcCallId;
     }
 
-    public boolean respond(String returnValue, boolean finalReply) {
+    public boolean respond(JsonElement returnValue, boolean finalReply) {
       return job.respond(funcCallId, returnValue, finalReply);
     }
 
@@ -1314,20 +1320,18 @@ public class Minescript {
     }
 
     @Override
-    public boolean sendResponse(long functionCallId, String returnValue, boolean finalReply) {
+    public boolean sendResponse(long functionCallId, JsonElement returnValue, boolean finalReply) {
       if (!isReadyToRespond()) {
         return false;
       }
       try {
+        var response = new JsonObject();
+        response.addProperty("fcid", functionCallId);
+        response.add("retval", returnValue);
         if (finalReply) {
-          stdinWriter.write(
-              String.format(
-                  "{\"fcid\": %d, \"retval\": %s, \"conn\": \"close\"}",
-                  functionCallId, returnValue));
-        } else {
-          stdinWriter.write(
-              String.format("{\"fcid\": %d, \"retval\": %s}", functionCallId, returnValue));
+          response.addProperty("conn", "close");
         }
+        stdinWriter.write(GSON.toJson(response));
         stdinWriter.newLine();
         stdinWriter.flush();
         return true;
@@ -1343,10 +1347,16 @@ public class Minescript {
         return false;
       }
       try {
-        stdinWriter.write(
-            String.format(
-                "{\"fcid\": %d, \"except\": {\"type\": %s, \"message\": %s}, \"conn\": \"close\"}",
-                functionCallId, toJsonString(exceptionType), toJsonString(message)));
+        var response = new JsonObject();
+        response.addProperty("fcid", functionCallId);
+        response.addProperty("conn", "close");
+
+        var exception = new JsonObject();
+        exception.addProperty("type", exceptionType);
+        exception.addProperty("message", message);
+        response.add("except", exception);
+
+        stdinWriter.write(GSON.toJson(response));
         stdinWriter.newLine();
         stdinWriter.flush();
         return true;
@@ -1360,16 +1370,6 @@ public class Minescript {
       return process != null && process.isAlive() && stdinWriter != null;
     }
   }
-
-  /*
-  static String jsonToString(JsonObjectBuilder builder) {
-    var stringWriter = new StringWriter();
-    try (var jsonWriter = Json.createWriter(stringWriter)) {
-      jsonWriter.write(builder.build());
-    }
-    return stringWriter.toString();
-  }
-  */
 
   static class UndoTask implements Task {
     private final UndoableAction undo;
@@ -2292,20 +2292,22 @@ public class Minescript {
   public static void onKeyboardEvent(int key, int scanCode, int action, int modifiers) {
     var minecraft = Minecraft.getInstance();
     var iter = keyEventListeners.entrySet().iterator();
-    String jsonText = null;
+    JsonObject json = null;
     while (iter.hasNext()) {
       var listener = iter.next();
-      if (jsonText == null) {
+      if (json == null) {
         String screenName = getScreenName().orElse(null);
         long timeMillis = System.currentTimeMillis();
-        jsonText =
-            String.format(
-                "{\"key\": %d, \"scanCode\": %d, \"action\": %d, \"modifiers\": %d, "
-                    + "\"timeMillis\": %d, \"screen\": %s}",
-                key, scanCode, action, modifiers, timeMillis, toJsonString(screenName));
+        json = new JsonObject();
+        json.addProperty("key", key);
+        json.addProperty("scanCode", scanCode);
+        json.addProperty("action", action);
+        json.addProperty("modifiers", modifiers);
+        json.addProperty("timeMillis", timeMillis);
+        json.addProperty("screen", screenName);
       }
-      LOGGER.info("Forwarding key event to listener {}: {}", listener.getKey(), jsonText);
-      if (!listener.getValue().respond(jsonText, false)) {
+      LOGGER.info("Forwarding key event to listener {}: {}", listener.getKey(), json);
+      if (!listener.getValue().respond(json, false)) {
         iter.remove();
       }
     }
@@ -2449,9 +2451,9 @@ public class Minescript {
     var iter = clientChatReceivedEventListeners.entrySet().iterator();
     while (iter.hasNext()) {
       var listener = iter.next();
-      String quotedText = toJsonString(text);
-      LOGGER.info("Forwarding chat message to listener {}: {}", listener.getKey(), quotedText);
-      if (!listener.getValue().respond(quotedText, false)) {
+      var jsonText = new JsonPrimitive(text);
+      LOGGER.info("Forwarding chat message to listener {}: {}", listener.getKey(), jsonText);
+      if (!listener.getValue().respond(jsonText, false)) {
         iter.remove();
       }
     }
@@ -2778,64 +2780,66 @@ public class Minescript {
     }
   }
 
-  private static String itemStackToJsonString(
+  private static JsonElement itemStackToJsonElement(
       ItemStack itemStack, OptionalInt slot, boolean markSelected) {
     if (itemStack.getCount() == 0) {
-      return "null";
+      return JsonNull.INSTANCE;
     } else {
       var nbt = itemStack.getTag();
-      var out = new StringBuilder("{");
-      out.append(
-          String.format(
-              "\"item\": \"%s\", \"count\": %d", itemStack.getItem(), itemStack.getCount()));
+      var out = new JsonObject();
+      out.addProperty("item", itemStack.getItem().toString());
+      out.addProperty("count", itemStack.getCount());
       if (nbt != null) {
-        out.append(String.format(", \"nbt\": %s", GSON.toJson(nbt.toString())));
+        out.addProperty("nbt", nbt.toString());
       }
       if (slot.isPresent()) {
-        out.append(String.format(", \"slot\": %d", slot.getAsInt()));
+        out.addProperty("slot", slot.getAsInt());
       }
       if (markSelected) {
-        out.append(", \"selected\":true");
+        out.addProperty("selected", true);
       }
-      out.append("}");
-      return out.toString();
+      return out;
     }
   }
 
-  private static String entitiesToJsonString(
+  private static JsonArray entitiesToJsonArray(
       Iterable<? extends Entity> entities, boolean includeNbt) {
     var minecraft = Minecraft.getInstance();
     var player = minecraft.player;
-    var result = new StringBuilder("[");
+    var result = new JsonArray();
     for (var entity : entities) {
-      if (result.length() > 1) {
-        result.append(",");
-      }
-      result.append("{");
-      result.append(String.format("\"name\":%s,", toJsonString(entity.getName().getString())));
-      result.append(String.format("\"type\":%s,", toJsonString(entity.getType().toString())));
-      if (entity instanceof LivingEntity) {
-        var livingEntity = (LivingEntity) entity;
-        result.append(String.format("\"health\":%s,", livingEntity.getHealth()));
+      var jsonEntity = new JsonObject();
+      jsonEntity.addProperty("name", entity.getName().getString());
+      jsonEntity.addProperty("type", entity.getType().toString());
+      if (entity instanceof LivingEntity livingEntity) {
+        jsonEntity.addProperty("health", livingEntity.getHealth());
       }
       if (entity == player) {
-        result.append("\"local\":true,");
+        jsonEntity.addProperty("local", "true");
       }
-      result.append(
-          String.format("\"position\":[%s,%s,%s],", entity.getX(), entity.getY(), entity.getZ()));
-      result.append(String.format("\"yaw\":%s,", entity.getYRot()));
-      result.append(String.format("\"pitch\":%s,", entity.getXRot()));
+      var position = new JsonArray();
+      position.add(entity.getX());
+      position.add(entity.getY());
+      position.add(entity.getZ());
+      jsonEntity.add("position", position);
+
+      jsonEntity.addProperty("yaw", entity.getYRot());
+      jsonEntity.addProperty("pitch", entity.getXRot());
+
       var v = entity.getDeltaMovement();
-      result.append(String.format("\"velocity\":[%s,%s,%s]", v.x, v.y, v.z));
+      var velocity = new JsonArray();
+      velocity.add(v.x);
+      velocity.add(v.y);
+      velocity.add(v.z);
+      jsonEntity.add("velocity", velocity);
+
       if (includeNbt) {
         var nbt = new CompoundTag();
-        result.append(
-            String.format(",\"nbt\":%s", toJsonString(entity.saveWithoutId(nbt).toString())));
+        jsonEntity.addProperty("nbt", entity.saveWithoutId(nbt).toString());
       }
-      result.append("}");
+      result.add(jsonEntity);
     }
-    result.append("]");
-    return result.toString();
+    return result;
   }
 
   private static boolean scriptFunctionDebugOutptut = false;
@@ -2882,7 +2886,7 @@ public class Minescript {
         minecraft.options.keyDrop, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_Q));
   }
 
-  private static Optional<String> doPlayerAction(
+  private static Optional<JsonElement> doPlayerAction(
       String functionName, KeyMapping keyBinding, List<?> args, String argsString) {
     if (args.size() == 1 && args.get(0) instanceof Boolean) {
       lazyInitBoundKeys();
@@ -2894,13 +2898,13 @@ public class Minescript {
       } else {
         KeyMapping.set(key, false);
       }
-      return Optional.of("true");
+      return OPTIONAL_JSON_TRUE;
     } else {
       logUserError(
           "Error: `{}` expected 1 boolean param (true or false) but got: {}",
           functionName,
           argsString);
-      return Optional.of("false");
+      return OPTIONAL_JSON_FALSE;
     }
   }
 
@@ -3020,8 +3024,20 @@ public class Minescript {
     return Optional.of(name);
   }
 
-  /** Returns a JSON response string if a script function is called. */
-  private static Optional<String> handleScriptFunction(
+  private static final Optional<JsonElement> OPTIONAL_JSON_NULL = Optional.of(JsonNull.INSTANCE);
+
+  private static final Optional<JsonElement> OPTIONAL_JSON_TRUE =
+      Optional.of(new JsonPrimitive(true));
+
+  private static final Optional<JsonElement> OPTIONAL_JSON_FALSE =
+      Optional.of(new JsonPrimitive(false));
+
+  private static JsonElement jsonPrimitiveOrNull(Optional<String> s) {
+    return s.map(str -> (JsonElement) new JsonPrimitive(str)).orElse(JsonNull.INSTANCE);
+  }
+
+  /** Returns a JSON response if a script function is called. */
+  private static Optional<JsonElement> handleScriptFunction(
       Job job, long funcCallId, String functionName, List<?> args, String argsString) {
     var minecraft = Minecraft.getInstance();
     var world = minecraft.level;
@@ -3047,11 +3063,14 @@ public class Minescript {
     switch (functionName) {
       case "player_position":
         if (args.isEmpty()) {
-          return Optional.of(
-              String.format("[%s, %s, %s]", player.getX(), player.getY(), player.getZ()));
+          var result = new JsonArray();
+          result.add(player.getX());
+          result.add(player.getY());
+          result.add(player.getZ());
+          return Optional.of(result);
         } else {
           logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-          return Optional.of("null");
+          return OPTIONAL_JSON_NULL;
         }
 
       case "player_set_position":
@@ -3062,7 +3081,7 @@ public class Minescript {
               || !(args.get(2) instanceof Number)) {
             logUserError(
                 "Error: `{}` expected 3 to 5 number params but got: {}", functionName, argsString);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
           double x = ((Number) args.get(0)).doubleValue();
           double y = ((Number) args.get(1)).doubleValue();
@@ -3072,27 +3091,27 @@ public class Minescript {
           if (args.size() >= 4 && args.get(3) != null) {
             if (!(args.get(3) instanceof Number)) {
               paramTypeErrorLogger.accept("yaw", "float");
-              return Optional.of("false");
+              return OPTIONAL_JSON_FALSE;
             }
             yaw = ((Number) args.get(3)).floatValue();
           }
           if (args.size() >= 5 && args.get(4) != null) {
             if (!(args.get(4) instanceof Number)) {
               paramTypeErrorLogger.accept("pitch", "float");
-              return Optional.of("false");
+              return OPTIONAL_JSON_FALSE;
             }
             pitch = ((Number) args.get(4)).floatValue();
           }
           player.moveTo(x, y, z, yaw, pitch);
-          return Optional.of("true");
+          return OPTIONAL_JSON_TRUE;
         }
 
       case "player_name":
         if (args.isEmpty()) {
-          return Optional.of(toJsonString(player.getName().getString()));
+          return Optional.of(new JsonPrimitive(player.getName().getString()));
         } else {
           logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-          return Optional.of("null");
+          return OPTIONAL_JSON_NULL;
         }
 
       case "getblock":
@@ -3106,22 +3125,22 @@ public class Minescript {
           int arg2 = ((Number) args.get(2)).intValue();
           Optional<String> block =
               blockStateToString(level.getBlockState(new BlockPos(arg0, arg1, arg2)));
-          return Optional.of(block.map(str -> toJsonString(str)).orElse("null"));
+          return Optional.of(jsonPrimitiveOrNull(block));
         } else {
           logUserError(
               "Error: `{}` expected 3 params (x, y, z) but got: {}", functionName, argsString);
-          return Optional.of("null");
+          return OPTIONAL_JSON_NULL;
         }
 
       case "getblocklist":
         {
-          Supplier<Optional<String>> badArgsResponse =
+          Supplier<Optional<JsonElement>> badArgsResponse =
               () -> {
                 logUserError(
                     "Error: `{}` expected a list of (x, y, z) positions but got: {}",
                     functionName,
                     argsString);
-                return Optional.of("null");
+                return OPTIONAL_JSON_NULL;
               };
 
           if (args.size() != 1 || !(args.get(0) instanceof List)) {
@@ -3129,7 +3148,7 @@ public class Minescript {
           }
           List<?> positions = (List<?>) args.get(0);
           Level level = player.getCommandSenderWorld();
-          List<String> blocks = new ArrayList<>();
+          var blocks = new JsonArray();
           var pos = new BlockPos.MutableBlockPos();
           for (var position : positions) {
             if (!(position instanceof List)) {
@@ -3146,9 +3165,9 @@ public class Minescript {
             int y = ((Number) coords.get(1)).intValue();
             int z = ((Number) coords.get(2)).intValue();
             Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, y, z)));
-            blocks.add(block.orElse(null));
+            blocks.add(jsonPrimitiveOrNull(block));
           }
-          return Optional.of(GSON.toJson(blocks));
+          return Optional.of(blocks);
         }
 
       case "register_key_event_listener":
@@ -3166,16 +3185,16 @@ public class Minescript {
       case "unregister_key_event_listener":
         if (!args.isEmpty()) {
           logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-          return Optional.of("false");
+          return OPTIONAL_JSON_FALSE;
         } else if (!keyEventListeners.containsKey(job.jobId())) {
           logUserError(
               "Error: `{}` has no listeners to unregister for job: {}",
               functionName,
               job.jobSummary());
-          return Optional.of("false");
+          return OPTIONAL_JSON_FALSE;
         } else {
           keyEventListeners.remove(job.jobId());
-          return Optional.of("true");
+          return OPTIONAL_JSON_TRUE;
         }
 
       case "register_chat_message_listener":
@@ -3193,16 +3212,16 @@ public class Minescript {
       case "unregister_chat_message_listener":
         if (!args.isEmpty()) {
           logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-          return Optional.of("false");
+          return OPTIONAL_JSON_FALSE;
         } else if (!clientChatReceivedEventListeners.containsKey(job.jobId())) {
           logUserError(
               "Error: `{}` has no listeners to unregister for job: {}",
               functionName,
               job.jobSummary());
-          return Optional.of("false");
+          return OPTIONAL_JSON_FALSE;
         } else {
           clientChatReceivedEventListeners.remove(job.jobId());
-          return Optional.of("true");
+          return OPTIONAL_JSON_TRUE;
         }
 
       case "register_chat_message_interceptor":
@@ -3210,7 +3229,7 @@ public class Minescript {
           if (chatInterceptor == null) {
             chatInterceptor =
                 s -> {
-                  job.respond(funcCallId, toJsonString(s), false);
+                  job.respond(funcCallId, new JsonPrimitive(s), false);
                 };
             job.addAtExitHandler(() -> chatInterceptor = null);
             logUserInfo("Chat interceptor enabled for job: {}", job.jobSummary());
@@ -3253,7 +3272,7 @@ public class Minescript {
                   arg1.intValue(),
                   arg2.intValue(),
                   arg3.intValue(),
-                  (boolean success) -> job.respond(funcCallId, String.valueOf(success), true));
+                  (boolean success) -> job.respond(funcCallId, new JsonPrimitive(success), true));
           listener.updateChunkStatuses();
           if (listener.isFullyLoaded()) {
             listener.onFinished(true);
@@ -3287,62 +3306,54 @@ public class Minescript {
         if (args.isEmpty()) {
           logUserInfo(
               "Chat nickname reset to default; was {}",
-              customNickname == null ? "default already" : toJsonString(customNickname));
+              customNickname == null ? "default already" : quoteString(customNickname));
           customNickname = null;
-          return Optional.of("true");
+          return OPTIONAL_JSON_TRUE;
         } else if (args.size() == 1) {
           String arg = args.get(0).toString();
           if (arg.contains("%s")) {
-            logUserInfo("Chat nickname set to {}.", toJsonString(arg));
+            logUserInfo("Chat nickname set to {}.", quoteString(arg));
             customNickname = arg;
-            return Optional.of("true");
+            return OPTIONAL_JSON_TRUE;
           } else {
             logUserError(
                 "Error: `{}` expects nickname to contain %s as a placeholder for"
                     + " message text.",
                 functionName);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
         } else {
           logUserError("Error: `{}` expected 0 or 1 param but got: {}", functionName, argsString);
-          return Optional.of("false");
+          return OPTIONAL_JSON_FALSE;
         }
 
       case "player_hand_items":
         if (args.isEmpty()) {
-          var result = new StringBuilder("[");
+          var result = new JsonArray();
           for (var itemStack : player.getHandSlots()) {
-            if (result.length() > 1) {
-              result.append(",");
-            }
-            result.append(itemStackToJsonString(itemStack, OptionalInt.empty(), false));
+            result.add(itemStackToJsonElement(itemStack, OptionalInt.empty(), false));
           }
-          result.append("]");
-          return Optional.of(result.toString());
+          return Optional.of(result);
         } else {
           logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-          return Optional.of("null");
+          return OPTIONAL_JSON_NULL;
         }
 
       case "player_inventory":
         if (args.isEmpty()) {
           var inventory = player.getInventory();
-          var result = new StringBuilder("[");
+          var result = new JsonArray();
           int selectedSlot = inventory.selected;
           for (int i = 0; i < inventory.getContainerSize(); i++) {
             var itemStack = inventory.getItem(i);
             if (itemStack.getCount() > 0) {
-              if (result.length() > 1) {
-                result.append(",");
-              }
-              result.append(itemStackToJsonString(itemStack, OptionalInt.of(i), i == selectedSlot));
+              result.add(itemStackToJsonElement(itemStack, OptionalInt.of(i), i == selectedSlot));
             }
           }
-          result.append("]");
-          return Optional.of(result.toString());
+          return Optional.of(result);
         } else {
           logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-          return Optional.of("null");
+          return OPTIONAL_JSON_NULL;
         }
 
       case "player_inventory_slot_to_hotbar":
@@ -3354,10 +3365,10 @@ public class Minescript {
             var inventory = player.getInventory();
             var connection = minecraft.getConnection();
             connection.send(new ServerboundPickItemPacket(slot));
-            return Optional.of(Integer.toString(inventory.selected));
+            return Optional.of(new JsonPrimitive(inventory.selected));
           } else {
             logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
         }
 
@@ -3370,10 +3381,10 @@ public class Minescript {
             var inventory = player.getInventory();
             var previouslySelectedSlot = inventory.selected;
             inventory.selected = slot;
-            return Optional.of(Integer.toString(previouslySelectedSlot));
+            return Optional.of(new JsonPrimitive(previouslySelectedSlot));
           } else {
             logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
         }
 
@@ -3415,10 +3426,13 @@ public class Minescript {
 
       case "player_orientation":
         if (args.isEmpty()) {
-          return Optional.of(String.format("[%s, %s]", player.getYRot(), player.getXRot()));
+          var result = new JsonArray();
+          result.add(player.getYRot());
+          result.add(player.getXRot());
+          return Optional.of(result);
         } else {
           logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-          return Optional.of("null");
+          return OPTIONAL_JSON_NULL;
         }
 
       case "player_set_orientation":
@@ -3427,11 +3441,11 @@ public class Minescript {
           Number pitch = (Number) args.get(1);
           player.setYRot(yaw.floatValue() % 360.0f);
           player.setXRot(pitch.floatValue() % 360.0f);
-          return Optional.of("true");
+          return OPTIONAL_JSON_TRUE;
         } else {
           logUserError(
               "Error: `{}` expected 2 number params but got: {}", functionName, argsString);
-          return Optional.of("false");
+          return OPTIONAL_JSON_FALSE;
         }
 
       case "player_get_targeted_block":
@@ -3439,11 +3453,11 @@ public class Minescript {
           // See minecraft.client.gui.hud.DebugHud for implementation of F3 debug screen.
           if (args.size() != 1) {
             numParamsErrorLogger.accept(1);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
           if (!(args.get(0) instanceof Number)) {
             paramTypeErrorLogger.accept("max_distance", "float");
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
           double maxDistance = ((Number) args.get(0)).doubleValue();
           var entity = minecraft.getCameraEntity();
@@ -3461,49 +3475,50 @@ public class Minescript {
                     blockPos.getZ());
             Level level = player.getCommandSenderWorld();
             Optional<String> block = blockStateToString(level.getBlockState(blockPos));
-            return Optional.of(
-                String.format(
-                    "[[%d,%d,%d],%s,\"%s\",%s]",
-                    blockPos.getX(),
-                    blockPos.getY(),
-                    blockPos.getZ(),
-                    playerDistance,
-                    hitResult.getDirection(),
-                    block.map(str -> toJsonString(str)).orElse("null")));
+            var result = new JsonArray();
+            var pos = new JsonArray();
+            pos.add(blockPos.getX());
+            pos.add(blockPos.getY());
+            pos.add(blockPos.getZ());
+            result.add(pos);
+            result.add(playerDistance);
+            result.add(hitResult.getDirection().toString());
+            result.add(jsonPrimitiveOrNull(block));
+            return Optional.of(result);
           } else {
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
         }
 
       case "player_health":
-        return Optional.of(String.format("%s", player.getHealth()));
+        return Optional.of(new JsonPrimitive(player.getHealth()));
 
       case "players":
         {
           if (args.size() != 1) {
             numParamsErrorLogger.accept(1);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
           if (!(args.get(0) instanceof Boolean)) {
             paramTypeErrorLogger.accept("nbt", "bool");
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
           boolean nbt = (Boolean) args.get(0);
-          return Optional.of(entitiesToJsonString(world.players(), nbt));
+          return Optional.of(entitiesToJsonArray(world.players(), nbt));
         }
 
       case "entities":
         {
           if (args.size() != 1) {
             numParamsErrorLogger.accept(1);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
           if (!(args.get(0) instanceof Boolean)) {
             paramTypeErrorLogger.accept("nbt", "bool");
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
           boolean nbt = (Boolean) args.get(0);
-          return Optional.of(entitiesToJsonString(world.entitiesForRendering(), nbt));
+          return Optional.of(entitiesToJsonArray(world.entitiesForRendering(), nbt));
         }
 
       case "world_properties":
@@ -3512,50 +3527,51 @@ public class Minescript {
           var difficulty = levelProperties.getDifficulty();
           var serverData = minecraft.getCurrentServer();
           var serverAddress = serverData == null ? "localhost" : serverData.ip;
-          return Optional.of(
-              String.format(
-                  "{\"game_ticks\":%s,\"day_ticks\":%s,\"raining\":%s,\"thundering\":%s,"
-                      + "\"spawn\":[%s,%s,%s],\"hardcore\":%s,\"difficulty\":%s,"
-                      + "\"name\": %s,\"address\":%s}",
-                  levelProperties.getGameTime(),
-                  levelProperties.getDayTime(),
-                  levelProperties.isRaining(),
-                  levelProperties.isThundering(),
-                  levelProperties.getXSpawn(),
-                  levelProperties.getYSpawn(),
-                  levelProperties.getZSpawn(),
-                  levelProperties.isHardcore(),
-                  toJsonString(difficulty.getSerializedName()),
-                  toJsonString(getWorldName()),
-                  toJsonString(serverAddress)));
+
+          var spawn = new JsonArray();
+          spawn.add(levelProperties.getXSpawn());
+          spawn.add(levelProperties.getYSpawn());
+          spawn.add(levelProperties.getZSpawn());
+
+          var result = new JsonObject();
+          result.addProperty("game_ticks", levelProperties.getGameTime());
+          result.addProperty("day_ticks", levelProperties.getDayTime());
+          result.addProperty("raining", levelProperties.isRaining());
+          result.addProperty("thundering", levelProperties.isThundering());
+          result.add("spawn", spawn);
+          result.addProperty("hardcore", levelProperties.isHardcore());
+          result.addProperty("difficulty", difficulty.getSerializedName());
+          result.addProperty("name", getWorldName());
+          result.addProperty("address", serverAddress);
+          return Optional.of(result);
         }
 
       case "log":
         if (args.size() == 1 && args.get(0) instanceof String) {
           String message = (String) args.get(0);
           LOGGER.info(message);
-          return Optional.of("true");
+          return OPTIONAL_JSON_TRUE;
         } else {
           logUserError("Error: `{}` expected 1 string param but got: {}", functionName, argsString);
-          return Optional.of("false");
+          return OPTIONAL_JSON_FALSE;
         }
 
       case "screenshot":
         final Optional<String> filename;
-        final String response;
+        final Optional<JsonElement> response;
         if (args.isEmpty()) {
           filename = Optional.empty();
-          response = "true";
+          response = OPTIONAL_JSON_TRUE;
         } else if (args.size() == 1 && args.get(0) instanceof String) {
           filename = Optional.of((String) args.get(0));
-          response = "true";
+          response = OPTIONAL_JSON_TRUE;
         } else {
           filename = null;
           logUserError(
               "Error: `{}` expected no params or 1 string param but got: {}",
               functionName,
               argsString);
-          response = "false";
+          response = OPTIONAL_JSON_FALSE;
         }
         if (filename != null) {
           Screenshot.grab(
@@ -3564,7 +3580,7 @@ public class Minescript {
               minecraft.getMainRenderTarget(),
               message -> job.enqueueStderr(message.getString()));
         }
-        return Optional.of(response);
+        return response;
 
       case "blockpack_read_world":
         {
@@ -3574,19 +3590,19 @@ public class Minescript {
           //     comments: Dict[str, str] = {}, safety_limit: bool = True) -> int
           if (args.size() != 6) {
             numParamsErrorLogger.accept(6);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
 
           Optional<List<Integer>> list1 = getStrictIntList(args.get(0));
           if (list1.isEmpty() || list1.get().size() != 3) {
             paramTypeErrorLogger.accept("pos1", "a sequence of 3 ints");
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
 
           Optional<List<Integer>> list2 = getStrictIntList(args.get(1));
           if (list2.isEmpty() || list2.get().size() != 3) {
             paramTypeErrorLogger.accept("pos2", "a sequence of 3 ints");
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
 
           int[] rotation = null;
@@ -3594,7 +3610,7 @@ public class Minescript {
             Optional<List<Integer>> list = getStrictIntList(args.get(2));
             if (list.isEmpty() || list.get().size() != 9) {
               paramTypeErrorLogger.accept("rotation", "a sequence of 9 ints");
-              return Optional.of("null");
+              return OPTIONAL_JSON_NULL;
             }
             rotation = list.get().stream().mapToInt(Integer::intValue).toArray();
           }
@@ -3604,20 +3620,20 @@ public class Minescript {
             Optional<List<Integer>> list = getStrictIntList(args.get(3));
             if (list.isEmpty() || list.get().size() != 3) {
               paramTypeErrorLogger.accept("offset", "a sequence of 3 ints");
-              return Optional.of("null");
+              return OPTIONAL_JSON_NULL;
             }
             offset = list.get().stream().mapToInt(Integer::intValue).toArray();
           }
 
           if (!(args.get(4) instanceof Map)) {
             paramTypeErrorLogger.accept("comment", "a dictionary");
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
           var comments = (Map<String, String>) args.get(4);
 
           if (!(args.get(5) instanceof Boolean)) {
             paramTypeErrorLogger.accept("safety_limit", "bool");
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
           boolean safetyLimit = (Boolean) args.get(5);
 
@@ -3633,12 +3649,12 @@ public class Minescript {
               pos2.get(2),
               safetyLimit,
               new BlockPack.TransformedBlockConsumer(rotation, offset, blockpacker))) {
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
           blockpacker.comments().putAll(comments);
           var blockpack = blockpacker.pack();
           int key = job.blockpacks.retain(blockpack);
-          return Optional.of(Integer.toString(key));
+          return Optional.of(new JsonPrimitive(key));
         }
 
       case "blockpack_read_file":
@@ -3650,16 +3666,16 @@ public class Minescript {
                 "Error: `{}` expected one param of type string but got: {}",
                 functionName,
                 argsString);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
           String blockpackFilename = (String) args.get(0);
           try {
             var blockpack = BlockPack.readZipFile(blockpackFilename);
             int key = job.blockpacks.retain(blockpack);
-            return Optional.of(Integer.toString(key));
+            return Optional.of(new JsonPrimitive(key));
           } catch (Exception e) {
             logUserError("Error while reading blockpack {}: {}", blockpackFilename, e.getMessage());
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
         }
 
@@ -3672,16 +3688,16 @@ public class Minescript {
                 "Error: `{}` expected one param of type string but got: {}",
                 functionName,
                 argsString);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
           String base64Data = (String) args.get(0);
           try {
             var blockpack = BlockPack.fromBase64EncodedString(base64Data);
             int key = job.blockpacks.retain(blockpack);
-            return Optional.of(Integer.toString(key));
+            return Optional.of(new JsonPrimitive(key));
           } catch (Exception e) {
             logException(e);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
         }
 
@@ -3693,7 +3709,7 @@ public class Minescript {
           if (!value.isPresent()) {
             logUserError(
                 "Error: `{}` expected one int param but got: {}", functionName, argsString);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
 
           int blockpackId = value.getAsInt();
@@ -3704,14 +3720,25 @@ public class Minescript {
                 functionName,
                 blockpackId,
                 argsString);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
 
           int[] bounds = blockpack.blockBounds();
-          return Optional.of(
-              String.format(
-                  "[[%d,%d,%d],[%d,%d,%d]]",
-                  bounds[0], bounds[1], bounds[2], bounds[3], bounds[4], bounds[5]));
+
+          var minBound = new JsonArray();
+          minBound.add(bounds[0]);
+          minBound.add(bounds[1]);
+          minBound.add(bounds[2]);
+
+          var maxBound = new JsonArray();
+          maxBound.add(bounds[3]);
+          maxBound.add(bounds[4]);
+          maxBound.add(bounds[5]);
+
+          var result = new JsonArray();
+          result.add(minBound);
+          result.add(maxBound);
+          return Optional.of(result);
         }
 
       case "blockpack_comments":
@@ -3722,7 +3749,7 @@ public class Minescript {
           if (!value.isPresent()) {
             logUserError(
                 "Error: `{}` expected one int param but got: {}", functionName, argsString);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
 
           int blockpackId = value.getAsInt();
@@ -3733,10 +3760,10 @@ public class Minescript {
                 functionName,
                 blockpackId,
                 argsString);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
 
-          return Optional.of(GSON.toJson(blockpack.comments()));
+          return Optional.of(GSON.toJsonTree(blockpack.comments()));
         }
 
       case "blockpack_write_world":
@@ -3745,13 +3772,13 @@ public class Minescript {
           //    (blockpack_id: int, rotation: Rotation = None, offset: BlockPos = None) -> bool
           if (args.size() != 3) {
             numParamsErrorLogger.accept(3);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
 
           OptionalInt value = getStrictIntValue(args.get(0));
           if (!value.isPresent()) {
             paramTypeErrorLogger.accept("blockpack_id", "int");
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
           int blockpackId = value.getAsInt();
 
@@ -3760,7 +3787,7 @@ public class Minescript {
             Optional<List<Integer>> list = getStrictIntList(args.get(1));
             if (list.isEmpty() || list.get().size() != 9) {
               paramTypeErrorLogger.accept("rotation", "a sequence of 9 ints");
-              return Optional.of("false");
+              return OPTIONAL_JSON_FALSE;
             }
             rotation = list.get().stream().mapToInt(Integer::intValue).toArray();
           }
@@ -3770,7 +3797,7 @@ public class Minescript {
             Optional<List<Integer>> list = getStrictIntList(args.get(2));
             if (list.isEmpty() || list.get().size() != 3) {
               paramTypeErrorLogger.accept("offset", "a sequence of 3 ints");
-              return Optional.of("false");
+              return OPTIONAL_JSON_FALSE;
             }
             offset = list.get().stream().mapToInt(Integer::intValue).toArray();
           }
@@ -3782,11 +3809,11 @@ public class Minescript {
                 functionName,
                 blockpackId,
                 argsString);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
 
           blockpack.getBlockCommands(rotation, offset, job::enqueueStdout);
-          return Optional.of("true");
+          return OPTIONAL_JSON_TRUE;
         }
 
       case "blockpack_write_file":
@@ -3797,14 +3824,14 @@ public class Minescript {
           if (!value.isPresent()) {
             logUserError(
                 "Error: `{}` expected first param to be int but got: {}", functionName, argsString);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
           if (args.size() < 2 || !(args.get(1) instanceof String)) {
             logUserError(
                 "Error: `{}` expected second param to be string but got: {}",
                 functionName,
                 argsString);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
 
           int blockpackId = value.getAsInt();
@@ -3817,15 +3844,15 @@ public class Minescript {
                 functionName,
                 blockpackId,
                 argsString);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
 
           try {
             blockpack.writeZipFile(blockpackFilename);
-            return Optional.of("true");
+            return OPTIONAL_JSON_TRUE;
           } catch (Exception e) {
             logUserError("Error while writing blockpack {}: {}", blockpackFilename, e.getMessage());
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
         }
 
@@ -3837,7 +3864,7 @@ public class Minescript {
               (args.size() == 1) ? getStrictIntValue(args.get(0)) : OptionalInt.empty();
           if (!value.isPresent()) {
             logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
           var blockpack = job.blockpacks.getById(value.getAsInt());
           if (blockpack == null) {
@@ -3846,9 +3873,9 @@ public class Minescript {
                 functionName,
                 value.getAsInt(),
                 argsString);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
-          return Optional.of(String.format("\"%s\"", blockpack.toBase64EncodedString()));
+          return Optional.of(new JsonPrimitive(blockpack.toBase64EncodedString()));
         }
 
       case "blockpack_delete":
@@ -3859,7 +3886,7 @@ public class Minescript {
               (args.size() == 1) ? getStrictIntValue(args.get(0)) : OptionalInt.empty();
           if (!value.isPresent()) {
             logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
           var blockpack = job.blockpacks.releaseById(value.getAsInt());
           if (blockpack == null) {
@@ -3868,15 +3895,15 @@ public class Minescript {
                 functionName,
                 value.getAsInt(),
                 argsString);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
-          return Optional.of("true");
+          return OPTIONAL_JSON_TRUE;
         }
 
       case "blockpacker_create":
         // Python function signature:
         //    () -> int
-        return Optional.of(Integer.toString(job.blockpackers.retain(new BlockPacker())));
+        return Optional.of(new JsonPrimitive(job.blockpackers.retain(new BlockPacker())));
 
       case "blockpacker_add_blocks":
         {
@@ -3885,14 +3912,14 @@ public class Minescript {
           //     base64_setblocks: str, base64_fills: str, blocks: List[str]) -> bool
           if (args.size() != 5) {
             logUserError("Error: `{}` expected 5 params but got: {}", functionName, argsString);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
 
           OptionalInt value = getStrictIntValue(args.get(0));
           if (!value.isPresent()) {
             logUserError(
                 "Error: `{}` expected first param to be int but got: {}", functionName, argsString);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
 
           Optional<List<Integer>> list = getStrictIntList(args.get(1));
@@ -3901,7 +3928,7 @@ public class Minescript {
                 "Error: `{}` expected second param to be list of 3 ints but got: {}",
                 functionName,
                 argsString);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
           var basePos = list.get();
 
@@ -3910,7 +3937,7 @@ public class Minescript {
           Optional<List<String>> blocks = getStringList(args.get(4));
           if (blocks.isEmpty()) {
             paramTypeErrorLogger.accept("blocks", "list of string");
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
 
           var blockpacker = job.blockpackers.getById(value.getAsInt());
@@ -3920,7 +3947,7 @@ public class Minescript {
                 functionName,
                 value.getAsInt(),
                 argsString);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
 
           blockpacker.addBlocks(
@@ -3930,7 +3957,7 @@ public class Minescript {
               setblocksBase64,
               fillsBase64,
               blocks.get());
-          return Optional.of("true");
+          return OPTIONAL_JSON_TRUE;
         }
 
       case "blockpacker_add_blockpack":
@@ -3940,19 +3967,19 @@ public class Minescript {
           //     rotation: Rotation = None, offset: BlockPos = None) -> bool
           if (args.size() != 4) {
             numParamsErrorLogger.accept(4);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
 
           OptionalInt value1 = getStrictIntValue(args.get(0));
           if (!value1.isPresent()) {
             paramTypeErrorLogger.accept("blockpacker_id", "int");
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
 
           OptionalInt value2 = getStrictIntValue(args.get(1));
           if (!value2.isPresent()) {
             paramTypeErrorLogger.accept("blockpack_id", "int");
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
 
           int[] rotation = null;
@@ -3960,7 +3987,7 @@ public class Minescript {
             Optional<List<Integer>> list = getStrictIntList(args.get(2));
             if (list.isEmpty() || list.get().size() != 9) {
               paramTypeErrorLogger.accept("rotation", "a sequence of 9 ints");
-              return Optional.of("false");
+              return OPTIONAL_JSON_FALSE;
             }
             rotation = list.get().stream().mapToInt(Integer::intValue).toArray();
           }
@@ -3970,7 +3997,7 @@ public class Minescript {
             Optional<List<Integer>> list = getStrictIntList(args.get(3));
             if (list.isEmpty() || list.get().size() != 3) {
               paramTypeErrorLogger.accept("offset", "a sequence of 3 ints");
-              return Optional.of("false");
+              return OPTIONAL_JSON_FALSE;
             }
             offset = list.get().stream().mapToInt(Integer::intValue).toArray();
           }
@@ -3982,7 +4009,7 @@ public class Minescript {
                 functionName,
                 value1.getAsInt(),
                 argsString);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
 
           var blockpack = job.blockpacks.getById(value2.getAsInt());
@@ -3992,13 +4019,13 @@ public class Minescript {
                 functionName,
                 value2.getAsInt(),
                 argsString);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
 
           blockpack.getBlocks(
               new BlockPack.TransformedBlockConsumer(rotation, offset, blockpacker));
 
-          return Optional.of("true");
+          return OPTIONAL_JSON_TRUE;
         }
 
       case "blockpacker_pack":
@@ -4007,14 +4034,14 @@ public class Minescript {
           //    (blockpacker_id: int, comments: Dict[str, str]) -> int
           if (args.size() != 2) {
             logUserError("Error: `{}` expected 2 params but got: {}", functionName, argsString);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
 
           OptionalInt value = getStrictIntValue(args.get(0));
           if (!value.isPresent()) {
             logUserError(
                 "Error: `{}` expected first param to be int but got: {}", functionName, argsString);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
 
           if (!(args.get(1) instanceof Map)) {
@@ -4022,7 +4049,7 @@ public class Minescript {
                 "Error: `{}` expected `comment` param to be a dictionary but got: {}",
                 functionName,
                 argsString);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
           var comments = (Map<String, String>) args.get(1);
 
@@ -4033,11 +4060,11 @@ public class Minescript {
                 functionName,
                 value.getAsInt(),
                 argsString);
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
 
           blockpacker.comments().putAll(comments);
-          return Optional.of(Integer.toString(job.blockpacks.retain(blockpacker.pack())));
+          return Optional.of(new JsonPrimitive(job.blockpacks.retain(blockpacker.pack())));
         }
 
       case "blockpacker_delete":
@@ -4048,7 +4075,7 @@ public class Minescript {
               (args.size() == 1) ? getStrictIntValue(args.get(0)) : OptionalInt.empty();
           if (!value.isPresent()) {
             logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
           var blockpacker = job.blockpackers.releaseById(value.getAsInt());
           if (blockpacker == null) {
@@ -4057,16 +4084,16 @@ public class Minescript {
                 functionName,
                 value.getAsInt(),
                 argsString);
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
-          return Optional.of("true");
+          return OPTIONAL_JSON_TRUE;
         }
 
       case "screen_name":
         if (!args.isEmpty()) {
           throw new IllegalArgumentException("Expected no params but got: " + argsString);
         }
-        return Optional.of(toJsonString(getScreenName().orElse(null)));
+        return Optional.of(jsonPrimitiveOrNull(getScreenName()));
 
       case "container_get_items": // List of Items in Chest
         {
@@ -4074,26 +4101,20 @@ public class Minescript {
             throw new IllegalArgumentException("Expected no params but got: " + argsString);
           }
           Screen screen = minecraft.screen;
-          if (screen instanceof AbstractContainerScreen<?>) {
-            AbstractContainerScreen handledScreen = (AbstractContainerScreen) screen;
+          if (screen instanceof AbstractContainerScreen<?> handledScreen) {
             AbstractContainerMenu screenHandler = handledScreen.getMenu();
             Slot[] slots = screenHandler.slots.toArray(new Slot[0]);
-            StringBuilder resultString = new StringBuilder("[");
+            var result = new JsonArray();
             for (Slot slot : slots) {
               ItemStack itemStack = slot.getItem();
               if (itemStack.isEmpty()) {
                 continue;
               }
-              if (resultString.length() > 1) {
-                resultString.append(",");
-              }
-              resultString.append(
-                  itemStackToJsonString(itemStack, OptionalInt.of(slot.index), false));
+              result.add(itemStackToJsonElement(itemStack, OptionalInt.of(slot.index), false));
             }
-            resultString.append("]");
-            return Optional.of(resultString.toString());
+            return Optional.of(result);
           } else {
-            return Optional.of("null");
+            return OPTIONAL_JSON_NULL;
           }
         }
 
@@ -4106,7 +4127,7 @@ public class Minescript {
           Screen screen = minecraft.screen;
           int slotId = getStrictIntValue(args.get(0)).getAsInt();
           if (screen == null || !(screen instanceof AbstractContainerScreen<?>)) {
-            return Optional.of("false");
+            return OPTIONAL_JSON_FALSE;
           }
           AbstractContainerScreen handledScreen = (AbstractContainerScreen) screen;
           AbstractContainerMenu screenHandler = handledScreen.getMenu();
@@ -4129,7 +4150,7 @@ public class Minescript {
           var connection = minecraft.getConnection();
           connection.send(new ServerboundContainerClickPacket(buf));
           screenHandler.broadcastChanges();
-          return Optional.of("true");
+          return OPTIONAL_JSON_TRUE;
         }
 
       case "player_look_at": // Look at x, y, z
@@ -4150,19 +4171,19 @@ public class Minescript {
           player.lookAt(
               EntityAnchorArgument.Anchor.EYES,
               new Vec3(value1.getAsDouble(), value2.getAsDouble(), value3.getAsDouble()));
-          return Optional.of("true");
+          return OPTIONAL_JSON_TRUE;
         }
 
       case "flush":
         if (args.isEmpty()) {
-          return Optional.of("true");
+          return OPTIONAL_JSON_TRUE;
         } else {
           logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-          return Optional.of("false");
+          return OPTIONAL_JSON_FALSE;
         }
 
       case "cancelfn!":
-        var cancelfnRetval = Optional.of("\"cancelfn!\"");
+        var cancelfnRetval = Optional.of((JsonElement) new JsonPrimitive("cancelfn!"));
         if (funcCallId != 0) {
           LOGGER.error(
               "Internal error while cancelling function: funcCallId = 0 but got {} in job: {}",
@@ -4202,15 +4223,15 @@ public class Minescript {
 
       case "exit!":
         if (funcCallId == 0) {
-          return Optional.of("\"exit!\"");
+          return Optional.of(new JsonPrimitive("exit!"));
         } else {
-          return Optional.of("null");
+          return OPTIONAL_JSON_NULL;
         }
 
       default:
         logUserError(
             "Error: unknown function `{}` called from job: {}", functionName, job.jobSummary());
-        return Optional.of("false");
+        return OPTIONAL_JSON_FALSE;
     }
   }
 
@@ -4279,7 +4300,7 @@ public class Minescript {
                     List<?> args = gson.fromJson(argsString, ArrayList.class);
 
                     try {
-                      Optional<String> response =
+                      Optional<JsonElement> response =
                           handleScriptFunction(job, funcCallId, functionName, args, argsString);
                       if (response.isPresent()) {
                         job.respond(funcCallId, response.get(), true);
@@ -4288,9 +4309,9 @@ public class Minescript {
                         LOGGER.info(
                             "(debug) Script function `{}`: {} / {}  ->  {}",
                             functionName,
-                            toJsonString(argsString),
+                            quoteString(argsString),
                             args,
-                            response.orElse("<no response>"));
+                            response.map(JsonElement::toString).orElse("<no response>"));
                       }
                     } catch (IndexOutOfBoundsException e) {
                       job.raiseException(funcCallId, "IndexError", e.getMessage());
@@ -4298,7 +4319,14 @@ public class Minescript {
                       job.raiseException(funcCallId, "ValueError", e.getMessage());
                     } catch (IllegalStateException e) {
                       job.raiseException(funcCallId, "RuntimeError", e.getMessage());
+                    } catch (NullPointerException e) {
+                      var message = e.getMessage();
+                      if (message == null) {
+                        message = e.toString();
+                      }
+                      job.raiseException(funcCallId, "AttributeError", message);
                     } catch (Exception e) {
+                      LOGGER.error("Generic Exception from `{}`: {}", functionName, e);
                       job.raiseException(funcCallId, "Exception", e.getMessage());
                     }
                   } else {
