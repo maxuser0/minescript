@@ -26,6 +26,7 @@ import threading
 import traceback
 import _thread
 
+from dataclasses import dataclass
 from typing import Any, List, Set, Dict, Tuple, Optional, Callable, Awaitable
 
 AnyConsumer = Callable[[str], None]
@@ -132,6 +133,20 @@ def await_script_function(func_name: str, args: Tuple[Any, ...], timeout: float 
     return retval_holder[0]
 
 
+@dataclass
+class StackElement:
+  file: str
+  method: str
+  line: int
+
+@dataclass
+class JavaException(Exception):
+  type: str
+  message: str
+  desc: str
+  stack: List[StackElement]
+
+
 def _ScriptServiceLoop():
   while True:
     try:
@@ -169,12 +184,14 @@ def _ScriptServiceLoop():
         del _script_function_calls[func_call_id]
 
     if "except" in reply:
-      exception_type = reply["except"]["type"]
-      message = reply["except"]["message"]
+      e = reply["except"]
+      exception = JavaException(
+          e["type"], e["message"], e["desc"],
+          [StackElement(s["file"], s["method"], s["line"]) for s in e["stack"]])
       if exception_handler is None:
-        print(f"{exception_type} in {func_name}: {message}", file=sys.stderr)
+        print(f"JavaException raised in `{func_name}`: {exception}", file=sys.stderr)
       else:
-        exception_handler(eval(f"{exception_type}({repr(message)})"))
+        exception_handler(exception)
     elif "retval" in reply:
       retval = reply["retval"]
       retval_handler(retval)

@@ -40,7 +40,6 @@ import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
@@ -596,6 +595,30 @@ public class Minescript {
     }
   };
 
+  record ExceptionInfo(String type, String message, String desc, List<StackElement> stack) {
+
+    record StackElement(String file, String method, int line) {}
+
+    public static ExceptionInfo fromException(Exception e) {
+      var type = e.getClass().getName();
+      var desc = e.toString();
+      var stackBuilder = new ImmutableList.Builder<StackElement>();
+      boolean hitMinescriptJava = false;
+      for (var element : e.getStackTrace()) {
+        var filename = element.getFileName();
+        // Capture stacktrace up through Minescript.java, but no further.
+        if (!hitMinescriptJava && filename.equals("Minescript.java")) {
+          hitMinescriptJava = true;
+        } else if (hitMinescriptJava && !filename.equals("Minescript.java")) {
+          break;
+        }
+        stackBuilder.add(
+            new StackElement(filename, element.getMethodName(), element.getLineNumber()));
+      }
+      return new ExceptionInfo(type, e.getMessage(), desc, stackBuilder.build());
+    }
+  }
+
   interface JobControl {
     JobState state();
 
@@ -605,7 +628,7 @@ public class Minescript {
 
     boolean respond(long functionCallId, JsonElement returnValue, boolean finalReply);
 
-    void raiseException(long functionCallId, String exceptionType, String message);
+    void raiseException(long functionCallId, ExceptionInfo exception);
 
     void enqueueStdout(String text);
 
@@ -947,7 +970,7 @@ public class Minescript {
       return false;
     }
 
-    default boolean sendException(long functionCallId, String exceptionType, String message) {
+    default boolean sendException(long functionCallId, ExceptionInfo exception) {
       return false;
     }
   }
@@ -1047,8 +1070,8 @@ public class Minescript {
     }
 
     @Override
-    public void raiseException(long functionCallId, String exceptionType, String message) {
-      task.sendException(functionCallId, exceptionType, message);
+    public void raiseException(long functionCallId, ExceptionInfo exception) {
+      task.sendException(functionCallId, exception);
     }
 
     @Override
@@ -1225,8 +1248,8 @@ public class Minescript {
       return job.respond(funcCallId, returnValue, finalReply);
     }
 
-    public void raiseException(String exceptionType, String message) {
-      job.raiseException(funcCallId, exceptionType, message);
+    public void raiseException(ExceptionInfo exception) {
+      job.raiseException(funcCallId, exception);
     }
   }
 
@@ -1342,7 +1365,7 @@ public class Minescript {
     }
 
     @Override
-    public boolean sendException(long functionCallId, String exceptionType, String message) {
+    public boolean sendException(long functionCallId, ExceptionInfo exception) {
       if (!isReadyToRespond()) {
         return false;
       }
@@ -1350,11 +1373,7 @@ public class Minescript {
         var response = new JsonObject();
         response.addProperty("fcid", functionCallId);
         response.addProperty("conn", "close");
-
-        var exception = new JsonObject();
-        exception.addProperty("type", exceptionType);
-        exception.addProperty("message", message);
-        response.add("except", exception);
+        response.add("except", GSON.toJsonTree(exception));
 
         stdinWriter.write(GSON.toJson(response));
         stdinWriter.newLine();
@@ -3038,7 +3057,8 @@ public class Minescript {
 
   /** Returns a JSON response if a script function is called. */
   private static Optional<JsonElement> handleScriptFunction(
-      Job job, long funcCallId, String functionName, List<?> args, String argsString) {
+      Job job, long funcCallId, String functionName, List<?> args, String argsString)
+      throws Exception {
     var minecraft = Minecraft.getInstance();
     var world = minecraft.level;
     var player = minecraft.player;
@@ -4228,6 +4248,27 @@ public class Minescript {
           return OPTIONAL_JSON_NULL;
         }
 
+      case "IndexOutOfBoundsException":
+        var iooArray = new int[1];
+        int iooInt = iooArray[1];
+        return OPTIONAL_JSON_NULL;
+
+      case "IllegalArgumentException":
+        throw new IllegalArgumentException("This is a test.");
+
+      case "NoSuchElementException":
+        var nseList = new ArrayList<String>();
+        nseList.iterator().next();
+        return OPTIONAL_JSON_NULL;
+
+      case "IllegalStateException":
+        throw new IllegalStateException("This is a test.");
+
+      case "NullPointerException":
+        String npeString = null;
+        npeString.length();
+        return OPTIONAL_JSON_NULL;
+
       default:
         logUserError(
             "Error: unknown function `{}` called from job: {}", functionName, job.jobSummary());
@@ -4313,21 +4354,8 @@ public class Minescript {
                             args,
                             response.map(JsonElement::toString).orElse("<no response>"));
                       }
-                    } catch (IndexOutOfBoundsException e) {
-                      job.raiseException(funcCallId, "IndexError", e.getMessage());
-                    } catch (IllegalArgumentException | NoSuchElementException e) {
-                      job.raiseException(funcCallId, "ValueError", e.getMessage());
-                    } catch (IllegalStateException e) {
-                      job.raiseException(funcCallId, "RuntimeError", e.getMessage());
-                    } catch (NullPointerException e) {
-                      var message = e.getMessage();
-                      if (message == null) {
-                        message = e.toString();
-                      }
-                      job.raiseException(funcCallId, "AttributeError", message);
                     } catch (Exception e) {
-                      LOGGER.error("Generic Exception from `{}`: {}", functionName, e);
-                      job.raiseException(funcCallId, "Exception", e.getMessage());
+                      job.raiseException(funcCallId, ExceptionInfo.fromException(e));
                     }
                   } else {
                     processMessage(jobCommand);
