@@ -994,7 +994,7 @@ def blockpack_read_file(filename: str) -> int:
         (".zip" is automatically appended to filename if it does not end with that extension)
 
   Returns:
-    an int id associated with a blockpack upon success, `None` otherwise
+    an int id associated with a blockpack upon success
 
   Since: v3.0
   """
@@ -1199,10 +1199,6 @@ def blockpacker_delete(blockpacker_id: int) -> bool:
   return await_script_function("blockpacker_delete", (blockpacker_id,))
 
 
-class BlockPackException(Exception):
-  pass
-
-
 class BlockPack:
   """BlockPack is an immutable and serializable collection of blocks.
 
@@ -1240,15 +1236,9 @@ class BlockPack:
 
     Returns:
       a new BlockPack containing blocks read from the world
-
-    Raises:
-      `BlockPackException` if blockpack cannot be read
     """
     blockpack_id = blockpack_read_world(pos1, pos2, rotation, offset, comments, safety_limit)
-    if blockpack_id is None:
-      raise BlockPackException()
     return BlockPack(blockpack_id)
-
 
   @classmethod
   def read_file(cls, filename: str, *, relative_to_cwd=False) -> 'BlockPack':
@@ -1261,16 +1251,10 @@ class BlockPack:
 
     Returns:
       a new BlockPack containing blocks read from the file
-
-    Raises:
-      `BlockPackException` if blockpack cannot be read
     """
     if not os.path.isabs(filename) and not relative_to_cwd:
       filename = os.path.join("minescript", "blockpacks", filename)
-    blockpack_id = blockpack_read_file(filename)
-    if blockpack_id is None:
-      raise BlockPackException()
-    return BlockPack(blockpack_id)
+    return BlockPack(blockpack_read_file(filename))
 
   @classmethod
   def import_data(cls, base64_data: str) -> 'BlockPack':
@@ -1281,41 +1265,16 @@ class BlockPack:
 
     Returns:
       a new BlockPack containing blocks read from the base64-encoded data
-
-    Raises:
-      `BlockPackException` if blockpack cannot be read
     """
-    blockpack_id = blockpack_import_data(base64_data)
-    if blockpack_id is None:
-      raise BlockPackException()
-    return BlockPack(blockpack_id)
+    return BlockPack(blockpack_import_data(base64_data))
 
   def block_bounds(self) -> (BlockPos, BlockPos):
-    """Returns min and max bounding coordinates of blocks in this BlockPack.
-
-    Raises:
-      `BlockPackException` if blockpack cannot be accessed
-    """
-    bounds = blockpack_block_bounds(self._id)
-    if bounds is None:
-      raise BlockPackException()
-    return bounds
-
+    """Returns min and max bounding coordinates of blocks in this BlockPack."""
+    return blockpack_block_bounds(self._id)
 
   def comments(self) -> Dict[str, str]:
-    """Returns comments stored in this BlockPack.
-
-    Raises:
-      `BlockPackException` if blockpack cannot be accessed
-
-    Raises:
-      `BlockPackException` if blockpack operation fails
-    """
-    comments = blockpack_comments(self._id)
-    if comments is None:
-      raise BlockPackException()
-    return comments
-
+    """Returns comments stored in this BlockPack."""
+    return blockpack_comments(self._id)
 
   def write_world(self, *, rotation: Rotation = None, offset: BlockPos = None):
     """Writes blocks from this BlockPack into the current world. Requires setblock, fill commands.
@@ -1323,13 +1282,8 @@ class BlockPack:
     Args:
       rotation: rotation matrix to apply to block coordinates before writing to world
       offset: offset to apply to block coordiantes (applied after rotation)
-
-    Raises:
-      `BlockPackException` if blockpack operation fails
     """
-    if not blockpack_write_world(self._id, rotation, offset):
-      raise BlockPackException()
-
+    blockpack_write_world(self._id, rotation, offset)
 
   def write_file(self, filename: str, *, relative_to_cwd=False):
     """Writes this BlockPack to a file.
@@ -1338,39 +1292,22 @@ class BlockPack:
       filename: name of file relative to minescript/blockpacks dir unless it's an absolute path
         (".zip" is automatically appended to filename if it does not end with that extension)
       relative_to_cwd: if `True`, relative filename is taken to be relative to Minecraft dir
-
-    Raises:
-      `BlockPackException` if blockpack operation fails
     """
     if not os.path.isabs(filename) and not relative_to_cwd:
       filename = os.path.join("minescript", "blockpacks", filename)
-    if not blockpack_write_file(self._id, filename):
-      raise BlockPackException()
-
+    blockpack_write_file(self._id, filename)
 
   def export_data(self) -> str:
     """Serializes this BlockPack into a base64-encoded string.
 
     Returns:
       a base64-encoded string containing this blockpack's data
-
-    Raises:
-      `BlockPackException` if blockpack operation fails
     """
-    base64_str = blockpack_export_data(self._id)
-    if base64_str is None:
-      raise BlockPackException()
-    return base64_str
-
+    return blockpack_export_data(self._id)
 
   def __del__(self):
-    """Frees this BlockPack to be garbage collected.
-
-    Raises:
-      `BlockPackException` if blockpack operation fails
-    """
-    if not blockpack_delete(self._id):
-      raise BlockPackException()
+    """Frees this BlockPack to be garbage collected."""
+    blockpack_delete(self._id)
 
 
 class BlockPackerException(Exception):
@@ -1428,10 +1365,9 @@ class BlockPacker:
 
     relative_pos = _pos_subtract(pos, self.offset)
     if max(relative_pos) > 32767 or min(relative_pos) < -32768:
-      echo(
+      raise BlockPackerException(
           f"Blocks within a Python-generated BlockPacker cannot span more than 32,767 blocks: "
           f"{self.offset} -> {pos}")
-      raise BlockPackerException()
 
     self.setblocks.extend(relative_pos)
     self.setblocks.append(self._get_block_id(block_type))
@@ -1455,17 +1391,15 @@ class BlockPacker:
 
     relative_pos1 = _pos_subtract(pos1, self.offset)
     if max(relative_pos1) > 32767 or min(relative_pos1) < -32768:
-      echo(
+      raise BlockPackerException(
           f"Blocks within a Python-generated BlockPacker cannot span more than 32,767 blocks: "
           f"{self.offset} -> {pos1}")
-      raise BlockPackerException()
 
     relative_pos2 = _pos_subtract(pos2, self.offset)
     if max(relative_pos2) > 32767 or min(relative_pos2) < -32768:
-      echo(
+      raise BlockPackerException(
           f"Blocks within a Python-generated BlockPacker cannot span more than 32,767 blocks: "
           f"{self.offset} -> {pos2}")
-      raise BlockPackerException()
 
     self.fills.extend(relative_pos1)
     self.fills.extend(relative_pos2)
@@ -1481,7 +1415,7 @@ class BlockPacker:
       self.setblocks.byteswap()
       self.fills.byteswap()
 
-    ok = blockpacker_add_blocks(
+    blockpacker_add_blocks(
         self._id, self.offset,
         base64.b64encode(self.setblocks.tobytes()).decode("utf-8"),
         base64.b64encode(self.fills.tobytes()).decode("utf-8"),
@@ -1492,9 +1426,6 @@ class BlockPacker:
     self.fills = array("h")
     self.blocks = dict()
 
-    if not ok:
-      raise BlockPackerException()
-
   def add_blockpack(
       self, blockpack: BlockPack, *, rotation: Rotation = None, offset: BlockPos = None):
     """Adds the blocks within a BlockPack into this BlockPacker.
@@ -1503,12 +1434,8 @@ class BlockPacker:
       blockpack: BlockPack from which to copy blocks
       rotation: rotation matrix to apply to block coordinates before adding to blockpacker
       offset: offset to apply to block coordiantes (applied after rotation)
-
-    Raises:
-      `BlockPackerException` if blockpacker operation fails
     """
-    if not blockpacker_add_blockpack(self._id, blockpack._id, rotation, offset):
-      raise BlockPackerException()
+    blockpacker_add_blockpack(self._id, blockpack._id, rotation, offset)
 
   def pack(self, *, comments: Dict[str, str] = {}) -> BlockPack:
     """Packs blocks within this BlockPacker into a new BlockPack.
@@ -1518,19 +1445,11 @@ class BlockPacker:
 
     Returns:
       a new BlockPack containing a snapshot of blocks from this BlockPacker
-
-    Raises:
-      `BlockPackerException` if blockpacker operation fails
     """
     self._flush_blocks()
     return BlockPack(blockpacker_pack(self._id, comments))
 
   def __del__(self):
-    """Frees this BlockPacker to be garbage collected.
-
-    Raises:
-      `BlockPackerException` if blockpacker operation fails
-    """
-    if not blockpacker_delete(self._id):
-      raise BlockPackerException()
+    """Frees this BlockPacker to be garbage collected."""
+    blockpacker_delete(self._id)
 

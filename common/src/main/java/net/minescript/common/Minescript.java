@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -54,8 +55,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -1705,7 +1707,7 @@ public class Minescript {
     return Optional.of(blockType + blockAttrs);
   }
 
-  private static boolean readBlocks(
+  private static void readBlocks(
       int x0,
       int y0,
       int z0,
@@ -1717,8 +1719,7 @@ public class Minescript {
     var minecraft = Minecraft.getInstance();
     var player = minecraft.player;
     if (player == null) {
-      logUserError("Unable to read blocks because player is null.");
-      return false;
+      throw new IllegalStateException("Unable to read blocks because player is null.");
     }
 
     int playerX = (int) player.getX();
@@ -1737,12 +1738,12 @@ public class Minescript {
       // Estimate the number of chunks to check against a soft limit.
       int numChunks = ((xMax - xMin) / 16 + 1) * ((zMax - zMin) / 16 + 1);
       if (numChunks > 1600) {
-        logUserError(
-            "`blockpack_read_world` exceeded soft limit of 1600 chunks (region covers {} chunks; "
+        throw new IllegalArgumentException(
+            "`blockpack_read_world` exceeded soft limit of 1600 chunks (region covers "
+                + numChunks
+                + " chunks; "
                 + "override this safety check by passing `no_limit` to `copy` command or "
-                + "`safety_limit=False` to `blockpack_read_world` function).",
-            numChunks);
-        return false;
+                + "`safety_limit=False` to `blockpack_read_world` function).");
       }
     }
 
@@ -1753,8 +1754,8 @@ public class Minescript {
       for (int z = zMin; z <= zMax; z += 16) {
         Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, 0, z)));
         if (block.isEmpty() || block.get().equals("minecraft:void_air")) {
-          logUserError("Not all chunks are loaded within the requested `copy` volume.");
-          return false;
+          throw new IllegalStateException(
+              "Not all chunks are loaded within the requested `copy` volume.");
         }
       }
     }
@@ -1777,8 +1778,6 @@ public class Minescript {
         }
       }
     }
-
-    return true;
   }
 
   private static void copyBlocks(
@@ -2907,24 +2906,30 @@ public class Minescript {
 
   private static Optional<JsonElement> doPlayerAction(
       String functionName, KeyMapping keyBinding, List<?> args, String argsString) {
-    if (args.size() == 1 && args.get(0) instanceof Boolean) {
-      lazyInitBoundKeys();
-      boolean pressed = (Boolean) args.get(0);
-      var key = boundKeys.get(keyBinding);
-      if (pressed) {
-        KeyMapping.set(key, true);
-        KeyMapping.click(key);
-      } else {
-        KeyMapping.set(key, false);
-      }
-      return OPTIONAL_JSON_TRUE;
-    } else {
-      logUserError(
-          "Error: `{}` expected 1 boolean param (true or false) but got: {}",
-          functionName,
-          argsString);
-      return OPTIONAL_JSON_FALSE;
+    if (args.size() != 1 || !(args.get(0) instanceof Boolean)) {
+      throw new IllegalArgumentException(
+          String.format(
+              "`%s` expected 1 boolean param (true or false) but got: %s",
+              functionName, argsString));
     }
+    lazyInitBoundKeys();
+    boolean pressed = (Boolean) args.get(0);
+    var key = boundKeys.get(keyBinding);
+    if (pressed) {
+      KeyMapping.set(key, true);
+      KeyMapping.click(key);
+    } else {
+      KeyMapping.set(key, false);
+    }
+    return OPTIONAL_JSON_TRUE;
+  }
+
+  private static Optional<Boolean> getStrictBooleanValue(Object object) {
+    if (!(object instanceof Boolean)) {
+      return Optional.empty();
+    }
+    Boolean value = (Boolean) object;
+    return Optional.of(value);
   }
 
   /** Returns int if object is a Number representing an int without truncation or rounding. */
@@ -2949,6 +2954,14 @@ public class Minescript {
       if (!Double.isInfinite(dbl) && dbl == Math.floor(dbl)) {
         return OptionalInt.of(number.intValue());
       }
+    }
+    return OptionalInt.empty();
+  }
+
+  /** Returns int if object is a Number convertible to int, possibly with truncation or rounding. */
+  private static OptionalInt getConvertibleIntValue(Object object) {
+    if (object instanceof Number number) {
+      return OptionalInt.of(number.intValue());
     }
     return OptionalInt.empty();
   }
@@ -2999,6 +3012,18 @@ public class Minescript {
       stringList.add(element.toString());
     }
     return Optional.of(stringList);
+  }
+
+  private static Optional<Map<String, String>> getStringMap(Object object) {
+    if (!(object instanceof Map)) {
+      return Optional.empty();
+    }
+    Map<?, ?> map = (Map<?, ?>) object;
+    Map<String, String> stringMap = new HashMap<>();
+    for (var entry : map.entrySet()) {
+      stringMap.put(entry.getKey().toString(), entry.getValue().toString());
+    }
+    return Optional.of(stringMap);
   }
 
   private static double computeDistance(
@@ -3064,107 +3089,182 @@ public class Minescript {
     var player = minecraft.player;
     var options = minecraft.options;
 
-    Consumer<Integer> numParamsErrorLogger =
-        (numParams) -> {
-          logUserError(
-              "Error: `{}` expected {} params but got: {}", functionName, numParams, argsString);
+    // TODO(maxuser): Move all these arg-checking functions and consumers to their own class.
+
+    Consumer<Integer> checkArgCount =
+        (expectedArgs) -> {
+          if (args.size() != expectedArgs) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "`%s` expected %d arg%s but got: %s",
+                    functionName, expectedArgs, expectedArgs == 1 ? "" : "s", argsString));
+          }
         };
 
-    BiConsumer<String, String> paramTypeErrorLogger =
-        (param, expectedType) -> {
-          logUserError(
-              "Error: `{}` expected param `{}` to be {} but got: {}",
-              functionName,
-              param,
-              expectedType,
-              argsString);
+    BiConsumer<Integer, Integer> checkArgRange =
+        (minArgs, maxArgs) -> {
+          if (args.size() < minArgs || args.size() > maxArgs) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "`%s` expected %d to %d args but got: %s",
+                    functionName, minArgs, maxArgs, argsString));
+          }
+        };
+
+    Function<Integer, Boolean> getBooleanArg =
+        (argPos) -> {
+          var value = getStrictBooleanValue(args.get(argPos));
+          if (value.isEmpty()) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "`%s` expected arg %d to be bool but got: %s",
+                    functionName, argPos + 1, argsString));
+          }
+          return value.get();
+        };
+
+    Function<Integer, Integer> getStrictIntArg =
+        (argPos) -> {
+          var value = getStrictIntValue(args.get(argPos));
+          if (value.isEmpty()) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "`%s` expected arg %d to be int but got: %s",
+                    functionName, argPos + 1, argsString));
+          }
+          return value.getAsInt();
+        };
+
+    Function<Integer, Integer> getConvertibleIntArg =
+        (argPos) -> {
+          var value = getConvertibleIntValue(args.get(argPos));
+          if (value.isEmpty()) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "`%s` expected arg %d to be convertible to int but got: %s",
+                    functionName, argPos + 1, argsString));
+          }
+          return value.getAsInt();
+        };
+
+    Function<Integer, Double> getDoubleArg =
+        (argPos) -> {
+          var value = getStrictDoubleValue(args.get(argPos));
+          if (value.isEmpty()) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "`%s` expected arg %d to be float but got: %s",
+                    functionName, argPos + 1, argsString));
+          }
+          return value.getAsDouble();
+        };
+
+    Function<Integer, String> getStringArg =
+        (argPos) -> {
+          var arg = args.get(argPos);
+          if (!(arg instanceof String)) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "`%s` expected arg %d to be string but got: %s",
+                    functionName, argPos + 1, argsString));
+          }
+          return (String) arg;
+        };
+
+    BiFunction<Integer, Integer, List<Integer>> getSizedIntListArg =
+        (argPos, length) -> {
+          var value = getStrictIntList(args.get(argPos));
+          if (value.isEmpty()) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "`%s` expected arg %d to be list of %d ints but got: %s",
+                    functionName, argPos + 1, length, argsString));
+          }
+          return value.get();
+        };
+
+    Function<Integer, List<String>> getStringListArg =
+        (argPos) -> {
+          var value = getStringList(args.get(argPos));
+          if (value.isEmpty()) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "`%s` expected arg %d to be list of strings but got: %s",
+                    functionName, argPos + 1, argsString));
+          }
+          return value.get();
+        };
+
+    Function<Integer, Map<String, String>> getStringMapArg =
+        (argPos) -> {
+          var value = getStringMap(args.get(argPos));
+          if (value.isEmpty()) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "`%s` expected arg %d to be string map but got: %s",
+                    functionName, argPos + 1, argsString));
+          }
+          return value.get();
         };
 
     switch (functionName) {
       case "player_position":
-        if (args.isEmpty()) {
+        {
+          checkArgCount.accept(0);
           var result = new JsonArray();
           result.add(player.getX());
           result.add(player.getY());
           result.add(player.getZ());
           return Optional.of(result);
-        } else {
-          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-          return OPTIONAL_JSON_NULL;
         }
 
       case "player_set_position":
         {
-          if (args.size() < 3
-              || !(args.get(0) instanceof Number)
-              || !(args.get(1) instanceof Number)
-              || !(args.get(2) instanceof Number)) {
-            logUserError(
-                "Error: `{}` expected 3 to 5 number params but got: {}", functionName, argsString);
-            return OPTIONAL_JSON_FALSE;
-          }
-          double x = ((Number) args.get(0)).doubleValue();
-          double y = ((Number) args.get(1)).doubleValue();
-          double z = ((Number) args.get(2)).doubleValue();
+          checkArgRange.accept(3, 5);
+          double x = getDoubleArg.apply(0);
+          double y = getDoubleArg.apply(1);
+          double z = getDoubleArg.apply(2);
           float yaw = player.getYRot();
           float pitch = player.getXRot();
-          if (args.size() >= 4 && args.get(3) != null) {
-            if (!(args.get(3) instanceof Number)) {
-              paramTypeErrorLogger.accept("yaw", "float");
-              return OPTIONAL_JSON_FALSE;
-            }
-            yaw = ((Number) args.get(3)).floatValue();
+          if (args.get(3) != null) {
+            yaw = getDoubleArg.apply(3).floatValue();
           }
-          if (args.size() >= 5 && args.get(4) != null) {
-            if (!(args.get(4) instanceof Number)) {
-              paramTypeErrorLogger.accept("pitch", "float");
-              return OPTIONAL_JSON_FALSE;
-            }
-            pitch = ((Number) args.get(4)).floatValue();
+          if (args.get(4) != null) {
+            pitch = getDoubleArg.apply(4).floatValue();
           }
           player.moveTo(x, y, z, yaw, pitch);
           return OPTIONAL_JSON_TRUE;
         }
 
       case "player_name":
-        if (args.isEmpty()) {
-          return Optional.of(new JsonPrimitive(player.getName().getString()));
-        } else {
-          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-          return OPTIONAL_JSON_NULL;
-        }
+        checkArgCount.accept(0);
+        return Optional.of(new JsonPrimitive(player.getName().getString()));
 
       case "getblock":
-        if (args.size() == 3
-            && args.get(0) instanceof Number
-            && args.get(1) instanceof Number
-            && args.get(2) instanceof Number) {
+        {
+          checkArgCount.accept(3);
           Level level = player.getCommandSenderWorld();
-          int arg0 = ((Number) args.get(0)).intValue();
-          int arg1 = ((Number) args.get(1)).intValue();
-          int arg2 = ((Number) args.get(2)).intValue();
+          int arg0 = getConvertibleIntArg.apply(0);
+          int arg1 = getConvertibleIntArg.apply(1);
+          int arg2 = getConvertibleIntArg.apply(2);
           Optional<String> block =
               blockStateToString(level.getBlockState(new BlockPos(arg0, arg1, arg2)));
           return Optional.of(jsonPrimitiveOrNull(block));
-        } else {
-          logUserError(
-              "Error: `{}` expected 3 params (x, y, z) but got: {}", functionName, argsString);
-          return OPTIONAL_JSON_NULL;
         }
 
       case "getblocklist":
         {
-          Supplier<Optional<JsonElement>> badArgsResponse =
+          Runnable badArgsResponse =
               () -> {
-                logUserError(
-                    "Error: `{}` expected a list of (x, y, z) positions but got: {}",
-                    functionName,
-                    argsString);
-                return OPTIONAL_JSON_NULL;
+                throw new IllegalArgumentException(
+                    String.format(
+                        "`%s` expected a list of (x, y, z) positions but got: %s",
+                        functionName, argsString));
               };
 
-          if (args.size() != 1 || !(args.get(0) instanceof List)) {
-            return badArgsResponse.get();
+          checkArgCount.accept(1);
+          if (!(args.get(0) instanceof List)) {
+            badArgsResponse.run();
           }
           List<?> positions = (List<?>) args.get(0);
           Level level = player.getCommandSenderWorld();
@@ -3172,14 +3272,14 @@ public class Minescript {
           var pos = new BlockPos.MutableBlockPos();
           for (var position : positions) {
             if (!(position instanceof List)) {
-              return badArgsResponse.get();
+              badArgsResponse.run();
             }
             List<?> coords = (List<?>) position;
             if (coords.size() != 3
                 || !(coords.get(0) instanceof Number)
                 || !(coords.get(1) instanceof Number)
                 || !(coords.get(2) instanceof Number)) {
-              return badArgsResponse.get();
+              badArgsResponse.run();
             }
             int x = ((Number) coords.get(0)).intValue();
             int y = ((Number) coords.get(1)).intValue();
@@ -3191,107 +3291,96 @@ public class Minescript {
         }
 
       case "register_key_event_listener":
-        if (!args.isEmpty()) {
-          throw new IllegalArgumentException("Expected no params but got: " + argsString);
+        {
+          checkArgCount.accept(0);
+          if (keyEventListeners.containsKey(job.jobId())) {
+            throw new IllegalStateException(
+                "Failed to create listener because a listener is already registered for job: "
+                    + job.jobSummary());
+          }
+          keyEventListeners.put(job.jobId(), new ScriptFunctionCall(job, funcCallId));
+          return Optional.empty();
         }
-        if (keyEventListeners.containsKey(job.jobId())) {
-          throw new IllegalStateException(
-              "Failed to create listener because a listener is already registered for job: "
-                  + job.jobSummary());
-        }
-        keyEventListeners.put(job.jobId(), new ScriptFunctionCall(job, funcCallId));
-        return Optional.empty();
 
       case "unregister_key_event_listener":
-        if (!args.isEmpty()) {
-          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-          return OPTIONAL_JSON_FALSE;
-        } else if (!keyEventListeners.containsKey(job.jobId())) {
-          logUserError(
-              "Error: `{}` has no listeners to unregister for job: {}",
-              functionName,
-              job.jobSummary());
-          return OPTIONAL_JSON_FALSE;
-        } else {
+        {
+          checkArgCount.accept(0);
+          if (!keyEventListeners.containsKey(job.jobId())) {
+            throw new IllegalStateException(
+                String.format(
+                    "`%s` has no listeners to unregister for job: %s",
+                    functionName, job.jobSummary()));
+          }
           keyEventListeners.remove(job.jobId());
           return OPTIONAL_JSON_TRUE;
         }
 
       case "register_chat_message_listener":
-        if (!args.isEmpty()) {
-          throw new IllegalArgumentException("Expected no params but got: " + argsString);
+        {
+          checkArgCount.accept(0);
+          if (clientChatReceivedEventListeners.containsKey(job.jobId())) {
+            throw new IllegalStateException(
+                "Failed to create listener because a listener is already registered for job: "
+                    + job.jobSummary());
+          }
+          clientChatReceivedEventListeners.put(
+              job.jobId(), new ScriptFunctionCall(job, funcCallId));
+          return Optional.empty();
         }
-        if (clientChatReceivedEventListeners.containsKey(job.jobId())) {
-          throw new IllegalStateException(
-              "Failed to create listener because a listener is already registered for job: "
-                  + job.jobSummary());
-        }
-        clientChatReceivedEventListeners.put(job.jobId(), new ScriptFunctionCall(job, funcCallId));
-        return Optional.empty();
 
       case "unregister_chat_message_listener":
-        if (!args.isEmpty()) {
-          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-          return OPTIONAL_JSON_FALSE;
-        } else if (!clientChatReceivedEventListeners.containsKey(job.jobId())) {
-          logUserError(
-              "Error: `{}` has no listeners to unregister for job: {}",
-              functionName,
-              job.jobSummary());
-          return OPTIONAL_JSON_FALSE;
-        } else {
+        {
+          checkArgCount.accept(0);
+          if (!clientChatReceivedEventListeners.containsKey(job.jobId())) {
+            throw new IllegalStateException(
+                String.format(
+                    "`%s` has no listeners to unregister for job: %s",
+                    functionName, job.jobSummary()));
+          }
           clientChatReceivedEventListeners.remove(job.jobId());
           return OPTIONAL_JSON_TRUE;
         }
 
       case "register_chat_message_interceptor":
-        if (args.isEmpty()) {
-          if (chatInterceptor == null) {
-            chatInterceptor =
-                s -> {
-                  job.respond(funcCallId, new JsonPrimitive(s), false);
-                };
-            job.addAtExitHandler(() -> chatInterceptor = null);
-            logUserInfo("Chat interceptor enabled for job: {}", job.jobSummary());
-          } else {
-            logUserError("Error: Chat interceptor already enabled for another job.");
+        {
+          checkArgCount.accept(0);
+          if (chatInterceptor != null) {
+            throw new IllegalStateException("Chat interceptor already enabled for another job.");
           }
-          return Optional.empty();
-        } else {
-          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          chatInterceptor =
+              s -> {
+                job.respond(funcCallId, new JsonPrimitive(s), false);
+              };
+          job.addAtExitHandler(() -> chatInterceptor = null);
+          logUserInfo("Chat interceptor enabled for job: {}", job.jobSummary());
           return Optional.empty();
         }
 
       case "unregister_chat_message_interceptor":
-        if (args.isEmpty()) {
-          if (chatInterceptor != null) {
-            chatInterceptor = null;
-            logUserInfo("Chat interceptor disabled for job: {}", job.jobSummary());
-          } else {
-            logUserError("Error: Chat interceptor already disabled: {}", job.jobSummary());
+        {
+          checkArgCount.accept(0);
+          if (chatInterceptor == null) {
+            throw new IllegalStateException(
+                "Chat interceptor already disabled: " + job.jobSummary());
           }
-          return Optional.empty();
-        } else {
-          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
+          chatInterceptor = null;
+          logUserInfo("Chat interceptor disabled for job: {}", job.jobSummary());
           return Optional.empty();
         }
 
       case "await_loaded_region":
-        if (args.size() == 4
-            && args.get(0) instanceof Number
-            && args.get(1) instanceof Number
-            && args.get(2) instanceof Number
-            && args.get(3) instanceof Number) {
-          Number arg0 = (Number) args.get(0);
-          Number arg1 = (Number) args.get(1);
-          Number arg2 = (Number) args.get(2);
-          Number arg3 = (Number) args.get(3);
+        {
+          checkArgCount.accept(4);
+          int arg0 = getStrictIntArg.apply(0);
+          int arg1 = getStrictIntArg.apply(1);
+          int arg2 = getStrictIntArg.apply(2);
+          int arg3 = getStrictIntArg.apply(3);
           var listener =
               new ChunkLoadEventListener(
-                  arg0.intValue(),
-                  arg1.intValue(),
-                  arg2.intValue(),
-                  arg3.intValue(),
+                  arg0,
+                  arg1,
+                  arg2,
+                  arg3,
                   (boolean success) -> job.respond(funcCallId, new JsonPrimitive(success), true));
           listener.updateChunkStatuses();
           if (listener.isFullyLoaded()) {
@@ -3317,50 +3406,42 @@ public class Minescript {
                 });
           }
           return Optional.empty();
-        } else {
-          throw new IllegalArgumentException(
-              "Expected 4 number params (x1, z1, x2, z2) but got: " + argsString);
         }
 
       case "set_nickname":
-        if (args.isEmpty()) {
-          logUserInfo(
-              "Chat nickname reset to default; was {}",
-              customNickname == null ? "default already" : quoteString(customNickname));
-          customNickname = null;
-          return OPTIONAL_JSON_TRUE;
-        } else if (args.size() == 1) {
-          String arg = args.get(0).toString();
-          if (arg.contains("%s")) {
+        {
+          checkArgRange.accept(0, 1);
+          if (args.isEmpty()) {
+            logUserInfo(
+                "Chat nickname reset to default; was {}",
+                customNickname == null ? "default already" : quoteString(customNickname));
+            customNickname = null;
+          } else if (args.size() == 1) {
+            String arg = args.get(0).toString();
+            if (!arg.contains("%s")) {
+              throw new IllegalArgumentException(
+                  "Expected nickname to contain %s as a placeholder for message text but got: "
+                      + arg);
+            }
             logUserInfo("Chat nickname set to {}.", quoteString(arg));
             customNickname = arg;
-            return OPTIONAL_JSON_TRUE;
-          } else {
-            logUserError(
-                "Error: `{}` expects nickname to contain %s as a placeholder for"
-                    + " message text.",
-                functionName);
-            return OPTIONAL_JSON_FALSE;
           }
-        } else {
-          logUserError("Error: `{}` expected 0 or 1 param but got: {}", functionName, argsString);
-          return OPTIONAL_JSON_FALSE;
+          return OPTIONAL_JSON_TRUE;
         }
 
       case "player_hand_items":
-        if (args.isEmpty()) {
+        {
+          checkArgCount.accept(0);
           var result = new JsonArray();
           for (var itemStack : player.getHandSlots()) {
             result.add(itemStackToJsonElement(itemStack, OptionalInt.empty(), false));
           }
           return Optional.of(result);
-        } else {
-          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-          return OPTIONAL_JSON_NULL;
         }
 
       case "player_inventory":
-        if (args.isEmpty()) {
+        {
+          checkArgCount.accept(0);
           var inventory = player.getInventory();
           var result = new JsonArray();
           int selectedSlot = inventory.selected;
@@ -3371,41 +3452,26 @@ public class Minescript {
             }
           }
           return Optional.of(result);
-        } else {
-          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-          return OPTIONAL_JSON_NULL;
         }
 
       case "player_inventory_slot_to_hotbar":
         {
-          OptionalInt value =
-              (args.size() == 1) ? getStrictIntValue(args.get(0)) : OptionalInt.empty();
-          if (value.isPresent()) {
-            int slot = value.getAsInt();
-            var inventory = player.getInventory();
-            var connection = minecraft.getConnection();
-            connection.send(new ServerboundPickItemPacket(slot));
-            return Optional.of(new JsonPrimitive(inventory.selected));
-          } else {
-            logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
-            return OPTIONAL_JSON_NULL;
-          }
+          checkArgCount.accept(1);
+          int slot = getStrictIntArg.apply(0);
+          var inventory = player.getInventory();
+          var connection = minecraft.getConnection();
+          connection.send(new ServerboundPickItemPacket(slot));
+          return Optional.of(new JsonPrimitive(inventory.selected));
         }
 
       case "player_inventory_select_slot":
         {
-          OptionalInt value =
-              (args.size() == 1) ? getStrictIntValue(args.get(0)) : OptionalInt.empty();
-          if (value.isPresent()) {
-            int slot = value.getAsInt();
-            var inventory = player.getInventory();
-            var previouslySelectedSlot = inventory.selected;
-            inventory.selected = slot;
-            return Optional.of(new JsonPrimitive(previouslySelectedSlot));
-          } else {
-            logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
-            return OPTIONAL_JSON_NULL;
-          }
+          checkArgCount.accept(1);
+          int slot = getStrictIntArg.apply(0);
+          var inventory = player.getInventory();
+          var previouslySelectedSlot = inventory.selected;
+          inventory.selected = slot;
+          return Optional.of(new JsonPrimitive(previouslySelectedSlot));
         }
 
       case "player_press_forward":
@@ -3445,41 +3511,29 @@ public class Minescript {
         return doPlayerAction(functionName, options.keyDrop, args, argsString);
 
       case "player_orientation":
-        if (args.isEmpty()) {
+        {
+          checkArgCount.accept(0);
           var result = new JsonArray();
           result.add(player.getYRot());
           result.add(player.getXRot());
           return Optional.of(result);
-        } else {
-          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-          return OPTIONAL_JSON_NULL;
         }
 
       case "player_set_orientation":
-        if (args.size() == 2 && args.get(0) instanceof Number && args.get(1) instanceof Number) {
-          Number yaw = (Number) args.get(0);
-          Number pitch = (Number) args.get(1);
+        {
+          checkArgCount.accept(2);
+          Double yaw = getDoubleArg.apply(0);
+          Double pitch = getDoubleArg.apply(1);
           player.setYRot(yaw.floatValue() % 360.0f);
           player.setXRot(pitch.floatValue() % 360.0f);
           return OPTIONAL_JSON_TRUE;
-        } else {
-          logUserError(
-              "Error: `{}` expected 2 number params but got: {}", functionName, argsString);
-          return OPTIONAL_JSON_FALSE;
         }
 
       case "player_get_targeted_block":
         {
           // See minecraft.client.gui.hud.DebugHud for implementation of F3 debug screen.
-          if (args.size() != 1) {
-            numParamsErrorLogger.accept(1);
-            return OPTIONAL_JSON_NULL;
-          }
-          if (!(args.get(0) instanceof Number)) {
-            paramTypeErrorLogger.accept("max_distance", "float");
-            return OPTIONAL_JSON_NULL;
-          }
-          double maxDistance = ((Number) args.get(0)).doubleValue();
+          checkArgCount.accept(1);
+          double maxDistance = getDoubleArg.apply(0);
           var entity = minecraft.getCameraEntity();
           var blockHit = entity.pick(maxDistance, 0.0f, false);
           if (blockHit.getType() == HitResult.Type.BLOCK) {
@@ -3515,29 +3569,15 @@ public class Minescript {
 
       case "players":
         {
-          if (args.size() != 1) {
-            numParamsErrorLogger.accept(1);
-            return OPTIONAL_JSON_NULL;
-          }
-          if (!(args.get(0) instanceof Boolean)) {
-            paramTypeErrorLogger.accept("nbt", "bool");
-            return OPTIONAL_JSON_NULL;
-          }
-          boolean nbt = (Boolean) args.get(0);
+          checkArgCount.accept(1);
+          boolean nbt = getBooleanArg.apply(0);
           return Optional.of(entitiesToJsonArray(world.players(), nbt));
         }
 
       case "entities":
         {
-          if (args.size() != 1) {
-            numParamsErrorLogger.accept(1);
-            return OPTIONAL_JSON_NULL;
-          }
-          if (!(args.get(0) instanceof Boolean)) {
-            paramTypeErrorLogger.accept("nbt", "bool");
-            return OPTIONAL_JSON_NULL;
-          }
-          boolean nbt = (Boolean) args.get(0);
+          checkArgCount.accept(1);
+          boolean nbt = getBooleanArg.apply(0);
           return Optional.of(entitiesToJsonArray(world.entitiesForRendering(), nbt));
         }
 
@@ -3567,40 +3607,23 @@ public class Minescript {
         }
 
       case "log":
-        if (args.size() == 1 && args.get(0) instanceof String) {
-          String message = (String) args.get(0);
-          LOGGER.info(message);
+        {
+          checkArgCount.accept(1);
+          LOGGER.info(args.get(0).toString());
           return OPTIONAL_JSON_TRUE;
-        } else {
-          logUserError("Error: `{}` expected 1 string param but got: {}", functionName, argsString);
-          return OPTIONAL_JSON_FALSE;
         }
 
       case "screenshot":
-        final Optional<String> filename;
-        final Optional<JsonElement> response;
-        if (args.isEmpty()) {
-          filename = Optional.empty();
-          response = OPTIONAL_JSON_TRUE;
-        } else if (args.size() == 1 && args.get(0) instanceof String) {
-          filename = Optional.of((String) args.get(0));
-          response = OPTIONAL_JSON_TRUE;
-        } else {
-          filename = null;
-          logUserError(
-              "Error: `{}` expected no params or 1 string param but got: {}",
-              functionName,
-              argsString);
-          response = OPTIONAL_JSON_FALSE;
-        }
-        if (filename != null) {
+        {
+          checkArgRange.accept(0, 1);
+          String filename = args.isEmpty() ? null : getStringArg.apply(0);
           Screenshot.grab(
               minecraft.gameDirectory,
-              filename.orElse(null),
+              filename,
               minecraft.getMainRenderTarget(),
               message -> job.enqueueStderr(message.getString()));
+          return OPTIONAL_JSON_TRUE;
         }
-        return response;
 
       case "blockpack_read_world":
         {
@@ -3608,59 +3631,27 @@ public class Minescript {
           //    (pos1: BlockPos, pos2: BlockPos,
           //     rotation: Rotation = None, offset: BlockPos = None,
           //     comments: Dict[str, str] = {}, safety_limit: bool = True) -> int
-          if (args.size() != 6) {
-            numParamsErrorLogger.accept(6);
-            return OPTIONAL_JSON_NULL;
-          }
+          checkArgCount.accept(6);
 
-          Optional<List<Integer>> list1 = getStrictIntList(args.get(0));
-          if (list1.isEmpty() || list1.get().size() != 3) {
-            paramTypeErrorLogger.accept("pos1", "a sequence of 3 ints");
-            return OPTIONAL_JSON_NULL;
-          }
-
-          Optional<List<Integer>> list2 = getStrictIntList(args.get(1));
-          if (list2.isEmpty() || list2.get().size() != 3) {
-            paramTypeErrorLogger.accept("pos2", "a sequence of 3 ints");
-            return OPTIONAL_JSON_NULL;
-          }
+          var pos1 = getSizedIntListArg.apply(0, 3);
+          var pos2 = getSizedIntListArg.apply(1, 3);
 
           int[] rotation = null;
           if (args.get(2) != null) {
-            Optional<List<Integer>> list = getStrictIntList(args.get(2));
-            if (list.isEmpty() || list.get().size() != 9) {
-              paramTypeErrorLogger.accept("rotation", "a sequence of 9 ints");
-              return OPTIONAL_JSON_NULL;
-            }
-            rotation = list.get().stream().mapToInt(Integer::intValue).toArray();
+            rotation =
+                getSizedIntListArg.apply(2, 9).stream().mapToInt(Integer::intValue).toArray();
           }
 
           int[] offset = null;
           if (args.get(3) != null) {
-            Optional<List<Integer>> list = getStrictIntList(args.get(3));
-            if (list.isEmpty() || list.get().size() != 3) {
-              paramTypeErrorLogger.accept("offset", "a sequence of 3 ints");
-              return OPTIONAL_JSON_NULL;
-            }
-            offset = list.get().stream().mapToInt(Integer::intValue).toArray();
+            offset = getSizedIntListArg.apply(3, 3).stream().mapToInt(Integer::intValue).toArray();
           }
 
-          if (!(args.get(4) instanceof Map)) {
-            paramTypeErrorLogger.accept("comment", "a dictionary");
-            return OPTIONAL_JSON_NULL;
-          }
-          var comments = (Map<String, String>) args.get(4);
+          var comments = getStringMapArg.apply(4);
+          boolean safetyLimit = getBooleanArg.apply(5);
 
-          if (!(args.get(5) instanceof Boolean)) {
-            paramTypeErrorLogger.accept("safety_limit", "bool");
-            return OPTIONAL_JSON_NULL;
-          }
-          boolean safetyLimit = (Boolean) args.get(5);
-
-          var pos1 = list1.get();
-          var pos2 = list2.get();
           var blockpacker = new BlockPacker();
-          if (!readBlocks(
+          readBlocks(
               pos1.get(0),
               pos1.get(1),
               pos1.get(2),
@@ -3668,9 +3659,7 @@ public class Minescript {
               pos2.get(1),
               pos2.get(2),
               safetyLimit,
-              new BlockPack.TransformedBlockConsumer(rotation, offset, blockpacker))) {
-            return OPTIONAL_JSON_NULL;
-          }
+              new BlockPack.TransformedBlockConsumer(rotation, offset, blockpacker));
           blockpacker.comments().putAll(comments);
           var blockpack = blockpacker.pack();
           int key = job.blockpacks.retain(blockpack);
@@ -3681,66 +3670,34 @@ public class Minescript {
         {
           // Python function signature:
           //    (filename: str) -> int
-          if (args.size() != 1 || !(args.get(0) instanceof String)) {
-            logUserError(
-                "Error: `{}` expected one param of type string but got: {}",
-                functionName,
-                argsString);
-            return OPTIONAL_JSON_NULL;
-          }
-          String blockpackFilename = (String) args.get(0);
-          try {
-            var blockpack = BlockPack.readZipFile(blockpackFilename);
-            int key = job.blockpacks.retain(blockpack);
-            return Optional.of(new JsonPrimitive(key));
-          } catch (Exception e) {
-            logUserError("Error while reading blockpack {}: {}", blockpackFilename, e.getMessage());
-            return OPTIONAL_JSON_NULL;
-          }
+          checkArgCount.accept(1);
+          String blockpackFilename = getStringArg.apply(0);
+          var blockpack = BlockPack.readZipFile(blockpackFilename);
+          int key = job.blockpacks.retain(blockpack);
+          return Optional.of(new JsonPrimitive(key));
         }
 
       case "blockpack_import_data":
         {
           // Python function signature:
           //    (base64_data: str) -> int
-          if (args.size() != 1 || !(args.get(0) instanceof String)) {
-            logUserError(
-                "Error: `{}` expected one param of type string but got: {}",
-                functionName,
-                argsString);
-            return OPTIONAL_JSON_NULL;
-          }
-          String base64Data = (String) args.get(0);
-          try {
-            var blockpack = BlockPack.fromBase64EncodedString(base64Data);
-            int key = job.blockpacks.retain(blockpack);
-            return Optional.of(new JsonPrimitive(key));
-          } catch (Exception e) {
-            logException(e);
-            return OPTIONAL_JSON_NULL;
-          }
+          checkArgCount.accept(1);
+          String base64Data = getStringArg.apply(0);
+          var blockpack = BlockPack.fromBase64EncodedString(base64Data);
+          int key = job.blockpacks.retain(blockpack);
+          return Optional.of(new JsonPrimitive(key));
         }
 
       case "blockpack_block_bounds":
         {
           // Python function signature:
           //    (blockpack_id) -> Tuple[Tuple[int, int, int], Tuple[int, int, int]]
-          OptionalInt value = args.isEmpty() ? OptionalInt.empty() : getStrictIntValue(args.get(0));
-          if (!value.isPresent()) {
-            logUserError(
-                "Error: `{}` expected one int param but got: {}", functionName, argsString);
-            return OPTIONAL_JSON_NULL;
-          }
-
-          int blockpackId = value.getAsInt();
+          checkArgCount.accept(1);
+          int blockpackId = getStrictIntArg.apply(0);
           var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
-            logUserError(
-                "Error: `{}` Failed to find BlockPack[{}]: {}",
-                functionName,
-                blockpackId,
-                argsString);
-            return OPTIONAL_JSON_NULL;
+            throw new IllegalStateException(
+                String.format("`%s` failed to find BlockPack[%d]", functionName, blockpackId));
           }
 
           int[] bounds = blockpack.blockBounds();
@@ -3765,24 +3722,13 @@ public class Minescript {
         {
           // Python function signature:
           //    (blockpack_id) -> Dict[str, str]
-          OptionalInt value = args.isEmpty() ? OptionalInt.empty() : getStrictIntValue(args.get(0));
-          if (!value.isPresent()) {
-            logUserError(
-                "Error: `{}` expected one int param but got: {}", functionName, argsString);
-            return OPTIONAL_JSON_NULL;
-          }
-
-          int blockpackId = value.getAsInt();
+          checkArgCount.accept(1);
+          int blockpackId = getStrictIntArg.apply(0);
           var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
-            logUserError(
-                "Error: `{}` Failed to find BlockPack[{}]: {}",
-                functionName,
-                blockpackId,
-                argsString);
-            return OPTIONAL_JSON_NULL;
+            throw new IllegalStateException(
+                String.format("`%s` Failed to find BlockPack[%d]", functionName, blockpackId));
           }
-
           return Optional.of(GSON.toJsonTree(blockpack.comments()));
         }
 
@@ -3790,46 +3736,27 @@ public class Minescript {
         {
           // Python function signature:
           //    (blockpack_id: int, rotation: Rotation = None, offset: BlockPos = None) -> bool
-          if (args.size() != 3) {
-            numParamsErrorLogger.accept(3);
-            return OPTIONAL_JSON_FALSE;
-          }
+          checkArgCount.accept(3);
 
-          OptionalInt value = getStrictIntValue(args.get(0));
-          if (!value.isPresent()) {
-            paramTypeErrorLogger.accept("blockpack_id", "int");
-            return OPTIONAL_JSON_FALSE;
-          }
-          int blockpackId = value.getAsInt();
+          int blockpackId = getStrictIntArg.apply(0);
 
           int[] rotation = null;
           if (args.get(1) != null) {
-            Optional<List<Integer>> list = getStrictIntList(args.get(1));
-            if (list.isEmpty() || list.get().size() != 9) {
-              paramTypeErrorLogger.accept("rotation", "a sequence of 9 ints");
-              return OPTIONAL_JSON_FALSE;
-            }
-            rotation = list.get().stream().mapToInt(Integer::intValue).toArray();
+            rotation =
+                getSizedIntListArg.apply(1, 9).stream().mapToInt(Integer::intValue).toArray();
           }
 
           int[] offset = null;
           if (args.get(2) != null) {
-            Optional<List<Integer>> list = getStrictIntList(args.get(2));
-            if (list.isEmpty() || list.get().size() != 3) {
-              paramTypeErrorLogger.accept("offset", "a sequence of 3 ints");
-              return OPTIONAL_JSON_FALSE;
-            }
-            offset = list.get().stream().mapToInt(Integer::intValue).toArray();
+            offset = getSizedIntListArg.apply(2, 3).stream().mapToInt(Integer::intValue).toArray();
           }
 
           var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
-            logUserError(
-                "Error: `{}` Failed to find BlockPack[{}] to write to world: {}",
-                functionName,
-                blockpackId,
-                argsString);
-            return OPTIONAL_JSON_FALSE;
+            throw new IllegalStateException(
+                String.format(
+                    "`%s` failed to find BlockPack[%d] to write to world",
+                    functionName, blockpackId));
           }
 
           blockpack.getBlockCommands(rotation, offset, job::enqueueStdout);
@@ -3840,60 +3767,34 @@ public class Minescript {
         {
           // Python function signature:
           //    (blockpack_id: int, filename: str) -> bool
-          OptionalInt value = args.isEmpty() ? OptionalInt.empty() : getStrictIntValue(args.get(0));
-          if (!value.isPresent()) {
-            logUserError(
-                "Error: `{}` expected first param to be int but got: {}", functionName, argsString);
-            return OPTIONAL_JSON_FALSE;
-          }
-          if (args.size() < 2 || !(args.get(1) instanceof String)) {
-            logUserError(
-                "Error: `{}` expected second param to be string but got: {}",
-                functionName,
-                argsString);
-            return OPTIONAL_JSON_FALSE;
-          }
-
-          int blockpackId = value.getAsInt();
-          String blockpackFilename = (String) args.get(1);
+          checkArgCount.accept(2);
+          int blockpackId = getStrictIntArg.apply(0);
+          String blockpackFilename = getStringArg.apply(1);
 
           var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
-            logUserError(
-                "Error: `{}` Failed to find BlockPack[{}] to write to file: {}",
-                functionName,
-                blockpackId,
-                argsString);
-            return OPTIONAL_JSON_FALSE;
+            throw new IllegalStateException(
+                String.format(
+                    "`%s` failed to find BlockPack[%d] to write to file `%s`",
+                    functionName, blockpackId, blockpackFilename));
           }
 
-          try {
-            blockpack.writeZipFile(blockpackFilename);
-            return OPTIONAL_JSON_TRUE;
-          } catch (Exception e) {
-            logUserError("Error while writing blockpack {}: {}", blockpackFilename, e.getMessage());
-            return OPTIONAL_JSON_FALSE;
-          }
+          blockpack.writeZipFile(blockpackFilename);
+          return OPTIONAL_JSON_TRUE;
         }
 
       case "blockpack_export_data":
         {
           // Python function signature:
           //    (blockpack_id: int) -> str
-          OptionalInt value =
-              (args.size() == 1) ? getStrictIntValue(args.get(0)) : OptionalInt.empty();
-          if (!value.isPresent()) {
-            logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
-            return OPTIONAL_JSON_NULL;
-          }
-          var blockpack = job.blockpacks.getById(value.getAsInt());
+          checkArgCount.accept(1);
+          int blockpackId = getStrictIntArg.apply(0);
+          var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
-            logUserError(
-                "Error: `{}` Failed to find BlockPack[{}] from which to export data: {}",
-                functionName,
-                value.getAsInt(),
-                argsString);
-            return OPTIONAL_JSON_NULL;
+            throw new IllegalStateException(
+                String.format(
+                    "`%s` failed to find BlockPack[%d] from which to export data",
+                    functionName, blockpackId));
           }
           return Optional.of(new JsonPrimitive(blockpack.toBase64EncodedString()));
         }
@@ -3902,20 +3803,13 @@ public class Minescript {
         {
           // Python function signature:
           //    (blockpack_id: int) -> bool
-          OptionalInt value =
-              (args.size() == 1) ? getStrictIntValue(args.get(0)) : OptionalInt.empty();
-          if (!value.isPresent()) {
-            logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
-            return OPTIONAL_JSON_FALSE;
-          }
-          var blockpack = job.blockpacks.releaseById(value.getAsInt());
+          checkArgCount.accept(1);
+          int blockpackId = getStrictIntArg.apply(0);
+          var blockpack = job.blockpacks.releaseById(blockpackId);
           if (blockpack == null) {
-            logUserError(
-                "Error: `{}` Failed to find BlockPack[{}] to delete: {}",
-                functionName,
-                value.getAsInt(),
-                argsString);
-            return OPTIONAL_JSON_FALSE;
+            throw new IllegalStateException(
+                String.format(
+                    "`%s` failed to find BlockPack[%d] to delete", functionName, blockpackId));
           }
           return OPTIONAL_JSON_TRUE;
         }
@@ -3930,53 +3824,21 @@ public class Minescript {
           // Python function signature:
           //    (blockpacker_id: int, base_pos: BlockPos,
           //     base64_setblocks: str, base64_fills: str, blocks: List[str]) -> bool
-          if (args.size() != 5) {
-            logUserError("Error: `{}` expected 5 params but got: {}", functionName, argsString);
-            return OPTIONAL_JSON_FALSE;
-          }
+          checkArgCount.accept(5);
+          int blockpackerId = getStrictIntArg.apply(0);
+          List<Integer> basePos = getSizedIntListArg.apply(1, 3);
+          String setblocksBase64 = getStringArg.apply(2);
+          String fillsBase64 = getStringArg.apply(3);
+          List<String> blocks = getStringListArg.apply(4);
 
-          OptionalInt value = getStrictIntValue(args.get(0));
-          if (!value.isPresent()) {
-            logUserError(
-                "Error: `{}` expected first param to be int but got: {}", functionName, argsString);
-            return OPTIONAL_JSON_FALSE;
-          }
-
-          Optional<List<Integer>> list = getStrictIntList(args.get(1));
-          if (list.isEmpty() || list.get().size() != 3) {
-            logUserError(
-                "Error: `{}` expected second param to be list of 3 ints but got: {}",
-                functionName,
-                argsString);
-            return OPTIONAL_JSON_FALSE;
-          }
-          var basePos = list.get();
-
-          String setblocksBase64 = args.get(2).toString();
-          String fillsBase64 = args.get(3).toString();
-          Optional<List<String>> blocks = getStringList(args.get(4));
-          if (blocks.isEmpty()) {
-            paramTypeErrorLogger.accept("blocks", "list of string");
-            return OPTIONAL_JSON_FALSE;
-          }
-
-          var blockpacker = job.blockpackers.getById(value.getAsInt());
+          var blockpacker = job.blockpackers.getById(blockpackerId);
           if (blockpacker == null) {
-            logUserError(
-                "Error: `{}` Failed to find BlockPacker[{}]: {}",
-                functionName,
-                value.getAsInt(),
-                argsString);
-            return OPTIONAL_JSON_FALSE;
+            throw new IllegalStateException(
+                String.format("`%s` failed to find BlockPacker[%d]", functionName, blockpackerId));
           }
 
           blockpacker.addBlocks(
-              basePos.get(0),
-              basePos.get(1),
-              basePos.get(2),
-              setblocksBase64,
-              fillsBase64,
-              blocks.get());
+              basePos.get(0), basePos.get(1), basePos.get(2), setblocksBase64, fillsBase64, blocks);
           return OPTIONAL_JSON_TRUE;
         }
 
@@ -3985,61 +3847,32 @@ public class Minescript {
           // Python function signature:
           //    (blockpacker_id: int, blockpack_id: int,
           //     rotation: Rotation = None, offset: BlockPos = None) -> bool
-          if (args.size() != 4) {
-            numParamsErrorLogger.accept(4);
-            return OPTIONAL_JSON_FALSE;
-          }
+          checkArgCount.accept(4);
 
-          OptionalInt value1 = getStrictIntValue(args.get(0));
-          if (!value1.isPresent()) {
-            paramTypeErrorLogger.accept("blockpacker_id", "int");
-            return OPTIONAL_JSON_FALSE;
-          }
-
-          OptionalInt value2 = getStrictIntValue(args.get(1));
-          if (!value2.isPresent()) {
-            paramTypeErrorLogger.accept("blockpack_id", "int");
-            return OPTIONAL_JSON_FALSE;
-          }
+          int blockpackerId = getStrictIntArg.apply(0);
+          int blockpackId = getStrictIntArg.apply(1);
 
           int[] rotation = null;
           if (args.get(2) != null) {
-            Optional<List<Integer>> list = getStrictIntList(args.get(2));
-            if (list.isEmpty() || list.get().size() != 9) {
-              paramTypeErrorLogger.accept("rotation", "a sequence of 9 ints");
-              return OPTIONAL_JSON_FALSE;
-            }
-            rotation = list.get().stream().mapToInt(Integer::intValue).toArray();
+            rotation =
+                getSizedIntListArg.apply(2, 9).stream().mapToInt(Integer::intValue).toArray();
           }
 
           int[] offset = null;
           if (args.get(3) != null) {
-            Optional<List<Integer>> list = getStrictIntList(args.get(3));
-            if (list.isEmpty() || list.get().size() != 3) {
-              paramTypeErrorLogger.accept("offset", "a sequence of 3 ints");
-              return OPTIONAL_JSON_FALSE;
-            }
-            offset = list.get().stream().mapToInt(Integer::intValue).toArray();
+            offset = getSizedIntListArg.apply(3, 3).stream().mapToInt(Integer::intValue).toArray();
           }
 
-          var blockpacker = job.blockpackers.getById(value1.getAsInt());
+          var blockpacker = job.blockpackers.getById(blockpackerId);
           if (blockpacker == null) {
-            logUserError(
-                "Error: `{}` Failed to find BlockPacker[{}]: {}",
-                functionName,
-                value1.getAsInt(),
-                argsString);
-            return OPTIONAL_JSON_FALSE;
+            throw new IllegalStateException(
+                String.format("`%s` failed to find BlockPacker[%d]", functionName, blockpackerId));
           }
 
-          var blockpack = job.blockpacks.getById(value2.getAsInt());
+          var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
-            logUserError(
-                "Error: `{}` Failed to find BlockPack[{}]: {}",
-                functionName,
-                value2.getAsInt(),
-                argsString);
-            return OPTIONAL_JSON_FALSE;
+            throw new IllegalStateException(
+                String.format("`%s` failed to find BlockPack[%d]", functionName, blockpackId));
           }
 
           blockpack.getBlocks(
@@ -4052,35 +3885,14 @@ public class Minescript {
         {
           // Python function signature:
           //    (blockpacker_id: int, comments: Dict[str, str]) -> int
-          if (args.size() != 2) {
-            logUserError("Error: `{}` expected 2 params but got: {}", functionName, argsString);
-            return OPTIONAL_JSON_NULL;
-          }
+          checkArgCount.accept(2);
+          int blockpackerId = getStrictIntArg.apply(0);
+          var comments = getStringMapArg.apply(1);
 
-          OptionalInt value = getStrictIntValue(args.get(0));
-          if (!value.isPresent()) {
-            logUserError(
-                "Error: `{}` expected first param to be int but got: {}", functionName, argsString);
-            return OPTIONAL_JSON_NULL;
-          }
-
-          if (!(args.get(1) instanceof Map)) {
-            logUserError(
-                "Error: `{}` expected `comment` param to be a dictionary but got: {}",
-                functionName,
-                argsString);
-            return OPTIONAL_JSON_NULL;
-          }
-          var comments = (Map<String, String>) args.get(1);
-
-          var blockpacker = job.blockpackers.getById(value.getAsInt());
+          var blockpacker = job.blockpackers.getById(blockpackerId);
           if (blockpacker == null) {
-            logUserError(
-                "Error: `{}` Failed to find BlockPacker[{}]: {}",
-                functionName,
-                value.getAsInt(),
-                argsString);
-            return OPTIONAL_JSON_NULL;
+            throw new IllegalStateException(
+                String.format("`%s` failed to find BlockPacker[%d]", functionName, blockpackerId));
           }
 
           blockpacker.comments().putAll(comments);
@@ -4091,20 +3903,13 @@ public class Minescript {
         {
           // Python function signature:
           //    (blockpacker_id: int) -> bool
-          OptionalInt value =
-              (args.size() == 1) ? getStrictIntValue(args.get(0)) : OptionalInt.empty();
-          if (!value.isPresent()) {
-            logUserError("Error: `{}` expected 1 int param but got: {}", functionName, argsString);
-            return OPTIONAL_JSON_FALSE;
-          }
-          var blockpacker = job.blockpackers.releaseById(value.getAsInt());
+          checkArgCount.accept(1);
+          int blockpackerId = getStrictIntArg.apply(0);
+
+          var blockpacker = job.blockpackers.releaseById(blockpackerId);
           if (blockpacker == null) {
-            logUserError(
-                "Error: `{}` Failed to find BlockPacker[{}] to delete: {}",
-                functionName,
-                value.getAsInt(),
-                argsString);
-            return OPTIONAL_JSON_FALSE;
+            throw new IllegalStateException(
+                String.format("`%s` failed to find BlockPacker[%d]", functionName, blockpackerId));
           }
           return OPTIONAL_JSON_TRUE;
         }
@@ -4195,12 +4000,8 @@ public class Minescript {
         }
 
       case "flush":
-        if (args.isEmpty()) {
-          return OPTIONAL_JSON_TRUE;
-        } else {
-          logUserError("Error: `{}` expected no params but got: {}", functionName, argsString);
-          return OPTIONAL_JSON_FALSE;
-        }
+        checkArgCount.accept(0);
+        return OPTIONAL_JSON_TRUE;
 
       case "cancelfn!":
         var cancelfnRetval = Optional.of((JsonElement) new JsonPrimitive("cancelfn!"));
@@ -4249,30 +4050,36 @@ public class Minescript {
         }
 
       case "IndexOutOfBoundsException":
-        var iooArray = new int[1];
-        int iooInt = iooArray[1];
-        return OPTIONAL_JSON_NULL;
+        {
+          var array = new int[1];
+          int i = array[1];
+          return OPTIONAL_JSON_NULL;
+        }
 
       case "IllegalArgumentException":
         throw new IllegalArgumentException("This is a test.");
 
       case "NoSuchElementException":
-        var nseList = new ArrayList<String>();
-        nseList.iterator().next();
-        return OPTIONAL_JSON_NULL;
+        {
+          var list = new ArrayList<String>();
+          list.iterator().next();
+          return OPTIONAL_JSON_NULL;
+        }
 
       case "IllegalStateException":
         throw new IllegalStateException("This is a test.");
 
       case "NullPointerException":
-        String npeString = null;
-        npeString.length();
-        return OPTIONAL_JSON_NULL;
+        {
+          String string = null;
+          string.length();
+          return OPTIONAL_JSON_NULL;
+        }
 
       default:
-        logUserError(
-            "Error: unknown function `{}` called from job: {}", functionName, job.jobSummary());
-        return OPTIONAL_JSON_FALSE;
+        throw new IllegalArgumentException(
+            String.format(
+                "Unknown function `%s` called from job: %s", functionName, job.jobSummary()));
     }
   }
 
