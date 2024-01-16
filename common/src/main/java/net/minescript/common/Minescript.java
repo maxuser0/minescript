@@ -3220,7 +3220,7 @@ public class Minescript {
 
       case "player_set_position":
         {
-          checkArgRange.accept(3, 5);
+          checkArgCount.accept(5);
           double x = getDoubleArg.apply(0);
           double y = getDoubleArg.apply(1);
           double z = getDoubleArg.apply(2);
