@@ -268,9 +268,6 @@ public class Minescript {
       new File(Paths.get(MINESCRIPT_DIR, "config.txt").toString());
   private static long lastConfigLoadTime = 0;
 
-  private static boolean useBlockPackForUndo = true;
-  private static boolean useBlockPackForCopy = true;
-
   // Regex pattern for ignoring lines of output from stderr of Python scripts.
   private static Pattern stderrChatIgnorePattern = Pattern.compile("^$");
 
@@ -379,14 +376,6 @@ public class Minescript {
               logChunkLoadEvents = Boolean.valueOf(value);
               LOGGER.info("Setting minescript_log_chunk_load_events to {}", logChunkLoadEvents);
               break;
-            case "minescript_use_blockpack_for_copy":
-              useBlockPackForCopy = Boolean.valueOf(value);
-              LOGGER.info("Setting minescript_use_blockpack_for_copy to {}", useBlockPackForCopy);
-              break;
-            case "minescript_use_blockpack_for_undo":
-              useBlockPackForUndo = Boolean.valueOf(value);
-              LOGGER.info("Setting minescript_use_blockpack_for_undo to {}", useBlockPackForUndo);
-              break;
             case "stderr_chat_ignore_pattern":
               stderrChatIgnorePattern = Pattern.compile(value);
               LOGGER.info("Setting stderr_chat_ignore_pattern to {}", value);
@@ -440,7 +429,6 @@ public class Minescript {
           "minescript_incremental_command_suggestions",
           "minescript_script_function_debug_outptut",
           "minescript_log_chunk_load_events",
-          "minescript_use_blockpack_for_undo",
           "enable_minescript_on_chat_received_event");
 
   private static List<String> getScriptCommandNamesWithBuiltins() {
@@ -646,168 +634,6 @@ public class Minescript {
     void processCommandToUndo(Level level, String command);
 
     void enqueueCommands(Queue<String> commandQueue);
-
-    static UndoableAction create(int originalJobId, String[] originalCommand) {
-      if (useBlockPackForUndo) {
-        return new UndoableActionBlockPack(originalJobId, originalCommand);
-      } else {
-        return new UndoableActionSetblocks(originalJobId, originalCommand);
-      }
-    }
-  }
-
-  static class UndoableActionSetblocks implements UndoableAction {
-    private static String UNDO_DIR = Paths.get(MINESCRIPT_DIR, "undo").toString();
-
-    private volatile int originalJobId; // ID of the job that this undoes.
-    private String[] originalCommand;
-    private final long startTimeMillis;
-    private final Deque<String> commands = new ArrayDeque<>();
-    private final Set<Position> blocks = new HashSet<>();
-    private String commandsFilename;
-    private boolean undone = false;
-
-    // coords and pos are reused to avoid lots of small object instantiations.
-    private int[] coords = new int[6];
-    private BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-
-    private static class Position {
-      public final int x;
-      public final int y;
-      public final int z;
-
-      public Position(int x, int y, int z) {
-        this.x = x;
-        this.y = y;
-        this.z = z;
-      }
-
-      @Override
-      public int hashCode() {
-        return Objects.hash(x, y, z);
-      }
-
-      @Override
-      public boolean equals(Object o) {
-        if (this == o) {
-          return true;
-        }
-        if (!(o instanceof Position)) {
-          return false;
-        }
-        Position other = (Position) o;
-        return x == other.x && y == other.y && z == other.z;
-      }
-    }
-
-    public UndoableActionSetblocks(int originalJobId, String[] originalCommand) {
-      this.originalJobId = originalJobId;
-      this.originalCommand = originalCommand;
-      this.startTimeMillis = System.currentTimeMillis();
-    }
-
-    public int originalJobId() {
-      return originalJobId;
-    }
-
-    public synchronized void onOriginalJobDone() {
-      originalJobId = -1;
-
-      if (!commands.isEmpty()) {
-        // Write undo commands to a file and clear in-memory commands queue.
-        new File(UNDO_DIR).mkdirs();
-        commandsFilename = Paths.get(UNDO_DIR, startTimeMillis + ".txt").toString();
-        try (var writer = new PrintWriter(new FileWriter(commandsFilename))) {
-          writer.printf("# Generated from Minescript command: %s\n", quoteCommand(originalCommand));
-          for (String command : commands) {
-            writer.println(command);
-          }
-        } catch (IOException e) {
-          logException(e);
-        }
-        commands.clear();
-        blocks.clear();
-      }
-    }
-
-    public String[] originalCommand() {
-      return originalCommand;
-    }
-
-    public String[] derivativeCommand() {
-      String[] derivative = new String[2];
-      derivative[0] = "\\undo";
-      derivative[1] = "(" + String.join(" ", originalCommand) + ")";
-      return derivative;
-    }
-
-    public synchronized void processCommandToUndo(Level level, String command) {
-      if (command.startsWith("/setblock ") && getSetblockCoords(command, coords)) {
-        Optional<String> block =
-            blockStateToString(level.getBlockState(pos.set(coords[0], coords[1], coords[2])));
-        if (block.isPresent()) {
-          if (!addBlockToUndoQueue(coords[0], coords[1], coords[2], block.get())) {
-            return;
-          }
-        }
-      } else if (command.startsWith("/fill ") && getFillCoords(command, coords)) {
-        int x0 = coords[0];
-        int y0 = coords[1];
-        int z0 = coords[2];
-        int x1 = coords[3];
-        int y1 = coords[4];
-        int z1 = coords[5];
-        for (int x = x0; x <= x1; x++) {
-          for (int y = y0; y <= y1; y++) {
-            for (int z = z0; z <= z1; z++) {
-              Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, y, z)));
-              if (block.isPresent()) {
-                if (!addBlockToUndoQueue(x, y, z, block.get())) {
-                  return;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    private boolean addBlockToUndoQueue(int x, int y, int z, String block) {
-      if (undone) {
-        LOGGER.error(
-            "Cannot add command to undoable action after already undone: {}",
-            String.join(" ", originalCommand));
-        return false;
-      }
-      // For a given position, add only the first block, because that's the
-      // block that needs to be restored at that position during an undo operation.
-      if (blocks.add(new Position(x, y, z))) {
-        commands.addFirst(String.format("/setblock %d %d %d %s", x, y, z, block));
-      }
-      return true;
-    }
-
-    public synchronized void enqueueCommands(Queue<String> commandQueue) {
-      undone = true;
-      if (commandsFilename == null) {
-        commandQueue.addAll(commands);
-        commands.clear();
-        blocks.clear();
-      } else {
-        try (var reader = new BufferedReader(new FileReader(commandsFilename))) {
-          String line;
-          while ((line = reader.readLine()) != null) {
-            line = line.strip();
-            if (line.startsWith("#")) {
-              continue;
-            }
-            commandQueue.add(line);
-          }
-        } catch (IOException e) {
-          logException(e);
-        }
-      }
-    }
   }
 
   static class UndoableActionBlockPack implements UndoableAction {
@@ -1414,7 +1240,7 @@ public class Minescript {
     public void createSubprocess(String[] command, List<Token> nextCommand) {
       var job =
           new Job(allocateJobId(), command, new SubprocessTask(), i -> finishJob(i, nextCommand));
-      var undo = UndoableAction.create(job.jobId(), command);
+      var undo = new UndoableActionBlockPack(job.jobId(), command);
       jobUndoMap.put(job.jobId(), undo);
       undoStack.addFirst(undo);
       jobMap.put(job.jobId(), job);
@@ -1775,91 +1601,6 @@ public class Minescript {
     }
   }
 
-  private static void copyBlocks(
-      int x0, int y0, int z0, int x1, int y1, int z1, Optional<String> label, boolean safetyLimit) {
-    var minecraft = Minecraft.getInstance();
-    var player = minecraft.player;
-    if (player == null) {
-      logUserError("Unable to copy blocks because player is null.");
-      return;
-    }
-
-    int playerX = (int) player.getX();
-    int playerY = (int) player.getY();
-    int playerZ = (int) player.getZ();
-
-    int xMin = Math.min(x0, x1);
-    int yMin = Math.max(Math.min(y0, y1), -64); // TODO(maxuser): Use an API for min build height.
-    int zMin = Math.min(z0, z1);
-
-    int xMax = Math.max(x0, x1);
-    int yMax = Math.min(Math.max(y0, y1), 320); // TODO(maxuser): Use an API for max build height.
-    int zMax = Math.max(z0, z1);
-
-    if (safetyLimit) {
-      // Estimate the number of chunks to check against a soft limit.
-      int numChunks = ((xMax - xMin) / 16 + 1) * ((zMax - zMin) / 16 + 1);
-      if (numChunks > 1600) {
-        logUserError(
-            "`copy` command exceeded soft limit of 1600 chunks (region covers {} chunks; override"
-                + " this safety check with `no_limit`).",
-            numChunks);
-        return;
-      }
-    }
-
-    Level level = player.getCommandSenderWorld();
-
-    var pos = new BlockPos.MutableBlockPos();
-    for (int x = xMin; x <= xMax; x += 16) {
-      for (int z = zMin; z <= zMax; z += 16) {
-        Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, 0, z)));
-        if (block.isEmpty() || block.get().equals("minecraft:void_air")) {
-          logUserError("Not all chunks are loaded within the requested `copy` volume.");
-          return;
-        }
-      }
-    }
-
-    final String copiesDir = Paths.get(MINESCRIPT_DIR, "copies").toString();
-    if (new File(copiesDir).mkdir()) {
-      LOGGER.info("Created minescript copies dir");
-    }
-
-    try (var writer =
-        new PrintWriter(
-            new FileWriter(
-                Paths.get(copiesDir, label.orElse("__default__") + ".txt").toString()))) {
-      writer.print("# Generated from Minescript `copy` command:\n");
-      writer.printf("# copy %d %d %d %d %d %d\n", x0, y0, z0, x1, y1, z1);
-
-      int numBlocks = 0;
-
-      for (int x = xMin; x <= xMax; ++x) {
-        for (int y = yMin; y <= yMax; ++y) {
-          for (int z = zMin; z <= zMax; ++z) {
-            BlockState blockState = level.getBlockState(pos.set(x, y, z));
-            if (!blockState.isAir()) {
-              int xOffset = x - x0;
-              int yOffset = y - y0;
-              int zOffset = z - z0;
-              Optional<String> block = blockStateToString(blockState);
-              if (block.isPresent()) {
-                writer.printf("/setblock %d %d %d %s\n", xOffset, yOffset, zOffset, block.get());
-                numBlocks++;
-              } else {
-                logUserError("Unexpected BlockState format: {}", blockState.toString());
-              }
-            }
-          }
-        }
-      }
-      logUserInfo("Copied {} blocks.", numBlocks);
-    } catch (IOException e) {
-      logException(e);
-    }
-  }
-
   public static final String[] EMPTY_STRING_ARRAY = {};
 
   private static void runMinescriptCommand(String commandLine) {
@@ -1966,59 +1707,6 @@ public class Minescript {
           runParsedMinescriptCommand(nextCommand);
           return;
 
-        case "copy":
-          if (useBlockPackForCopy) {
-            // In this case, `copy` is implemented in a script: copy.py
-            break;
-          } else {
-            final var cmd = command;
-            Runnable badArgsMessage =
-                () ->
-                    logUserError(
-                        "Expected 6 params of type integer (plus optional params for label and"
-                            + " `no_limit`), instead got `{}`",
-                        getParamsAsString(cmd));
-
-            if (checkParamTypes(
-                    command,
-                    ParamType.INT,
-                    ParamType.INT,
-                    ParamType.INT,
-                    ParamType.INT,
-                    ParamType.INT,
-                    ParamType.INT,
-                    ParamType.VAR_ARGS)
-                && command.length <= 9) {
-              int x0 = Integer.valueOf(command[1]);
-              int y0 = Integer.valueOf(command[2]);
-              int z0 = Integer.valueOf(command[3]);
-              int x1 = Integer.valueOf(command[4]);
-              int y1 = Integer.valueOf(command[5]);
-              int z1 = Integer.valueOf(command[6]);
-
-              boolean safetyLimit = true;
-              Optional<String> label = Optional.empty();
-              for (int i = 7; i < command.length; i++) {
-                // Don't allow safetyLimit to be set to false multiple times.
-                if (command[i].equals("no_limit") && safetyLimit) {
-                  safetyLimit = false;
-                } else if (label.isEmpty()) {
-                  label = Optional.of(command[i]);
-                } else {
-                  badArgsMessage.run();
-                  runParsedMinescriptCommand(nextCommand);
-                  return;
-                }
-              }
-
-              copyBlocks(x0, y0, z0, x1, y1, z1, label, safetyLimit);
-            } else {
-              badArgsMessage.run();
-            }
-            runParsedMinescriptCommand(nextCommand);
-            return;
-          }
-
         case "minescript_commands_per_cycle":
           if (checkParamTypes(command)) {
             logUserInfo(
@@ -2079,30 +1767,6 @@ public class Minescript {
             boolean value = Boolean.valueOf(command[1]);
             logChunkLoadEvents = value;
             logUserInfo("Minescript logging of chunk load events set to {}", value);
-          } else {
-            logUserError(
-                "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
-          }
-          runParsedMinescriptCommand(nextCommand);
-          return;
-
-        case "minescript_use_blockpack_for_copy":
-          if (checkParamTypes(command, ParamType.BOOL)) {
-            boolean value = Boolean.valueOf(command[1]);
-            useBlockPackForCopy = value;
-            logUserInfo("Minescript use of BlockPack for copy set to {}", value);
-          } else {
-            logUserError(
-                "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
-          }
-          runParsedMinescriptCommand(nextCommand);
-          return;
-
-        case "minescript_use_blockpack_for_undo":
-          if (checkParamTypes(command, ParamType.BOOL)) {
-            boolean value = Boolean.valueOf(command[1]);
-            useBlockPackForUndo = value;
-            logUserInfo("Minescript use of BlockPack for undo set to {}", value);
           } else {
             logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
