@@ -95,28 +95,25 @@ def log(message: str) -> bool:
   await_script_function("log", (message,))
 
 
-def screenshot(filename=None) -> bool:
+def screenshot(filename=None):
   """Takes a screenshot, similar to pressing the F2 key.
 
   Args:
     filename: if specified, screenshot filename relative to the screenshots directory; ".png"
       extension is added to the screenshot file if it doesn't already have a png extension.
 
-  Returns:
-    `True` is successful
-
   Since: v2.1
   """
   if filename is None:
-    return await_script_function("screenshot", ())
-  else:
-    if os.path.sep in filename:
-      echo(f'Error: `screenshot` does not support filenames with "{os.path.sep}" character.')
-      return False
-    else:
-      if not filename.lower().endswith(".png"):
-        filename += ".png"
-      return await_script_function("screenshot", (filename,))
+    await_script_function("screenshot", (None,))
+    return
+
+  if os.path.sep in filename:
+    raise Exception(f'`screenshot` does not support filenames with "{os.path.sep}" character.')
+
+  if not filename.lower().endswith(".png"):
+    filename += ".png"
+  await_script_function("screenshot", (filename,))
 
 
 def flush():

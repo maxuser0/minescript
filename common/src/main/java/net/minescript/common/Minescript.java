@@ -37,13 +37,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.Queue;
 import java.util.Set;
@@ -54,10 +52,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -2905,15 +2900,11 @@ public class Minescript {
   }
 
   private static Optional<JsonElement> doPlayerAction(
-      String functionName, KeyMapping keyBinding, List<?> args, String argsString) {
-    if (args.size() != 1 || !(args.get(0) instanceof Boolean)) {
-      throw new IllegalArgumentException(
-          String.format(
-              "`%s` expected 1 boolean param (true or false) but got: %s",
-              functionName, argsString));
-    }
+      String functionName, KeyMapping keyBinding, ScriptFunctionArgList args, String argsString) {
+    args.expectSize(1);
+    boolean pressed = args.getBoolean(0);
+
     lazyInitBoundKeys();
-    boolean pressed = (Boolean) args.get(0);
     var key = boundKeys.get(keyBinding);
     if (pressed) {
       KeyMapping.set(key, true);
@@ -2922,108 +2913,6 @@ public class Minescript {
       KeyMapping.set(key, false);
     }
     return OPTIONAL_JSON_TRUE;
-  }
-
-  private static Optional<Boolean> getStrictBooleanValue(Object object) {
-    if (!(object instanceof Boolean)) {
-      return Optional.empty();
-    }
-    Boolean value = (Boolean) object;
-    return Optional.of(value);
-  }
-
-  /** Returns int if object is a Number representing an int without truncation or rounding. */
-  private static OptionalInt getStrictIntValue(Object object) {
-    if (!(object instanceof Number)) {
-      return OptionalInt.empty();
-    }
-    Number number = (Number) object;
-    if (number instanceof Integer) {
-      return OptionalInt.of(number.intValue());
-    }
-    if (number instanceof Long) {
-      long lng = number.longValue();
-      if (lng >= Integer.MIN_VALUE && lng <= Integer.MAX_VALUE) {
-        return OptionalInt.of(number.intValue());
-      } else {
-        return OptionalInt.empty();
-      }
-    }
-    if (number instanceof Double) {
-      double dbl = number.doubleValue();
-      if (!Double.isInfinite(dbl) && dbl == Math.floor(dbl)) {
-        return OptionalInt.of(number.intValue());
-      }
-    }
-    return OptionalInt.empty();
-  }
-
-  /** Returns int if object is a Number convertible to int, possibly with truncation or rounding. */
-  private static OptionalInt getConvertibleIntValue(Object object) {
-    if (object instanceof Number number) {
-      return OptionalInt.of(number.intValue());
-    }
-    return OptionalInt.empty();
-  }
-
-  private static OptionalDouble getStrictDoubleValue(Object object) {
-    if (!(object instanceof Number)) {
-      return OptionalDouble.empty();
-    }
-    Number number = (Number) object;
-    if (number instanceof Double) {
-      return OptionalDouble.of(number.doubleValue());
-    }
-    if (number instanceof Float) {
-      return OptionalDouble.of(number.doubleValue());
-    }
-    if (number instanceof Long) {
-      return OptionalDouble.of(number.doubleValue());
-    }
-    if (number instanceof Integer) {
-      return OptionalDouble.of(number.doubleValue());
-    }
-    return OptionalDouble.empty();
-  }
-
-  private static Optional<List<Integer>> getStrictIntList(Object object) {
-    if (!(object instanceof List)) {
-      return Optional.empty();
-    }
-    List<?> list = (List<?>) object;
-    List<Integer> intList = new ArrayList<>();
-    for (var element : list) {
-      var asInt = getStrictIntValue(element);
-      if (asInt.isEmpty()) {
-        return Optional.empty();
-      }
-      intList.add(asInt.getAsInt());
-    }
-    return Optional.of(intList);
-  }
-
-  private static Optional<List<String>> getStringList(Object object) {
-    if (!(object instanceof List)) {
-      return Optional.empty();
-    }
-    List<?> list = (List<?>) object;
-    List<String> stringList = new ArrayList<>();
-    for (var element : list) {
-      stringList.add(element.toString());
-    }
-    return Optional.of(stringList);
-  }
-
-  private static Optional<Map<String, String>> getStringMap(Object object) {
-    if (!(object instanceof Map)) {
-      return Optional.empty();
-    }
-    Map<?, ?> map = (Map<?, ?>) object;
-    Map<String, String> stringMap = new HashMap<>();
-    for (var entry : map.entrySet()) {
-      stringMap.put(entry.getKey().toString(), entry.getValue().toString());
-    }
-    return Optional.of(stringMap);
   }
 
   private static double computeDistance(
@@ -3082,135 +2971,17 @@ public class Minescript {
 
   /** Returns a JSON response if a script function is called. */
   private static Optional<JsonElement> handleScriptFunction(
-      Job job, long funcCallId, String functionName, List<?> args, String argsString)
+      Job job, long funcCallId, String functionName, ScriptFunctionArgList args, String argsString)
       throws Exception {
     var minecraft = Minecraft.getInstance();
     var world = minecraft.level;
     var player = minecraft.player;
     var options = minecraft.options;
 
-    // TODO(maxuser): Move all these arg-checking functions and consumers to their own class.
-
-    Consumer<Integer> checkArgCount =
-        (expectedArgs) -> {
-          if (args.size() != expectedArgs) {
-            throw new IllegalArgumentException(
-                String.format(
-                    "`%s` expected %d arg%s but got: %s",
-                    functionName, expectedArgs, expectedArgs == 1 ? "" : "s", argsString));
-          }
-        };
-
-    BiConsumer<Integer, Integer> checkArgRange =
-        (minArgs, maxArgs) -> {
-          if (args.size() < minArgs || args.size() > maxArgs) {
-            throw new IllegalArgumentException(
-                String.format(
-                    "`%s` expected %d to %d args but got: %s",
-                    functionName, minArgs, maxArgs, argsString));
-          }
-        };
-
-    Function<Integer, Boolean> getBooleanArg =
-        (argPos) -> {
-          var value = getStrictBooleanValue(args.get(argPos));
-          if (value.isEmpty()) {
-            throw new IllegalArgumentException(
-                String.format(
-                    "`%s` expected arg %d to be bool but got: %s",
-                    functionName, argPos + 1, argsString));
-          }
-          return value.get();
-        };
-
-    Function<Integer, Integer> getStrictIntArg =
-        (argPos) -> {
-          var value = getStrictIntValue(args.get(argPos));
-          if (value.isEmpty()) {
-            throw new IllegalArgumentException(
-                String.format(
-                    "`%s` expected arg %d to be int but got: %s",
-                    functionName, argPos + 1, argsString));
-          }
-          return value.getAsInt();
-        };
-
-    Function<Integer, Integer> getConvertibleIntArg =
-        (argPos) -> {
-          var value = getConvertibleIntValue(args.get(argPos));
-          if (value.isEmpty()) {
-            throw new IllegalArgumentException(
-                String.format(
-                    "`%s` expected arg %d to be convertible to int but got: %s",
-                    functionName, argPos + 1, argsString));
-          }
-          return value.getAsInt();
-        };
-
-    Function<Integer, Double> getDoubleArg =
-        (argPos) -> {
-          var value = getStrictDoubleValue(args.get(argPos));
-          if (value.isEmpty()) {
-            throw new IllegalArgumentException(
-                String.format(
-                    "`%s` expected arg %d to be float but got: %s",
-                    functionName, argPos + 1, argsString));
-          }
-          return value.getAsDouble();
-        };
-
-    Function<Integer, String> getStringArg =
-        (argPos) -> {
-          var arg = args.get(argPos);
-          if (!(arg instanceof String)) {
-            throw new IllegalArgumentException(
-                String.format(
-                    "`%s` expected arg %d to be string but got: %s",
-                    functionName, argPos + 1, argsString));
-          }
-          return (String) arg;
-        };
-
-    BiFunction<Integer, Integer, List<Integer>> getSizedIntListArg =
-        (argPos, length) -> {
-          var value = getStrictIntList(args.get(argPos));
-          if (value.isEmpty()) {
-            throw new IllegalArgumentException(
-                String.format(
-                    "`%s` expected arg %d to be list of %d ints but got: %s",
-                    functionName, argPos + 1, length, argsString));
-          }
-          return value.get();
-        };
-
-    Function<Integer, List<String>> getStringListArg =
-        (argPos) -> {
-          var value = getStringList(args.get(argPos));
-          if (value.isEmpty()) {
-            throw new IllegalArgumentException(
-                String.format(
-                    "`%s` expected arg %d to be list of strings but got: %s",
-                    functionName, argPos + 1, argsString));
-          }
-          return value.get();
-        };
-
-    Function<Integer, Map<String, String>> getStringMapArg =
-        (argPos) -> {
-          var value = getStringMap(args.get(argPos));
-          if (value.isEmpty()) {
-            throw new IllegalArgumentException(
-                String.format(
-                    "`%s` expected arg %d to be string map but got: %s",
-                    functionName, argPos + 1, argsString));
-          }
-          return value.get();
-        };
-
     switch (functionName) {
       case "player_position":
         {
-          checkArgCount.accept(0);
+          args.expectSize(0);
           var result = new JsonArray();
           result.add(player.getX());
           result.add(player.getY());
@@ -3220,33 +2991,33 @@ public class Minescript {
 
       case "player_set_position":
         {
-          checkArgCount.accept(5);
-          double x = getDoubleArg.apply(0);
-          double y = getDoubleArg.apply(1);
-          double z = getDoubleArg.apply(2);
+          args.expectSize(5);
+          double x = args.getDouble(0);
+          double y = args.getDouble(1);
+          double z = args.getDouble(2);
           float yaw = player.getYRot();
           float pitch = player.getXRot();
           if (args.get(3) != null) {
-            yaw = getDoubleArg.apply(3).floatValue();
+            yaw = args.getDouble(3).floatValue();
           }
           if (args.get(4) != null) {
-            pitch = getDoubleArg.apply(4).floatValue();
+            pitch = args.getDouble(4).floatValue();
           }
           player.moveTo(x, y, z, yaw, pitch);
           return OPTIONAL_JSON_TRUE;
         }
 
       case "player_name":
-        checkArgCount.accept(0);
+        args.expectSize(0);
         return Optional.of(new JsonPrimitive(player.getName().getString()));
 
       case "getblock":
         {
-          checkArgCount.accept(3);
+          args.expectSize(3);
           Level level = player.getCommandSenderWorld();
-          int arg0 = getConvertibleIntArg.apply(0);
-          int arg1 = getConvertibleIntArg.apply(1);
-          int arg2 = getConvertibleIntArg.apply(2);
+          int arg0 = args.getConvertibleInt(0);
+          int arg1 = args.getConvertibleInt(1);
+          int arg2 = args.getConvertibleInt(2);
           Optional<String> block =
               blockStateToString(level.getBlockState(new BlockPos(arg0, arg1, arg2)));
           return Optional.of(jsonPrimitiveOrNull(block));
@@ -3262,7 +3033,7 @@ public class Minescript {
                         functionName, argsString));
               };
 
-          checkArgCount.accept(1);
+          args.expectSize(1);
           if (!(args.get(0) instanceof List)) {
             badArgsResponse.run();
           }
@@ -3292,7 +3063,7 @@ public class Minescript {
 
       case "register_key_event_listener":
         {
-          checkArgCount.accept(0);
+          args.expectSize(0);
           if (keyEventListeners.containsKey(job.jobId())) {
             throw new IllegalStateException(
                 "Failed to create listener because a listener is already registered for job: "
@@ -3304,7 +3075,7 @@ public class Minescript {
 
       case "unregister_key_event_listener":
         {
-          checkArgCount.accept(0);
+          args.expectSize(0);
           if (!keyEventListeners.containsKey(job.jobId())) {
             throw new IllegalStateException(
                 String.format(
@@ -3317,7 +3088,7 @@ public class Minescript {
 
       case "register_chat_message_listener":
         {
-          checkArgCount.accept(0);
+          args.expectSize(0);
           if (clientChatReceivedEventListeners.containsKey(job.jobId())) {
             throw new IllegalStateException(
                 "Failed to create listener because a listener is already registered for job: "
@@ -3330,7 +3101,7 @@ public class Minescript {
 
       case "unregister_chat_message_listener":
         {
-          checkArgCount.accept(0);
+          args.expectSize(0);
           if (!clientChatReceivedEventListeners.containsKey(job.jobId())) {
             throw new IllegalStateException(
                 String.format(
@@ -3343,7 +3114,7 @@ public class Minescript {
 
       case "register_chat_message_interceptor":
         {
-          checkArgCount.accept(0);
+          args.expectSize(0);
           if (chatInterceptor != null) {
             throw new IllegalStateException("Chat interceptor already enabled for another job.");
           }
@@ -3358,7 +3129,7 @@ public class Minescript {
 
       case "unregister_chat_message_interceptor":
         {
-          checkArgCount.accept(0);
+          args.expectSize(0);
           if (chatInterceptor == null) {
             throw new IllegalStateException(
                 "Chat interceptor already disabled: " + job.jobSummary());
@@ -3370,11 +3141,11 @@ public class Minescript {
 
       case "await_loaded_region":
         {
-          checkArgCount.accept(4);
-          int arg0 = getStrictIntArg.apply(0);
-          int arg1 = getStrictIntArg.apply(1);
-          int arg2 = getStrictIntArg.apply(2);
-          int arg3 = getStrictIntArg.apply(3);
+          args.expectSize(4);
+          int arg0 = args.getStrictInt(0);
+          int arg1 = args.getStrictInt(1);
+          int arg2 = args.getStrictInt(2);
+          int arg3 = args.getStrictInt(3);
           var listener =
               new ChunkLoadEventListener(
                   arg0,
@@ -3410,13 +3181,13 @@ public class Minescript {
 
       case "set_nickname":
         {
-          checkArgRange.accept(0, 1);
-          if (args.isEmpty()) {
+          args.expectSize(1);
+          if (args.get(0) == null) {
             logUserInfo(
                 "Chat nickname reset to default; was {}",
                 customNickname == null ? "default already" : quoteString(customNickname));
             customNickname = null;
-          } else if (args.size() == 1) {
+          } else {
             String arg = args.get(0).toString();
             if (!arg.contains("%s")) {
               throw new IllegalArgumentException(
@@ -3431,7 +3202,7 @@ public class Minescript {
 
       case "player_hand_items":
         {
-          checkArgCount.accept(0);
+          args.expectSize(0);
           var result = new JsonArray();
           for (var itemStack : player.getHandSlots()) {
             result.add(itemStackToJsonElement(itemStack, OptionalInt.empty(), false));
@@ -3441,7 +3212,7 @@ public class Minescript {
 
       case "player_inventory":
         {
-          checkArgCount.accept(0);
+          args.expectSize(0);
           var inventory = player.getInventory();
           var result = new JsonArray();
           int selectedSlot = inventory.selected;
@@ -3456,8 +3227,8 @@ public class Minescript {
 
       case "player_inventory_slot_to_hotbar":
         {
-          checkArgCount.accept(1);
-          int slot = getStrictIntArg.apply(0);
+          args.expectSize(1);
+          int slot = args.getStrictInt(0);
           var inventory = player.getInventory();
           var connection = minecraft.getConnection();
           connection.send(new ServerboundPickItemPacket(slot));
@@ -3466,8 +3237,8 @@ public class Minescript {
 
       case "player_inventory_select_slot":
         {
-          checkArgCount.accept(1);
-          int slot = getStrictIntArg.apply(0);
+          args.expectSize(1);
+          int slot = args.getStrictInt(0);
           var inventory = player.getInventory();
           var previouslySelectedSlot = inventory.selected;
           inventory.selected = slot;
@@ -3512,7 +3283,7 @@ public class Minescript {
 
       case "player_orientation":
         {
-          checkArgCount.accept(0);
+          args.expectSize(0);
           var result = new JsonArray();
           result.add(player.getYRot());
           result.add(player.getXRot());
@@ -3521,9 +3292,9 @@ public class Minescript {
 
       case "player_set_orientation":
         {
-          checkArgCount.accept(2);
-          Double yaw = getDoubleArg.apply(0);
-          Double pitch = getDoubleArg.apply(1);
+          args.expectSize(2);
+          Double yaw = args.getDouble(0);
+          Double pitch = args.getDouble(1);
           player.setYRot(yaw.floatValue() % 360.0f);
           player.setXRot(pitch.floatValue() % 360.0f);
           return OPTIONAL_JSON_TRUE;
@@ -3532,8 +3303,8 @@ public class Minescript {
       case "player_get_targeted_block":
         {
           // See minecraft.client.gui.hud.DebugHud for implementation of F3 debug screen.
-          checkArgCount.accept(1);
-          double maxDistance = getDoubleArg.apply(0);
+          args.expectSize(1);
+          double maxDistance = args.getDouble(0);
           var entity = minecraft.getCameraEntity();
           var blockHit = entity.pick(maxDistance, 0.0f, false);
           if (blockHit.getType() == HitResult.Type.BLOCK) {
@@ -3569,20 +3340,21 @@ public class Minescript {
 
       case "players":
         {
-          checkArgCount.accept(1);
-          boolean nbt = getBooleanArg.apply(0);
+          args.expectSize(1);
+          boolean nbt = args.getBoolean(0);
           return Optional.of(entitiesToJsonArray(world.players(), nbt));
         }
 
       case "entities":
         {
-          checkArgCount.accept(1);
-          boolean nbt = getBooleanArg.apply(0);
+          args.expectSize(1);
+          boolean nbt = args.getBoolean(0);
           return Optional.of(entitiesToJsonArray(world.entitiesForRendering(), nbt));
         }
 
       case "world_properties":
         {
+          args.expectSize(0);
           var levelProperties = world.getLevelData();
           var difficulty = levelProperties.getDifficulty();
           var serverData = minecraft.getCurrentServer();
@@ -3608,15 +3380,15 @@ public class Minescript {
 
       case "log":
         {
-          checkArgCount.accept(1);
+          args.expectSize(1);
           LOGGER.info(args.get(0).toString());
           return OPTIONAL_JSON_TRUE;
         }
 
       case "screenshot":
         {
-          checkArgRange.accept(0, 1);
-          String filename = args.isEmpty() ? null : getStringArg.apply(0);
+          args.expectSize(1);
+          String filename = args.get(0) == null ? null : args.getString(0);
           Screenshot.grab(
               minecraft.gameDirectory,
               filename,
@@ -3631,24 +3403,23 @@ public class Minescript {
           //    (pos1: BlockPos, pos2: BlockPos,
           //     rotation: Rotation = None, offset: BlockPos = None,
           //     comments: Dict[str, str] = {}, safety_limit: bool = True) -> int
-          checkArgCount.accept(6);
+          args.expectSize(6);
 
-          var pos1 = getSizedIntListArg.apply(0, 3);
-          var pos2 = getSizedIntListArg.apply(1, 3);
+          var pos1 = args.getIntListWithSize(0, 3);
+          var pos2 = args.getIntListWithSize(1, 3);
 
           int[] rotation = null;
           if (args.get(2) != null) {
-            rotation =
-                getSizedIntListArg.apply(2, 9).stream().mapToInt(Integer::intValue).toArray();
+            rotation = args.getIntListWithSize(2, 9).stream().mapToInt(Integer::intValue).toArray();
           }
 
           int[] offset = null;
           if (args.get(3) != null) {
-            offset = getSizedIntListArg.apply(3, 3).stream().mapToInt(Integer::intValue).toArray();
+            offset = args.getIntListWithSize(3, 3).stream().mapToInt(Integer::intValue).toArray();
           }
 
-          var comments = getStringMapArg.apply(4);
-          boolean safetyLimit = getBooleanArg.apply(5);
+          var comments = args.getConvertibleStringMap(4);
+          boolean safetyLimit = args.getBoolean(5);
 
           var blockpacker = new BlockPacker();
           readBlocks(
@@ -3670,8 +3441,8 @@ public class Minescript {
         {
           // Python function signature:
           //    (filename: str) -> int
-          checkArgCount.accept(1);
-          String blockpackFilename = getStringArg.apply(0);
+          args.expectSize(1);
+          String blockpackFilename = args.getString(0);
           var blockpack = BlockPack.readZipFile(blockpackFilename);
           int key = job.blockpacks.retain(blockpack);
           return Optional.of(new JsonPrimitive(key));
@@ -3681,8 +3452,8 @@ public class Minescript {
         {
           // Python function signature:
           //    (base64_data: str) -> int
-          checkArgCount.accept(1);
-          String base64Data = getStringArg.apply(0);
+          args.expectSize(1);
+          String base64Data = args.getString(0);
           var blockpack = BlockPack.fromBase64EncodedString(base64Data);
           int key = job.blockpacks.retain(blockpack);
           return Optional.of(new JsonPrimitive(key));
@@ -3692,8 +3463,8 @@ public class Minescript {
         {
           // Python function signature:
           //    (blockpack_id) -> Tuple[Tuple[int, int, int], Tuple[int, int, int]]
-          checkArgCount.accept(1);
-          int blockpackId = getStrictIntArg.apply(0);
+          args.expectSize(1);
+          int blockpackId = args.getStrictInt(0);
           var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
             throw new IllegalStateException(
@@ -3722,8 +3493,8 @@ public class Minescript {
         {
           // Python function signature:
           //    (blockpack_id) -> Dict[str, str]
-          checkArgCount.accept(1);
-          int blockpackId = getStrictIntArg.apply(0);
+          args.expectSize(1);
+          int blockpackId = args.getStrictInt(0);
           var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
             throw new IllegalStateException(
@@ -3736,19 +3507,18 @@ public class Minescript {
         {
           // Python function signature:
           //    (blockpack_id: int, rotation: Rotation = None, offset: BlockPos = None) -> bool
-          checkArgCount.accept(3);
+          args.expectSize(3);
 
-          int blockpackId = getStrictIntArg.apply(0);
+          int blockpackId = args.getStrictInt(0);
 
           int[] rotation = null;
           if (args.get(1) != null) {
-            rotation =
-                getSizedIntListArg.apply(1, 9).stream().mapToInt(Integer::intValue).toArray();
+            rotation = args.getIntListWithSize(1, 9).stream().mapToInt(Integer::intValue).toArray();
           }
 
           int[] offset = null;
           if (args.get(2) != null) {
-            offset = getSizedIntListArg.apply(2, 3).stream().mapToInt(Integer::intValue).toArray();
+            offset = args.getIntListWithSize(2, 3).stream().mapToInt(Integer::intValue).toArray();
           }
 
           var blockpack = job.blockpacks.getById(blockpackId);
@@ -3767,9 +3537,9 @@ public class Minescript {
         {
           // Python function signature:
           //    (blockpack_id: int, filename: str) -> bool
-          checkArgCount.accept(2);
-          int blockpackId = getStrictIntArg.apply(0);
-          String blockpackFilename = getStringArg.apply(1);
+          args.expectSize(2);
+          int blockpackId = args.getStrictInt(0);
+          String blockpackFilename = args.getString(1);
 
           var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
@@ -3787,8 +3557,8 @@ public class Minescript {
         {
           // Python function signature:
           //    (blockpack_id: int) -> str
-          checkArgCount.accept(1);
-          int blockpackId = getStrictIntArg.apply(0);
+          args.expectSize(1);
+          int blockpackId = args.getStrictInt(0);
           var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
             throw new IllegalStateException(
@@ -3803,8 +3573,8 @@ public class Minescript {
         {
           // Python function signature:
           //    (blockpack_id: int) -> bool
-          checkArgCount.accept(1);
-          int blockpackId = getStrictIntArg.apply(0);
+          args.expectSize(1);
+          int blockpackId = args.getStrictInt(0);
           var blockpack = job.blockpacks.releaseById(blockpackId);
           if (blockpack == null) {
             throw new IllegalStateException(
@@ -3824,12 +3594,12 @@ public class Minescript {
           // Python function signature:
           //    (blockpacker_id: int, base_pos: BlockPos,
           //     base64_setblocks: str, base64_fills: str, blocks: List[str]) -> bool
-          checkArgCount.accept(5);
-          int blockpackerId = getStrictIntArg.apply(0);
-          List<Integer> basePos = getSizedIntListArg.apply(1, 3);
-          String setblocksBase64 = getStringArg.apply(2);
-          String fillsBase64 = getStringArg.apply(3);
-          List<String> blocks = getStringListArg.apply(4);
+          args.expectSize(5);
+          int blockpackerId = args.getStrictInt(0);
+          List<Integer> basePos = args.getIntListWithSize(1, 3);
+          String setblocksBase64 = args.getString(2);
+          String fillsBase64 = args.getString(3);
+          List<String> blocks = args.getConvertibleStringList(4);
 
           var blockpacker = job.blockpackers.getById(blockpackerId);
           if (blockpacker == null) {
@@ -3847,20 +3617,19 @@ public class Minescript {
           // Python function signature:
           //    (blockpacker_id: int, blockpack_id: int,
           //     rotation: Rotation = None, offset: BlockPos = None) -> bool
-          checkArgCount.accept(4);
+          args.expectSize(4);
 
-          int blockpackerId = getStrictIntArg.apply(0);
-          int blockpackId = getStrictIntArg.apply(1);
+          int blockpackerId = args.getStrictInt(0);
+          int blockpackId = args.getStrictInt(1);
 
           int[] rotation = null;
           if (args.get(2) != null) {
-            rotation =
-                getSizedIntListArg.apply(2, 9).stream().mapToInt(Integer::intValue).toArray();
+            rotation = args.getIntListWithSize(2, 9).stream().mapToInt(Integer::intValue).toArray();
           }
 
           int[] offset = null;
           if (args.get(3) != null) {
-            offset = getSizedIntListArg.apply(3, 3).stream().mapToInt(Integer::intValue).toArray();
+            offset = args.getIntListWithSize(3, 3).stream().mapToInt(Integer::intValue).toArray();
           }
 
           var blockpacker = job.blockpackers.getById(blockpackerId);
@@ -3885,9 +3654,9 @@ public class Minescript {
         {
           // Python function signature:
           //    (blockpacker_id: int, comments: Dict[str, str]) -> int
-          checkArgCount.accept(2);
-          int blockpackerId = getStrictIntArg.apply(0);
-          var comments = getStringMapArg.apply(1);
+          args.expectSize(2);
+          int blockpackerId = args.getStrictInt(0);
+          var comments = args.getConvertibleStringMap(1);
 
           var blockpacker = job.blockpackers.getById(blockpackerId);
           if (blockpacker == null) {
@@ -3903,8 +3672,8 @@ public class Minescript {
         {
           // Python function signature:
           //    (blockpacker_id: int) -> bool
-          checkArgCount.accept(1);
-          int blockpackerId = getStrictIntArg.apply(0);
+          args.expectSize(1);
+          int blockpackerId = args.getStrictInt(0);
 
           var blockpacker = job.blockpackers.releaseById(blockpackerId);
           if (blockpacker == null) {
@@ -3945,24 +3714,18 @@ public class Minescript {
 
       case "container_click_slot": // Click on slot in container
         {
-          if (args.size() != 1) {
-            throw new IllegalArgumentException(
-                "Expected 1 param (slot: int) but got: " + argsString);
-          }
+          args.expectSize(1);
           Screen screen = minecraft.screen;
-          int slotId = getStrictIntValue(args.get(0)).getAsInt();
-          if (screen == null || !(screen instanceof AbstractContainerScreen<?>)) {
+          int slotId = args.getStrictInt(0);
+          if (screen == null || !(screen instanceof AbstractContainerScreen<?> handledScreen)) {
             return OPTIONAL_JSON_FALSE;
           }
-          AbstractContainerScreen handledScreen = (AbstractContainerScreen) screen;
           AbstractContainerMenu screenHandler = handledScreen.getMenu();
           if (slotId < 0 || slotId >= screenHandler.slots.size()) {
             throw new IndexOutOfBoundsException(
-                "Slot "
-                    + slotId
-                    + " outside expected range: [0, "
-                    + (screenHandler.slots.size() - 1)
-                    + "]");
+                String.format(
+                    "Slot %d outside expected range: [0, %d]",
+                    slotId, (screenHandler.slots.size() - 1)));
           }
           var slot = screenHandler.getSlot(slotId);
           FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
@@ -3980,27 +3743,16 @@ public class Minescript {
 
       case "player_look_at": // Look at x, y, z
         {
-          if (args.size() != 3) {
-            throw new IllegalArgumentException(
-                "Expected 3 params (x, y, z) but got: " + argsString);
-          }
-          if (!(args.get(0) instanceof Number)
-              || !(args.get(1) instanceof Number)
-              || !(args.get(2) instanceof Number)) {
-            throw new IllegalArgumentException(
-                "Expected 3 params (x, y, z) as numbers but got: " + argsString);
-          }
-          OptionalDouble value1 = getStrictDoubleValue(args.get(0));
-          OptionalDouble value2 = getStrictDoubleValue(args.get(1));
-          OptionalDouble value3 = getStrictDoubleValue(args.get(2));
-          player.lookAt(
-              EntityAnchorArgument.Anchor.EYES,
-              new Vec3(value1.getAsDouble(), value2.getAsDouble(), value3.getAsDouble()));
+          args.expectSize(3);
+          double x = args.getDouble(0);
+          double y = args.getDouble(1);
+          double z = args.getDouble(2);
+          player.lookAt(EntityAnchorArgument.Anchor.EYES, new Vec3(x, y, z));
           return OPTIONAL_JSON_TRUE;
         }
 
       case "flush":
-        checkArgCount.accept(0);
+        args.expectSize(0);
         return OPTIONAL_JSON_TRUE;
 
       case "cancelfn!":
@@ -4145,7 +3897,8 @@ public class Minescript {
                     String functionName = functionCall[1];
                     String argsString = functionCall.length == 3 ? functionCall[2] : "";
                     var gson = new Gson();
-                    List<?> args = gson.fromJson(argsString, ArrayList.class);
+                    List<?> rawArgs = gson.fromJson(argsString, ArrayList.class);
+                    var args = new ScriptFunctionArgList(functionName, rawArgs, argsString);
 
                     try {
                       Optional<JsonElement> response =
@@ -4158,7 +3911,7 @@ public class Minescript {
                             "(debug) Script function `{}`: {} / {}  ->  {}",
                             functionName,
                             quoteString(argsString),
-                            args,
+                            rawArgs,
                             response.map(JsonElement::toString).orElse("<no response>"));
                       }
                     } catch (Exception e) {
