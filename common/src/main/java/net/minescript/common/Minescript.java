@@ -2481,42 +2481,45 @@ public class Minescript {
     }
   }
 
+  private static JsonObject entityToJsonObject(Entity entity, boolean includeNbt) {
+    var minecraft = Minecraft.getInstance();
+    var jsonEntity = new JsonObject();
+    jsonEntity.addProperty("name", entity.getName().getString());
+    jsonEntity.addProperty("type", entity.getType().toString());
+    if (entity instanceof LivingEntity livingEntity) {
+      jsonEntity.addProperty("health", livingEntity.getHealth());
+    }
+    if (entity == minecraft.player) {
+      jsonEntity.addProperty("local", "true");
+    }
+    var position = new JsonArray();
+    position.add(entity.getX());
+    position.add(entity.getY());
+    position.add(entity.getZ());
+    jsonEntity.add("position", position);
+
+    jsonEntity.addProperty("yaw", entity.getYRot());
+    jsonEntity.addProperty("pitch", entity.getXRot());
+
+    var v = entity.getDeltaMovement();
+    var velocity = new JsonArray();
+    velocity.add(v.x);
+    velocity.add(v.y);
+    velocity.add(v.z);
+    jsonEntity.add("velocity", velocity);
+
+    if (includeNbt) {
+      var nbt = new CompoundTag();
+      jsonEntity.addProperty("nbt", entity.saveWithoutId(nbt).toString());
+    }
+    return jsonEntity;
+  }
+
   private static JsonArray entitiesToJsonArray(
       Iterable<? extends Entity> entities, boolean includeNbt) {
-    var minecraft = Minecraft.getInstance();
-    var player = minecraft.player;
     var result = new JsonArray();
     for (var entity : entities) {
-      var jsonEntity = new JsonObject();
-      jsonEntity.addProperty("name", entity.getName().getString());
-      jsonEntity.addProperty("type", entity.getType().toString());
-      if (entity instanceof LivingEntity livingEntity) {
-        jsonEntity.addProperty("health", livingEntity.getHealth());
-      }
-      if (entity == player) {
-        jsonEntity.addProperty("local", "true");
-      }
-      var position = new JsonArray();
-      position.add(entity.getX());
-      position.add(entity.getY());
-      position.add(entity.getZ());
-      jsonEntity.add("position", position);
-
-      jsonEntity.addProperty("yaw", entity.getYRot());
-      jsonEntity.addProperty("pitch", entity.getXRot());
-
-      var v = entity.getDeltaMovement();
-      var velocity = new JsonArray();
-      velocity.add(v.x);
-      velocity.add(v.y);
-      velocity.add(v.z);
-      jsonEntity.add("velocity", velocity);
-
-      if (includeNbt) {
-        var nbt = new CompoundTag();
-        jsonEntity.addProperty("nbt", entity.saveWithoutId(nbt).toString());
-      }
-      result.add(jsonEntity);
+      result.add(entityToJsonObject(entity, includeNbt));
     }
     return result;
   }
