@@ -1196,7 +1196,9 @@ public class Minescript {
         var response = new JsonObject();
         response.addProperty("fcid", functionCallId);
         response.addProperty("conn", "close");
-        response.add("except", GSON.toJsonTree(exception));
+        var json = GSON.toJsonTree(exception);
+        LOGGER.warn("Translating Java exception as JSON: {}", json);
+        response.add("except", json);
 
         stdinWriter.write(GSON.toJson(response));
         stdinWriter.newLine();
@@ -2800,7 +2802,7 @@ public class Minescript {
           }
           chatInterceptor = null;
           logUserInfo("Chat interceptor disabled for job: {}", job.jobSummary());
-          return Optional.empty();
+          return OPTIONAL_JSON_TRUE;
         }
 
       case "await_loaded_region":
