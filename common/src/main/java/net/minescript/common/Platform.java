@@ -3,6 +3,4 @@
 
 package net.minescript.common;
 
-public interface Platform {
-  String getChatScreenInputFieldName();
-}
+public interface Platform {}

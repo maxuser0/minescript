@@ -5,9 +5,4 @@ package net.minescript.forge;
 
 import net.minescript.common.Platform;
 
-class ForgePlatform implements Platform {
-  @Override
-  public String getChatScreenInputFieldName() {
-    return "f_95573_";
-  }
-}
+class ForgePlatform implements Platform {}

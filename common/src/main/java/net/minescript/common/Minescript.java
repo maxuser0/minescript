@@ -28,7 +28,6 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -1882,43 +1881,6 @@ public class Minescript {
 
   private static List<String> commandSuggestions = new ArrayList<>();
 
-  private static boolean loggedFieldNameFallback = false;
-
-  private static Object getField(
-      Object object, Class<?> klass, String unobfuscatedName, String obfuscatedName)
-      throws IllegalAccessException, NoSuchFieldException, SecurityException {
-    Field field;
-    try {
-      field = klass.getDeclaredField(obfuscatedName);
-    } catch (NoSuchFieldException e) {
-      if (!loggedFieldNameFallback) {
-        LOGGER.info(
-            "Cannot find field with obfuscated name \"{}\", falling back to"
-                + " unobfuscated name \"{}\"",
-            obfuscatedName,
-            unobfuscatedName);
-        loggedFieldNameFallback = true;
-      }
-      try {
-        field = klass.getDeclaredField(unobfuscatedName);
-      } catch (NoSuchFieldException e2) {
-        logUserError(
-            "Internal Minescript error: cannot find field {}/{} in class {}. See log file for"
-                + " details.",
-            unobfuscatedName,
-            obfuscatedName,
-            klass.getSimpleName());
-        LOGGER.info("Declared fields of {}:", klass.getName());
-        for (Field f : klass.getDeclaredFields()) {
-          LOGGER.info("  {}", f);
-        }
-        throw e2;
-      }
-    }
-    field.setAccessible(true);
-    return field.get(object);
-  }
-
   private static class MinescriptCommandHistory {
     private final List<String> commandList = new ArrayList<>();
     private int commandPosition;
@@ -2016,119 +1978,128 @@ public class Minescript {
     }
   }
 
+  private static EditBox chatEditBox = null;
+  private static boolean reportedChatEditBoxError = false;
+
+  public static void setChatScreenInput(EditBox input) {
+    chatEditBox = input;
+  }
+
   private static MinescriptCommandHistory minescriptCommandHistory = new MinescriptCommandHistory();
   private static boolean incrementalCommandSuggestions = false;
 
   public static boolean onKeyboardKeyPressed(Screen screen, int key) {
     boolean cancel = false;
     if (screen != null && screen instanceof ChatScreen) {
-      var scriptCommandNames = getScriptCommandNamesWithBuiltins();
-      try {
-        var chatEditBox =
-            (EditBox)
-                getField(screen, ChatScreen.class, "input", platform.getChatScreenInputFieldName());
-        String value = chatEditBox.getValue();
-        if (!value.startsWith("\\")) {
-          minescriptCommandHistory.moveToEnd();
-          if (key == ENTER_KEY
-              && (customNickname != null || chatInterceptor != null)
-              && !value.startsWith("/")) {
-            cancel = true;
-            chatEditBox.setValue("");
-            onClientChat(value);
-            screen.onClose();
-          }
-          return cancel;
+      if (chatEditBox == null) {
+        if (!reportedChatEditBoxError) {
+          reportedChatEditBoxError = true;
+          logUserError(
+              "Minescript internal error: Expected ChatScreen.input to be initialized by"
+                  + " ChatScreen.init(), but it's null instead. Minescript commands sent through"
+                  + " chat will not be interpreted as commands, and sent as normal chats instead.");
         }
-        if (key == UP_ARROW_KEY) {
-          Optional<String> previousCommand = minescriptCommandHistory.moveBackwardAndGet(value);
-          if (previousCommand.isPresent()) {
-            value = previousCommand.get();
-            chatEditBox.setValue(value);
-            chatEditBox.setCursorPosition(value.length());
-          }
-          cancel = true;
-        } else if (key == DOWN_ARROW_KEY) {
-          Optional<String> nextCommand = minescriptCommandHistory.moveForwardAndGet();
-          if (nextCommand.isPresent()) {
-            value = nextCommand.get();
-            chatEditBox.setValue(value);
-            chatEditBox.setCursorPosition(value.length());
-          }
-          cancel = true;
-        } else if (key == ENTER_KEY) {
-          cancel = true;
-          String text = chatEditBox.getValue();
-          chatEditBox.setValue("");
-          onClientChat(text);
-          screen.onClose();
-          return cancel;
-        } else {
-          minescriptCommandHistory.moveToEnd();
-        }
-        int cursorPos = chatEditBox.getCursorPosition();
-        if (key >= 32 && key < 127) {
-          // TODO(maxuser): use chatEditBox.setSuggestion(String) to set suggestion?
-          // TODO(maxuser): detect upper vs lower case properly
-          String extraChar = Character.toString((char) key).toLowerCase();
-          value = insertSubstring(value, cursorPos, extraChar);
-        } else if (key == BACKSPACE_KEY) {
-          value = eraseChar(value, cursorPos);
-        }
-        if (value.stripTrailing().length() > 1) {
-          String command = value.substring(1).split("\\s+")[0];
-          if (key == TAB_KEY && !commandSuggestions.isEmpty()) {
-            if (cursorPos == command.length() + 1) {
-              // Insert the remainder of the completed command.
-              String maybeTrailingSpace =
-                  ((cursorPos < value.length() && value.charAt(cursorPos) == ' ')
-                          || commandSuggestions.size() > 1)
-                      ? ""
-                      : " ";
-              chatEditBox.insertText(
-                  longestCommonPrefix(commandSuggestions).substring(command.length())
-                      + maybeTrailingSpace);
-              if (commandSuggestions.size() > 1) {
-                chatEditBox.setTextColor(0x5ee8e8); // cyan for partial completion
-              } else {
-                chatEditBox.setTextColor(0x5ee85e); // green for full completion
-              }
-              commandSuggestions = new ArrayList<>();
-              return cancel;
-            }
-          }
-          if (scriptCommandNames.contains(command)) {
-            chatEditBox.setTextColor(0x5ee85e); // green
-            commandSuggestions = new ArrayList<>();
-          } else {
-            List<String> newCommandSuggestions = new ArrayList<>();
-            if (!command.isEmpty()) {
-              for (String scriptName : scriptCommandNames) {
-                if (scriptName.startsWith(command)) {
-                  newCommandSuggestions.add(scriptName);
-                }
-              }
-            }
-            if (!newCommandSuggestions.isEmpty()) {
-              if (!newCommandSuggestions.equals(commandSuggestions)) {
-                if (key == TAB_KEY || incrementalCommandSuggestions) {
-                  systemCommandQueue.add(formatAsJsonText("completions:", "aqua"));
-                  for (String suggestion : newCommandSuggestions) {
-                    systemCommandQueue.add(formatAsJsonText("  " + suggestion, "aqua"));
-                  }
-                }
-                commandSuggestions = newCommandSuggestions;
-              }
-              chatEditBox.setTextColor(0x5ee8e8); // cyan
-            } else {
-              chatEditBox.setTextColor(0xe85e5e); // red
-              commandSuggestions = new ArrayList<>();
-            }
-          }
-        }
-      } catch (IllegalAccessException | NoSuchFieldException | SecurityException e) {
-        logException(e);
         return cancel;
+      }
+      var scriptCommandNames = getScriptCommandNamesWithBuiltins();
+      String value = chatEditBox.getValue();
+      if (!value.startsWith("\\")) {
+        minescriptCommandHistory.moveToEnd();
+        if (key == ENTER_KEY
+            && (customNickname != null || chatInterceptor != null)
+            && !value.startsWith("/")) {
+          cancel = true;
+          chatEditBox.setValue("");
+          onClientChat(value);
+          screen.onClose();
+        }
+        return cancel;
+      }
+      if (key == UP_ARROW_KEY) {
+        Optional<String> previousCommand = minescriptCommandHistory.moveBackwardAndGet(value);
+        if (previousCommand.isPresent()) {
+          value = previousCommand.get();
+          chatEditBox.setValue(value);
+          chatEditBox.setCursorPosition(value.length());
+        }
+        cancel = true;
+      } else if (key == DOWN_ARROW_KEY) {
+        Optional<String> nextCommand = minescriptCommandHistory.moveForwardAndGet();
+        if (nextCommand.isPresent()) {
+          value = nextCommand.get();
+          chatEditBox.setValue(value);
+          chatEditBox.setCursorPosition(value.length());
+        }
+        cancel = true;
+      } else if (key == ENTER_KEY) {
+        cancel = true;
+        String text = chatEditBox.getValue();
+        chatEditBox.setValue("");
+        onClientChat(text);
+        screen.onClose();
+        return cancel;
+      } else {
+        minescriptCommandHistory.moveToEnd();
+      }
+      int cursorPos = chatEditBox.getCursorPosition();
+      if (key >= 32 && key < 127) {
+        // TODO(maxuser): use chatEditBox.setSuggestion(String) to set suggestion?
+        // TODO(maxuser): detect upper vs lower case properly
+        String extraChar = Character.toString((char) key).toLowerCase();
+        value = insertSubstring(value, cursorPos, extraChar);
+      } else if (key == BACKSPACE_KEY) {
+        value = eraseChar(value, cursorPos);
+      }
+      if (value.stripTrailing().length() > 1) {
+        String command = value.substring(1).split("\\s+")[0];
+        if (key == TAB_KEY && !commandSuggestions.isEmpty()) {
+          if (cursorPos == command.length() + 1) {
+            // Insert the remainder of the completed command.
+            String maybeTrailingSpace =
+                ((cursorPos < value.length() && value.charAt(cursorPos) == ' ')
+                        || commandSuggestions.size() > 1)
+                    ? ""
+                    : " ";
+            chatEditBox.insertText(
+                longestCommonPrefix(commandSuggestions).substring(command.length())
+                    + maybeTrailingSpace);
+            if (commandSuggestions.size() > 1) {
+              chatEditBox.setTextColor(0x5ee8e8); // cyan for partial completion
+            } else {
+              chatEditBox.setTextColor(0x5ee85e); // green for full completion
+            }
+            commandSuggestions = new ArrayList<>();
+            return cancel;
+          }
+        }
+        if (scriptCommandNames.contains(command)) {
+          chatEditBox.setTextColor(0x5ee85e); // green
+          commandSuggestions = new ArrayList<>();
+        } else {
+          List<String> newCommandSuggestions = new ArrayList<>();
+          if (!command.isEmpty()) {
+            for (String scriptName : scriptCommandNames) {
+              if (scriptName.startsWith(command)) {
+                newCommandSuggestions.add(scriptName);
+              }
+            }
+          }
+          if (!newCommandSuggestions.isEmpty()) {
+            if (!newCommandSuggestions.equals(commandSuggestions)) {
+              if (key == TAB_KEY || incrementalCommandSuggestions) {
+                systemCommandQueue.add(formatAsJsonText("completions:", "aqua"));
+                for (String suggestion : newCommandSuggestions) {
+                  systemCommandQueue.add(formatAsJsonText("  " + suggestion, "aqua"));
+                }
+              }
+              commandSuggestions = newCommandSuggestions;
+            }
+            chatEditBox.setTextColor(0x5ee8e8); // cyan
+          } else {
+            chatEditBox.setTextColor(0xe85e5e); // red
+            commandSuggestions = new ArrayList<>();
+          }
+        }
       }
     }
     return cancel;

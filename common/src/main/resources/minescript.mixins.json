@@ -5,6 +5,7 @@
   "refmap": "minescript.refmap.json",
   "mixins": [
     "ChatComponentMixin",
+    "ChatScreenMixin",
     "MouseHandlerMixin"
   ],
   "client": [

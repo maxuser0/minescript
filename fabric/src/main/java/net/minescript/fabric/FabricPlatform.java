@@ -5,9 +5,4 @@ package net.minescript.fabric;
 
 import net.minescript.common.Platform;
 
-class FabricPlatform implements Platform {
-  @Override
-  public String getChatScreenInputFieldName() {
-    return "field_2382";
-  }
-}
+class FabricPlatform implements Platform {}
