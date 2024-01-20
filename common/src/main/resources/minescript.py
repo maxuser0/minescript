@@ -810,6 +810,88 @@ def unregister_key_event_listener():
   await_script_function("unregister_key_event_listener", ())
 
 
+class MouseEventListener(EventRegistrationHandler):
+  """Listener for mouse click events.
+
+  Only one `MouseEventListener` can be instantiated at a time within a job.
+
+  Inherits `register()` and `unregister()` methods from the base class,
+  `EventRegistrationHandler`. These methods both return `bool` indicating
+  whether the operation succeeded. Calling `register()` on a listener that's
+  already registered returns `False`, and similarly for calling `unregister()`
+  on a listener that's already unregistered.
+
+  Implements context management so that it can be used with a `with` expression
+  to automatically unregister the listener at the end of the block, e.g.
+
+  ```
+  events = []
+  with MouseEventListener() as listener:
+    # Listen for next 3 mouse events:
+    for i in range(3):
+      events.append(listener.get())
+
+  # listener no longer registered here...
+  ```
+
+  Since: v4.0
+  """
+
+  def __init__(self, register=True):
+    """Creates a `MouseEventListener` for listening to mouseboard events.
+
+    Args:
+      register: if `True`, register the listener upon construction
+    """
+    super().__init__(register, register_mouse_event_listener, unregister_mouse_event_listener)
+
+  def get(self, block: bool = True, timeout: float = None) -> Dict[str, Any]:
+    """Gets the next mouse event in the queue.
+
+    Args:
+      block: if `True`, block until an event fires
+      timeout: timeout in seconds to wait for an event if `block` is `True`
+
+    Returns:
+      event dict: `{"button": int, "action": int, "modifiers": int,
+      "timeMillis": int, "screen": str}` where `action` is 0 for mouse up and 1
+      for mouse down.
+
+    Raises:
+      `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
+      queue is empty.
+    """
+    return super().get(block, timeout)
+
+
+def register_mouse_event_listener(
+    listener: Callable[[str], None], exception_handler: ExceptionHandler = None):
+  """Registers a listener for receiving mouse events. One listener allowed per job.
+
+  For a more user-friendly API, use `MouseEventListener` instead. (__internal__)
+
+  Args:
+    listener: callable that repeatedly accepts a string representing mouse events
+    exception_handler: callable for handling an `Exception` thrown from Java (optional)
+
+  Since: v4.0
+  """
+  send_script_function_request("register_mouse_event_listener", (), listener, exception_handler)
+
+
+def unregister_mouse_event_listener():
+  """Unregisters a mouse event listener, if any, for the currently running job.
+
+  For a more user-friendly API, use `MouseEventListener` instead. (__internal__)
+
+  Returns:
+    `True` if successfully unregistered a listener.
+
+  Since: v4.0
+  """
+  await_script_function("unregister_mouse_event_listener", ())
+
+
 class ChatEventListener(EventRegistrationHandler):
   """Listener for chat message events.
 

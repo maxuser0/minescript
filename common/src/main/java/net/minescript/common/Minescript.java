@@ -1969,7 +1969,6 @@ public class Minescript {
   }
 
   public static void onKeyboardEvent(int key, int scanCode, int action, int modifiers) {
-    var minecraft = Minecraft.getInstance();
     var iter = keyEventListeners.entrySet().iterator();
     JsonObject json = null;
     while (iter.hasNext()) {
@@ -1986,6 +1985,31 @@ public class Minescript {
         json.addProperty("screen", screenName);
       }
       LOGGER.info("Forwarding key event to listener {}: {}", listener.getKey(), json);
+      if (!listener.getValue().respond(json, false)) {
+        iter.remove();
+      }
+    }
+  }
+
+  public static void onMouseClick(int button, int action, int modifiers, double x, double y) {
+    var minecraft = Minecraft.getInstance();
+    var iter = mouseEventListeners.entrySet().iterator();
+    JsonObject json = null;
+    while (iter.hasNext()) {
+      var listener = iter.next();
+      if (json == null) {
+        String screenName = getScreenName().orElse(null);
+        long timeMillis = System.currentTimeMillis();
+        json = new JsonObject();
+        json.addProperty("button", button);
+        json.addProperty("action", action);
+        json.addProperty("modifiers", modifiers);
+        json.addProperty("timeMillis", timeMillis);
+        json.addProperty("x", x);
+        json.addProperty("y", y);
+        json.addProperty("screen", screenName);
+      }
+      LOGGER.info("Forwarding mouse event to listener {}: {}", listener.getKey(), json);
       if (!listener.getValue().respond(json, false)) {
         iter.remove();
       }
@@ -2273,7 +2297,7 @@ public class Minescript {
   private static ServerBlockList serverBlockList = new ServerBlockList();
 
   private static Map<Integer, ScriptFunctionCall> keyEventListeners = new ConcurrentHashMap<>();
-
+  private static Map<Integer, ScriptFunctionCall> mouseEventListeners = new ConcurrentHashMap<>();
   private static Map<Integer, ScriptFunctionCall> clientChatReceivedEventListeners =
       new ConcurrentHashMap<>();
 
@@ -2739,6 +2763,7 @@ public class Minescript {
                     + job.jobSummary());
           }
           keyEventListeners.put(job.jobId(), new ScriptFunctionCall(job, funcCallId));
+          job.addAtExitHandler(() -> keyEventListeners.remove(job.jobId()));
           return Optional.empty();
         }
 
@@ -2755,6 +2780,32 @@ public class Minescript {
           return OPTIONAL_JSON_TRUE;
         }
 
+      case "register_mouse_event_listener":
+        {
+          args.expectSize(0);
+          if (mouseEventListeners.containsKey(job.jobId())) {
+            throw new IllegalStateException(
+                "Failed to create listener because a listener is already registered for job: "
+                    + job.jobSummary());
+          }
+          mouseEventListeners.put(job.jobId(), new ScriptFunctionCall(job, funcCallId));
+          job.addAtExitHandler(() -> mouseEventListeners.remove(job.jobId()));
+          return Optional.empty();
+        }
+
+      case "unregister_mouse_event_listener":
+        {
+          args.expectSize(0);
+          if (!mouseEventListeners.containsKey(job.jobId())) {
+            throw new IllegalStateException(
+                String.format(
+                    "`%s` has no listeners to unregister for job: %s",
+                    functionName, job.jobSummary()));
+          }
+          mouseEventListeners.remove(job.jobId());
+          return OPTIONAL_JSON_TRUE;
+        }
+
       case "register_chat_message_listener":
         {
           args.expectSize(0);
@@ -2765,6 +2816,7 @@ public class Minescript {
           }
           clientChatReceivedEventListeners.put(
               job.jobId(), new ScriptFunctionCall(job, funcCallId));
+          job.addAtExitHandler(() -> clientChatReceivedEventListeners.remove(job.jobId()));
           return Optional.empty();
         }
 
