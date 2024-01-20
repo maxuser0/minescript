@@ -854,8 +854,8 @@ class MouseEventListener(EventRegistrationHandler):
 
     Returns:
       event dict: `{"button": int, "action": int, "modifiers": int,
-      "timeMillis": int, "screen": str}` where `action` is 0 for mouse up and 1
-      for mouse down.
+      "timeMillis": int, "screen": str, "x": float, "y": float}` where `action`
+      is 0 for mouse up and 1 for mouse down.
 
     Raises:
       `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
