@@ -2521,55 +2521,20 @@ public class Minescript {
 
   private static boolean scriptFunctionDebugOutptut = false;
 
-  private static final Map<KeyMapping, InputConstants.Key> boundKeys = new ConcurrentHashMap<>();
+  // String key: KeyMapping.getName()
+  private static final Map<String, InputConstants.Key> keyBinds = new ConcurrentHashMap<>();
 
-  private static void lazyInitBoundKeys() {
-    // The map of bound keys must be initialized lazily because
-    // minecraft.options is still null at the time the mod is initialized.
-    if (!boundKeys.isEmpty()) {
-      return;
-    }
-
-    // TODO(maxuser): These default bindings do not track custom bindings. Use
-    // mixins to intercept KeyMapping constructor and setBoundKey method.
-    var minecraft = Minecraft.getInstance();
-    boundKeys.put(minecraft.options.keyUp, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_W));
-    boundKeys.put(
-        minecraft.options.keyDown, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_S));
-    boundKeys.put(
-        minecraft.options.keyLeft, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_A));
-    boundKeys.put(
-        minecraft.options.keyRight, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_D));
-    boundKeys.put(
-        minecraft.options.keyJump, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_SPACE));
-    boundKeys.put(
-        minecraft.options.keySprint,
-        InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_LEFT_CONTROL));
-    boundKeys.put(
-        minecraft.options.keyShift,
-        InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_LEFT_SHIFT));
-    boundKeys.put(
-        minecraft.options.keyPickItem,
-        InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_MIDDLE));
-    boundKeys.put(
-        minecraft.options.keyUse,
-        InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_RIGHT));
-    boundKeys.put(
-        minecraft.options.keyAttack,
-        InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_LEFT));
-    boundKeys.put(
-        minecraft.options.keySwapOffhand, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_F));
-    boundKeys.put(
-        minecraft.options.keyDrop, InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_Q));
+  public static void setKeyBind(String keyMappingName, InputConstants.Key key) {
+    LOGGER.info("Set key binding: {} -> {}", keyMappingName, key);
+    keyBinds.put(keyMappingName, key);
   }
 
   private static Optional<JsonElement> doPlayerAction(
-      String functionName, KeyMapping keyBinding, ScriptFunctionArgList args, String argsString) {
+      String functionName, KeyMapping keyMapping, ScriptFunctionArgList args, String argsString) {
     args.expectSize(1);
     boolean pressed = args.getBoolean(0);
 
-    lazyInitBoundKeys();
-    var key = boundKeys.get(keyBinding);
+    var key = keyBinds.get(keyMapping.getName());
     if (pressed) {
       KeyMapping.set(key, true);
       KeyMapping.click(key);

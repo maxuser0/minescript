@@ -6,6 +6,7 @@
   "mixins": [
     "ChatComponentMixin",
     "ChatScreenMixin",
+    "KeyMappingMixin",
     "MouseHandlerMixin"
   ],
   "client": [
