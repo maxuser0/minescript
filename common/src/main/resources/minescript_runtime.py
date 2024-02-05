@@ -146,6 +146,9 @@ class JavaException(Exception):
   desc: str
   stack: List[StackElement]
 
+  def __str__(self):
+    return self.desc
+
 
 def _ScriptServiceLoop():
   while True:

@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.Queue;
 import java.util.Set;
@@ -87,7 +88,6 @@ import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.lwjgl.glfw.GLFW;
 
 public class Minescript {
   private static final Logger LOGGER = LogManager.getLogger();
@@ -2481,6 +2481,7 @@ public class Minescript {
     var jsonEntity = new JsonObject();
     jsonEntity.addProperty("name", entity.getName().getString());
     jsonEntity.addProperty("type", entity.getType().toString());
+    jsonEntity.addProperty("uuid", entity.getUUID().toString());
     if (entity instanceof LivingEntity livingEntity) {
       jsonEntity.addProperty("health", livingEntity.getHealth());
     }
@@ -2512,11 +2513,11 @@ public class Minescript {
 
   private static JsonArray entitiesToJsonArray(
       Iterable<? extends Entity> entities, boolean includeNbt) {
-    var result = new JsonArray();
+    var jsonEntities = new JsonArray();
     for (var entity : entities) {
-      result.add(entityToJsonObject(entity, includeNbt));
+      jsonEntities.add(entityToJsonObject(entity, includeNbt));
     }
-    return result;
+    return jsonEntities;
   }
 
   private static boolean scriptFunctionDebugOutptut = false;
@@ -2542,14 +2543,6 @@ public class Minescript {
       KeyMapping.set(key, false);
     }
     return OPTIONAL_JSON_TRUE;
-  }
-
-  private static double computeDistance(
-      double x1, double y1, double z1, double x2, double y2, double z2) {
-    double dx = x1 - x2;
-    double dy = y1 - y2;
-    double dz = z1 - z2;
-    return Math.sqrt(dx * dx + dy * dy + dz * dz);
   }
 
   public static String getWorldName() {
@@ -2627,10 +2620,10 @@ public class Minescript {
           float yaw = player.getYRot();
           float pitch = player.getXRot();
           if (args.get(3) != null) {
-            yaw = args.getDouble(3).floatValue();
+            yaw = (float) args.getDouble(3);
           }
           if (args.get(4) != null) {
-            pitch = args.getDouble(4).floatValue();
+            pitch = (float) args.getDouble(4);
           }
           player.moveTo(x, y, z, yaw, pitch);
           return OPTIONAL_JSON_TRUE;
@@ -2968,7 +2961,7 @@ public class Minescript {
             var hitResult = (BlockHitResult) blockHit;
             var blockPos = hitResult.getBlockPos();
             double playerDistance =
-                computeDistance(
+                Math3d.computeDistance(
                     player.getX(),
                     player.getY(),
                     player.getZ(),
@@ -2997,16 +2990,69 @@ public class Minescript {
 
       case "players":
         {
-          args.expectSize(1);
+          args.expectArgs(
+              "nbt",
+              "uuid",
+              "name",
+              "position",
+              "offset",
+              "minDistance",
+              "maxDistance",
+              "sort",
+              "limit");
           boolean nbt = args.getBoolean(0);
-          return Optional.of(entitiesToJsonArray(world.players(), nbt));
+          Optional<String> uuid = args.getOptionalString(1);
+          Optional<String> name = args.getOptionalString(2);
+          Optional<String> type = Optional.empty();
+          Optional<List<Double>> position = args.getOptionalDoubleListWithSize(3, 3);
+          Optional<List<Double>> offset = args.getOptionalDoubleListWithSize(4, 3);
+          OptionalDouble minDistance = args.getOptionalDouble(5);
+          OptionalDouble maxDistance = args.getOptionalDouble(6);
+          Optional<EntitySelection.SortType> sort =
+              args.getOptionalString(7)
+                  .map(String::toUpperCase)
+                  .map(EntitySelection.SortType::valueOf);
+          OptionalInt limit = args.getOptionalStrictInt(8);
+          return Optional.of(
+              entitiesToJsonArray(
+                  new EntitySelection(
+                          uuid, name, type, position, offset, minDistance, maxDistance, sort, limit)
+                      .selectFrom(world.players()),
+                  nbt));
         }
 
       case "entities":
         {
-          args.expectSize(1);
+          args.expectArgs(
+              "nbt",
+              "uuid",
+              "name",
+              "type",
+              "position",
+              "offset",
+              "minDistance",
+              "maxDistance",
+              "sort",
+              "limit");
           boolean nbt = args.getBoolean(0);
-          return Optional.of(entitiesToJsonArray(world.entitiesForRendering(), nbt));
+          Optional<String> uuid = args.getOptionalString(1);
+          Optional<String> name = args.getOptionalString(2);
+          Optional<String> type = args.getOptionalString(3);
+          Optional<List<Double>> position = args.getOptionalDoubleListWithSize(4, 3);
+          Optional<List<Double>> offset = args.getOptionalDoubleListWithSize(5, 3);
+          OptionalDouble minDistance = args.getOptionalDouble(6);
+          OptionalDouble maxDistance = args.getOptionalDouble(7);
+          Optional<EntitySelection.SortType> sort =
+              args.getOptionalString(8)
+                  .map(String::toUpperCase)
+                  .map(EntitySelection.SortType::valueOf);
+          OptionalInt limit = args.getOptionalStrictInt(9);
+          return Optional.of(
+              entitiesToJsonArray(
+                  new EntitySelection(
+                          uuid, name, type, position, offset, minDistance, maxDistance, sort, limit)
+                      .selectFrom(world.entitiesForRendering()),
+                  nbt));
         }
 
       case "world_properties":

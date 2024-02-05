@@ -31,6 +31,10 @@ from minescript_runtime import (
 from typing import Any, List, Set, Dict, Tuple, Optional, Callable, Awaitable
 
 
+Vector3f = Tuple[float, float, float]
+"""Tuple representing `(x: float, y: float, z: float)` position or offset in 3D space."""
+
+
 def execute(command: str):
   """Executes the given command.
 
@@ -512,18 +516,34 @@ def player_health() -> float:
   return await_script_function("player_health", ())
 
 
-def players(*, nbt: bool = False):
+def players(
+    *, nbt: bool = False, uuid: str = None, name: str = None,
+    position: Vector3f = None, offset: Vector3f = None, minDistance: float = None,
+    maxDistance: float = None, sort: str = None, limit: int = None):
   """Gets a list of nearby players and their attributes.
 
   Args:
     nbt: if `True`, populate an `"nbt"` attribute for each returned player
+    uuid: regular expression for matching entities' UUIDs (optional)
+    name: regular expression for matching entities' names (optional)
+    position: position used with `offset`, `minDistance`, or `maxDistance` to define a
+        volume for filtering entities; default is the local player's position (optional)
+    offset: offset relative to `position` for selecting entities (optional)
+    minDistance: min distance relative to `position` for selecting entities (optional)
+    maxDistance: max distance relative to `position` for selecting entities (optional)
+    sort: one of "nearest", "furthest", "random", or "arbitrary" (optional)
+    limit: maximum number of entities to return (optional)
 
   Returns:
     List of players where each player is represented as a dict containing:
-    `"name": str, "health": float, "type": str,
+    `"name": str, "health": float, "type": str, "uuid": str,
     "position": [float, float, float], "yaw": float, "pitch": float,
     "velocity": [float, float, float]`. The local player has the attribute
     `"local": True`. The`"nbt"` attribute is present if `nbt` arg is `True`.
+
+  Update in v4.0:
+    Added args: uuid, name, type, position, offset, minDistance, maxDistance, sort, limit.
+    Added `"uuid"` attribute to output.
 
   Update in v3.1:
     Added `"health"` and `"local"` attributes, and `nbt` arg to output `"nbt"`
@@ -531,30 +551,49 @@ def players(*, nbt: bool = False):
 
   Since: v2.1
   """
-  return await_script_function("players", (nbt,))
+  return await_script_function("players",
+      (nbt, uuid, name, position, offset, minDistance, maxDistance, sort, limit));
 
 
-def entities(*, nbt: bool = False):
+def entities(
+    *, nbt: bool = False, uuid: str = None, name: str = None, type: str = None,
+    position: Vector3f = None, offset: Vector3f = None, minDistance: float = None,
+    maxDistance: float = None, sort: str = None, limit: int = None):
   """Gets a list of nearby entities and their attributes.
 
   Args:
-    nbt: if `True`, populate an `"nbt"` attribute for each returned entity
+    nbt: if `True`, populate an `"nbt"` attribute for each returned entity (optional)
+    uuid: regular expression for matching entities' UUIDs (optional)
+    name: regular expression for matching entities' names (optional)
+    type: regular expression for matching entities' types (optional)
+    position: position used with `offset`, `minDistance`, or `maxDistance` to define a
+        volume for filtering entities; default is the local player's position (optional)
+    offset: offset relative to `position` for selecting entities (optional)
+    minDistance: min distance relative to `position` for selecting entities (optional)
+    maxDistance: max distance relative to `position` for selecting entities (optional)
+    sort: one of "nearest", "furthest", "random", or "arbitrary" (optional)
+    limit: maximum number of entities to return (optional)
 
   Returns:
     List of entities where each entity is represented as a dict containing:
-    `"name": str, "health": float (living entities only), "type": str,
+    `"name": str, "health": float (living entities only), "type": str, "uuid": str,
     "position": [float, float, float], "yaw": float, "pitch": float,
     "velocity": [float, float, float]`. Living entities have
     `"health": float` and the local player has `"local": True`. The`"nbt"`
     attribute is present if `nbt` arg is `True`.
 
+  Update in v4.0:
+    Added args: uuid, name, type, position, offset, minDistance, maxDistance, sort, limit
+    Added `"uuid"` attribute to output.
+
   Update in v3.1:
     Added `"health"` and `"local"` attributes, and `nbt` arg to output `"nbt"`
     attribute.
 
   Since: v2.1
   """
-  return await_script_function("entities", (nbt,))
+  return await_script_function("entities",
+      (nbt, uuid, name, type, position, offset, minDistance, maxDistance, sort, limit));
 
 
 def world_properties() -> Dict[str, Any]:
