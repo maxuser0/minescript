@@ -518,19 +518,19 @@ def player_health() -> float:
 
 def players(
     *, nbt: bool = False, uuid: str = None, name: str = None,
-    position: Vector3f = None, offset: Vector3f = None, minDistance: float = None,
-    maxDistance: float = None, sort: str = None, limit: int = None):
+    position: Vector3f = None, offset: Vector3f = None, min_distance: float = None,
+    max_distance: float = None, sort: str = None, limit: int = None):
   """Gets a list of nearby players and their attributes.
 
   Args:
     nbt: if `True`, populate an `"nbt"` attribute for each returned player
     uuid: regular expression for matching entities' UUIDs (optional)
     name: regular expression for matching entities' names (optional)
-    position: position used with `offset`, `minDistance`, or `maxDistance` to define a
+    position: position used with `offset`, `min_distance`, or `max_distance` to define a
         volume for filtering entities; default is the local player's position (optional)
     offset: offset relative to `position` for selecting entities (optional)
-    minDistance: min distance relative to `position` for selecting entities (optional)
-    maxDistance: max distance relative to `position` for selecting entities (optional)
+    min_distance: min distance relative to `position` for selecting entities (optional)
+    max_distance: max distance relative to `position` for selecting entities (optional)
     sort: one of "nearest", "furthest", "random", or "arbitrary" (optional)
     limit: maximum number of entities to return (optional)
 
@@ -542,7 +542,7 @@ def players(
     `"local": True`. The`"nbt"` attribute is present if `nbt` arg is `True`.
 
   Update in v4.0:
-    Added args: uuid, name, type, position, offset, minDistance, maxDistance, sort, limit.
+    Added args: uuid, name, type, position, offset, min_distance, max_distance, sort, limit.
     Added `"uuid"` attribute to output.
 
   Update in v3.1:
@@ -552,13 +552,13 @@ def players(
   Since: v2.1
   """
   return await_script_function("players",
-      (nbt, uuid, name, position, offset, minDistance, maxDistance, sort, limit));
+      (nbt, uuid, name, position, offset, min_distance, max_distance, sort, limit));
 
 
 def entities(
     *, nbt: bool = False, uuid: str = None, name: str = None, type: str = None,
-    position: Vector3f = None, offset: Vector3f = None, minDistance: float = None,
-    maxDistance: float = None, sort: str = None, limit: int = None):
+    position: Vector3f = None, offset: Vector3f = None, min_distance: float = None,
+    max_distance: float = None, sort: str = None, limit: int = None):
   """Gets a list of nearby entities and their attributes.
 
   Args:
@@ -566,11 +566,11 @@ def entities(
     uuid: regular expression for matching entities' UUIDs (optional)
     name: regular expression for matching entities' names (optional)
     type: regular expression for matching entities' types (optional)
-    position: position used with `offset`, `minDistance`, or `maxDistance` to define a
+    position: position used with `offset`, `min_distance`, or `max_distance` to define a
         volume for filtering entities; default is the local player's position (optional)
     offset: offset relative to `position` for selecting entities (optional)
-    minDistance: min distance relative to `position` for selecting entities (optional)
-    maxDistance: max distance relative to `position` for selecting entities (optional)
+    min_distance: min distance relative to `position` for selecting entities (optional)
+    max_distance: max distance relative to `position` for selecting entities (optional)
     sort: one of "nearest", "furthest", "random", or "arbitrary" (optional)
     limit: maximum number of entities to return (optional)
 
@@ -583,7 +583,7 @@ def entities(
     attribute is present if `nbt` arg is `True`.
 
   Update in v4.0:
-    Added args: uuid, name, type, position, offset, minDistance, maxDistance, sort, limit
+    Added args: uuid, name, type, position, offset, min_distance, max_distance, sort, limit
     Added `"uuid"` attribute to output.
 
   Update in v3.1:
@@ -593,7 +593,7 @@ def entities(
   Since: v2.1
   """
   return await_script_function("entities",
-      (nbt, uuid, name, type, position, offset, minDistance, maxDistance, sort, limit));
+      (nbt, uuid, name, type, position, offset, min_distance, max_distance, sort, limit));
 
 
 def world_properties() -> Dict[str, Any]:

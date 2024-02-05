@@ -2996,8 +2996,8 @@ public class Minescript {
               "name",
               "position",
               "offset",
-              "minDistance",
-              "maxDistance",
+              "min_distance",
+              "max_distance",
               "sort",
               "limit");
           boolean nbt = args.getBoolean(0);
@@ -3030,8 +3030,8 @@ public class Minescript {
               "type",
               "position",
               "offset",
-              "minDistance",
-              "maxDistance",
+              "min_distance",
+              "max_distance",
               "sort",
               "limit");
           boolean nbt = args.getBoolean(0);
