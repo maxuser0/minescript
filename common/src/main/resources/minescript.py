@@ -516,6 +516,24 @@ def player_health() -> float:
   return await_script_function("player_health", ())
 
 
+def player(*, nbt: bool = False):
+  """Gets attributes for the local player.
+
+  Args:
+    nbt: if `True`, populate an `"nbt"` attribute for the player
+
+  Returns:
+    Attributes of the local player represented as a dict containing:
+    `"name": str, "health": float, "type": str, "uuid": str,
+    "position": [float, float, float], "yaw": float, "pitch": float,
+    "velocity": [float, float, float]`.
+    The`"nbt"` attribute is present if `nbt` arg is `True`.
+
+  Since: v4.0
+  """
+  return await_script_function("player", (nbt,));
+
+
 def players(
     *, nbt: bool = False, uuid: str = None, name: str = None,
     position: Vector3f = None, offset: Vector3f = None, min_distance: float = None,

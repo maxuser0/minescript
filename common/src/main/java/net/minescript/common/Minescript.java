@@ -2988,6 +2988,13 @@ public class Minescript {
       case "player_health":
         return Optional.of(new JsonPrimitive(player.getHealth()));
 
+      case "player":
+        {
+          args.expectArgs("nbt");
+          boolean nbt = args.getBoolean(0);
+          return Optional.of(entityToJsonObject(player, nbt));
+        }
+
       case "players":
         {
           args.expectArgs(
