@@ -102,6 +102,7 @@ public class Minescript {
 
   private static Platform platform;
   private static Thread worldListenerThread;
+  private static ScriptConfig scriptConfig;
 
   public static void init(Platform platform) {
     Minescript.platform = platform;
@@ -285,6 +286,8 @@ public class Minescript {
     lastConfigLoadTime = System.currentTimeMillis();
     autorunCommands.clear();
 
+    scriptConfig = new ScriptConfig(MINESCRIPT_DIR, BUILTIN_COMMANDS);
+
     try (var reader = new BufferedReader(new FileReader(configFile.getPath()))) {
       String line;
       String continuedLine = null;
@@ -341,6 +344,23 @@ public class Minescript {
                         : value;
               }
               LOGGER.info("Setting config var: {} = \"{}\" (\"{}\")", name, value, pythonLocation);
+
+              // TODO(maxuser): Move Python-specific env and scriptConfig to config variables.
+
+              // TODO(maxuser): Join multiple dirs in path with File.pathSeparator, including dir
+              // containing the requested script.
+              String[] env = {
+                "PYTHONPATH=" + Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR).toString()
+              };
+
+              try {
+                // `python3 -u` for unbuffered stdout and stderr.
+                scriptConfig.configureFileType(
+                    ".py", String.format("%s -u {command} {args}", pythonLocation), env);
+              } catch (Exception e) {
+                LOGGER.error("Failed to configure .py script execution: {}", e.toString());
+              }
+
               break;
             case "minescript_commands_per_cycle":
               try {
@@ -379,6 +399,14 @@ public class Minescript {
               stderrChatIgnorePattern = Pattern.compile(value);
               LOGGER.info("Setting stderr_chat_ignore_pattern to {}", value);
               break;
+            case "path":
+              var commandPath =
+                  Arrays.stream(value.split(File.pathSeparator))
+                      .map(Paths::get)
+                      .collect(Collectors.toList());
+              scriptConfig.setCommandPath(commandPath);
+              LOGGER.info("Setting path to {}", commandPath);
+              break;
             default:
               {
                 match = CONFIG_AUTORUN_RE.matcher(name);
@@ -396,11 +424,7 @@ public class Minescript {
                   }
                   LOGGER.info("Added autorun command `{}` for `{}`", command, worldName);
                 } else {
-                  LOGGER.warn(
-                      "Unrecognized config var: {} = \"{}\" (\"{}\")",
-                      name,
-                      command,
-                      pythonLocation);
+                  LOGGER.warn("Unrecognized config var: {} = \"{}\"", name, value);
                 }
               }
           }
@@ -423,18 +447,13 @@ public class Minescript {
           "resume",
           "killjob",
           "undo",
+          "which",
           "minescript_commands_per_cycle",
           "minescript_ticks_per_cycle",
           "minescript_incremental_command_suggestions",
           "minescript_script_function_debug_outptut",
           "minescript_log_chunk_load_events",
           "enable_minescript_on_chat_received_event");
-
-  private static List<String> getScriptCommandNamesWithBuiltins() {
-    var names = getScriptCommandNames();
-    names.addAll(BUILTIN_COMMANDS);
-    return names;
-  }
 
   private static void logException(Exception e) {
     var sw = new StringWriter();
@@ -445,31 +464,6 @@ public class Minescript {
             + " see https://minescript.net/issues)",
         e.toString());
     LOGGER.error(sw.toString());
-  }
-
-  private static List<String> getScriptCommandNames() {
-    List<String> scriptNames = new ArrayList<>();
-    String minescriptDir = Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR).toString();
-    try {
-      Files.list(new File(minescriptDir).toPath())
-          .filter(
-              path -> {
-                String filename = path.getFileName().toString();
-                return (!filename.startsWith("minescript") || filename.endsWith("_test.py"))
-                    && path.toString().endsWith(".py");
-              })
-          .forEach(
-              path -> {
-                String commandName =
-                    path.toString()
-                        .replace(minescriptDir + File.separator, "")
-                        .replaceFirst("\\.py$", "");
-                scriptNames.add(commandName);
-              });
-    } catch (IOException e) {
-      logException(e);
-    }
-    return scriptNames;
   }
 
   private static final Pattern TILDE_RE = Pattern.compile("^~([-\\+]?)([0-9]*)$");
@@ -786,7 +780,7 @@ public class Minescript {
   }
 
   interface Task {
-    int run(String[] command, JobControl jobControl);
+    int run(ScriptConfig.BoundCommand command, JobControl jobControl);
 
     default boolean sendResponse(long functionCallId, JsonElement returnValue, boolean finalReply) {
       return false;
@@ -837,7 +831,7 @@ public class Minescript {
 
   static class Job implements JobControl {
     private final int jobId;
-    private final String[] command;
+    private final ScriptConfig.BoundCommand command;
     private final Task task;
     private Thread thread;
     private volatile JobState state = JobState.NOT_STARTED;
@@ -848,9 +842,10 @@ public class Minescript {
     private final ResourceTracker<BlockPack> blockpacks;
     private final ResourceTracker<BlockPacker> blockpackers;
 
-    public Job(int jobId, String[] command, Task task, Consumer<Integer> doneCallback) {
+    public Job(
+        int jobId, ScriptConfig.BoundCommand command, Task task, Consumer<Integer> doneCallback) {
       this.jobId = jobId;
-      this.command = Arrays.copyOf(command, command.length);
+      this.command = command;
       this.task = task;
       this.doneCallback = doneCallback;
       blockpacks = new ResourceTracker<>(BlockPack.class, jobId);
@@ -924,7 +919,8 @@ public class Minescript {
     }
 
     public void start() {
-      thread = new Thread(this::runOnJobThread, String.format("job-%d-%s", jobId, command[0]));
+      thread =
+          new Thread(this::runOnJobThread, String.format("job-%d-%s", jobId, command.command()[0]));
       thread.start();
     }
 
@@ -1043,7 +1039,7 @@ public class Minescript {
     }
 
     private String jobSummaryWithStatus(String status) {
-      String displayCommand = quoteCommand(command);
+      String displayCommand = quoteCommand(command.command());
       if (displayCommand.length() > 61) {
         displayCommand = displayCommand.substring(0, 61) + "...";
       }
@@ -1080,25 +1076,18 @@ public class Minescript {
     private BufferedWriter stdinWriter;
 
     @Override
-    public int run(String[] command, JobControl jobControl) {
-      if (pythonLocation == null) {
+    public int run(ScriptConfig.BoundCommand command, JobControl jobControl) {
+      var exec = scriptConfig.getExecutableCommand(command);
+      if (exec == null) {
         jobControl.enqueueStderr(
-            "Python location not specified. Set `python` variable at: {}",
+            "Command execution not configured for \"{}\": {}",
+            command.fileExtension(),
             configFile.getAbsolutePath());
         return -1;
       }
 
-      String scriptName = Paths.get(MINESCRIPT_DIR, command[0] + ".py").toString();
-      String[] executableCommand = new String[command.length + 2];
-      executableCommand[0] = pythonLocation;
-      executableCommand[1] = "-u"; // `python3 -u` for unbuffered stdout and stderr.
-      executableCommand[2] = scriptName;
-      for (int i = 1; i < command.length; i++) {
-        executableCommand[i + 2] = command[i];
-      }
-
       try {
-        process = Runtime.getRuntime().exec(executableCommand);
+        process = Runtime.getRuntime().exec(exec.command(), exec.environment());
       } catch (IOException e) {
         jobControl.logJobException(e);
         return -2;
@@ -1222,7 +1211,7 @@ public class Minescript {
     }
 
     @Override
-    public int run(String[] command, JobControl jobControl) {
+    public int run(ScriptConfig.BoundCommand command, JobControl jobControl) {
       undo.enqueueCommands(jobControl.commandQueue());
       return 0;
     }
@@ -1238,10 +1227,10 @@ public class Minescript {
 
     private final Deque<UndoableAction> undoStack = new ArrayDeque<>();
 
-    public void createSubprocess(String[] command, List<Token> nextCommand) {
+    public void createSubprocess(ScriptConfig.BoundCommand command, List<Token> nextCommand) {
       var job =
           new Job(allocateJobId(), command, new SubprocessTask(), i -> finishJob(i, nextCommand));
-      var undo = new UndoableActionBlockPack(job.jobId(), command);
+      var undo = new UndoableActionBlockPack(job.jobId(), command.command());
       jobUndoMap.put(job.jobId(), undo);
       undoStack.addFirst(undo);
       jobMap.put(job.jobId(), job);
@@ -1275,7 +1264,7 @@ public class Minescript {
       var undoJob =
           new Job(
               allocateJobId(),
-              undo.derivativeCommand(),
+              new ScriptConfig.BoundCommand(null, undo.derivativeCommand()),
               new UndoTask(undo),
               i -> finishJob(i, Collections.emptyList()));
       jobMap.put(undoJob.jobId(), undoJob);
@@ -1708,6 +1697,26 @@ public class Minescript {
           runParsedMinescriptCommand(nextCommand);
           return;
 
+        case "which":
+          if (checkParamTypes(command, ParamType.STRING)) {
+            String arg = command[1];
+            if (BUILTIN_COMMANDS.contains(arg)) {
+              logUserInfo("Built-in command: `{}`", arg);
+            } else {
+              Path commandPath = scriptConfig.resolveCommandPath(arg);
+              if (commandPath == null) {
+                logUserInfo("Command `{}` not found.", arg);
+              } else {
+                logUserInfo(commandPath.toString());
+              }
+            }
+          } else {
+            logUserError(
+                "Expected 1 param of type string, instead got `{}`", getParamsAsString(command));
+          }
+          runParsedMinescriptCommand(nextCommand);
+          return;
+
         case "minescript_commands_per_cycle":
           if (checkParamTypes(command)) {
             logUserInfo(
@@ -1807,13 +1816,18 @@ public class Minescript {
         command[0] = "copy_blocks";
       }
 
-      if (!getScriptCommandNames().contains(command[0])) {
-        logUserInfo("Minescript commands:");
+      Path commandPath = scriptConfig.resolveCommandPath(command[0]);
+      if (commandPath == null) {
+        logUserInfo("Minescript built-in commands:");
         for (String builtin : BUILTIN_COMMANDS) {
-          logUserInfo("  {} [builtin]", builtin);
+          logUserInfo("  {}", builtin);
         }
-        for (String script : getScriptCommandNames()) {
-          logUserInfo("  {}", script);
+        logUserInfo("");
+        logUserInfo("Minescript command directories:");
+        Path minescriptDir = Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR);
+        for (Path commandDir : scriptConfig.commandPath()) {
+          Path path = minescriptDir.resolve(commandDir);
+          logUserInfo("  {}", path);
         }
         if (!command[0].equals("ls")) {
           logUserError("No Minescript command named \"{}\"", command[0]);
@@ -1822,7 +1836,7 @@ public class Minescript {
         return;
       }
 
-      jobs.createSubprocess(command, nextCommand);
+      jobs.createSubprocess(new ScriptConfig.BoundCommand(commandPath, command), nextCommand);
 
     } catch (RuntimeException e) {
       logException(e);
@@ -2001,7 +2015,6 @@ public class Minescript {
         }
         return cancel;
       }
-      var scriptCommandNames = getScriptCommandNamesWithBuiltins();
       String value = chatEditBox.getValue();
       if (!value.startsWith("\\")) {
         minescriptCommandHistory.moveToEnd();
@@ -2057,7 +2070,8 @@ public class Minescript {
             // Insert the remainder of the completed command.
             String maybeTrailingSpace =
                 ((cursorPos < value.length() && value.charAt(cursorPos) == ' ')
-                        || commandSuggestions.size() > 1)
+                        || commandSuggestions.size() > 1
+                        || commandSuggestions.get(0).endsWith(File.separator))
                     ? ""
                     : " ";
             chatEditBox.insertText(
@@ -2072,33 +2086,34 @@ public class Minescript {
             return cancel;
           }
         }
-        if (scriptCommandNames.contains(command)) {
-          chatEditBox.setTextColor(0x5ee85e); // green
-          commandSuggestions = new ArrayList<>();
-        } else {
-          List<String> newCommandSuggestions = new ArrayList<>();
-          if (!command.isEmpty()) {
-            for (String scriptName : scriptCommandNames) {
-              if (scriptName.startsWith(command)) {
-                newCommandSuggestions.add(scriptName);
-              }
-            }
-          }
-          if (!newCommandSuggestions.isEmpty()) {
-            if (!newCommandSuggestions.equals(commandSuggestions)) {
-              if (key == TAB_KEY || incrementalCommandSuggestions) {
-                systemCommandQueue.add(formatAsJsonText("completions:", "aqua"));
-                for (String suggestion : newCommandSuggestions) {
-                  systemCommandQueue.add(formatAsJsonText("  " + suggestion, "aqua"));
-                }
-              }
-              commandSuggestions = newCommandSuggestions;
-            }
-            chatEditBox.setTextColor(0x5ee8e8); // cyan
-          } else {
-            chatEditBox.setTextColor(0xe85e5e); // red
+        try {
+          var scriptCommandNames = scriptConfig.findCommandPrefixMatches(command);
+          if (scriptCommandNames.contains(command)) {
+            chatEditBox.setTextColor(0x5ee85e); // green
             commandSuggestions = new ArrayList<>();
+          } else {
+            List<String> newCommandSuggestions = new ArrayList<>();
+            if (!command.isEmpty()) {
+              newCommandSuggestions.addAll(scriptCommandNames);
+            }
+            if (!newCommandSuggestions.isEmpty()) {
+              if (!newCommandSuggestions.equals(commandSuggestions)) {
+                if (key == TAB_KEY || incrementalCommandSuggestions) {
+                  systemCommandQueue.add(formatAsJsonText("completions:", "aqua"));
+                  for (String suggestion : newCommandSuggestions) {
+                    systemCommandQueue.add(formatAsJsonText("  " + suggestion, "aqua"));
+                  }
+                }
+                commandSuggestions = newCommandSuggestions;
+              }
+              chatEditBox.setTextColor(0x5ee8e8); // cyan
+            } else {
+              chatEditBox.setTextColor(0xe85e5e); // red
+              commandSuggestions = new ArrayList<>();
+            }
           }
+        } catch (IOException e) {
+          logException(e);
         }
       }
     }
