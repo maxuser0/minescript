@@ -291,7 +291,9 @@ public class Minescript {
     try (var reader = new BufferedReader(new FileReader(configFile.getPath()))) {
       String line;
       String continuedLine = null;
+      int lineNum = 0;
       while ((line = reader.readLine()) != null) {
+        ++lineNum;
         line = line.stripLeading();
 
         // Concatenate across lines ending with backslash. Interpret line ending with double
@@ -313,14 +315,19 @@ public class Minescript {
           continuedLine = null;
         }
 
+        if (line.matches("[^=]*=\\s*\\{.*") && !line.strip().endsWith("}")) {
+          continuedLine = line;
+          continue;
+        }
+
         line = line.strip();
         if (line.isEmpty() || line.startsWith("#")) {
           continue;
         }
         var match = CONFIG_LINE_RE.matcher(line);
         if (match.matches()) {
-          String name = match.group(1);
-          String value = match.group(2);
+          String name = match.group(1).strip();
+          String value = match.group(2).strip();
 
           // Strip double quotes surrounding value if present.
           match = DOUBLE_QUOTED_STRING_RE.matcher(value);
@@ -345,23 +352,48 @@ public class Minescript {
               }
               LOGGER.info("Setting config var: {} = \"{}\" (\"{}\")", name, value, pythonLocation);
 
-              // TODO(maxuser): Move Python-specific env and scriptConfig to config variables.
+              // `python3 -u` for unbuffered stdout and stderr.
+              var commandPattern = ImmutableList.of(pythonLocation, "-u", "{command}", "{args}");
 
-              // TODO(maxuser): Join multiple dirs in path with File.pathSeparator, including dir
-              // containing the requested script.
-              String[] env = {
-                "PYTHONPATH=" + Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR).toString()
-              };
+              // If adding multiple paths in PYTHONPATH, use File.pathSeparator for separating them.
+              var environmentVars =
+                  ImmutableList.of(
+                      "PYTHONPATH="
+                          + Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR).toString());
 
               try {
-                // `python3 -u` for unbuffered stdout and stderr.
                 scriptConfig.configureFileType(
-                    ".py", String.format("%s -u {command} {args}", pythonLocation), env);
+                    new ScriptConfig.CommandConfig(".py", commandPattern, environmentVars));
               } catch (Exception e) {
-                LOGGER.error("Failed to configure .py script execution: {}", e.toString());
+                LOGGER.error(
+                    "config.txt:{}: Failed to configure .py script execution: {}",
+                    lineNum,
+                    e.toString());
               }
 
               break;
+
+            case "command":
+              try {
+                var commandConfig = GSON.fromJson(value, ScriptConfig.CommandConfig.class);
+                scriptConfig.configureFileType(commandConfig);
+              } catch (Exception e) {
+                LOGGER.error(
+                    "config.txt:{}: Failed to configure script execution: {}",
+                    lineNum,
+                    e.toString());
+              }
+              break;
+
+            case "path":
+              var commandPath =
+                  Arrays.stream(value.split(File.pathSeparator))
+                      .map(Paths::get)
+                      .collect(Collectors.toList());
+              scriptConfig.setCommandPath(commandPath);
+              LOGGER.info("Setting path to {}", commandPath);
+              break;
+
             case "minescript_commands_per_cycle":
               try {
                 minescriptCommandsPerCycle = Integer.valueOf(value);
@@ -371,6 +403,7 @@ public class Minescript {
                 LOGGER.error("Unable to parse minescript_commands_per_cycle as integer: {}", value);
               }
               break;
+
             case "minescript_ticks_per_cycle":
               try {
                 minescriptTicksPerCycle = Integer.valueOf(value);
@@ -379,34 +412,31 @@ public class Minescript {
                 LOGGER.error("Unable to parse minescript_ticks_per_cycle as integer: {}", value);
               }
               break;
+
             case "minescript_incremental_command_suggestions":
               incrementalCommandSuggestions = Boolean.valueOf(value);
               LOGGER.info(
                   "Setting minescript_incremental_command_suggestions to {}",
                   incrementalCommandSuggestions);
               break;
+
             case "minescript_script_function_debug_outptut":
               scriptFunctionDebugOutptut = Boolean.valueOf(value);
               LOGGER.info(
                   "Setting minescript_script_function_debug_outptut to {}",
                   scriptFunctionDebugOutptut);
               break;
+
             case "minescript_log_chunk_load_events":
               logChunkLoadEvents = Boolean.valueOf(value);
               LOGGER.info("Setting minescript_log_chunk_load_events to {}", logChunkLoadEvents);
               break;
+
             case "stderr_chat_ignore_pattern":
               stderrChatIgnorePattern = Pattern.compile(value);
               LOGGER.info("Setting stderr_chat_ignore_pattern to {}", value);
               break;
-            case "path":
-              var commandPath =
-                  Arrays.stream(value.split(File.pathSeparator))
-                      .map(Paths::get)
-                      .collect(Collectors.toList());
-              scriptConfig.setCommandPath(commandPath);
-              LOGGER.info("Setting path to {}", commandPath);
-              break;
+
             default:
               {
                 match = CONFIG_AUTORUN_RE.matcher(name);
@@ -429,7 +459,7 @@ public class Minescript {
               }
           }
         } else {
-          LOGGER.warn("config.txt: unable parse config line: {}", line);
+          LOGGER.warn("config.txt:{}: unable parse config line: {}", lineNum, line);
         }
       }
     } catch (IOException e) {

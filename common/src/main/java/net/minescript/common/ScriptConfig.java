@@ -11,7 +11,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -108,16 +107,32 @@ public class ScriptConfig {
     return matches;
   }
 
-  public void configureFileType(String fileExtension, String commandPattern, String[] environment) {
-    Preconditions.checkNotNull(fileExtension);
-    Preconditions.checkArgument(
-        !fileTypeMap.containsKey(fileExtension),
-        "File extension already configured: \"%s\"",
-        fileExtension);
+  public record CommandConfig(String extension, List<String> command, List<String> environment) {}
 
-    fileTypeMap.put(
-        fileExtension, new FileTypeConfig(CommandBuilder.create(commandPattern), environment));
-    fileExtensions.add(fileExtension);
+  public void configureFileType(CommandConfig commandConfig) {
+    Preconditions.checkNotNull(commandConfig.extension);
+    Preconditions.checkArgument(
+        commandConfig.extension.startsWith("."),
+        "File extension does not start with dot: \"%s\"",
+        commandConfig.extension);
+    Preconditions.checkArgument(
+        !fileTypeMap.containsKey(commandConfig.extension),
+        "File extension already configured: \"%s\"",
+        commandConfig.extension);
+
+    var fileTypeConfig =
+        new FileTypeConfig(
+            CommandBuilder.create(commandConfig.command),
+            commandConfig.environment == null
+                ? new String[0]
+                : commandConfig.environment.stream()
+                    .map(s -> s.replace("{minescript_dir}", minescriptDir.toString()))
+                    .toArray(String[]::new));
+    fileTypeMap.put(commandConfig.extension, fileTypeConfig);
+    fileExtensions.add(commandConfig.extension);
+
+    LOGGER.info(
+        "Configured file extension `{}` for commands: {}", commandConfig.extension, fileTypeConfig);
   }
 
   public List<String> supportedFileExtensions() {
@@ -187,16 +202,16 @@ public class ScriptConfig {
    */
   public record CommandBuilder(String[] pattern, int commandIndex, int argsIndex) {
 
-    public static CommandBuilder create(String commandPattern) {
-      List<String> pattern = Arrays.asList(commandPattern.trim().split("\\s+"));
+    public static CommandBuilder create(List<String> commandPattern) {
+      int commandIndex = commandPattern.indexOf("{command}");
+      Preconditions.checkArgument(
+          commandIndex >= 0, "{command} not found in pattern: %s", commandPattern);
 
-      int commandIndex = pattern.indexOf("{command}");
-      Preconditions.checkArgument(commandIndex >= 0, "{command} not found in pattern: %s", pattern);
+      int argsIndex = commandPattern.indexOf("{args}");
+      Preconditions.checkArgument(
+          commandIndex >= 0, "{args} not found in pattern: %s", commandPattern);
 
-      int argsIndex = pattern.indexOf("{args}");
-      Preconditions.checkArgument(commandIndex >= 0, "{args} not found in pattern: %s", pattern);
-
-      return new CommandBuilder(pattern.toArray(STRING_ARRAY), commandIndex, argsIndex);
+      return new CommandBuilder(commandPattern.toArray(STRING_ARRAY), commandIndex, argsIndex);
     }
 
     public String[] buildExecutableCommand(BoundCommand boundCommand) {
