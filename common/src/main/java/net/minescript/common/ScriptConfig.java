@@ -5,6 +5,7 @@ package net.minescript.common;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -22,14 +23,19 @@ public class ScriptConfig {
 
   private final Path minescriptDir;
   private final ImmutableList<String> builtinCommands;
+  private final ImmutableSet<String> ignoreDirs;
   private ImmutableList<Path> commandPath =
       ImmutableList.of(Paths.get("system", "exec"), Paths.get(""));
   private Map<String, FileTypeConfig> fileTypeMap = new ConcurrentHashMap<>();
   private List<String> fileExtensions = new ArrayList<>();
 
-  public ScriptConfig(String minescriptDirName, ImmutableList<String> builtinCommands) {
+  public ScriptConfig(
+      String minescriptDirName,
+      ImmutableList<String> builtinCommands,
+      ImmutableSet<String> ignoreDirs) {
     this.minescriptDir = Paths.get(System.getProperty("user.dir"), minescriptDirName);
     this.builtinCommands = builtinCommands;
+    this.ignoreDirs = ignoreDirs;
   }
 
   public void setCommandPath(List<Path> commandPath) {
@@ -44,10 +50,6 @@ public class ScriptConfig {
    * Returns names of commands and directories accessible from command path that match the prefix.
    */
   public List<String> findCommandPrefixMatches(String prefix) throws IOException {
-    if (prefix.isEmpty()) {
-      return ImmutableList.of();
-    }
-
     var matches = new ArrayList<String>();
     for (String builtin : builtinCommands) {
       if (builtin.startsWith(prefix)) {
@@ -57,8 +59,10 @@ public class ScriptConfig {
     Path prefixPath = Paths.get(prefix);
     commandDirLoop:
     for (Path commandDir : commandPath) {
+      LOGGER.info("commandDir: `{}`", commandDir.toString());
       Path resolvedCommandDir = minescriptDir.resolve(commandDir);
       Path resolvedDir = resolvedCommandDir;
+
       // Iterate all but the last component of the prefix path to walk the path within commandDir.
       for (int i = 0; i < prefixPath.getNameCount() - 1; ++i) {
         resolvedDir = resolvedDir.resolve(prefixPath.getName(i));
@@ -66,7 +70,21 @@ public class ScriptConfig {
           continue commandDirLoop;
         }
       }
-      String prefixFileName = prefixPath.getFileName().toString();
+
+      // When prefix ends with File.separator ("\" on Windows, "/" otherwise), the last name
+      // component of the path is the component before the final separator. Treat the last name
+      // component as empty instead.
+      final String prefixFileName;
+      if (prefix.endsWith(File.separator)) {
+        resolvedDir = resolvedDir.resolve(prefixPath.getFileName());
+        if (!Files.isDirectory(resolvedDir)) {
+          continue commandDirLoop;
+        }
+        prefixFileName = "";
+      } else {
+        prefixFileName = prefixPath.getFileName().toString();
+      }
+
       Files.list(resolvedDir)
           .forEach(
               path -> {
@@ -74,7 +92,10 @@ public class ScriptConfig {
                 if (Files.isDirectory(path)) {
                   if (fileName.startsWith(prefixFileName)) {
                     try {
-                      matches.add(resolvedCommandDir.relativize(path).toString() + File.separator);
+                      String relativeName = resolvedCommandDir.relativize(path).toString();
+                      if (!(commandDir.toString().isEmpty() && ignoreDirs.contains(relativeName))) {
+                        matches.add(relativeName + File.separator);
+                      }
                     } catch (IllegalArgumentException e) {
                       LOGGER.info(
                           "Dir completion: resolvedCommandDir: {}  path: {}",

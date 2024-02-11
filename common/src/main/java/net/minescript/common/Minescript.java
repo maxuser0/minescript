@@ -9,6 +9,7 @@ import static net.minescript.common.CommandSyntax.quoteCommand;
 import static net.minescript.common.CommandSyntax.quoteString;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -308,7 +309,7 @@ public class Minescript {
     lastConfigLoadTime = System.currentTimeMillis();
     autorunCommands.clear();
 
-    scriptConfig = new ScriptConfig(MINESCRIPT_DIR, BUILTIN_COMMANDS);
+    scriptConfig = new ScriptConfig(MINESCRIPT_DIR, BUILTIN_COMMANDS, IGNORE_DIRS_FOR_COMPLETIONS);
 
     try (var reader = new BufferedReader(new FileReader(configFile.getPath()))) {
       String line;
@@ -510,6 +511,9 @@ public class Minescript {
           "minescript_script_function_debug_outptut",
           "minescript_log_chunk_load_events",
           "enable_minescript_on_chat_received_event");
+
+  private static final ImmutableSet<String> IGNORE_DIRS_FOR_COMPLETIONS =
+      ImmutableSet.of("blockpacks", "copies", "undo");
 
   private static void logException(Exception e) {
     var sw = new StringWriter();
@@ -1945,7 +1949,7 @@ public class Minescript {
       if (end < longest.length()) {
         longest = longest.substring(0, end);
       }
-      for (int j = 1; j < end; j++) {
+      for (int j = 0; j < end; j++) {
         if (string.charAt(j) != longest.charAt(j)) {
           longest = longest.substring(0, j);
           break;
@@ -2125,7 +2129,7 @@ public class Minescript {
       } else if (key == BACKSPACE_KEY) {
         value = eraseChar(value, cursorPos);
       }
-      if (value.stripTrailing().length() > 1) {
+      if (value.stripTrailing().length() > 0) {
         String command = value.substring(1).split("\\s+")[0];
         if (key == TAB_KEY && !commandSuggestions.isEmpty()) {
           if (cursorPos == command.length() + 1) {
@@ -2150,14 +2154,13 @@ public class Minescript {
         }
         try {
           var scriptCommandNames = scriptConfig.findCommandPrefixMatches(command);
+          scriptCommandNames.sort(null);
           if (scriptCommandNames.contains(command)) {
             chatEditBox.setTextColor(0x5ee85e); // green
             commandSuggestions = new ArrayList<>();
           } else {
             List<String> newCommandSuggestions = new ArrayList<>();
-            if (!command.isEmpty()) {
-              newCommandSuggestions.addAll(scriptCommandNames);
-            }
+            newCommandSuggestions.addAll(scriptCommandNames);
             if (!newCommandSuggestions.isEmpty()) {
               if (!newCommandSuggestions.equals(commandSuggestions)) {
                 if (key == TAB_KEY || incrementalCommandSuggestions) {
