@@ -137,25 +137,8 @@ public class Minescript {
           "Current version ({}) does not match last run version ({})",
           currentVersion,
           lastRunVersion);
-      // copy.py was renamed to copy_blocks.py in Minescript 4.0 to avoid conflict with the built-in
-      // copy module. Delete the obsolete script if it exists.
-      var obsoleteCopyScript = new File(Paths.get(MINESCRIPT_DIR, "copy.py").toString());
-      if (obsoleteCopyScript.exists()) {
-        if (obsoleteCopyScript.delete()) {
-          LOGGER.info(
-              "Deleted obsolete script `{}` which has been renamed to `copy_blocks.py`",
-              obsoleteCopyScript.getPath());
-        } else {
-          LOGGER.warn("Failed to delete obsolete script `{}`", obsoleteCopyScript.getPath());
-        }
-      }
-      copyJarResourceToMinescriptDir("version.txt", FileOverwritePolicy.OVERWRITTE);
-      copyJarResourceToMinescriptDir("minescript.py", FileOverwritePolicy.OVERWRITTE);
-      copyJarResourceToMinescriptDir("minescript_runtime.py", FileOverwritePolicy.OVERWRITTE);
-      copyJarResourceToMinescriptDir("help.py", FileOverwritePolicy.OVERWRITTE);
-      copyJarResourceToMinescriptDir("copy_blocks.py", FileOverwritePolicy.OVERWRITTE);
-      copyJarResourceToMinescriptDir("paste.py", FileOverwritePolicy.OVERWRITTE);
-      copyJarResourceToMinescriptDir("eval.py", FileOverwritePolicy.OVERWRITTE);
+
+      loadMinescriptResources();
     }
 
     worldListenerThread =
@@ -163,6 +146,44 @@ public class Minescript {
     worldListenerThread.start();
 
     loadConfig();
+  }
+
+  private static void loadMinescriptResources() {
+    // copy.py was renamed to copy_blocks.py in Minescript 4.0 to avoid conflict with the built-in
+    // copy module. Delete the obsolete script if it exists.
+    deleteMinescriptFile("copy.py");
+
+    // Delete files that used to be stored directly within the `minescript` dir in prior versions.
+    deleteMinescriptFile("minescript.py");
+    deleteMinescriptFile("minescript_runtime.py");
+    deleteMinescriptFile("help.py");
+    deleteMinescriptFile("copy_blocks.py");
+    deleteMinescriptFile("paste.py");
+    deleteMinescriptFile("eval.py");
+
+    Path minescriptDir = Paths.get(MINESCRIPT_DIR);
+    Path libDir = Paths.get(MINESCRIPT_DIR, "system", "lib");
+    Path execDir = Paths.get(MINESCRIPT_DIR, "system", "exec");
+
+    new File(libDir.toString()).mkdirs();
+    new File(execDir.toString()).mkdirs();
+
+    copyJarResourceToFile("version.txt", minescriptDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("minescript.py", libDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("minescript_runtime.py", libDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("help.py", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("copy_blocks.py", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("paste.py", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("eval.py", execDir, FileOverwritePolicy.OVERWRITTE);
+  }
+
+  private static void deleteMinescriptFile(String fileName) {
+    var fileToDelete = new File(Paths.get(MINESCRIPT_DIR, fileName).toString());
+    if (fileToDelete.exists()) {
+      if (fileToDelete.delete()) {
+        LOGGER.info("Deleted obsolete file: `{}`", fileToDelete.getPath());
+      }
+    }
   }
 
   private static AtomicBoolean autorunHandled = new AtomicBoolean(false);
@@ -220,15 +241,15 @@ public class Minescript {
   }
 
   /** Copies resource from jar to a same-named file in the minescript dir.. */
-  private static void copyJarResourceToMinescriptDir(
-      String resourceName, FileOverwritePolicy overwritePolicy) {
-    copyJarResourceToMinescriptDir(resourceName, resourceName, overwritePolicy);
+  private static void copyJarResourceToFile(
+      String resourceName, Path dir, FileOverwritePolicy overwritePolicy) {
+    copyJarResourceToFile(resourceName, dir, resourceName, overwritePolicy);
   }
 
   /** Copies resource from jar to a file in the minescript dir. */
-  private static void copyJarResourceToMinescriptDir(
-      String resourceName, String fileName, FileOverwritePolicy overwritePolicy) {
-    Path filePath = Paths.get(MINESCRIPT_DIR, fileName);
+  private static void copyJarResourceToFile(
+      String resourceName, Path dir, String fileName, FileOverwritePolicy overwritePolicy) {
+    Path filePath = dir.resolve(fileName);
     if (Files.exists(filePath)) {
       switch (overwritePolicy) {
         case OVERWRITTE:
@@ -248,10 +269,9 @@ public class Minescript {
         var reader = new BufferedReader(new InputStreamReader(in));
         var writer = new FileWriter(filePath.toString())) {
       reader.transferTo(writer);
-      LOGGER.info("Copied jar resource \"{}\" to minescript dir as \"{}\"", resourceName, fileName);
+      LOGGER.info("Copied jar resource \"{}\" to \"{}\"", resourceName, filePath);
     } catch (IOException e) {
-      LOGGER.error(
-          "Failed to copy jar resource \"{}\" to minescript dir as \"{}\"", resourceName, fileName);
+      LOGGER.error("Failed to copy jar resource \"{}\" to \"{}\"", resourceName, filePath);
     }
   }
 
@@ -273,12 +293,14 @@ public class Minescript {
 
   /** Loads config from {@code minescript/config.txt} if the file has changed since last loaded. */
   private static void loadConfig() {
+    Path minescriptDir = Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR);
+
     if (System.getProperty("os.name").startsWith("Windows")) {
-      copyJarResourceToMinescriptDir(
-          "windows_config.txt", "config.txt", FileOverwritePolicy.DO_NOT_OVERWRITE);
+      copyJarResourceToFile(
+          "windows_config.txt", minescriptDir, "config.txt", FileOverwritePolicy.DO_NOT_OVERWRITE);
     } else {
-      copyJarResourceToMinescriptDir(
-          "posix_config.txt", "config.txt", FileOverwritePolicy.DO_NOT_OVERWRITE);
+      copyJarResourceToFile(
+          "posix_config.txt", minescriptDir, "config.txt", FileOverwritePolicy.DO_NOT_OVERWRITE);
     }
     if (configFile.lastModified() < lastConfigLoadTime) {
       return;
@@ -355,11 +377,14 @@ public class Minescript {
               // `python3 -u` for unbuffered stdout and stderr.
               var commandPattern = ImmutableList.of(pythonLocation, "-u", "{command}", "{args}");
 
-              // If adding multiple paths in PYTHONPATH, use File.pathSeparator for separating them.
               var environmentVars =
                   ImmutableList.of(
                       "PYTHONPATH="
-                          + Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR).toString());
+                          + String.join(
+                              File.pathSeparator,
+                              ImmutableList.of(
+                                  minescriptDir.resolve(Paths.get("system", "lib")).toString(),
+                                  minescriptDir.toString())));
 
               try {
                 scriptConfig.configureFileType(
@@ -478,6 +503,7 @@ public class Minescript {
           "killjob",
           "undo",
           "which",
+          "reload_minescript_resources",
           "minescript_commands_per_cycle",
           "minescript_ticks_per_cycle",
           "minescript_incremental_command_suggestions",
@@ -1744,6 +1770,12 @@ public class Minescript {
             logUserError(
                 "Expected 1 param of type string, instead got `{}`", getParamsAsString(command));
           }
+          runParsedMinescriptCommand(nextCommand);
+          return;
+
+        case "reload_minescript_resources":
+          loadMinescriptResources();
+          logUserInfo("Reloaded resources from Minescript jar.");
           runParsedMinescriptCommand(nextCommand);
           return;
 

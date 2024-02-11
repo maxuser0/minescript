@@ -279,6 +279,15 @@ def VersionAsString(version_tuple):
   return "v" + ".".join([str(x) for x in version_tuple])
 
 
+def ResolveScriptName(name):
+  python_dirs = os.environ["PYTHONPATH"].split(os.pathsep)
+  for dirname in python_dirs:
+    script_filename = os.path.join(dirname, name) + ".py"
+    if os.path.exists(script_filename):
+      return script_filename
+  return None
+
+
 def CheckVersionCompatibility(
     module_name, module_docstr, errors=[], module_versions=dict(), debug=False):
   """Checks version compatibility of the given module, recursively parsing required deps.
@@ -338,8 +347,8 @@ def CheckVersionCompatibility(
           continue
 
         if name not in module_versions:
-          script_filename = os.path.join("minescript", name) + ".py"
-          if os.path.exists(script_filename):
+          script_filename = ResolveScriptName(name)
+          if script_filename:
             docstr = ReadDocString(script_filename)
             actual_version = CheckVersionCompatibility(
                 name, docstr, errors, module_versions, debug)

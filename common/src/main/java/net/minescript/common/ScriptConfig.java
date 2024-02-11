@@ -22,7 +22,8 @@ public class ScriptConfig {
 
   private final Path minescriptDir;
   private final ImmutableList<String> builtinCommands;
-  private ImmutableList<Path> commandPath = ImmutableList.of(Paths.get(""));
+  private ImmutableList<Path> commandPath =
+      ImmutableList.of(Paths.get("system", "exec"), Paths.get(""));
   private Map<String, FileTypeConfig> fileTypeMap = new ConcurrentHashMap<>();
   private List<String> fileExtensions = new ArrayList<>();
 
@@ -70,35 +71,32 @@ public class ScriptConfig {
           .forEach(
               path -> {
                 String fileName = path.getFileName().toString();
-                if (!fileName.startsWith("minescript") || fileName.contains("_test.")) {
-                  if (Files.isDirectory(path)) {
-                    if (fileName.startsWith(prefixFileName)) {
-                      try {
-                        matches.add(
-                            resolvedCommandDir.relativize(path).toString() + File.separator);
-                      } catch (IllegalArgumentException e) {
-                        LOGGER.info(
-                            "Dir completion: resolvedCommandDir: {}  path: {}",
-                            resolvedCommandDir,
-                            path);
-                        throw e;
-                      }
+                if (Files.isDirectory(path)) {
+                  if (fileName.startsWith(prefixFileName)) {
+                    try {
+                      matches.add(resolvedCommandDir.relativize(path).toString() + File.separator);
+                    } catch (IllegalArgumentException e) {
+                      LOGGER.info(
+                          "Dir completion: resolvedCommandDir: {}  path: {}",
+                          resolvedCommandDir,
+                          path);
+                      throw e;
                     }
-                  } else {
-                    if (fileExtensions.contains(getFileExtension(fileName))) {
-                      try {
-                        String scriptName =
-                            removeFileExtension(resolvedCommandDir.relativize(path).toString());
-                        if (scriptName.startsWith(prefix) && !matches.contains(scriptName)) {
-                          matches.add(scriptName);
-                        }
-                      } catch (IllegalArgumentException e) {
-                        LOGGER.info(
-                            "File completion: resolvedCommandDir: {}  path: {}",
-                            resolvedCommandDir,
-                            path);
-                        throw e;
+                  }
+                } else {
+                  if (fileExtensions.contains(getFileExtension(fileName))) {
+                    try {
+                      String scriptName =
+                          removeFileExtension(resolvedCommandDir.relativize(path).toString());
+                      if (scriptName.startsWith(prefix) && !matches.contains(scriptName)) {
+                        matches.add(scriptName);
                       }
+                    } catch (IllegalArgumentException e) {
+                      LOGGER.info(
+                          "File completion: resolvedCommandDir: {}  path: {}",
+                          resolvedCommandDir,
+                          path);
+                      throw e;
                     }
                   }
                 }
