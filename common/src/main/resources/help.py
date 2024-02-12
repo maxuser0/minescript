@@ -16,11 +16,24 @@ Prints documentation string for the given script.
 import os
 import sys
 
+def ResolveScriptName(name):
+  python_dirs = os.environ["MINESCRIPT_COMMAND_PATH"].split(os.pathsep)
+  for dirname in python_dirs:
+    script_filename = os.path.join(dirname, name)
+    if os.path.exists(script_filename):
+      return script_filename
+  return None
+
+
 def ReadDocString(script_name):
   nlines = 0
   src = ""
+  script_path = ResolveScriptName(script_name)
+  if script_path is None:
+    print(f'Script named "{script_name}" not found.', file=sys.stderr)
+    return None
   try:
-    script = open(os.path.join("minescript", script_name))
+    script = open(script_path)
   except FileNotFoundError as e:
     print(f'Script named "{script_name}" not found.', file=sys.stderr)
     return None

@@ -12,9 +12,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -26,6 +28,7 @@ public class ScriptConfig {
   private final ImmutableSet<String> ignoreDirs;
   private ImmutableList<Path> commandPath =
       ImmutableList.of(Paths.get("system", "exec"), Paths.get(""));
+  private String minescriptCommandPathEnvVar = "";
   private Map<String, FileTypeConfig> fileTypeMap = new ConcurrentHashMap<>();
   private List<String> fileExtensions = new ArrayList<>();
 
@@ -40,6 +43,14 @@ public class ScriptConfig {
 
   public void setCommandPath(List<Path> commandPath) {
     this.commandPath = ImmutableList.copyOf(commandPath);
+
+    minescriptCommandPathEnvVar =
+        "MINESCRIPT_COMMAND_PATH="
+            + String.join(
+                File.pathSeparator,
+                this.commandPath.stream()
+                    .map(p -> minescriptDir.resolve(p).toString())
+                    .collect(Collectors.toList()));
   }
 
   public ImmutableList<Path> commandPath() {
@@ -59,7 +70,6 @@ public class ScriptConfig {
     Path prefixPath = Paths.get(prefix);
     commandDirLoop:
     for (Path commandDir : commandPath) {
-      LOGGER.info("commandDir: `{}`", commandDir.toString());
       Path resolvedCommandDir = minescriptDir.resolve(commandDir);
       Path resolvedDir = resolvedCommandDir;
 
@@ -175,9 +185,16 @@ public class ScriptConfig {
     if (fileTypeConfig == null) {
       return null;
     }
+
+    var env = new ArrayList<String>();
+    Collections.addAll(env, fileTypeConfig.environment());
+    if (!minescriptCommandPathEnvVar.isEmpty()) {
+      env.add(minescriptCommandPathEnvVar);
+    }
+
     return new ExecutableCommand(
         fileTypeConfig.commandBuilder.buildExecutableCommand(boundCommand),
-        fileTypeConfig.environment());
+        env.toArray(STRING_ARRAY));
   }
 
   /**
