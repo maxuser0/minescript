@@ -962,7 +962,13 @@ public class Minescript {
       LOGGER.error("{}", logMessage);
       var match = stderrChatIgnorePattern.matcher(logMessage);
       if (!match.find()) {
-        jobCommandQueue.add(formatAsJsonText(logMessage, "yellow"));
+        if (logMessage.startsWith("|{") || logMessage.startsWith("|[")) {
+          // The message is already formatted, so pass along as is.
+          jobCommandQueue.add(logMessage);
+        } else {
+          // Wrap the message in formatting JSON.
+          jobCommandQueue.add(formatAsJsonText(logMessage, "yellow"));
+        }
       }
     }
 
@@ -2512,7 +2518,7 @@ public class Minescript {
     if (message.startsWith("|")) {
       var minecraft = Minecraft.getInstance();
       var chatHud = minecraft.gui.getChat();
-      if (message.startsWith("|{\"")) {
+      if (message.startsWith("|{") || message.startsWith("|[")) {
         chatHud.addMessage(Component.Serializer.fromJson(message.substring(1)));
       } else {
         chatHud.addMessage(Component.nullToEmpty(message.substring(1)));

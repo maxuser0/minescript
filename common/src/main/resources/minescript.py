@@ -17,6 +17,7 @@ scripts and not run directly.
 
 import asyncio
 import base64
+import json
 import os
 import queue
 import sys
@@ -55,48 +56,71 @@ def execute(command: str):
   print(command)
 
 
-def echo(message: Any):
-  """Echoes message to the chat.
+def echo(*messages):
+  """Echoes messages to the chat.
 
-  The echoed message is visible only to the local player.
+  Echoed messages are visible only to the local player.
 
-  Since: v2.0
-  """
-  print(message, file=sys.stderr)
+  If `len(messages)` is greater than 1, join messages with a space separating
+  them. If `messages[0]` is a dict or list, interpret as JSON-formatted text;
+  `len(messages)` must be 1 in this case.
 
-
-def chat(message: str):
-  """Sends the given message to the chat.
-
-  If `message` starts with a slash or backslash, automatically prepends a space
-  so that the message is sent as a chat and not executed as a command.  Ignores
-  empty messages.
+  Update in v4.0:
+    Support multiple plain-text messages. Interpret dict or list as a JSON-formatted message.
 
   Since: v2.0
   """
-  if not message:
+  if not messages:
     return
-  # If the message starts with a slash or backslash, prepend a space so that
-  # the message is printed and not executed as a command.
-  if message[0] in ("/", "\\"):
-    message = " " + message
-  print(message)
+
+  if type(messages[0]) in (dict, list):
+    # Interpret as JSON-formatted text by using the special "|" prefix.
+    # Subsequent messages are silently dropped in this case.
+    print(f"|{json.dumps(messages[0])}", file=sys.stderr)
+  else:
+    print(*messages, file=sys.stderr)
 
 
-def log(message: str) -> bool:
-  """Sends the given message to latest.log.
+def chat(*messages):
+  """Sends messages to the chat.
 
-  Args:
-    message: string to send to the log
+  If `messages[0]` is a str starting with a slash or backslash, automatically
+  prepends a space so that the messages are sent as a chat and not executed as
+  a command. If `len(messages)` is greater than 1, join messages with a space
+  separating them.  Ignores empty `messages`.
+
+  Update in v4.0:
+    Support multiple messages.
+
+  Since: v2.0
+  """
+  if not messages:
+    return
+
+  if type(messages[0]) is str:
+    # If the first message starts with a slash or backslash, prepend a space so
+    # that the first message is printed and not executed as a command.
+    if messages[0] in ("/", "\\"):
+      messages[0] = " " + messages[0]
+    print(*messages)
+  else:
+    print(*messages)
+
+
+def log(*messages) -> bool:
+  """Sends messages to latest.log.
 
   Returns:
-    `True` if `message` was logged successfully.
+    `True` if messages were logged successfully.
+
+  Update in v4.0:
+    Support multiple messages of any type. Auto-convert messages to str.
 
   Since: v3.0
   """
-  if not message:
-    return
-  await_script_function("log", (message,))
+  if not messages:
+    return False
+  return await_script_function("log", (" ".join([str(m) for m in messages]),))
 
 
 def screenshot(filename=None):
