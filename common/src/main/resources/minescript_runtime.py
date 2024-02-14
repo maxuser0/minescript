@@ -38,6 +38,17 @@ _script_function_calls_lock = threading.Lock()
 _next_fcallid = 1000
 _thread_pool = concurrent.futures.ThreadPoolExecutor()  # ThreadPool for coroutines
 
+# Special prefix for emitting function calls, e.g. "?mnsc:123 my_func [4, 5, 6]"
+_FUNCTION_PREFIX = "?mnsc:"
+
+
+def call_noreturn_function(command: str, args):
+  """Calls a function which does not return.
+
+  Make a fire-and-forget function call with a call id of 0 and no return value.
+  """
+  print(f"{_FUNCTION_PREFIX}0 {command} {json.dumps(args)}")
+
 
 def send_script_function_request(func_name: str, args: Tuple[Any, ...],
                                  retval_handler: AnyConsumer,
@@ -59,7 +70,7 @@ def send_script_function_request(func_name: str, args: Tuple[Any, ...],
     _next_fcallid += 1
     func_call_id = _next_fcallid
     _script_function_calls[func_call_id] = (func_name, retval_handler, exception_handler)
-  print(f"?{func_call_id} {func_name} {json.dumps(args)}")
+  print(f"{_FUNCTION_PREFIX}{func_call_id} {func_name} {json.dumps(args)}")
   return func_call_id
 
 
@@ -124,7 +135,7 @@ def await_script_function(func_name: str, args: Tuple[Any, ...], timeout: float 
   if not locked:
     # Special pseudo-function for cancelling the function call.
     cancel_args = (func_call_id, func_name)
-    print(f"?0 cancelfn! {json.dumps(cancel_args)}")
+    call_noreturn_function("cancelfn!", cancel_args)
     raise TimeoutError(f'Timeout after {timeout} seconds')
 
   if exception_holder:
@@ -219,7 +230,8 @@ def _WatchdogLoop():
   while is_alive():
     time.sleep(0.2)
 
-  print(f"?0 exit!")  # special pseudo-function for requesting script termination
+  # Request script termination.
+  call_noreturn_function("exit!", ())
 
 
 _script_service_thread = threading.Thread(target=_ScriptServiceLoop,

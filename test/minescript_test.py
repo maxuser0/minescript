@@ -40,8 +40,8 @@ def escape_double_quotes(string):
   return string.replace('"', r'\"')
 
 def print_success(message):
-  minescript.chat(
-      f'|{{"text":"[{current_test_}] {escape_double_quotes(message)}","color":"green"}}')
+  minescript.echo(
+      { "text": f"[{current_test_}] {escape_double_quotes(message)}", "color": "green" })
 
 def print_failure(message):
   minescript.echo(f'[{current_test_}] {message}')
@@ -128,7 +128,7 @@ def copy_paste_test():
   filename = os.path.join("minescript", "blockpacks", "test.zip")
   try:
     minescript.execute(r"\copy ~ ~-1 ~ ~5 ~5 ~5 test")
-    time.sleep(0.5) # give copy command some time to complete
+    time.sleep(1) # give copy command some time to complete
     expect_true(os.path.isfile(filename))
     expect_message(
         r"Copied volume .* to minescript.blockpacks.test.zip \(.* bytes\)\.")
@@ -155,7 +155,8 @@ def copy_paste_test():
     minescript.execute(r"\copy ~10000 ~-1 ~ ~10005 ~5 ~5")
     expect_message("Not all chunks are loaded within the requested `copy` volume")
   finally:
-    os.remove(filename)
+    if os.path.isfile(filename):
+      os.remove(filename)
 
 
 @test
@@ -402,7 +403,7 @@ def world_properties_test():
 
 if "--list" in sys.argv[1:]:
   for test in all_tests:
-    minescript.chat(f'|{{"text":"{test.__name__}","color":"green"}}')
+    minescript.echo({ "text": test.__name__, "color": "green" })
   sys.exit(0)
 
 explicit_tests = set()

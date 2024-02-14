@@ -31,7 +31,7 @@ import java.util.zip.ZipOutputStream;
 /**
  * {@code BlockPack} represents blocks stored as rectangular volumes of equivalent blocks.
  *
- * <p>{@code BlockPack} stores blocks for efficient translation into /fill and /setblock commands.
+ * <p>{@code BlockPack} stores blocks for efficient translation into fill and setblock commands.
  */
 public class BlockPack {
   private static final int X_BUILD_MIN = -(1 << 25);
@@ -858,13 +858,13 @@ public class BlockPack {
             new BlockConsumer() {
               @Override
               public void setblock(int x, int y, int z, String block) {
-                commandConsumer.accept(String.format("/setblock %d %d %d %s", x, y, z, block));
+                commandConsumer.accept(String.format("setblock %d %d %d %s", x, y, z, block));
               }
 
               @Override
               public void fill(int x1, int y1, int z1, int x2, int y2, int z2, String block) {
                 commandConsumer.accept(
-                    String.format("/fill %d %d %d %d %d %d %s", x1, y1, z1, x2, y2, z2, block));
+                    String.format("fill %d %d %d %d %d %d %s", x1, y1, z1, x2, y2, z2, block));
               }
             }));
   }
@@ -971,14 +971,14 @@ public class BlockPack {
             for (int y = y1; y <= y2; ++y) {
               for (int z = z1; z <= z2; ++z) {
                 commandConsumer.accept(
-                    String.format("/setblock %d %d %d %s", x, y, z, blockType.symbol));
+                    String.format("setblock %d %d %d %s", x, y, z, blockType.symbol));
               }
             }
           }
         } else {
           commandConsumer.accept(
               String.format(
-                  "/fill %d %d %d %d %d %d %s", x1, y1, z1, x2, y2, z2, blockType.symbol));
+                  "fill %d %d %d %d %d %d %s", x1, y1, z1, x2, y2, z2, blockType.symbol));
         }
       }
       for (int i = 0; i < setblocks.length; i += 2) {
@@ -988,7 +988,7 @@ public class BlockPack {
         int z = zOffset + coord[2];
         int blockTypeId = blockTypes[setblocks[i + 1]];
         BlockType blockType = symbolMap.get(blockTypeId);
-        commandConsumer.accept(String.format("/setblock %d %d %d %s", x, y, z, blockType.symbol));
+        commandConsumer.accept(String.format("setblock %d %d %d %s", x, y, z, blockType.symbol));
       }
     }
 
