@@ -2204,7 +2204,8 @@ public class Minescript {
         value = eraseChar(value, cursorPos);
       }
       if (value.stripTrailing().length() > 0) {
-        String command = value.substring(1).split("\\s+")[0];
+        String[] words = value.substring(1).split("\\s+");
+        String command = words.length > 0 ? words[0] : "";
         if (key == TAB_KEY && !commandSuggestions.isEmpty()) {
           if (cursorPos == command.length() + 1) {
             // Insert the remainder of the completed command.
