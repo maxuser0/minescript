@@ -39,21 +39,17 @@ Vector3f = Tuple[float, float, float]
 def execute(command: str):
   """Executes the given command.
 
-  If `command` doesn't already start with a slash or backslash, automatically
-  prepends a slash. Ignores leading and trailing whitespace, and ignores empty
-  commands.
+  If `command` is prefixed by a backslash, it's treated as Minescript command,
+  otherwise it's treated as a Minecraft command (the slash prefix is optional).
 
   *Note: This was named `exec` in Minescript 2.0. The old name is no longer
   available in v3.0.*
 
   Since: v2.1
   """
-  command = command.strip()
-  if not command:
-    return
-  if command[0] not in ("/", "\\"):
-    command = "/" + command
-  print(command)
+  if not isinstance(command, str):
+    raise TypeError("Argument must be a string.")
+  minescript_runtime.call_noreturn_function("execute", (command,))
 
 
 def echo(*messages):
@@ -74,11 +70,11 @@ def echo(*messages):
     return
 
   if type(messages[0]) in (dict, list):
-    # Interpret as JSON-formatted text by using the special "|" prefix.
-    # Subsequent messages are silently dropped in this case.
-    print(f"|{json.dumps(messages[0])}", file=sys.stderr)
+    # Interpret as JSON-formatted text.  Subsequent messages are silently
+    # dropped in this case.
+    await_script_function("echo_json_text", (json.dumps(messages[0]),))
   else:
-    print(*messages, file=sys.stderr)
+    await_script_function("echo_plain_text", (" ".join([str(m) for m in messages]),))
 
 
 def chat(*messages):
@@ -102,9 +98,8 @@ def chat(*messages):
     # that the first message is printed and not executed as a command.
     if messages[0] in ("/", "\\"):
       messages[0] = " " + messages[0]
-    print(*messages)
-  else:
-    print(*messages)
+
+  minescript_runtime.call_noreturn_function("chat", (" ".join([str(m) for m in messages]),))
 
 
 def log(*messages) -> bool:
@@ -120,7 +115,7 @@ def log(*messages) -> bool:
   """
   if not messages:
     return False
-  return await_script_function("log", (" ".join([str(m) for m in messages]),))
+  minescript_runtime.call_noreturn_function("log", (" ".join([str(m) for m in messages]),))
 
 
 def screenshot(filename=None):

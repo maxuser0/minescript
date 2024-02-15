@@ -671,9 +671,14 @@ public class Minescript {
 
     void raiseException(long functionCallId, ExceptionInfo exception);
 
-    void enqueueStdout(String text);
+    void processStdout(String text);
 
-    void enqueueStderr(String messagePattern, Object... arguments);
+    void processStderr(String text);
+
+    default void log(String messagePattern, Object... arguments) {
+      String logMessage = ParameterizedMessage.format(messagePattern, arguments);
+      processStderr(logMessage);
+    }
 
     void logJobException(Exception e);
   }
@@ -970,39 +975,61 @@ public class Minescript {
     }
 
     @Override
-    public void enqueueStdout(String text) {
+    public void processStdout(String text) {
       // Stdout lines with FUNCTION_PREFIX are handled as function calls regardless of redirection.
       if (text.startsWith(FUNCTION_PREFIX)) {
         jobMessageQueue.add(Message.createFunctionCall(text.substring(FUNCTION_PREFIX.length())));
         return;
       }
 
-      // TODO(maxuser): Process Minecraft commands, Minescript commands, and chat messages via
-      // script function instead, unless redirected to chat to preserve legacy behavior.
-      // Stdout redirection should support: chat (legacy behavior), echo (default), log, null
-      if (text.startsWith("/")) {
-        jobMessageQueue.add(Message.createMinecraftCommand(text.substring(1)));
-      } else if (text.startsWith("\\")) {
-        jobMessageQueue.add(Message.createMinescriptCommand(text.substring(1)));
-      } else {
-        jobMessageQueue.add(Message.createChatMessage(text));
+      switch (command.redirects().stdout()) {
+        case CHAT:
+          if (text.startsWith("/")) {
+            jobMessageQueue.add(Message.createMinecraftCommand(text.substring(1)));
+          } else if (text.startsWith("\\")) {
+            jobMessageQueue.add(Message.createMinescriptCommand(text.substring(1)));
+          } else {
+            jobMessageQueue.add(Message.createChatMessage(text));
+          }
+          break;
+        case DEFAULT:
+        case ECHO:
+          jobMessageQueue.add(Message.fromPlainText(text));
+          break;
+        case LOG:
+          LOGGER.info(text);
+          break;
+        case NULL:
+          break;
       }
     }
 
     @Override
-    public void enqueueStderr(String messagePattern, Object... arguments) {
-      String logMessage = ParameterizedMessage.format(messagePattern, arguments);
-      LOGGER.error("{}", logMessage);
-      var match = stderrChatIgnorePattern.matcher(logMessage);
-      if (!match.find()) {
-        // TODO(maxuser): Support stderr redirection: chat, echo (default yellow), log, null
-        if (logMessage.startsWith("|{") || logMessage.startsWith("|[")) {
-          // The message is already formatted, so pass along as is.
-          jobMessageQueue.add(Message.fromJsonFormattedText(logMessage.substring(1)));
-        } else {
-          // Wrap the message in formatting JSON.
-          jobMessageQueue.add(formatAsJsonText(logMessage, "yellow"));
-        }
+    public void processStderr(String text) {
+      var match = stderrChatIgnorePattern.matcher(text);
+      if (match.find()) {
+        return;
+      }
+
+      switch (command.redirects().stderr()) {
+        case CHAT:
+          if (text.startsWith("/")) {
+            jobMessageQueue.add(Message.createMinecraftCommand(text.substring(1)));
+          } else if (text.startsWith("\\")) {
+            jobMessageQueue.add(Message.createMinescriptCommand(text.substring(1)));
+          } else {
+            jobMessageQueue.add(Message.createChatMessage(text));
+          }
+          break;
+        case DEFAULT:
+        case ECHO:
+          jobMessageQueue.add(formatAsJsonText(text, "yellow"));
+          break;
+        case LOG:
+          LOGGER.info(text);
+          break;
+        case NULL:
+          break;
       }
     }
 
@@ -1179,7 +1206,7 @@ public class Minescript {
     public int run(ScriptConfig.BoundCommand command, JobControl jobControl) {
       var exec = scriptConfig.getExecutableCommand(command);
       if (exec == null) {
-        jobControl.enqueueStderr(
+        jobControl.log(
             "Command execution not configured for \"{}\": {}",
             command.fileExtension(),
             configFile.getAbsolutePath());
@@ -1210,14 +1237,14 @@ public class Minescript {
               break;
             }
             lastReadTime = System.currentTimeMillis();
-            jobControl.enqueueStdout(line);
+            jobControl.processStdout(line);
           }
           if (stderrReader.ready()) {
             if ((line = stderrReader.readLine()) == null) {
               break;
             }
             lastReadTime = System.currentTimeMillis();
-            jobControl.enqueueStderr(line);
+            jobControl.log(line);
           }
           try {
             Thread.sleep(millisToSleep);
@@ -1228,7 +1255,7 @@ public class Minescript {
         }
       } catch (IOException e) {
         jobControl.logJobException(e);
-        jobControl.enqueueStderr(e.getMessage());
+        jobControl.log(e.getMessage());
         return -3;
       }
 
@@ -1364,7 +1391,8 @@ public class Minescript {
       var undoJob =
           new Job(
               allocateJobId(),
-              new ScriptConfig.BoundCommand(null, undo.derivativeCommand()),
+              new ScriptConfig.BoundCommand(
+                  null, undo.derivativeCommand(), ScriptRedirect.Pair.DEFAULTS),
               new UndoTask(undo),
               i -> finishJob(i, Collections.emptyList()));
       jobMap.put(undoJob.jobId(), undoJob);
@@ -1737,8 +1765,7 @@ public class Minescript {
       }
 
       List<String> tokenStrings = tokens.stream().map(Token::toString).collect(Collectors.toList());
-      String[] command = tokenStrings.toArray(EMPTY_STRING_ARRAY);
-      command = substituteMinecraftVars(command);
+      String[] command = substituteMinecraftVars(tokenStrings.toArray(EMPTY_STRING_ARRAY));
 
       switch (command[0]) {
         case "jobs":
@@ -1943,7 +1970,13 @@ public class Minescript {
         return;
       }
 
-      jobs.createSubprocess(new ScriptConfig.BoundCommand(commandPath, command), nextCommand);
+      var redirects = ScriptRedirect.parseAndRemoveRedirects(tokenStrings);
+
+      // Reassign command based on potentially updated tokenStrings.
+      command = substituteMinecraftVars(tokenStrings.toArray(EMPTY_STRING_ARRAY));
+
+      jobs.createSubprocess(
+          new ScriptConfig.BoundCommand(commandPath, command, redirects), nextCommand);
 
     } catch (RuntimeException e) {
       logException(e);
@@ -2321,12 +2354,12 @@ public class Minescript {
       String tellrawCommand = "tellraw @a " + String.format(customNickname, message);
       systemMessageQueue.add(Message.createMinecraftCommand(tellrawCommand));
       var minecraft = Minecraft.getInstance();
-      var chatHud = minecraft.gui.getChat();
+      var chat = minecraft.gui.getChat();
       // TODO(maxuser): There appears to be a bug truncating the chat HUD command history. It might
       // be that onClientChat(...) can get called on a different thread from what other callers are
       // expecting, thereby corrupting the history. Verify whether this gets called on the same
       // thread as onClientWorldTick() or other events.
-      chatHud.addRecentChat(message);
+      chat.addRecentChat(message);
       cancel = true;
     }
     return cancel;
@@ -2538,45 +2571,62 @@ public class Minescript {
         || serverBlockList.areCommandsAllowedForServer(serverData.name, serverData.ip);
   }
 
-  private static void processMessage(Message message) {
-    if (message.type() == Message.Type.MINESCRIPT_COMMAND) {
-      LOGGER.info("Processing command from message queue: {}", message.value());
-      // TODO(maxuser): If there's a parent job that spawned this command, pass along the parent job
-      // so that suspending or killing the parent job also suspends or kills the child job. Also,
-      // child jobs are listed from `jobs` command and increment the job counter, but should they?
-      // This speaks to the conceptual distinction between "shell job" and "process" which currently
-      // isn't established.
-      runMinescriptCommand(message.value());
-      return;
-    }
-
+  private static void processMinecraftCommand(String command) {
     var minecraft = Minecraft.getInstance();
-    if (message.type() == Message.Type.JSON_FORMATTED_TEXT) {
-      var chatHud = minecraft.gui.getChat();
-      // TODO(maxuser): Consider catching RuntimeException or com.google.gson.JsonParseException to
-      // fall back to plain text as Message.Type.PLAIN_TEXT.
-      chatHud.addMessage(Component.Serializer.fromJson(message.value()));
+    var connection = minecraft.player.connection;
+    if (!areCommandsAllowed()) {
+      LOGGER.info("Minecraft command blocked for server: /{}", command);
       return;
     }
+    connection.sendUnsignedCommand(command);
+  }
 
-    if (message.type() == Message.Type.PLAIN_TEXT) {
-      var chatHud = minecraft.gui.getChat();
-      chatHud.addMessage(Component.nullToEmpty(message.value()));
-      return;
-    }
+  private static void processChatMessage(String message) {
+    var minecraft = Minecraft.getInstance();
+    var connection = minecraft.player.connection;
+    connection.sendChat(message);
+  }
 
-    var networkHandler = minecraft.player.connection;
-    if (message.type() == Message.Type.MINECRAFT_COMMAND) {
-      if (!areCommandsAllowed()) {
-        LOGGER.info("Minecraft command blocked for server: /{}", message.value());
+  private static void processPlainText(String text) {
+    var minecraft = Minecraft.getInstance();
+    var chat = minecraft.gui.getChat();
+    chat.addMessage(Component.nullToEmpty(text));
+  }
+
+  private static void processJsonFormattedText(String text) {
+    var minecraft = Minecraft.getInstance();
+    var chat = minecraft.gui.getChat();
+    chat.addMessage(Component.Serializer.fromJson(text));
+  }
+
+  private static void processMessage(Message message) {
+    var minecraft = Minecraft.getInstance();
+    switch (message.type()) {
+      case MINECRAFT_COMMAND:
+        processMinecraftCommand(message.value());
         return;
-      }
-      networkHandler.sendUnsignedCommand(message.value());
-      return;
-    }
 
-    if (message.type() == Message.Type.CHAT_MESSAGE) {
-      networkHandler.sendChat(message.value());
+      case MINESCRIPT_COMMAND:
+        LOGGER.info("Processing command: {}", message.value());
+        // TODO(maxuser): If there's a parent job that spawned this command, pass along the parent
+        // job so that suspending or killing the parent job also suspends or kills the child job.
+        // Also, child jobs are listed from `jobs` command and increment the job counter, but should
+        // they?  This speaks to the conceptual distinction between "shell job" and "process" which
+        // currently isn't established.
+        runMinescriptCommand(message.value());
+        return;
+
+      case CHAT_MESSAGE:
+        processChatMessage(message.value());
+        return;
+
+      case PLAIN_TEXT:
+        processPlainText(message.value());
+        return;
+
+      case JSON_FORMATTED_TEXT:
+        processJsonFormattedText(message.value());
+        return;
     }
   }
 
@@ -3214,11 +3264,48 @@ public class Minescript {
           return Optional.of(result);
         }
 
+      case "execute":
+        {
+          args.expectArgs("command");
+          String command = args.getString(0);
+          if (command.startsWith("\\")) {
+            runMinescriptCommand(command.substring(1));
+          } else {
+            processMinecraftCommand(command.startsWith("/") ? command.substring(1) : command);
+          }
+          return Optional.empty();
+        }
+
+      case "echo_json_text":
+        {
+          args.expectArgs("message");
+          var message = args.getString(0);
+          processJsonFormattedText(message);
+          return OPTIONAL_JSON_TRUE;
+        }
+
+      case "echo_plain_text":
+        {
+          args.expectArgs("message");
+          var message = args.getString(0);
+          processPlainText(message);
+          return OPTIONAL_JSON_TRUE;
+        }
+
+      case "chat":
+        {
+          args.expectArgs("message");
+          String message = args.getString(0);
+          processChatMessage(message);
+          return Optional.empty();
+        }
+
       case "log":
         {
-          args.expectSize(1);
-          LOGGER.info(args.get(0).toString());
-          return OPTIONAL_JSON_TRUE;
+          args.expectArgs("message");
+          String message = args.getString(0);
+          LOGGER.info(message);
+          return Optional.empty();
         }
 
       case "screenshot":
@@ -3229,7 +3316,7 @@ public class Minescript {
               minecraft.gameDirectory,
               filename,
               minecraft.getMainRenderTarget(),
-              message -> job.enqueueStderr(message.getString()));
+              message -> job.log(message.getString()));
           return OPTIONAL_JSON_TRUE;
         }
 

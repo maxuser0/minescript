@@ -73,12 +73,16 @@ public class CommandSyntax {
       STRING,
       AND,
       OR,
-      SEMICOLON
+      SEMICOLON,
+      REDIRECT_STDOUT,
+      REDIRECT_STDERR
     }
 
     private static final Token AND_TOKEN = new Token(Type.AND);
     private static final Token OR_TOKEN = new Token(Type.OR);
     private static final Token SEMICOLON_TOKEN = new Token(Type.SEMICOLON);
+    private static final Token REDIRECT_STDOUT_TOKEN = new Token(Type.REDIRECT_STDOUT);
+    private static final Token REDIRECT_STDERR_TOKEN = new Token(Type.REDIRECT_STDERR);
 
     private final Optional<String> string;
     private final Type type;
@@ -99,6 +103,14 @@ public class CommandSyntax {
       return SEMICOLON_TOKEN;
     }
 
+    public static Token redirectStdout() {
+      return REDIRECT_STDOUT_TOKEN;
+    }
+
+    public static Token redirectStderr() {
+      return REDIRECT_STDERR_TOKEN;
+    }
+
     public Type type() {
       return type;
     }
@@ -114,6 +126,10 @@ public class CommandSyntax {
           return "||";
         case SEMICOLON:
           return ";";
+        case REDIRECT_STDOUT:
+          return ">";
+        case REDIRECT_STDERR:
+          return "2>";
         default:
           throw new IllegalStateException("Unsupported Token type: `" + type.toString() + "`");
       }
@@ -197,6 +213,18 @@ public class CommandSyntax {
                     args.add(Token.string(argPrefix));
                   }
                   args.add(Token.semicolon());
+                } else if (literalArg.startsWith(">")) {
+                  args.add(Token.redirectStdout());
+                  String argSuffix = arg.substring(1);
+                  if (!argSuffix.isEmpty()) {
+                    args.add(Token.string(argSuffix));
+                  }
+                } else if (literalArg.startsWith("2>")) {
+                  args.add(Token.redirectStderr());
+                  String argSuffix = arg.substring(2);
+                  if (!argSuffix.isEmpty()) {
+                    args.add(Token.string(argSuffix));
+                  }
                 } else {
                   args.add(Token.string(arg));
                 }

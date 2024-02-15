@@ -216,7 +216,7 @@ public class ScriptConfig {
     return fileName.substring(0, lastIndex);
   }
 
-  public record BoundCommand(Path scriptPath, String[] command) {
+  public record BoundCommand(Path scriptPath, String[] command, ScriptRedirect.Pair redirects) {
     String fileExtension() {
       if (scriptPath == null) {
         return null;
