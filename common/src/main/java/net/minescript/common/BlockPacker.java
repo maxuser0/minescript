@@ -436,9 +436,9 @@ public class BlockPacker implements BlockPack.BlockConsumer {
 
     public void computeRunLengths() {
       // Algorithm:
-      // 1. Iterate x, y, z from 15 to 0 to accumulate run lengths in positive x, y, z direction.
-      // 2. Iterate by y slice from 0 to 15
-      //    - For each unfilled x, z block from (0, y, 0) to (15, y, 15):
+      // 1. Iterate x, y, z from 31 to 0 to accumulate run lengths in positive x, y, z direction.
+      // 2. Iterate by y slice from 0 to 31
+      //    - For each unfilled x, z block from (0, y, 0) to (31, y, 31):
       //      - Iterate the +x span to find the max (x, z) box from x, y, z to x', y', z'.
       //      - Iterate the +z span to find the max (x, z) box from x, y, z to x', y', z'.
       //      - Take the larger of the volumes computed in the previous two steps. If the volume is
