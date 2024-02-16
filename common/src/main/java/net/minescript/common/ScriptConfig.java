@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -26,6 +27,8 @@ public class ScriptConfig {
   private final Path minescriptDir;
   private final ImmutableList<String> builtinCommands;
   private final ImmutableSet<String> ignoreDirs;
+
+  private boolean escapeCommandDoubleQuotes = System.getProperty("os.name").startsWith("Windows");
   private ImmutableList<Path> commandPath =
       ImmutableList.of(Paths.get("system", "exec"), Paths.get(""));
   private String minescriptCommandPathEnvVar = "";
@@ -51,6 +54,10 @@ public class ScriptConfig {
                 this.commandPath.stream()
                     .map(p -> minescriptDir.resolve(p).toString())
                     .collect(Collectors.toList()));
+  }
+
+  public void setEscapeCommandDoubleQuotes(boolean enable) {
+    this.escapeCommandDoubleQuotes = enable;
   }
 
   public ImmutableList<Path> commandPath() {
@@ -151,7 +158,7 @@ public class ScriptConfig {
 
     var fileTypeConfig =
         new FileTypeConfig(
-            CommandBuilder.create(commandConfig.command),
+            CommandBuilder.create(commandConfig.command, () -> escapeCommandDoubleQuotes),
             commandConfig.environment == null
                 ? new String[0]
                 : commandConfig.environment.stream()
@@ -236,9 +243,14 @@ public class ScriptConfig {
    * @param commandIndex index of "{command}" in pattern
    * @param argsIndex index of "{args}" in pattern
    */
-  public record CommandBuilder(String[] pattern, int commandIndex, int argsIndex) {
+  public record CommandBuilder(
+      String[] pattern,
+      int commandIndex,
+      int argsIndex,
+      Supplier<Boolean> escapeCommandDoubleQuotesSupplier) {
 
-    public static CommandBuilder create(List<String> commandPattern) {
+    public static CommandBuilder create(
+        List<String> commandPattern, Supplier<Boolean> escapeCommandDoubleQuotesSupplier) {
       int commandIndex = commandPattern.indexOf("{command}");
       Preconditions.checkArgument(
           commandIndex >= 0, "{command} not found in pattern: %s", commandPattern);
@@ -247,18 +259,27 @@ public class ScriptConfig {
       Preconditions.checkArgument(
           commandIndex >= 0, "{args} not found in pattern: %s", commandPattern);
 
-      return new CommandBuilder(commandPattern.toArray(STRING_ARRAY), commandIndex, argsIndex);
+      return new CommandBuilder(
+          commandPattern.toArray(STRING_ARRAY),
+          commandIndex,
+          argsIndex,
+          escapeCommandDoubleQuotesSupplier);
     }
 
     public String[] buildExecutableCommand(BoundCommand boundCommand) {
       var executableCommand = new ArrayList<String>();
+      boolean escapeCommandDoubleQuotes = escapeCommandDoubleQuotesSupplier.get();
       String[] command = boundCommand.command();
       for (int i = 0; i < pattern.length; ++i) {
         if (i == commandIndex) {
           executableCommand.add(boundCommand.scriptPath().toString());
         } else if (i == argsIndex) {
           for (int j = 1; j < command.length; ++j) {
-            executableCommand.add(command[j]);
+            String arg = command[j];
+            if (escapeCommandDoubleQuotes) {
+              arg = arg.replace("\"", "\\\"");
+            }
+            executableCommand.add(arg);
           }
         } else {
           executableCommand.add(pattern[i]);

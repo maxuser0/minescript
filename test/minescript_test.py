@@ -377,6 +377,7 @@ def player_look_at_test():
   # Restore original orientation.
   minescript.player_set_orientation(yaw, pitch)
 
+
 @test
 def screen_name_test():
   # Assume that no GUI screen is active while test is running.
@@ -397,6 +398,22 @@ def world_properties_test():
   expect_contains(props, "difficulty")
   expect_contains(props, "name")
   expect_contains(props, "address")
+
+
+@test
+def command_parse_test():
+  minescript.execute(r"""\eval 'print("this is " + "a test")' 2>null""")
+  expect_message("this is a test")
+
+  minescript.execute(r'''\eval "print('this is ' + 'another test')" 2>null''')
+  expect_message("this is another test")
+
+  minescript.execute(r"""\eval 'print(\'this is \' + \'an escaped test\')' 2>null""")
+  expect_message("this is an escaped test")
+
+  minescript.execute(r'''\eval "print(\"this is \" + \"a doubly escaped test\")" 2>null''')
+  expect_message("this is a doubly escaped test")
+
 
 # END TESTS
 

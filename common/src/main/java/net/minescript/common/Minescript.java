@@ -411,6 +411,12 @@ public class Minescript {
               }
               break;
 
+            case "escape_command_double_quotes":
+              boolean isEnabled = Boolean.valueOf(value);
+              scriptConfig.setEscapeCommandDoubleQuotes(isEnabled);
+              LOGGER.info("Setting escape_command_double_quotes to {}", isEnabled);
+              break;
+
             case "path":
               var commandPath =
                   Arrays.stream(value.split(File.pathSeparator))
