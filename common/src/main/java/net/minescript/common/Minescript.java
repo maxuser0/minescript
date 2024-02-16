@@ -131,8 +131,11 @@ public class Minescript {
       LOGGER.info("{} undo file(s) deleted.", numDeletedFiles);
     }
 
-    String currentVersion = getCurrentVersion();
     String lastRunVersion = getLastRunVersion();
+    if (lastRunVersion.equals(LEGACY_VERSION)) {
+      deleteLegacyFiles();
+    }
+    String currentVersion = getCurrentVersion();
     if (!currentVersion.equals(lastRunVersion)) {
       LOGGER.info(
           "Current version ({}) does not match last run version ({})",
@@ -149,27 +152,29 @@ public class Minescript {
     loadConfig();
   }
 
-  private static void loadMinescriptResources() {
-    // copy.py was renamed to copy_blocks.py in Minescript 4.0 to avoid conflict with the built-in
-    // copy module. Delete the obsolete script if it exists.
-    deleteMinescriptFile("copy.py");
+  private static void deleteLegacyFiles() {
+    LOGGER.info("Deleting files from legacy version of Minescript...");
 
-    // Delete files that used to be stored directly within the `minescript` dir in prior versions.
+    // Delete files that used to be stored directly within the `minescript` dir in legacy versions.
+    deleteMinescriptFile("version.txt");
     deleteMinescriptFile("minescript.py");
     deleteMinescriptFile("minescript_runtime.py");
     deleteMinescriptFile("help.py");
-    deleteMinescriptFile("copy_blocks.py");
+    deleteMinescriptFile("copy.py");
     deleteMinescriptFile("paste.py");
     deleteMinescriptFile("eval.py");
+  }
 
+  private static void loadMinescriptResources() {
     Path minescriptDir = Paths.get(MINESCRIPT_DIR);
-    Path libDir = Paths.get(MINESCRIPT_DIR, "system", "lib");
-    Path execDir = Paths.get(MINESCRIPT_DIR, "system", "exec");
+    Path systemDir = Paths.get(MINESCRIPT_DIR, "system");
+    Path libDir = systemDir.resolve("lib");
+    Path execDir = systemDir.resolve("exec");
 
     new File(libDir.toString()).mkdirs();
     new File(execDir.toString()).mkdirs();
 
-    copyJarResourceToFile("version.txt", minescriptDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("version.txt", systemDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("minescript.py", libDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("minescript_runtime.py", libDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("help.py", execDir, FileOverwritePolicy.OVERWRITTE);
@@ -228,8 +233,15 @@ public class Minescript {
     }
   }
 
+  private static final String LEGACY_VERSION = "legacy";
+
   private static String getLastRunVersion() {
-    Path versionPath = Paths.get(MINESCRIPT_DIR, "version.txt");
+    Path legacyVersionPath = Paths.get(MINESCRIPT_DIR, "version.txt");
+    if (Files.exists(legacyVersionPath)) {
+      return LEGACY_VERSION; // Doesn't matter what's in the legacy version file. It's out of date.
+    }
+
+    Path versionPath = Paths.get(MINESCRIPT_DIR, "system", "version.txt");
     if (!Files.exists(versionPath)) {
       return "";
     }
