@@ -1169,6 +1169,21 @@ def screen_name() -> str:
   return await_script_function("screen_name", ())
 
 
+def show_chat_screen(show: bool, prompt: str = None) -> str:
+  """Shows or hides the chat screen.
+
+  Args:
+    show: if `True`, show the chat screen; otherwise hide it
+    prompt: if show is `True`, insert `prompt` into chat input box upon showing chat screen.
+
+  Returns:
+    `True` if chat screen was successfully shown (`show=True`) or hidden (`show=False`)
+
+  Since: v4.0
+  """
+  return await_script_function("show_chat_screen", (show, prompt))
+
+
 def container_get_items():
   """Gets all items in an open container (chest, furnace, etc. with slots).
 

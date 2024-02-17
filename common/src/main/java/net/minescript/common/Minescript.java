@@ -2160,17 +2160,24 @@ public class Minescript {
   private static MinescriptCommandHistory minescriptCommandHistory = new MinescriptCommandHistory();
   private static boolean incrementalCommandSuggestions = false;
 
+  private static boolean checkChatScreenInput() {
+    if (chatEditBox == null) {
+      if (!reportedChatEditBoxError) {
+        reportedChatEditBoxError = true;
+        logUserError(
+            "Minescript internal error: Expected ChatScreen.input to be initialized by"
+                + " ChatScreen.init(), but it's null instead. Minescript commands sent through"
+                + " chat will not be interpreted as commands, and sent as normal chats instead.");
+      }
+      return false;
+    }
+    return true;
+  }
+
   public static boolean onKeyboardKeyPressed(Screen screen, int key) {
     boolean cancel = false;
     if (screen != null && screen instanceof ChatScreen) {
-      if (chatEditBox == null) {
-        if (!reportedChatEditBoxError) {
-          reportedChatEditBoxError = true;
-          logUserError(
-              "Minescript internal error: Expected ChatScreen.input to be initialized by"
-                  + " ChatScreen.init(), but it's null instead. Minescript commands sent through"
-                  + " chat will not be interpreted as commands, and sent as normal chats instead.");
-        }
+      if (!checkChatScreenInput()) {
         return cancel;
       }
       String value = chatEditBox.getValue();
@@ -3692,6 +3699,34 @@ public class Minescript {
           double z = args.getDouble(2);
           player.lookAt(EntityAnchorArgument.Anchor.EYES, new Vec3(x, y, z));
           return OPTIONAL_JSON_TRUE;
+        }
+
+      case "show_chat_screen":
+        {
+          args.expectSize(2);
+          boolean show = args.getBoolean(0);
+          var screen = minecraft.screen;
+          final Optional<JsonElement> result;
+          if (show) {
+            if (screen == null) {
+              minecraft.setScreen(new ChatScreen(""));
+              var prompt = args.get(1);
+              if (prompt != null && checkChatScreenInput()) {
+                chatEditBox.setValue(prompt.toString());
+              }
+              result = OPTIONAL_JSON_TRUE;
+            } else {
+              result = OPTIONAL_JSON_FALSE;
+            }
+          } else {
+            if (screen != null && screen instanceof ChatScreen) {
+              screen.onClose();
+              result = OPTIONAL_JSON_TRUE;
+            } else {
+              result = OPTIONAL_JSON_FALSE;
+            }
+          }
+          return result;
         }
 
       case "flush":
