@@ -54,7 +54,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import net.minecraft.client.KeyMapping;
@@ -103,7 +102,7 @@ public class Minescript {
 
   private static Platform platform;
   private static Thread worldListenerThread;
-  private static ScriptConfig scriptConfig;
+  private static Config config;
 
   public static void init(Platform platform) {
     Minescript.platform = platform;
@@ -149,7 +148,18 @@ public class Minescript {
         new Thread(Minescript::runWorldListenerThread, "minescript-world-listener");
     worldListenerThread.start();
 
-    loadConfig();
+    Path minescriptDir = Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR);
+    if (System.getProperty("os.name").startsWith("Windows")) {
+      copyJarResourceToFile(
+          "windows_config.txt", minescriptDir, "config.txt", FileOverwritePolicy.DO_NOT_OVERWRITE);
+    } else {
+      copyJarResourceToFile(
+          "posix_config.txt", minescriptDir, "config.txt", FileOverwritePolicy.DO_NOT_OVERWRITE);
+    }
+
+    config =
+        new Config(MINESCRIPT_DIR, "config.txt", BUILTIN_COMMANDS, IGNORE_DIRS_FOR_COMPLETIONS);
+    config.load();
   }
 
   private static void deleteLegacyFiles() {
@@ -285,234 +295,6 @@ public class Minescript {
       LOGGER.info("Copied jar resource \"{}\" to \"{}\"", resourceName, filePath);
     } catch (IOException e) {
       LOGGER.error("Failed to copy jar resource \"{}\" to \"{}\"", resourceName, filePath);
-    }
-  }
-
-  private static String pythonLocation = null;
-
-  private static final Pattern CONFIG_LINE_RE = Pattern.compile("([^=]+)=(.*)");
-  private static final Pattern DOUBLE_QUOTED_STRING_RE = Pattern.compile("\"(.*)\"");
-  private static final Pattern CONFIG_AUTORUN_RE = Pattern.compile("autorun\\[(.*)\\]");
-
-  // Map from world name (or "*" for all) to a list of Minescript/Minecraft commands.
-  private static Map<String, List<Message>> autorunCommands = new ConcurrentHashMap<>();
-
-  private static final File configFile =
-      new File(Paths.get(MINESCRIPT_DIR, "config.txt").toString());
-  private static long lastConfigLoadTime = 0;
-
-  // Regex pattern for ignoring lines of output from stderr of Python scripts.
-  private static Pattern stderrChatIgnorePattern = Pattern.compile("^$");
-
-  /** Loads config from {@code minescript/config.txt} if the file has changed since last loaded. */
-  private static void loadConfig() {
-    Path minescriptDir = Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR);
-
-    if (System.getProperty("os.name").startsWith("Windows")) {
-      copyJarResourceToFile(
-          "windows_config.txt", minescriptDir, "config.txt", FileOverwritePolicy.DO_NOT_OVERWRITE);
-    } else {
-      copyJarResourceToFile(
-          "posix_config.txt", minescriptDir, "config.txt", FileOverwritePolicy.DO_NOT_OVERWRITE);
-    }
-    if (configFile.lastModified() < lastConfigLoadTime) {
-      return;
-    }
-    lastConfigLoadTime = System.currentTimeMillis();
-    autorunCommands.clear();
-
-    scriptConfig = new ScriptConfig(MINESCRIPT_DIR, BUILTIN_COMMANDS, IGNORE_DIRS_FOR_COMPLETIONS);
-
-    try (var reader = new BufferedReader(new FileReader(configFile.getPath()))) {
-      String line;
-      String continuedLine = null;
-      int lineNum = 0;
-      while ((line = reader.readLine()) != null) {
-        ++lineNum;
-        line = line.stripLeading();
-
-        // Concatenate across lines ending with backslash. Interpret line ending with double
-        // backslash as escaped and treat it as a literal backslash.
-        if (line.endsWith("\\\\")) {
-          line = line.substring(0, line.length() - 1);
-        } else if (line.endsWith("\\")) {
-          line = line.substring(0, line.length() - 1);
-          if (continuedLine == null) {
-            continuedLine = line;
-          } else {
-            continuedLine += " " + line;
-          }
-          continue;
-        }
-
-        if (continuedLine != null) {
-          line = continuedLine + " " + line;
-          continuedLine = null;
-        }
-
-        if (line.matches("[^=]*=\\s*\\{.*") && !line.strip().endsWith("}")) {
-          continuedLine = line;
-          continue;
-        }
-
-        line = line.strip();
-        if (line.isEmpty() || line.startsWith("#")) {
-          continue;
-        }
-        var match = CONFIG_LINE_RE.matcher(line);
-        if (match.matches()) {
-          String name = match.group(1).strip();
-          String value = match.group(2).strip();
-
-          // Strip double quotes surrounding value if present.
-          match = DOUBLE_QUOTED_STRING_RE.matcher(value);
-          if (match.matches()) {
-            value = match.group(1);
-          }
-
-          switch (name) {
-            case "python":
-              if (System.getProperty("os.name").startsWith("Windows")) {
-                pythonLocation =
-                    value.startsWith("%userprofile%\\")
-                        ? value.replace("%userprofile%", System.getProperty("user.home"))
-                        : value;
-              } else {
-                // This does not support "~otheruser/..." syntax. But that would be odd anyway.
-                pythonLocation =
-                    value.startsWith("~/")
-                        ? value.replaceFirst(
-                            "~", Matcher.quoteReplacement(System.getProperty("user.home")))
-                        : value;
-              }
-              LOGGER.info("Setting config var: {} = \"{}\" (\"{}\")", name, value, pythonLocation);
-
-              // `python3 -u` for unbuffered stdout and stderr.
-              var commandPattern = ImmutableList.of(pythonLocation, "-u", "{command}", "{args}");
-
-              var environmentVars =
-                  ImmutableList.of(
-                      "PYTHONPATH="
-                          + String.join(
-                              File.pathSeparator,
-                              ImmutableList.of(
-                                  minescriptDir.resolve(Paths.get("system", "lib")).toString(),
-                                  minescriptDir.toString())));
-
-              try {
-                scriptConfig.configureFileType(
-                    new ScriptConfig.CommandConfig(".py", commandPattern, environmentVars));
-              } catch (Exception e) {
-                LOGGER.error(
-                    "config.txt:{}: Failed to configure .py script execution: {}",
-                    lineNum,
-                    e.toString());
-              }
-
-              break;
-
-            case "command":
-              try {
-                var commandConfig = GSON.fromJson(value, ScriptConfig.CommandConfig.class);
-                scriptConfig.configureFileType(commandConfig);
-              } catch (Exception e) {
-                LOGGER.error(
-                    "config.txt:{}: Failed to configure script execution: {}",
-                    lineNum,
-                    e.toString());
-              }
-              break;
-
-            case "escape_command_double_quotes":
-              boolean isEnabled = Boolean.valueOf(value);
-              scriptConfig.setEscapeCommandDoubleQuotes(isEnabled);
-              LOGGER.info("Setting escape_command_double_quotes to {}", isEnabled);
-              break;
-
-            case "path":
-              var commandPath =
-                  Arrays.stream(value.split(File.pathSeparator))
-                      .map(Paths::get)
-                      .collect(Collectors.toList());
-              scriptConfig.setCommandPath(commandPath);
-              LOGGER.info("Setting path to {}", commandPath);
-              break;
-
-            case "minescript_commands_per_cycle":
-              try {
-                minescriptCommandsPerCycle = Integer.valueOf(value);
-                LOGGER.info(
-                    "Setting minescript_commands_per_cycle to {}", minescriptCommandsPerCycle);
-              } catch (NumberFormatException e) {
-                LOGGER.error("Unable to parse minescript_commands_per_cycle as integer: {}", value);
-              }
-              break;
-
-            case "minescript_ticks_per_cycle":
-              try {
-                minescriptTicksPerCycle = Integer.valueOf(value);
-                LOGGER.info("Setting minescript_ticks_per_cycle to {}", minescriptTicksPerCycle);
-              } catch (NumberFormatException e) {
-                LOGGER.error("Unable to parse minescript_ticks_per_cycle as integer: {}", value);
-              }
-              break;
-
-            case "minescript_incremental_command_suggestions":
-              incrementalCommandSuggestions = Boolean.valueOf(value);
-              LOGGER.info(
-                  "Setting minescript_incremental_command_suggestions to {}",
-                  incrementalCommandSuggestions);
-              break;
-
-            case "minescript_script_function_debug_outptut":
-              scriptFunctionDebugOutptut = Boolean.valueOf(value);
-              LOGGER.info(
-                  "Setting minescript_script_function_debug_outptut to {}",
-                  scriptFunctionDebugOutptut);
-              break;
-
-            case "minescript_log_chunk_load_events":
-              logChunkLoadEvents = Boolean.valueOf(value);
-              LOGGER.info("Setting minescript_log_chunk_load_events to {}", logChunkLoadEvents);
-              break;
-
-            case "stderr_chat_ignore_pattern":
-              stderrChatIgnorePattern = Pattern.compile(value);
-              LOGGER.info("Setting stderr_chat_ignore_pattern to {}", value);
-              break;
-
-            default:
-              {
-                match = CONFIG_AUTORUN_RE.matcher(name);
-                if (match.matches()) {
-                  value = value.strip();
-                  // Interpret commands lacking a slash or backslash prefix as Minescript commands.
-                  final Message command;
-                  if (value.startsWith("/")) {
-                    command = Message.createMinecraftCommand(value.substring(1));
-                  } else if (value.startsWith("\\")) {
-                    command = Message.createMinescriptCommand(value.substring(1));
-                  } else {
-                    command = Message.createMinescriptCommand(value);
-                  }
-                  String worldName = match.group(1);
-                  synchronized (autorunCommands) {
-                    var commandList =
-                        autorunCommands.computeIfAbsent(worldName, k -> new ArrayList<Message>());
-                    commandList.add(command);
-                  }
-                  LOGGER.info("Added autorun command `{}` for `{}`", command, worldName);
-                } else {
-                  LOGGER.warn("Unrecognized config var: {} = \"{}\"", name, value);
-                }
-              }
-          }
-        } else {
-          LOGGER.warn("config.txt:{}: unable parse config line: {}", lineNum, line);
-        }
-      }
-    } catch (IOException e) {
-      LOGGER.error("Exception loading config file: {}", e);
     }
   }
 
@@ -1024,8 +806,7 @@ public class Minescript {
 
     @Override
     public void processStderr(String text) {
-      var match = stderrChatIgnorePattern.matcher(text);
-      if (match.find()) {
+      if (config.shouldIgnoreStderrLine(text)) {
         return;
       }
 
@@ -1222,12 +1003,12 @@ public class Minescript {
 
     @Override
     public int run(ScriptConfig.BoundCommand command, JobControl jobControl) {
-      var exec = scriptConfig.getExecutableCommand(command);
+      var exec = config.scriptConfig().getExecutableCommand(command);
       if (exec == null) {
         jobControl.log(
             "Command execution not configured for \"{}\": {}",
             command.fileExtension(),
-            configFile.getAbsolutePath());
+            config.file().getAbsolutePath());
         return -1;
       }
 
@@ -1746,7 +1527,7 @@ public class Minescript {
       }
 
       // Check if config needs to be reloaded.
-      loadConfig();
+      config.load();
 
       List<Token> tokens = parseCommand(commandLine);
 
@@ -1849,7 +1630,7 @@ public class Minescript {
             if (BUILTIN_COMMANDS.contains(arg)) {
               logUserInfo("Built-in command: `{}`", arg);
             } else {
-              Path commandPath = scriptConfig.resolveCommandPath(arg);
+              Path commandPath = config.scriptConfig().resolveCommandPath(arg);
               if (commandPath == null) {
                 logUserInfo("Command `{}` not found.", arg);
               } else {
@@ -1872,11 +1653,12 @@ public class Minescript {
         case "minescript_commands_per_cycle":
           if (checkParamTypes(command)) {
             logUserInfo(
-                "Minescript executing {} command(s) per cycle.", minescriptCommandsPerCycle);
+                "Minescript executing {} command(s) per cycle.",
+                config.minescriptCommandsPerCycle());
           } else if (checkParamTypes(command, ParamType.INT)) {
             int numCommands = Integer.valueOf(command[1]);
             if (numCommands < 1) numCommands = 1;
-            minescriptCommandsPerCycle = numCommands;
+            config.setMinescriptTicksPerCycle(numCommands);
             logUserInfo("Minescript execution set to {} command(s) per cycle.", numCommands);
           } else {
             logUserError(
@@ -1887,11 +1669,12 @@ public class Minescript {
 
         case "minescript_ticks_per_cycle":
           if (checkParamTypes(command)) {
-            logUserInfo("Minescript executing {} tick(s) per cycle.", minescriptTicksPerCycle);
+            logUserInfo(
+                "Minescript executing {} tick(s) per cycle.", config.minescriptTicksPerCycle());
           } else if (checkParamTypes(command, ParamType.INT)) {
             int ticks = Integer.valueOf(command[1]);
             if (ticks < 1) ticks = 1;
-            minescriptTicksPerCycle = ticks;
+            config.setMinescriptTicksPerCycle(ticks);
             logUserInfo("Minescript execution set to {} tick(s) per cycle.", ticks);
           } else {
             logUserError(
@@ -1903,7 +1686,7 @@ public class Minescript {
         case "minescript_incremental_command_suggestions":
           if (checkParamTypes(command, ParamType.BOOL)) {
             boolean value = Boolean.valueOf(command[1]);
-            incrementalCommandSuggestions = value;
+            config.setIncrementalCommandSuggestions(value);
             logUserInfo("Minescript incremental command suggestions set to {}", value);
           } else {
             logUserError(
@@ -1915,7 +1698,7 @@ public class Minescript {
         case "minescript_script_function_debug_outptut":
           if (checkParamTypes(command, ParamType.BOOL)) {
             boolean value = Boolean.valueOf(command[1]);
-            scriptFunctionDebugOutptut = value;
+            config.setScriptFunctionDebugOutptut(value);
             logUserInfo("Minescript script function debug output set to {}", value);
           } else {
             logUserError(
@@ -1927,7 +1710,7 @@ public class Minescript {
         case "minescript_log_chunk_load_events":
           if (checkParamTypes(command, ParamType.BOOL)) {
             boolean value = Boolean.valueOf(command[1]);
-            logChunkLoadEvents = value;
+            config.setLogChunkLoadEvents(value);
             logUserInfo("Minescript logging of chunk load events set to {}", value);
           } else {
             logUserError(
@@ -1956,7 +1739,7 @@ public class Minescript {
 
         case "NullPointerException":
           // This is for testing purposes only. Throw NPE only if we're in debug mode.
-          if (scriptFunctionDebugOutptut) {
+          if (config.scriptFunctionDebugOutptut()) {
             String s = null;
             logUserError("Length of a null string is {}", s.length());
           }
@@ -1968,7 +1751,7 @@ public class Minescript {
         command[0] = "copy_blocks";
       }
 
-      Path commandPath = scriptConfig.resolveCommandPath(command[0]);
+      Path commandPath = config.scriptConfig().resolveCommandPath(command[0]);
       if (commandPath == null) {
         logUserInfo("Minescript built-in commands:");
         for (String builtin : BUILTIN_COMMANDS) {
@@ -1977,7 +1760,7 @@ public class Minescript {
         logUserInfo("");
         logUserInfo("Minescript command directories:");
         Path minescriptDir = Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR);
-        for (Path commandDir : scriptConfig.commandPath()) {
+        for (Path commandDir : config.scriptConfig().commandPath()) {
           Path path = minescriptDir.resolve(commandDir);
           logUserInfo("  {}", path);
         }
@@ -2001,10 +1784,6 @@ public class Minescript {
     }
   }
 
-  private static int minescriptTicksPerCycle = 1;
-  private static int minescriptCommandsPerCycle = 15;
-
-  private static int renderTickEventCounter = 0;
   private static int clientTickEventCounter = 0;
 
   private static int BACKSLASH_KEY = 92;
@@ -2109,7 +1888,6 @@ public class Minescript {
   }
 
   private static MinescriptCommandHistory minescriptCommandHistory = new MinescriptCommandHistory();
-  private static boolean incrementalCommandSuggestions = false;
 
   private static boolean checkChatScreenInput() {
     if (chatEditBox == null) {
@@ -2204,7 +1982,7 @@ public class Minescript {
           }
         }
         try {
-          var scriptCommandNames = scriptConfig.findCommandPrefixMatches(command);
+          var scriptCommandNames = config.scriptConfig().findCommandPrefixMatches(command);
           scriptCommandNames.sort(null);
           if (scriptCommandNames.contains(command)) {
             chatEditBox.setTextColor(0x5ee85e); // green
@@ -2214,7 +1992,7 @@ public class Minescript {
             newCommandSuggestions.addAll(scriptCommandNames);
             if (!newCommandSuggestions.isEmpty()) {
               if (!newCommandSuggestions.equals(commandSuggestions)) {
-                if (key == TAB_KEY || incrementalCommandSuggestions) {
+                if (key == TAB_KEY || config.incrementalCommandSuggestions()) {
                   systemMessageQueue.add(formatAsJsonText("completions:", "aqua"));
                   for (String suggestion : newCommandSuggestions) {
                     systemMessageQueue.add(formatAsJsonText("  " + suggestion, "aqua"));
@@ -2287,12 +2065,10 @@ public class Minescript {
     return new int[] {(int) (x >> 32), (int) x};
   }
 
-  private static boolean logChunkLoadEvents = false;
-
   public static void onChunkLoad(LevelAccessor chunkLevel, ChunkAccess chunk) {
     int chunkX = chunk.getPos().x;
     int chunkZ = chunk.getPos().z;
-    if (logChunkLoadEvents) {
+    if (config.logChunkLoadEvents()) {
       LOGGER.info("world {} chunk loaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
     }
     var iter = chunkLoadEventListeners.entrySet().iterator();
@@ -2307,7 +2083,7 @@ public class Minescript {
   public static void onChunkUnload(LevelAccessor chunkLevel, ChunkAccess chunk) {
     int chunkX = chunk.getPos().x;
     int chunkZ = chunk.getPos().z;
-    if (logChunkLoadEvents) {
+    if (config.logChunkLoadEvents()) {
       LOGGER.info("world {} chunk unloaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
     }
     for (var entry : chunkLoadEventListeners.entrySet()) {
@@ -2672,8 +2448,6 @@ public class Minescript {
     }
     return jsonEntities;
   }
-
-  private static boolean scriptFunctionDebugOutptut = false;
 
   // String key: KeyMapping.getName()
   private static final Map<String, InputConstants.Key> keyBinds = new ConcurrentHashMap<>();
@@ -3768,7 +3542,7 @@ public class Minescript {
     LOGGER.info("Handling autorun for world `{}`", worldName);
     var commands = new ArrayList<Message>();
 
-    var wildcardCommands = autorunCommands.get("*");
+    var wildcardCommands = config.getAutorunCommands("*");
     if (wildcardCommands != null) {
       LOGGER.info(
           "Matched {} command(s) with autorun[*] for world `{}`",
@@ -3777,7 +3551,7 @@ public class Minescript {
       commands.addAll(wildcardCommands);
     }
 
-    var worldCommands = autorunCommands.get(worldName);
+    var worldCommands = config.getAutorunCommands(worldName);
     if (worldCommands != null) {
       LOGGER.info("Matched {} command(s) with autorun[{}]", wildcardCommands.size(), worldName);
       commands.addAll(worldCommands);
@@ -3790,14 +3564,14 @@ public class Minescript {
   }
 
   public static void onClientWorldTick() {
-    if (++clientTickEventCounter % minescriptTicksPerCycle == 0) {
+    if (++clientTickEventCounter % config.minescriptTicksPerCycle() == 0) {
       var minecraft = Minecraft.getInstance();
       var player = minecraft.player;
 
       String worldName = getWorldName();
       if (!autorunHandled.getAndSet(true) && worldName != null) {
         systemMessageQueue.clear();
-        loadConfig();
+        config.load();
         handleAutorun(worldName);
       }
 
@@ -3837,7 +3611,7 @@ public class Minescript {
                       if (response.isPresent()) {
                         job.respond(funcCallId, response.get(), true);
                       }
-                      if (scriptFunctionDebugOutptut) {
+                      if (config.scriptFunctionDebugOutptut()) {
                         LOGGER.info(
                             "(debug) Script function `{}`: {} / {}  ->  {}",
                             functionName,
@@ -3858,7 +3632,7 @@ public class Minescript {
               }
             }
           }
-        } while (hasMessage && iterations < minescriptCommandsPerCycle);
+        } while (hasMessage && iterations < config.minescriptCommandsPerCycle());
       }
     }
   }
