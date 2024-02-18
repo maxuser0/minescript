@@ -2053,55 +2053,6 @@ public class Minescript {
 
   private static List<String> commandSuggestions = new ArrayList<>();
 
-  private static class MinescriptCommandHistory {
-    private final List<String> commandList = new ArrayList<>();
-    private int commandPosition;
-
-    public MinescriptCommandHistory() {
-      commandList.add("");
-      commandPosition = 0;
-    }
-
-    public Optional<String> moveBackwardAndGet(String currentCommand) {
-      // Temporarily add currentCommand as the final command if current position is at the final
-      // command.
-      if (commandPosition == 0) {
-        return Optional.empty();
-      }
-      if (commandPosition == lastCommandPosition()) {
-        commandList.set(commandPosition, currentCommand);
-      }
-      commandPosition--;
-      return Optional.of(commandList.get(commandPosition));
-    }
-
-    public Optional<String> moveForwardAndGet() {
-      if (commandPosition == lastCommandPosition()) {
-        return Optional.empty();
-      }
-      commandPosition++;
-      return Optional.of(commandList.get(commandPosition));
-    }
-
-    public void addCommand(String command) {
-      // Command list of size 1 contains only the empty placeholder command. Ignore duplicate
-      // consecutive user commands.
-      if (commandList.size() == 1 || !command.equals(commandList.get(lastCommandPosition() - 1))) {
-        commandList.add(lastCommandPosition(), command);
-        moveToEnd();
-      }
-    }
-
-    public void moveToEnd() {
-      commandPosition = lastCommandPosition();
-      commandList.set(commandPosition, "");
-    }
-
-    private int lastCommandPosition() {
-      return commandList.size() - 1;
-    }
-  }
-
   public static void onKeyboardEvent(int key, int scanCode, int action, int modifiers) {
     var iter = keyEventListeners.entrySet().iterator();
     JsonObject json = null;
