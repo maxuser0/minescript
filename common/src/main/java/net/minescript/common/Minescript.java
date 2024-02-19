@@ -301,13 +301,7 @@ public class Minescript {
           "undo",
           "which",
           "config",
-          "reload_minescript_resources",
-          "minescript_commands_per_cycle",
-          "minescript_ticks_per_cycle",
-          "minescript_incremental_command_suggestions",
-          "minescript_script_function_debug_outptut",
-          "minescript_log_chunk_load_events",
-          "enable_minescript_on_chat_received_event");
+          "reload_minescript_resources");
 
   private static final ImmutableSet<String> IGNORE_DIRS_FOR_COMPLETIONS =
       ImmutableSet.of("blockpacks", "copies", "undo");
@@ -1136,101 +1130,9 @@ public class Minescript {
           runParsedMinescriptCommand(nextCommand);
           return;
 
-        case "minescript_commands_per_cycle":
-          if (checkParamTypes(command)) {
-            systemMessageQueue.logUserInfo(
-                "Minescript executing {} command(s) per cycle.",
-                config.minescriptCommandsPerCycle());
-          } else if (checkParamTypes(command, ParamType.INT)) {
-            int numCommands = Integer.valueOf(command[1]);
-            if (numCommands < 1) numCommands = 1;
-            config.setMinescriptTicksPerCycle(numCommands);
-            systemMessageQueue.logUserInfo(
-                "Minescript execution set to {} command(s) per cycle.", numCommands);
-          } else {
-            systemMessageQueue.logUserError(
-                "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
-          }
-          runParsedMinescriptCommand(nextCommand);
-          return;
-
-        case "minescript_ticks_per_cycle":
-          if (checkParamTypes(command)) {
-            systemMessageQueue.logUserInfo(
-                "Minescript executing {} tick(s) per cycle.", config.minescriptTicksPerCycle());
-          } else if (checkParamTypes(command, ParamType.INT)) {
-            int ticks = Integer.valueOf(command[1]);
-            if (ticks < 1) ticks = 1;
-            config.setMinescriptTicksPerCycle(ticks);
-            systemMessageQueue.logUserInfo(
-                "Minescript execution set to {} tick(s) per cycle.", ticks);
-          } else {
-            systemMessageQueue.logUserError(
-                "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
-          }
-          runParsedMinescriptCommand(nextCommand);
-          return;
-
-        case "minescript_incremental_command_suggestions":
-          if (checkParamTypes(command, ParamType.BOOL)) {
-            boolean value = Boolean.valueOf(command[1]);
-            config.setIncrementalCommandSuggestions(value);
-            systemMessageQueue.logUserInfo(
-                "Minescript incremental command suggestions set to {}", value);
-          } else {
-            systemMessageQueue.logUserError(
-                "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
-          }
-          runParsedMinescriptCommand(nextCommand);
-          return;
-
-        case "minescript_script_function_debug_outptut":
-          if (checkParamTypes(command, ParamType.BOOL)) {
-            boolean value = Boolean.valueOf(command[1]);
-            config.setScriptFunctionDebugOutptut(value);
-            systemMessageQueue.logUserInfo(
-                "Minescript script function debug output set to {}", value);
-          } else {
-            systemMessageQueue.logUserError(
-                "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
-          }
-          runParsedMinescriptCommand(nextCommand);
-          return;
-
-        case "minescript_log_chunk_load_events":
-          if (checkParamTypes(command, ParamType.BOOL)) {
-            boolean value = Boolean.valueOf(command[1]);
-            config.setLogChunkLoadEvents(value);
-            systemMessageQueue.logUserInfo(
-                "Minescript logging of chunk load events set to {}", value);
-          } else {
-            systemMessageQueue.logUserError(
-                "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
-          }
-          runParsedMinescriptCommand(nextCommand);
-          return;
-
-        case "enable_minescript_on_chat_received_event":
-          if (checkParamTypes(command, ParamType.BOOL)) {
-            boolean enable = command[1].equals("true");
-            enableMinescriptOnChatReceivedEvent = enable;
-            systemMessageQueue.logUserInfo(
-                "Minescript execution on client chat events {}.{}",
-                (enable ? "enabled" : "disabled"),
-                (enable
-                    ? " e.g. add command to command block: [execute as Player run tell Player"
-                        + " \\help]"
-                    : ""));
-          } else {
-            systemMessageQueue.logUserError(
-                "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
-          }
-          runParsedMinescriptCommand(nextCommand);
-          return;
-
         case "NullPointerException":
           // This is for testing purposes only. Throw NPE only if we're in debug mode.
-          if (config.scriptFunctionDebugOutptut()) {
+          if (config.debugOutput()) {
             String s = null;
             systemMessageQueue.logUserError("Length of a null string is {}", s.length());
           }
@@ -1339,8 +1241,9 @@ public class Minescript {
         json.addProperty("timeMillis", timeMillis);
         json.addProperty("screen", screenName);
       }
-      // TODO(maxuser): Log only if debug logging is enabled.
-      LOGGER.info("Forwarding key event to listener {}: {}", listener.getKey(), json);
+      if (config.debugOutput()) {
+        LOGGER.info("Forwarding key event to listener {}: {}", listener.getKey(), json);
+      }
       if (!listener.getValue().respond(json, false)) {
         iter.remove();
       }
@@ -1555,7 +1458,6 @@ public class Minescript {
     }
   }
 
-  private static boolean enableMinescriptOnChatReceivedEvent = false;
   private static Pattern CHAT_WHISPER_MESSAGE_RE = Pattern.compile("You whisper to [^ :]+: (.*)");
 
   public static boolean onClientChatReceived(Component message) {
@@ -1572,7 +1474,7 @@ public class Minescript {
       }
     }
 
-    if (enableMinescriptOnChatReceivedEvent) {
+    if (config.minescriptOnChatReceivedEvent()) {
       // Respond to messages like this one sent from a command block:
       // [execute as Dev run tell Dev \eval 1+2]
       var matcher = CHAT_WHISPER_MESSAGE_RE.matcher(text);
@@ -1590,7 +1492,7 @@ public class Minescript {
   public static void onChunkLoad(LevelAccessor chunkLevel, ChunkAccess chunk) {
     int chunkX = chunk.getPos().x;
     int chunkZ = chunk.getPos().z;
-    if (config.logChunkLoadEvents()) {
+    if (config.debugOutput()) {
       LOGGER.info("world {} chunk loaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
     }
     var iter = chunkLoadEventListeners.entrySet().iterator();
@@ -1611,7 +1513,7 @@ public class Minescript {
   public static void onChunkUnload(LevelAccessor chunkLevel, ChunkAccess chunk) {
     int chunkX = chunk.getPos().x;
     int chunkZ = chunk.getPos().z;
-    if (config.logChunkLoadEvents()) {
+    if (config.debugOutput()) {
       LOGGER.info("world {} chunk unloaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
     }
     for (var entry : chunkLoadEventListeners.entrySet()) {
@@ -2946,7 +2848,7 @@ public class Minescript {
   }
 
   public static void onClientWorldTick() {
-    if (++clientTickEventCounter % config.minescriptTicksPerCycle() == 0) {
+    if (++clientTickEventCounter % config.ticksPerCycle() == 0) {
       var minecraft = Minecraft.getInstance();
       var player = minecraft.player;
 
@@ -3002,7 +2904,7 @@ public class Minescript {
                       if (response.isPresent()) {
                         job.respond(funcCallId, response.get(), true);
                       }
-                      if (config.scriptFunctionDebugOutptut()) {
+                      if (config.debugOutput()) {
                         LOGGER.info(
                             "(debug) Script function `{}`: {} / {}  ->  {}",
                             functionName,
@@ -3023,7 +2925,7 @@ public class Minescript {
               }
             }
           }
-        } while (hasMessage && iterations < config.minescriptCommandsPerCycle());
+        } while (hasMessage && iterations < config.commandsPerCycle());
       }
     }
   }

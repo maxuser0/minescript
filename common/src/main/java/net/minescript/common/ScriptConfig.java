@@ -175,10 +175,6 @@ public class ScriptConfig {
         commandConfig.extension.startsWith("."),
         "File extension does not start with dot: \"%s\"",
         commandConfig.extension);
-    Preconditions.checkArgument(
-        !fileTypeMap.containsKey(commandConfig.extension),
-        "File extension already configured: \"%s\"",
-        commandConfig.extension);
 
     var fileTypeConfig =
         new FileTypeConfig(
@@ -188,11 +184,16 @@ public class ScriptConfig {
                 : commandConfig.environment.stream()
                     .map(s -> s.replace("{minescript_dir}", minescriptDir.toString()))
                     .toArray(String[]::new));
-    fileTypeMap.put(commandConfig.extension, fileTypeConfig);
-    fileExtensions.add(commandConfig.extension);
+    if (fileTypeMap.put(commandConfig.extension, fileTypeConfig) == null) {
+      fileExtensions.add(commandConfig.extension);
+    } else {
+      LOGGER.warn(
+          "Existing file extension configuration is being replaced: \"{}\"",
+          commandConfig.extension);
+    }
 
     LOGGER.info(
-        "Configured file extension `{}` for commands: {}", commandConfig.extension, fileTypeConfig);
+        "Configured file extension `{}` for commands: {}", commandConfig.extension, commandConfig);
   }
 
   public List<String> supportedFileExtensions() {

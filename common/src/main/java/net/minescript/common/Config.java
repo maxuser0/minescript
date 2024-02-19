@@ -40,12 +40,12 @@ public class Config {
           "command",
           "escape_command_double_quotes",
           "path",
-          "minescript_commands_per_cycle",
-          "minescript_ticks_per_cycle",
-          "minescript_incremental_command_suggestions",
-          "minescript_script_function_debug_outptut",
-          "minescript_log_chunk_load_events",
+          "commands_per_cycle",
+          "ticks_per_cycle",
+          "incremental_command_suggestions",
+          "debug_output",
           "stderr_chat_ignore_pattern",
+          "minescript_on_chat_received_event",
           "autorun[");
 
   private static final ImmutableList<String> CONFIG_VARIABLE_LIST =
@@ -66,14 +66,15 @@ public class Config {
   // Regex pattern for ignoring lines of output from stderr of Python scripts.
   private Pattern stderrChatIgnorePattern = Pattern.compile("^$");
 
+  private boolean minescriptOnChatReceivedEvent = false;
+
   // Map from world name (or "*" for all) to a list of Minescript/Minecraft commands.
   private Map<String, List<Message>> autorunCommands = new ConcurrentHashMap<>();
 
-  private boolean logChunkLoadEvents = false;
-  private boolean scriptFunctionDebugOutptut = false;
+  private boolean debugOutput = false;
   private boolean incrementalCommandSuggestions = false;
-  private int minescriptTicksPerCycle = 1;
-  private int minescriptCommandsPerCycle = 15;
+  private int ticksPerCycle = 1;
+  private int commandsPerCycle = 15;
 
   public Config(
       String minescriptDirName,
@@ -182,20 +183,16 @@ public class Config {
     return stderrChatIgnorePattern;
   }
 
-  public void setLogChunkLoadEvents(boolean enable) {
-    logChunkLoadEvents = enable;
+  public boolean minescriptOnChatReceivedEvent() {
+    return minescriptOnChatReceivedEvent;
   }
 
-  public boolean logChunkLoadEvents() {
-    return logChunkLoadEvents;
+  public void setDebugOutptut(boolean enable) {
+    debugOutput = enable;
   }
 
-  public void setScriptFunctionDebugOutptut(boolean enable) {
-    scriptFunctionDebugOutptut = enable;
-  }
-
-  public boolean scriptFunctionDebugOutptut() {
-    return scriptFunctionDebugOutptut;
+  public boolean debugOutput() {
+    return debugOutput;
   }
 
   public void setIncrementalCommandSuggestions(boolean enable) {
@@ -206,20 +203,12 @@ public class Config {
     return incrementalCommandSuggestions;
   }
 
-  public void setMinescriptCommandsPerCycle(int num) {
-    minescriptCommandsPerCycle = num;
+  public int commandsPerCycle() {
+    return commandsPerCycle;
   }
 
-  public int minescriptCommandsPerCycle() {
-    return minescriptCommandsPerCycle;
-  }
-
-  public void setMinescriptTicksPerCycle(int num) {
-    minescriptTicksPerCycle = num;
-  }
-
-  public int minescriptTicksPerCycle() {
-    return minescriptTicksPerCycle;
+  public int ticksPerCycle() {
+    return ticksPerCycle;
   }
 
   public ImmutableList<String> getConfigVariables() {
@@ -231,17 +220,13 @@ public class Config {
     consumer.accept("command", getValue("command"));
     consumer.accept("escape_command_double_quotes", getValue("escape_command_double_quotes"));
     consumer.accept("path", getValue("path"));
-    consumer.accept("minescript_commands_per_cycle", getValue("minescript_commands_per_cycle"));
-    consumer.accept("minescript_ticks_per_cycle", getValue("minescript_ticks_per_cycle"));
-    consumer.accept(
-        "minescript_incremental_command_suggestions",
-        getValue("minescript_incremental_command_suggestions"));
-    consumer.accept(
-        "minescript_script_function_debug_outptut",
-        getValue("minescript_script_function_debug_outptut"));
-    consumer.accept(
-        "minescript_log_chunk_load_events", getValue("minescript_log_chunk_load_events"));
+    consumer.accept("commands_per_cycle", getValue("commands_per_cycle"));
+    consumer.accept("ticks_per_cycle", getValue("ticks_per_cycle"));
+    consumer.accept("incremental_command_suggestions", getValue("incremental_command_suggestions"));
+    consumer.accept("debug_output", getValue("debug_outptut"));
     consumer.accept("stderr_chat_ignore_pattern", getValue("stderr_chat_ignore_pattern"));
+    consumer.accept(
+        "minescript_on_chat_received_event", getValue("minescript_on_chat_received_event"));
 
     for (var entry : autorunCommands.entrySet()) {
       var worldName = entry.getKey();
@@ -268,23 +253,26 @@ public class Config {
             File.pathSeparator,
             scriptConfig.commandPath().stream().map(Path::toString).collect(Collectors.toList()));
 
-      case "minescript_commands_per_cycle":
-        return String.valueOf(minescriptCommandsPerCycle);
+      case "commands_per_cycle":
+      case "minescript_commands_per_cycle": // legacy name
+        return String.valueOf(commandsPerCycle);
 
-      case "minescript_ticks_per_cycle":
-        return String.valueOf(minescriptTicksPerCycle);
+      case "ticks_per_cycle":
+      case "minescript_ticks_per_cycle": // legacy name
+        return String.valueOf(ticksPerCycle);
 
-      case "minescript_incremental_command_suggestions":
+      case "incremental_command_suggestions":
+      case "minescript_incremental_command_suggestions": // legacy name
         return String.valueOf(incrementalCommandSuggestions);
 
-      case "minescript_script_function_debug_outptut":
-        return String.valueOf(scriptFunctionDebugOutptut);
-
-      case "minescript_log_chunk_load_events":
-        return String.valueOf(logChunkLoadEvents);
+      case "debug_output":
+        return String.valueOf(debugOutput);
 
       case "stderr_chat_ignore_pattern":
         return stderrChatIgnorePattern.toString();
+
+      case "minescript_on_chat_received_event":
+        return String.valueOf(minescriptOnChatReceivedEvent);
 
       default:
         {
@@ -339,9 +327,10 @@ public class Config {
                             absMinescriptDir.toString())));
 
         try {
-          scriptConfig.configureFileType(
-              new ScriptConfig.CommandConfig(".py", commandPattern, environmentVars));
-          reportInfo(out, "Setting config var: {} = \"{}\" (\"{}\")", name, value, python);
+          var commandConfig =
+              new ScriptConfig.CommandConfig(".py", commandPattern, environmentVars);
+          scriptConfig.configureFileType(commandConfig);
+          reportInfo(out, "Setting config var: {} = \"{}\" ({})", name, value, commandConfig);
           pythonLocation = python;
         } catch (Exception e) {
           reportError(out, "Failed to configure .py script execution: {}", e.toString());
@@ -354,7 +343,7 @@ public class Config {
         try {
           var commandConfig = GSON.fromJson(value, ScriptConfig.CommandConfig.class);
           scriptConfig.configureFileType(commandConfig);
-          reportInfo(out, "Configured script execution for \"{}\"", commandConfig.extension());
+          reportInfo(out, "Configured script execution for \"{}\"", commandConfig);
         } catch (Exception e) {
           reportError(out, "Failed to configure script execution: {}", e.toString());
         }
@@ -375,26 +364,32 @@ public class Config {
         reportInfo(out, "Setting path to {}", commandPath);
         break;
 
-      case "minescript_commands_per_cycle":
+      case "commands_per_cycle":
+      case "minescript_commands_per_cycle": // legacy name
         try {
-          minescriptCommandsPerCycle = Integer.valueOf(value);
-          reportInfo(
-              out, "Setting minescript_commands_per_cycle to {}", minescriptCommandsPerCycle);
+          int numCommands = Integer.valueOf(value);
+          if (numCommands < 1) numCommands = 1;
+          commandsPerCycle = numCommands;
+          reportInfo(out, "Setting commands_per_cycle to {}", commandsPerCycle);
         } catch (NumberFormatException e) {
-          reportError(out, "Unable to parse minescript_commands_per_cycle as integer: {}", value);
+          reportError(out, "Unable to parse commands_per_cycle as integer: {}", value);
         }
         break;
 
-      case "minescript_ticks_per_cycle":
+      case "ticks_per_cycle":
+      case "minescript_ticks_per_cycle": // legacy name
         try {
-          minescriptTicksPerCycle = Integer.valueOf(value);
-          reportInfo(out, "Setting minescript_ticks_per_cycle to {}", minescriptTicksPerCycle);
+          int ticks = Integer.valueOf(value);
+          if (ticks < 1) ticks = 1;
+          ticksPerCycle = ticks;
+          reportInfo(out, "Setting ticks_per_cycle to {}", ticksPerCycle);
         } catch (NumberFormatException e) {
-          reportError(out, "Unable to parse minescript_ticks_per_cycle as integer: {}", value);
+          reportError(out, "Unable to parse ticks_per_cycle as integer: {}", value);
         }
         break;
 
-      case "minescript_incremental_command_suggestions":
+      case "incremental_command_suggestions":
+      case "minescript_incremental_command_suggestions": // legacy name
         incrementalCommandSuggestions = Boolean.valueOf(value);
         reportInfo(
             out,
@@ -402,22 +397,30 @@ public class Config {
             incrementalCommandSuggestions);
         break;
 
-      case "minescript_script_function_debug_outptut":
-        scriptFunctionDebugOutptut = Boolean.valueOf(value);
-        reportInfo(
-            out,
-            "Setting minescript_script_function_debug_outptut to {}",
-            scriptFunctionDebugOutptut);
-        break;
-
-      case "minescript_log_chunk_load_events":
-        logChunkLoadEvents = Boolean.valueOf(value);
-        reportInfo(out, "Setting minescript_log_chunk_load_events to {}", logChunkLoadEvents);
+      case "debug_output":
+        debugOutput = Boolean.valueOf(value);
+        reportInfo(out, "Setting debug_outptut to {}", debugOutput);
         break;
 
       case "stderr_chat_ignore_pattern":
         stderrChatIgnorePattern = Pattern.compile(value);
         reportInfo(out, "Setting stderr_chat_ignore_pattern to {}", value);
+        break;
+
+      case "minescript_on_chat_received_event":
+        {
+          boolean enable = Boolean.valueOf(value);
+          minescriptOnChatReceivedEvent = enable;
+          reportInfo(
+              out,
+              "Minescript execution on client chat events {}.",
+              enable ? "enabled" : "disabled");
+          if (enable) {
+            reportInfo(
+                out,
+                "e.g. add command to command block: [execute as Player run tell Player \\help]");
+          }
+        }
         break;
 
       default:
