@@ -17,18 +17,15 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSyntaxException;
 import com.mojang.blaze3d.platform.InputConstants;
 import io.netty.buffer.Unpooled;
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -47,12 +44,7 @@ import java.util.OptionalInt;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -87,7 +79,6 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
 
 public class Minescript {
   private static final Logger LOGGER = LogManager.getLogger();
@@ -226,7 +217,7 @@ public class Minescript {
       try {
         Thread.sleep(millisToSleep);
       } catch (InterruptedException e) {
-        logException(e);
+        systemMessageQueue.logException(e);
       }
     }
   }
@@ -320,17 +311,6 @@ public class Minescript {
   private static final ImmutableSet<String> IGNORE_DIRS_FOR_COMPLETIONS =
       ImmutableSet.of("blockpacks", "copies", "undo");
 
-  private static void logException(Exception e) {
-    var sw = new StringWriter();
-    var pw = new PrintWriter(sw);
-    e.printStackTrace(pw);
-    logUserError(
-        "Minescript internal error: {} (see logs/latest.log for details; to browse or report issues"
-            + " see https://minescript.net/issues)",
-        e.toString());
-    LOGGER.error(sw.toString());
-  }
-
   private static final Pattern TILDE_RE = Pattern.compile("^~([-\\+]?)([0-9]*)$");
 
   private static String tildeParamToNumber(String param, double playerPosition) {
@@ -341,7 +321,7 @@ public class Minescript {
               + (match.group(1).equals("-") ? -1 : 1)
                   * (match.group(2).isEmpty() ? 0 : Integer.valueOf(match.group(2))));
     } else {
-      logUserError("Cannot parse tilde-param: \"{}\"", param);
+      systemMessageQueue.logUserError("Cannot parse tilde-param: \"{}\"", param);
       return String.valueOf((int) playerPosition);
     }
   }
@@ -357,7 +337,7 @@ public class Minescript {
         tildeParamPositions.add(i);
       } else {
         if (consecutiveTildes % 3 != 0) {
-          logUserError(
+          systemMessageQueue.logUserError(
               "Expected number of consecutive tildes to be a multple of 3, but got {}.",
               consecutiveTildes);
           break;
@@ -383,7 +363,7 @@ public class Minescript {
     }
 
     if (consecutiveTildes % 3 != 0) {
-      logUserError(
+      systemMessageQueue.logUserError(
           "Expected number of consecutive tildes to be a multple of 3, but got {}.",
           consecutiveTildes);
       return command;
@@ -406,81 +386,6 @@ public class Minescript {
     }
 
     return command;
-  }
-
-  static Message formatAsJsonText(String text, String color) {
-    return Message.fromJsonFormattedText(
-        "{\"text\":\""
-            + text.replace("\\", "\\\\").replace("\"", "\\\"")
-            + "\",\"color\":\""
-            + color
-            + "\"}");
-  }
-
-  public enum JobState {
-    NOT_STARTED("Not started"),
-    RUNNING("Running"),
-    SUSPENDED("Suspended"),
-    KILLED("Killed"),
-    DONE("Done");
-
-    private final String displayName;
-
-    private JobState(String displayName) {
-      this.displayName = displayName;
-    }
-
-    @Override
-    public String toString() {
-      return displayName;
-    }
-  };
-
-  record ExceptionInfo(String type, String message, String desc, List<StackElement> stack) {
-
-    record StackElement(String file, String method, int line) {}
-
-    public static ExceptionInfo fromException(Exception e) {
-      var type = e.getClass().getName();
-      var desc = e.toString();
-      var stackBuilder = new ImmutableList.Builder<StackElement>();
-      boolean hitMinescriptJava = false;
-      for (var element : e.getStackTrace()) {
-        var filename = element.getFileName();
-        // Capture stacktrace up through Minescript.java, but no further.
-        if (!hitMinescriptJava && filename.equals("Minescript.java")) {
-          hitMinescriptJava = true;
-        } else if (hitMinescriptJava && !filename.equals("Minescript.java")) {
-          break;
-        }
-        stackBuilder.add(
-            new StackElement(filename, element.getMethodName(), element.getLineNumber()));
-      }
-      return new ExceptionInfo(type, e.getMessage(), desc, stackBuilder.build());
-    }
-  }
-
-  interface JobControl {
-    JobState state();
-
-    void yield();
-
-    Queue<Message> messageQueue();
-
-    boolean respond(long functionCallId, JsonElement returnValue, boolean finalReply);
-
-    void raiseException(long functionCallId, ExceptionInfo exception);
-
-    void processStdout(String text);
-
-    void processStderr(String text);
-
-    default void log(String messagePattern, Object... arguments) {
-      String logMessage = ParameterizedMessage.format(messagePattern, arguments);
-      processStderr(logMessage);
-    }
-
-    void logJobException(Exception e);
   }
 
   interface UndoableAction {
@@ -564,7 +469,7 @@ public class Minescript {
         try {
           blockpack.writeZipFile(blockpackFilename);
         } catch (Exception e) {
-          logException(e);
+          systemMessageQueue.logException(e);
         }
         blockpacker = null;
         blocks.clear();
@@ -651,331 +556,9 @@ public class Minescript {
                   nullOffset,
                   s -> messageQueue.add(Message.createMinecraftCommand(s)));
         } catch (Exception e) {
-          logException(e);
+          systemMessageQueue.logException(e);
         }
       }
-    }
-  }
-
-  interface Task {
-    int run(ScriptConfig.BoundCommand command, JobControl jobControl);
-
-    default boolean sendResponse(long functionCallId, JsonElement returnValue, boolean finalReply) {
-      return false;
-    }
-
-    default boolean sendException(long functionCallId, ExceptionInfo exception) {
-      return false;
-    }
-  }
-
-  /** Tracker for managing resources accessed by a script job. */
-  static class ResourceTracker<T> {
-    private final String resourceTypeName;
-    private final int jobId;
-    private final AtomicInteger idAllocator = new AtomicInteger(0);
-    private final Map<Integer, T> resources = new ConcurrentHashMap<>();
-
-    public ResourceTracker(Class<T> resourceType, int jobId) {
-      resourceTypeName = resourceType.getSimpleName();
-      this.jobId = jobId;
-    }
-
-    public int retain(T resource) {
-      int id = idAllocator.incrementAndGet();
-      resources.put(id, resource);
-      LOGGER.info("Mapped Job[{}] {}[{}]", jobId, resourceTypeName, id);
-      return id;
-    }
-
-    public T getById(int id) {
-      return resources.get(id);
-    }
-
-    public T releaseById(int id) {
-      var resource = resources.remove(id);
-      if (resource != null) {
-        LOGGER.info("Unmapped Job[{}] {}[{}]", jobId, resourceTypeName, id);
-      }
-      return resource;
-    }
-
-    public void releaseAll() {
-      for (int id : resources.keySet()) {
-        releaseById(id);
-      }
-    }
-  }
-
-  static class Job implements JobControl {
-    private final int jobId;
-    private final ScriptConfig.BoundCommand command;
-    private final Task task;
-    private Thread thread;
-    private volatile JobState state = JobState.NOT_STARTED;
-    private Consumer<Integer> doneCallback;
-    private Queue<Message> jobMessageQueue = new ConcurrentLinkedQueue<Message>();
-    private Lock lock = new ReentrantLock(true); // true indicates a fair lock to avoid starvation
-    private List<Runnable> atExitHandlers = new ArrayList<>();
-    private final ResourceTracker<BlockPack> blockpacks;
-    private final ResourceTracker<BlockPacker> blockpackers;
-
-    // Special prefix for commands and function calls emitted from stdout of scripts, for example:
-    // - script function call: "?mnsc:123 my_func [4, 5, 6]"
-    // - script system call: "?mnsc:0 exit! []"
-    private static final String FUNCTION_PREFIX = "?mnsc:";
-
-    public Job(
-        int jobId, ScriptConfig.BoundCommand command, Task task, Consumer<Integer> doneCallback) {
-      this.jobId = jobId;
-      this.command = command;
-      this.task = task;
-      this.doneCallback = doneCallback;
-      blockpacks = new ResourceTracker<>(BlockPack.class, jobId);
-      blockpackers = new ResourceTracker<>(BlockPacker.class, jobId);
-    }
-
-    public void addAtExitHandler(Runnable handler) {
-      atExitHandlers.add(handler);
-    }
-
-    @Override
-    public JobState state() {
-      return state;
-    }
-
-    @Override
-    public void yield() {
-      // Lock and immediately unlock to respect job suspension which holds this lock.
-      lock.lock();
-      lock.unlock();
-    }
-
-    @Override
-    public Queue<Message> messageQueue() {
-      return jobMessageQueue;
-    }
-
-    @Override
-    public boolean respond(long functionCallId, JsonElement returnValue, boolean finalReply) {
-      boolean result = task.sendResponse(functionCallId, returnValue, finalReply);
-      if (functionCallId == 0
-          && returnValue.isJsonPrimitive()
-          && returnValue instanceof JsonPrimitive primitive
-          && primitive.isString()
-          && primitive.getAsString().equals("exit!")) {
-        state = JobState.DONE;
-      }
-      return result;
-    }
-
-    @Override
-    public void raiseException(long functionCallId, ExceptionInfo exception) {
-      task.sendException(functionCallId, exception);
-    }
-
-    @Override
-    public void processStdout(String text) {
-      // Stdout lines with FUNCTION_PREFIX are handled as function calls regardless of redirection.
-      if (text.startsWith(FUNCTION_PREFIX)) {
-        jobMessageQueue.add(Message.createFunctionCall(text.substring(FUNCTION_PREFIX.length())));
-        return;
-      }
-
-      switch (command.redirects().stdout()) {
-        case CHAT:
-          if (text.startsWith("/")) {
-            jobMessageQueue.add(Message.createMinecraftCommand(text.substring(1)));
-          } else if (text.startsWith("\\")) {
-            jobMessageQueue.add(Message.createMinescriptCommand(text.substring(1)));
-          } else {
-            jobMessageQueue.add(Message.createChatMessage(text));
-          }
-          break;
-        case DEFAULT:
-        case ECHO:
-          jobMessageQueue.add(Message.fromPlainText(text));
-          break;
-        case LOG:
-          LOGGER.info(text);
-          break;
-        case NULL:
-          break;
-      }
-    }
-
-    @Override
-    public void processStderr(String text) {
-      if (config.shouldIgnoreStderrLine(text)) {
-        return;
-      }
-
-      switch (command.redirects().stderr()) {
-        case CHAT:
-          if (text.startsWith("/")) {
-            jobMessageQueue.add(Message.createMinecraftCommand(text.substring(1)));
-          } else if (text.startsWith("\\")) {
-            jobMessageQueue.add(Message.createMinescriptCommand(text.substring(1)));
-          } else {
-            jobMessageQueue.add(Message.createChatMessage(text));
-          }
-          break;
-        case DEFAULT:
-        case ECHO:
-          jobMessageQueue.add(formatAsJsonText(text, "yellow"));
-          break;
-        case LOG:
-          LOGGER.info(text);
-          break;
-        case NULL:
-          break;
-      }
-    }
-
-    @Override
-    public void logJobException(Exception e) {
-      var sw = new StringWriter();
-      var pw = new PrintWriter(sw);
-      e.printStackTrace(pw);
-      logUserError(
-          "Exception in job `{}`: {} (see logs/latest.log for details)",
-          jobSummary(),
-          e.toString());
-      LOGGER.error("exception stack trace in job `{}`: {}", jobSummary(), sw.toString());
-    }
-
-    public void start() {
-      thread =
-          new Thread(this::runOnJobThread, String.format("job-%d-%s", jobId, command.command()[0]));
-      thread.start();
-    }
-
-    public boolean suspend() {
-      if (state == JobState.KILLED) {
-        logUserError("Job already killed: {}", jobSummary());
-        return false;
-      }
-      if (state == JobState.SUSPENDED) {
-        logUserError("Job already suspended: {}", jobSummary());
-        return false;
-      }
-      try {
-        int timeoutSeconds = 2;
-        if (lock.tryLock(timeoutSeconds, TimeUnit.SECONDS)) {
-          state = JobState.SUSPENDED;
-          for (var entry : chunkLoadEventListeners.entrySet()) {
-            if (entry.getKey().jobId == jobId) {
-              var listener = entry.getValue();
-              listener.suspend();
-            }
-          }
-          return true;
-        } else {
-          logUserError(
-              "Timed out trying to suspend job after {} seconds: {}", timeoutSeconds, jobSummary());
-          return false;
-        }
-      } catch (InterruptedException e) {
-        logException(e);
-        return false;
-      }
-    }
-
-    public boolean resume() {
-      if (state != JobState.SUSPENDED && state != JobState.KILLED) {
-        logUserError("Job not suspended: {}", jobSummary());
-        return false;
-      }
-      if (state == JobState.SUSPENDED) {
-        state = JobState.RUNNING;
-
-        var iter = chunkLoadEventListeners.entrySet().iterator();
-        while (iter.hasNext()) {
-          var entry = iter.next();
-          if (entry.getKey().jobId == jobId) {
-            var listener = entry.getValue();
-            listener.resume();
-            listener.updateChunkStatuses();
-            if (listener.isFullyLoaded()) {
-              listener.onFinished(true);
-              iter.remove();
-            }
-          }
-        }
-      }
-      try {
-        lock.unlock();
-      } catch (IllegalMonitorStateException e) {
-        logException(e);
-        return false;
-      }
-      return true;
-    }
-
-    public void kill() {
-      JobState prevState = state;
-      state = JobState.KILLED;
-      if (prevState == JobState.SUSPENDED) {
-        resume();
-      }
-    }
-
-    private void runOnJobThread() {
-      if (state == JobState.NOT_STARTED) {
-        state = JobState.RUNNING;
-      }
-      try {
-        final long startTimeMillis = System.currentTimeMillis();
-        final long longRunningJobThreshold = 3000L;
-        int exitCode = task.run(command, this);
-
-        final int millisToSleep = 1000;
-        while (state != JobState.KILLED && state != JobState.DONE && !jobMessageQueue.isEmpty()) {
-          try {
-            Thread.sleep(millisToSleep);
-          } catch (InterruptedException e) {
-            logJobException(e);
-          }
-        }
-        final long endTimeMillis = System.currentTimeMillis();
-        if (exitCode != 0) {
-          logUserError(jobSummaryWithStatus("Exited with error code " + exitCode));
-        } else if (endTimeMillis - startTimeMillis > longRunningJobThreshold) {
-          if (state != JobState.KILLED) {
-            state = JobState.DONE;
-          }
-          logUserInfo(toString());
-        }
-      } finally {
-        doneCallback.accept(jobId);
-        for (Runnable handler : atExitHandlers) {
-          handler.run();
-        }
-        blockpacks.releaseAll();
-        blockpackers.releaseAll();
-      }
-    }
-
-    public int jobId() {
-      return jobId;
-    }
-
-    public String jobSummary() {
-      return jobSummaryWithStatus("");
-    }
-
-    private String jobSummaryWithStatus(String status) {
-      String displayCommand = quoteCommand(command.command());
-      if (displayCommand.length() > 61) {
-        displayCommand = displayCommand.substring(0, 61) + "...";
-      }
-      return String.format(
-          "[%d] %s%s%s", jobId, status, status.isEmpty() ? "" : ": ", displayCommand);
-    }
-
-    @Override
-    public String toString() {
-      return jobSummaryWithStatus(state.toString());
     }
   }
 
@@ -994,138 +577,6 @@ public class Minescript {
 
     public void raiseException(ExceptionInfo exception) {
       job.raiseException(funcCallId, exception);
-    }
-  }
-
-  static class SubprocessTask implements Task {
-    private Process process;
-    private BufferedWriter stdinWriter;
-
-    @Override
-    public int run(ScriptConfig.BoundCommand command, JobControl jobControl) {
-      var exec = config.scriptConfig().getExecutableCommand(command);
-      if (exec == null) {
-        jobControl.log(
-            "Command execution not configured for \"{}\": {}",
-            command.fileExtension(),
-            config.file().getAbsolutePath());
-        return -1;
-      }
-
-      try {
-        process = Runtime.getRuntime().exec(exec.command(), exec.environment());
-      } catch (IOException e) {
-        jobControl.logJobException(e);
-        return -2;
-      }
-
-      stdinWriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
-
-      try (var stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-          var stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-        final int millisToSleep = 1;
-        final long trailingReadTimeoutMillis = 5000;
-        long lastReadTime = System.currentTimeMillis();
-        String line;
-        while (jobControl.state() != JobState.KILLED
-            && jobControl.state() != JobState.DONE
-            && (process.isAlive()
-                || System.currentTimeMillis() - lastReadTime < trailingReadTimeoutMillis)) {
-          if (stdoutReader.ready()) {
-            if ((line = stdoutReader.readLine()) == null) {
-              break;
-            }
-            lastReadTime = System.currentTimeMillis();
-            jobControl.processStdout(line);
-          }
-          if (stderrReader.ready()) {
-            if ((line = stderrReader.readLine()) == null) {
-              break;
-            }
-            lastReadTime = System.currentTimeMillis();
-            jobControl.log(line);
-          }
-          try {
-            Thread.sleep(millisToSleep);
-          } catch (InterruptedException e) {
-            jobControl.logJobException(e);
-          }
-          jobControl.yield();
-        }
-      } catch (IOException e) {
-        jobControl.logJobException(e);
-        jobControl.log(e.getMessage());
-        return -3;
-      }
-
-      LOGGER.info("Exited script event loop for job `{}`", jobControl.toString());
-
-      if (process == null) {
-        return -4;
-      }
-      if (jobControl.state() == JobState.KILLED) {
-        LOGGER.info("Killing script process for job `{}`", jobControl.toString());
-        process.destroy();
-        return -5;
-      }
-      try {
-        LOGGER.info("Waiting for script process to complete for job `{}`", jobControl.toString());
-        int result = process.waitFor();
-        LOGGER.info("Script process exited with {} for job `{}`", result, jobControl.toString());
-        return result;
-      } catch (InterruptedException e) {
-        jobControl.logJobException(e);
-        return -6;
-      }
-    }
-
-    @Override
-    public boolean sendResponse(long functionCallId, JsonElement returnValue, boolean finalReply) {
-      if (!isReadyToRespond()) {
-        return false;
-      }
-      try {
-        var response = new JsonObject();
-        response.addProperty("fcid", functionCallId);
-        response.add("retval", returnValue);
-        if (finalReply) {
-          response.addProperty("conn", "close");
-        }
-        stdinWriter.write(GSON.toJson(response));
-        stdinWriter.newLine();
-        stdinWriter.flush();
-        return true;
-      } catch (IOException e) {
-        LOGGER.error("IOException in SubprocessTask sendResponse: {}", e.getMessage());
-        return false;
-      }
-    }
-
-    @Override
-    public boolean sendException(long functionCallId, ExceptionInfo exception) {
-      if (!isReadyToRespond()) {
-        return false;
-      }
-      try {
-        var response = new JsonObject();
-        response.addProperty("fcid", functionCallId);
-        response.addProperty("conn", "close");
-        var json = GSON.toJsonTree(exception);
-        LOGGER.warn("Translating Java exception as JSON: {}", json);
-        response.add("except", json);
-
-        stdinWriter.write(GSON.toJson(response));
-        stdinWriter.newLine();
-        stdinWriter.flush();
-        return true;
-      } catch (IOException e) {
-        LOGGER.error("IOException in SubprocessTask sendResponse: {}", e.getMessage());
-        return false;
-      }
-    }
-
-    private boolean isReadyToRespond() {
-      return process != null && process.isAlive() && stdinWriter != null;
     }
   }
 
@@ -1155,7 +606,13 @@ public class Minescript {
 
     public void createSubprocess(ScriptConfig.BoundCommand command, List<Token> nextCommand) {
       var job =
-          new Job(allocateJobId(), command, new SubprocessTask(), i -> finishJob(i, nextCommand));
+          new Job(
+              allocateJobId(),
+              command,
+              new SubprocessTask(config.scriptConfig()),
+              config.stderrChatIgnorePattern(),
+              systemMessageQueue,
+              i -> finishJob(i, nextCommand));
       var undo = new UndoableActionBlockPack(job.jobId(), command.command());
       jobUndoMap.put(job.jobId(), undo);
       undoStack.addFirst(undo);
@@ -1174,7 +631,7 @@ public class Minescript {
     public void startUndo() {
       var undo = undoStack.pollFirst();
       if (undo == null) {
-        logUserError("The undo stack is empty.");
+        systemMessageQueue.logUserError("The undo stack is empty.");
         return;
       }
 
@@ -1193,6 +650,8 @@ public class Minescript {
               new ScriptConfig.BoundCommand(
                   null, undo.derivativeCommand(), ScriptRedirect.Pair.DEFAULTS),
               new UndoTask(undo),
+              config.stderrChatIgnorePattern(),
+              systemMessageQueue,
               i -> finishJob(i, Collections.emptyList()));
       jobMap.put(undoJob.jobId(), undoJob);
       undoJob.start();
@@ -1221,12 +680,12 @@ public class Minescript {
 
   private static JobManager jobs = new JobManager();
 
-  private static Queue<Message> systemMessageQueue = new ConcurrentLinkedQueue<Message>();
+  private static SystemMessageQueue systemMessageQueue = new SystemMessageQueue();
 
   private static boolean checkMinescriptDir() {
     Path minescriptDir = Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR);
     if (!Files.isDirectory(minescriptDir)) {
-      logUserError(
+      systemMessageQueue.logUserError(
           "Minescript folder is missing. It should have been created at: {}", minescriptDir);
       return false;
     }
@@ -1293,25 +752,13 @@ public class Minescript {
     return result.toString();
   }
 
-  public static void logUserInfo(String messagePattern, Object... arguments) {
-    String logMessage = ParameterizedMessage.format(messagePattern, arguments);
-    LOGGER.info("{}", logMessage);
-    systemMessageQueue.add(formatAsJsonText(logMessage, "yellow"));
-  }
-
-  public static void logUserError(String messagePattern, Object... arguments) {
-    String logMessage = ParameterizedMessage.format(messagePattern, arguments);
-    LOGGER.error("{}", logMessage);
-    systemMessageQueue.add(formatAsJsonText(logMessage, "red"));
-  }
-
   private static void listJobs() {
     if (jobs.getMap().isEmpty()) {
-      logUserInfo("There are no jobs running.");
+      systemMessageQueue.logUserInfo("There are no jobs running.");
       return;
     }
     for (var job : jobs.getMap().values()) {
-      logUserInfo(job.toString());
+      systemMessageQueue.logUserInfo(job.toString());
     }
   }
 
@@ -1320,17 +767,18 @@ public class Minescript {
       // Suspend specified job.
       var job = jobs.getMap().get(jobId.getAsInt());
       if (job == null) {
-        logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId.getAsInt());
+        systemMessageQueue.logUserError(
+            "No job with ID {}. Use \\jobs to list jobs.", jobId.getAsInt());
         return;
       }
       if (job.suspend()) {
-        logUserInfo("Job suspended: {}", job.jobSummary());
+        systemMessageQueue.logUserInfo("Job suspended: {}", job.jobSummary());
       }
     } else {
       // Suspend all jobs.
       for (var job : jobs.getMap().values()) {
         if (job.suspend()) {
-          logUserInfo("Job suspended: {}", job.jobSummary());
+          systemMessageQueue.logUserInfo("Job suspended: {}", job.jobSummary());
         }
       }
     }
@@ -1341,17 +789,18 @@ public class Minescript {
       // Resume specified job.
       var job = jobs.getMap().get(jobId.getAsInt());
       if (job == null) {
-        logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId.getAsInt());
+        systemMessageQueue.logUserError(
+            "No job with ID {}. Use \\jobs to list jobs.", jobId.getAsInt());
         return;
       }
       if (job.resume()) {
-        logUserInfo("Job resumed: {}", job.jobSummary());
+        systemMessageQueue.logUserInfo("Job resumed: {}", job.jobSummary());
       }
     } else {
       // Resume all jobs.
       for (var job : jobs.getMap().values()) {
         if (job.resume()) {
-          logUserInfo("Job resumed: {}", job.jobSummary());
+          systemMessageQueue.logUserInfo("Job resumed: {}", job.jobSummary());
         }
       }
     }
@@ -1367,11 +816,11 @@ public class Minescript {
     }
     var job = jobs.getMap().get(jobId);
     if (job == null) {
-      logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
+      systemMessageQueue.logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
       return;
     }
     job.kill();
-    logUserInfo("Removed job: {}", job.jobSummary());
+    systemMessageQueue.logUserInfo("Removed job: {}", job.jobSummary());
   }
 
   private static Pattern SETBLOCK_COMMAND_RE =
@@ -1383,8 +832,8 @@ public class Minescript {
       return false;
     }
     if (setblockCommand.contains("~")) {
-      logUserInfo("Warning: /setblock commands with ~ syntax cannot be undone.");
-      logUserInfo("           Use minescript.player_position() instead.");
+      systemMessageQueue.logUserInfo("Warning: /setblock commands with ~ syntax cannot be undone.");
+      systemMessageQueue.logUserInfo("           Use minescript.player_position() instead.");
       return false;
     }
     try {
@@ -1392,7 +841,7 @@ public class Minescript {
       coords[1] = Integer.valueOf(match.group(2));
       coords[2] = Integer.valueOf(match.group(3));
     } catch (NumberFormatException e) {
-      logUserError(
+      systemMessageQueue.logUserError(
           "Error: invalid number format for /setblock coordinates: {} {} {}",
           match.group(1),
           match.group(2),
@@ -1411,8 +860,8 @@ public class Minescript {
       return false;
     }
     if (fillCommand.contains("~")) {
-      logUserError("Warning: /fill commands with ~ syntax cannot be undone.");
-      logUserError("           Use minescript.player_position() instead.");
+      systemMessageQueue.logUserError("Warning: /fill commands with ~ syntax cannot be undone.");
+      systemMessageQueue.logUserError("           Use minescript.player_position() instead.");
       return false;
     }
     coords[0] = Integer.valueOf(match.group(1));
@@ -1422,10 +871,6 @@ public class Minescript {
     coords[4] = Integer.valueOf(match.group(5));
     coords[5] = Integer.valueOf(match.group(6));
     return true;
-  }
-
-  private static int worldCoordToChunkCoord(int x) {
-    return (x >= 0) ? (x / 16) : (((x + 1) / 16) - 1);
   }
 
   // BlockState#toString() returns a string formatted as:
@@ -1510,7 +955,8 @@ public class Minescript {
               blockConsumer.setblock(x, y, z, block.get());
               numBlocks++;
             } else {
-              logUserError("Unexpected BlockState format: {}", blockState.toString());
+              systemMessageQueue.logUserError(
+                  "Unexpected BlockState format: {}", blockState.toString());
             }
           }
         }
@@ -1541,7 +987,7 @@ public class Minescript {
       runParsedMinescriptCommand(tokens);
 
     } catch (RuntimeException e) {
-      logException(e);
+      systemMessageQueue.logException(e);
     }
   }
 
@@ -1571,7 +1017,8 @@ public class Minescript {
           if (checkParamTypes(command)) {
             listJobs();
           } else {
-            logUserError("Expected no params, instead got `{}`", getParamsAsString(command));
+            systemMessageQueue.logUserError(
+                "Expected no params, instead got `{}`", getParamsAsString(command));
           }
           runParsedMinescriptCommand(nextCommand);
           return;
@@ -1583,7 +1030,7 @@ public class Minescript {
           } else if (checkParamTypes(command, ParamType.INT)) {
             suspendJob(OptionalInt.of(Integer.valueOf(command[1])));
           } else {
-            logUserError(
+            systemMessageQueue.logUserError(
                 "Expected no params or 1 param of type integer, instead got `{}`",
                 getParamsAsString(command));
           }
@@ -1596,7 +1043,7 @@ public class Minescript {
           } else if (checkParamTypes(command, ParamType.INT)) {
             resumeJob(OptionalInt.of(Integer.valueOf(command[1])));
           } else {
-            logUserError(
+            systemMessageQueue.logUserError(
                 "Expected no params or 1 param of type integer, instead got `{}`",
                 getParamsAsString(command));
           }
@@ -1607,7 +1054,7 @@ public class Minescript {
           if (checkParamTypes(command, ParamType.INT)) {
             killJob(Integer.valueOf(command[1]));
           } else {
-            logUserError(
+            systemMessageQueue.logUserError(
                 "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
           }
           runParsedMinescriptCommand(nextCommand);
@@ -1617,7 +1064,7 @@ public class Minescript {
           if (checkParamTypes(command)) {
             jobs.startUndo();
           } else {
-            logUserError(
+            systemMessageQueue.logUserError(
                 "Expected no params or 1 param of type integer, instead got `{}`",
                 getParamsAsString(command));
           }
@@ -1628,17 +1075,17 @@ public class Minescript {
           if (checkParamTypes(command, ParamType.STRING)) {
             String arg = command[1];
             if (BUILTIN_COMMANDS.contains(arg)) {
-              logUserInfo("Built-in command: `{}`", arg);
+              systemMessageQueue.logUserInfo("Built-in command: `{}`", arg);
             } else {
               Path commandPath = config.scriptConfig().resolveCommandPath(arg);
               if (commandPath == null) {
-                logUserInfo("Command `{}` not found.", arg);
+                systemMessageQueue.logUserInfo("Command `{}` not found.", arg);
               } else {
-                logUserInfo(commandPath.toString());
+                systemMessageQueue.logUserInfo(commandPath.toString());
               }
             }
           } else {
-            logUserError(
+            systemMessageQueue.logUserError(
                 "Expected 1 param of type string, instead got `{}`", getParamsAsString(command));
           }
           runParsedMinescriptCommand(nextCommand);
@@ -1646,22 +1093,23 @@ public class Minescript {
 
         case "reload_minescript_resources":
           loadMinescriptResources();
-          logUserInfo("Reloaded resources from Minescript jar.");
+          systemMessageQueue.logUserInfo("Reloaded resources from Minescript jar.");
           runParsedMinescriptCommand(nextCommand);
           return;
 
         case "minescript_commands_per_cycle":
           if (checkParamTypes(command)) {
-            logUserInfo(
+            systemMessageQueue.logUserInfo(
                 "Minescript executing {} command(s) per cycle.",
                 config.minescriptCommandsPerCycle());
           } else if (checkParamTypes(command, ParamType.INT)) {
             int numCommands = Integer.valueOf(command[1]);
             if (numCommands < 1) numCommands = 1;
             config.setMinescriptTicksPerCycle(numCommands);
-            logUserInfo("Minescript execution set to {} command(s) per cycle.", numCommands);
+            systemMessageQueue.logUserInfo(
+                "Minescript execution set to {} command(s) per cycle.", numCommands);
           } else {
-            logUserError(
+            systemMessageQueue.logUserError(
                 "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
           }
           runParsedMinescriptCommand(nextCommand);
@@ -1669,15 +1117,16 @@ public class Minescript {
 
         case "minescript_ticks_per_cycle":
           if (checkParamTypes(command)) {
-            logUserInfo(
+            systemMessageQueue.logUserInfo(
                 "Minescript executing {} tick(s) per cycle.", config.minescriptTicksPerCycle());
           } else if (checkParamTypes(command, ParamType.INT)) {
             int ticks = Integer.valueOf(command[1]);
             if (ticks < 1) ticks = 1;
             config.setMinescriptTicksPerCycle(ticks);
-            logUserInfo("Minescript execution set to {} tick(s) per cycle.", ticks);
+            systemMessageQueue.logUserInfo(
+                "Minescript execution set to {} tick(s) per cycle.", ticks);
           } else {
-            logUserError(
+            systemMessageQueue.logUserError(
                 "Expected 1 param of type integer, instead got `{}`", getParamsAsString(command));
           }
           runParsedMinescriptCommand(nextCommand);
@@ -1687,9 +1136,10 @@ public class Minescript {
           if (checkParamTypes(command, ParamType.BOOL)) {
             boolean value = Boolean.valueOf(command[1]);
             config.setIncrementalCommandSuggestions(value);
-            logUserInfo("Minescript incremental command suggestions set to {}", value);
+            systemMessageQueue.logUserInfo(
+                "Minescript incremental command suggestions set to {}", value);
           } else {
-            logUserError(
+            systemMessageQueue.logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
           }
           runParsedMinescriptCommand(nextCommand);
@@ -1699,9 +1149,10 @@ public class Minescript {
           if (checkParamTypes(command, ParamType.BOOL)) {
             boolean value = Boolean.valueOf(command[1]);
             config.setScriptFunctionDebugOutptut(value);
-            logUserInfo("Minescript script function debug output set to {}", value);
+            systemMessageQueue.logUserInfo(
+                "Minescript script function debug output set to {}", value);
           } else {
-            logUserError(
+            systemMessageQueue.logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
           }
           runParsedMinescriptCommand(nextCommand);
@@ -1711,9 +1162,10 @@ public class Minescript {
           if (checkParamTypes(command, ParamType.BOOL)) {
             boolean value = Boolean.valueOf(command[1]);
             config.setLogChunkLoadEvents(value);
-            logUserInfo("Minescript logging of chunk load events set to {}", value);
+            systemMessageQueue.logUserInfo(
+                "Minescript logging of chunk load events set to {}", value);
           } else {
-            logUserError(
+            systemMessageQueue.logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
           }
           runParsedMinescriptCommand(nextCommand);
@@ -1723,7 +1175,7 @@ public class Minescript {
           if (checkParamTypes(command, ParamType.BOOL)) {
             boolean enable = command[1].equals("true");
             enableMinescriptOnChatReceivedEvent = enable;
-            logUserInfo(
+            systemMessageQueue.logUserInfo(
                 "Minescript execution on client chat events {}.{}",
                 (enable ? "enabled" : "disabled"),
                 (enable
@@ -1731,7 +1183,7 @@ public class Minescript {
                         + " \\help]"
                     : ""));
           } else {
-            logUserError(
+            systemMessageQueue.logUserError(
                 "Expected 1 param of type boolean, instead got `{}`", getParamsAsString(command));
           }
           runParsedMinescriptCommand(nextCommand);
@@ -1741,7 +1193,7 @@ public class Minescript {
           // This is for testing purposes only. Throw NPE only if we're in debug mode.
           if (config.scriptFunctionDebugOutptut()) {
             String s = null;
-            logUserError("Length of a null string is {}", s.length());
+            systemMessageQueue.logUserError("Length of a null string is {}", s.length());
           }
       }
 
@@ -1753,19 +1205,19 @@ public class Minescript {
 
       Path commandPath = config.scriptConfig().resolveCommandPath(command[0]);
       if (commandPath == null) {
-        logUserInfo("Minescript built-in commands:");
+        systemMessageQueue.logUserInfo("Minescript built-in commands:");
         for (String builtin : BUILTIN_COMMANDS) {
-          logUserInfo("  {}", builtin);
+          systemMessageQueue.logUserInfo("  {}", builtin);
         }
-        logUserInfo("");
-        logUserInfo("Minescript command directories:");
+        systemMessageQueue.logUserInfo("");
+        systemMessageQueue.logUserInfo("Minescript command directories:");
         Path minescriptDir = Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR);
         for (Path commandDir : config.scriptConfig().commandPath()) {
           Path path = minescriptDir.resolve(commandDir);
-          logUserInfo("  {}", path);
+          systemMessageQueue.logUserInfo("  {}", path);
         }
         if (!command[0].equals("ls")) {
-          logUserError("No Minescript command named \"{}\"", command[0]);
+          systemMessageQueue.logUserError("No Minescript command named \"{}\"", command[0]);
         }
         runParsedMinescriptCommand(nextCommand);
         return;
@@ -1780,7 +1232,7 @@ public class Minescript {
           new ScriptConfig.BoundCommand(commandPath, command, redirects), nextCommand);
 
     } catch (RuntimeException e) {
-      logException(e);
+      systemMessageQueue.logException(e);
     }
   }
 
@@ -1848,6 +1300,7 @@ public class Minescript {
         json.addProperty("timeMillis", timeMillis);
         json.addProperty("screen", screenName);
       }
+      // TODO(maxuser): Log only if debug logging is enabled.
       LOGGER.info("Forwarding key event to listener {}: {}", listener.getKey(), json);
       if (!listener.getValue().respond(json, false)) {
         iter.remove();
@@ -1893,7 +1346,7 @@ public class Minescript {
     if (chatEditBox == null) {
       if (!reportedChatEditBoxError) {
         reportedChatEditBoxError = true;
-        logUserError(
+        systemMessageQueue.logUserError(
             "Minescript internal error: Expected ChatScreen.input to be initialized by"
                 + " ChatScreen.init(), but it's null instead. Minescript commands sent through"
                 + " chat will not be interpreted as commands, and sent as normal chats instead.");
@@ -1993,9 +1446,10 @@ public class Minescript {
             if (!newCommandSuggestions.isEmpty()) {
               if (!newCommandSuggestions.equals(commandSuggestions)) {
                 if (key == TAB_KEY || config.incrementalCommandSuggestions()) {
-                  systemMessageQueue.add(formatAsJsonText("completions:", "aqua"));
+                  systemMessageQueue.add(Message.formatAsJsonColoredText("completions:", "aqua"));
                   for (String suggestion : newCommandSuggestions) {
-                    systemMessageQueue.add(formatAsJsonText("  " + suggestion, "aqua"));
+                    systemMessageQueue.add(
+                        Message.formatAsJsonColoredText("  " + suggestion, "aqua"));
                   }
                 }
                 commandSuggestions = newCommandSuggestions;
@@ -2007,7 +1461,7 @@ public class Minescript {
             }
           }
         } catch (IOException e) {
-          logException(e);
+          systemMessageQueue.logException(e);
         }
       }
     }
@@ -2056,15 +1510,6 @@ public class Minescript {
     return cancel;
   }
 
-  private static long packInts(int x, int z) {
-    return (((long) x) << 32) | (z & 0xffffffffL);
-  }
-
-  /** Unpack 64-bit long into two 32-bit ints written to returned 2-element int array. */
-  private static int[] unpackLong(long x) {
-    return new int[] {(int) (x >> 32), (int) x};
-  }
-
   public static void onChunkLoad(LevelAccessor chunkLevel, ChunkAccess chunk) {
     int chunkX = chunk.getPos().x;
     int chunkZ = chunk.getPos().z;
@@ -2073,8 +1518,14 @@ public class Minescript {
     }
     var iter = chunkLoadEventListeners.entrySet().iterator();
     while (iter.hasNext()) {
-      var listener = iter.next().getValue();
+      var entry = iter.next();
+      var listener = entry.getValue();
       if (listener.onChunkLoaded(chunkLevel, chunkX, chunkZ)) {
+        JobFunctionCallId key = entry.getKey();
+        Job job = jobs.getMap().get(key.jobId());
+        if (job != null) {
+          job.removeOperation(key.funcCallId());
+        }
         iter.remove();
       }
     }
@@ -2160,7 +1611,7 @@ public class Minescript {
           line = reader.readLine();
         }
       } catch (IOException e) {
-        logException(e);
+        systemMessageQueue.logException(e);
       }
       LOGGER.info(
           "No server match in {}, commands enabled: {} / {}",
@@ -2179,137 +1630,7 @@ public class Minescript {
   private static Map<Integer, ScriptFunctionCall> clientChatReceivedEventListeners =
       new ConcurrentHashMap<>();
 
-  public static class ChunkLoadEventListener {
-
-    interface DoneCallback {
-      void done(boolean success);
-    }
-
-    // Map packed chunk (x, z) to boolean: true if chunk is loaded, false otherwise.
-    private final Map<Long, Boolean> chunksToLoad = new ConcurrentHashMap<>();
-
-    // Level with chunks to listen for. Store hash rather than reference to avoid memory leak.
-    private final int levelHashCode;
-
-    private final DoneCallback doneCallback;
-    private int numUnloadedChunks = 0;
-    private boolean suspended = false;
-    private boolean finished = false;
-
-    public ChunkLoadEventListener(int x1, int z1, int x2, int z2, DoneCallback doneCallback) {
-      var minecraft = Minecraft.getInstance();
-      this.levelHashCode = minecraft.level.hashCode();
-      LOGGER.info("listener chunk region in level {}: {} {} {} {}", levelHashCode, x1, z1, x2, z2);
-      int chunkX1 = worldCoordToChunkCoord(x1);
-      int chunkZ1 = worldCoordToChunkCoord(z1);
-      int chunkX2 = worldCoordToChunkCoord(x2);
-      int chunkZ2 = worldCoordToChunkCoord(z2);
-
-      int chunkXMin = Math.min(chunkX1, chunkX2);
-      int chunkXMax = Math.max(chunkX1, chunkX2);
-      int chunkZMin = Math.min(chunkZ1, chunkZ2);
-      int chunkZMax = Math.max(chunkZ1, chunkZ2);
-
-      for (int chunkX = chunkXMin; chunkX <= chunkXMax; chunkX++) {
-        for (int chunkZ = chunkZMin; chunkZ <= chunkZMax; chunkZ++) {
-          LOGGER.info("listener chunk registered: {} {}", chunkX, chunkZ);
-          long packedChunkXZ = packInts(chunkX, chunkZ);
-          chunksToLoad.put(packedChunkXZ, false);
-        }
-      }
-      this.doneCallback = doneCallback;
-    }
-
-    public synchronized void suspend() {
-      suspended = true;
-    }
-
-    public synchronized void resume() {
-      suspended = false;
-    }
-
-    public synchronized void updateChunkStatuses() {
-      var minecraft = Minecraft.getInstance();
-      var level = minecraft.level;
-      if (level.hashCode() != this.levelHashCode) {
-        LOGGER.info("chunk listener's world doesn't match current world; clearing listener");
-        chunksToLoad.clear();
-        numUnloadedChunks = 0;
-        return;
-      }
-      numUnloadedChunks = 0;
-      var chunkManager = level.getChunkSource();
-      for (var entry : chunksToLoad.entrySet()) {
-        long packedChunkXZ = entry.getKey();
-        int[] chunkCoords = unpackLong(packedChunkXZ);
-        boolean isLoaded = chunkManager.getChunkNow(chunkCoords[0], chunkCoords[1]) != null;
-        entry.setValue(isLoaded);
-        if (!isLoaded) {
-          numUnloadedChunks++;
-        }
-      }
-      LOGGER.info("Unloaded chunks after updateChunkStatuses: {}", numUnloadedChunks);
-    }
-
-    /** Returns true if the final outstanding chunk is loaded. */
-    public synchronized boolean onChunkLoaded(LevelAccessor chunkLevel, int chunkX, int chunkZ) {
-      if (suspended) {
-        return false;
-      }
-      if (chunkLevel.hashCode() != levelHashCode) {
-        return false;
-      }
-      long packedChunkXZ = packInts(chunkX, chunkZ);
-      if (!chunksToLoad.containsKey(packedChunkXZ)) {
-        return false;
-      }
-      boolean wasLoaded = chunksToLoad.put(packedChunkXZ, true);
-      if (!wasLoaded) {
-        LOGGER.info("listener chunk loaded for level {}: {} {}", levelHashCode, chunkX, chunkZ);
-        numUnloadedChunks--;
-        if (numUnloadedChunks == 0) {
-          onFinished(true);
-          return true;
-        }
-      }
-      return false;
-    }
-
-    public synchronized void onChunkUnloaded(LevelAccessor chunkLevel, int chunkX, int chunkZ) {
-      if (suspended) {
-        return;
-      }
-      if (chunkLevel.hashCode() != levelHashCode) {
-        return;
-      }
-      long packedChunkXZ = packInts(chunkX, chunkZ);
-      if (!chunksToLoad.containsKey(packedChunkXZ)) {
-        return;
-      }
-      boolean wasLoaded = chunksToLoad.put(packedChunkXZ, false);
-      if (wasLoaded) {
-        numUnloadedChunks++;
-      }
-    }
-
-    public synchronized boolean isFullyLoaded() {
-      return numUnloadedChunks == 0;
-    }
-
-    /** To be called when either all requested chunks are loaded or operation is cancelled. */
-    public synchronized void onFinished(boolean success) {
-      if (finished) {
-        LOGGER.warn(
-            "ChunkLoadEventListener already finished; finished again with {}",
-            success ? "success" : "failure");
-        return;
-      }
-      finished = true;
-      doneCallback.done(success);
-    }
-  }
-
-  private record JobFunctionCallId(int jobId, long funcCallId) {}
+  public record JobFunctionCallId(int jobId, long funcCallId) {}
 
   private static Map<JobFunctionCallId, ChunkLoadEventListener> chunkLoadEventListeners =
       new ConcurrentHashMap<JobFunctionCallId, ChunkLoadEventListener>();
@@ -2700,7 +2021,7 @@ public class Minescript {
                 job.respond(funcCallId, new JsonPrimitive(s), false);
               };
           job.addAtExitHandler(() -> chatInterceptor = null);
-          logUserInfo("Chat interceptor enabled for job: {}", job.jobSummary());
+          systemMessageQueue.logUserInfo("Chat interceptor enabled for job: {}", job.jobSummary());
           return Optional.empty();
         }
 
@@ -2712,7 +2033,7 @@ public class Minescript {
                 "Chat interceptor already disabled: " + job.jobSummary());
           }
           chatInterceptor = null;
-          logUserInfo("Chat interceptor disabled for job: {}", job.jobSummary());
+          systemMessageQueue.logUserInfo("Chat interceptor disabled for job: {}", job.jobSummary());
           return OPTIONAL_JSON_TRUE;
         }
 
@@ -2729,29 +2050,16 @@ public class Minescript {
                   arg1,
                   arg2,
                   arg3,
-                  (boolean success) -> job.respond(funcCallId, new JsonPrimitive(success), true));
+                  (boolean success) -> {
+                    job.respond(funcCallId, new JsonPrimitive(success), true);
+                    chunkLoadEventListeners.remove(new JobFunctionCallId(job.jobId(), funcCallId));
+                  });
           listener.updateChunkStatuses();
           if (listener.isFullyLoaded()) {
             listener.onFinished(true);
           } else {
+            job.addOperation(funcCallId, listener);
             chunkLoadEventListeners.put(new JobFunctionCallId(job.jobId, funcCallId), listener);
-
-            // TODO(maxuser): Generalize cancellation of long-running functions at job exit. When
-            // such functions complete naturally, they should be cleared from at-exit handlers.
-            job.addAtExitHandler(
-                () -> {
-                  var chunkListener =
-                      chunkLoadEventListeners.remove(
-                          new JobFunctionCallId(job.jobId(), funcCallId));
-                  if (chunkListener != null) {
-                    chunkListener.onFinished(false);
-                    LOGGER.info(
-                        "Cancelled function call {} for \"{}\" at job exit: {}",
-                        funcCallId,
-                        functionName,
-                        job.jobSummary());
-                  }
-                });
           }
           return Optional.empty();
         }
@@ -2760,7 +2068,7 @@ public class Minescript {
         {
           args.expectSize(1);
           if (args.get(0) == null) {
-            logUserInfo(
+            systemMessageQueue.logUserInfo(
                 "Chat nickname reset to default; was {}",
                 customNickname == null ? "default already" : quoteString(customNickname));
             customNickname = null;
@@ -2771,7 +2079,7 @@ public class Minescript {
                   "Expected nickname to contain %s as a placeholder for message text but got: "
                       + arg);
             }
-            logUserInfo("Chat nickname set to {}.", quoteString(arg));
+            systemMessageQueue.logUserInfo("Chat nickname set to {}.", quoteString(arg));
             customNickname = arg;
           }
           return OPTIONAL_JSON_TRUE;
@@ -3478,23 +2786,20 @@ public class Minescript {
         }
         long funcIdToCancel = ((Number) args.get(0)).longValue();
         String funcName = (String) args.get(1);
-        // TODO(maxuser): Generalize script function call cancellation beyond chunk load listeners.
-        var listener =
-            chunkLoadEventListeners.remove(new JobFunctionCallId(job.jobId(), funcIdToCancel));
-        if (listener == null) {
-          LOGGER.warn(
-              "Failed to find operation to cancel: funcCallId {} for \"{}\" in job: {}",
-              funcIdToCancel,
-              funcName,
-              job.jobSummary());
-        } else {
-          listener.onFinished(false);
+        if (job.cancelOperation(funcIdToCancel)) {
           LOGGER.info(
               "Cancelled function call {} for \"{}\" in job: {}",
               funcIdToCancel,
               funcName,
               job.jobSummary());
+        } else {
+          LOGGER.warn(
+              "Failed to find operation to cancel: funcCallId {} for \"{}\" in job: {}",
+              funcIdToCancel,
+              funcName,
+              job.jobSummary());
         }
+        job.removeOperation(funcIdToCancel);
         return cancelfnRetval;
 
       case "exit!":
@@ -3602,7 +2907,16 @@ public class Minescript {
                     long funcCallId = Long.valueOf(functionCall[0]);
                     String functionName = functionCall[1];
                     String argsString = functionCall[2];
-                    List<?> rawArgs = GSON.fromJson(argsString, ArrayList.class);
+                    // TODO(maxuser): This sometimes throws com.google.gson.JsonSyntaxException
+                    // warpping com.google.gson.stream.MalformedJsonException .
+                    List<?> rawArgs;
+                    try {
+                      rawArgs = GSON.fromJson(argsString, ArrayList.class);
+                    } catch (JsonSyntaxException e) {
+                      systemMessageQueue.logUserError(
+                          "JSON syntax error in args to `{}`: `{}`", functionName, argsString);
+                      continue;
+                    }
                     var args = new ScriptFunctionArgList(functionName, rawArgs, argsString);
 
                     try {

@@ -36,4 +36,13 @@ public record Message(Message.Type type, String value) {
   public static Message fromJsonFormattedText(String value) {
     return new Message(Type.JSON_FORMATTED_TEXT, value);
   }
+
+  public static Message formatAsJsonColoredText(String text, String color) {
+    return Message.fromJsonFormattedText(
+        "{\"text\":\""
+            + text.replace("\\", "\\\\").replace("\"", "\\\"")
+            + "\",\"color\":\""
+            + color
+            + "\"}");
+  }
 }

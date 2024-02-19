@@ -279,8 +279,8 @@ public class Config {
     return autorunCommands.get(worldName);
   }
 
-  public boolean shouldIgnoreStderrLine(String line) {
-    return stderrChatIgnorePattern.matcher(line).find();
+  public Pattern stderrChatIgnorePattern() {
+    return stderrChatIgnorePattern;
   }
 
   public void setLogChunkLoadEvents(boolean enable) {
