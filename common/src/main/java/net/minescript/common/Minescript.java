@@ -291,6 +291,7 @@ public class Minescript {
 
   private static final ImmutableList<String> BUILTIN_COMMANDS =
       ImmutableList.of(
+          "help",
           "ls",
           "copy",
           "jobs",
@@ -986,6 +987,80 @@ public class Minescript {
     }
   }
 
+  private static boolean printBuiltinHelp(String command) {
+    switch (command) {
+      case "help":
+        systemMessageQueue.logUserInfo("{} - built-in command", command);
+        systemMessageQueue.logUserInfo("Usage: \\help [command]");
+        systemMessageQueue.logUserInfo("Prints documentation for the given command.");
+        return true;
+      case "ls":
+        systemMessageQueue.logUserInfo("{} - built-in command", command);
+        systemMessageQueue.logUserInfo("Usage: \\ls");
+        systemMessageQueue.logUserInfo("Lists available commands.");
+        return true;
+      case "copy":
+        systemMessageQueue.logUserInfo("{} - built-in command", command);
+        systemMessageQueue.logUserInfo("Usage: \\copy ...");
+        systemMessageQueue.logUserInfo("Alias for the built-in `copy_blocks` script.");
+        return true;
+      case "jobs":
+        systemMessageQueue.logUserInfo("{} - built-in command", command);
+        systemMessageQueue.logUserInfo("Usage: \\jobs");
+        systemMessageQueue.logUserInfo("Lists currently running (or suspended) script jobs.");
+        return true;
+      case "suspend":
+        systemMessageQueue.logUserInfo("{} - built-in command (alias: `z`)", command);
+        systemMessageQueue.logUserInfo("Usage: \\suspend [jobID]");
+        systemMessageQueue.logUserInfo(
+            "Suspends the job with the given ID, or all jobs if none given.");
+        return true;
+      case "z":
+        systemMessageQueue.logUserInfo("{} - built-in command", command);
+        systemMessageQueue.logUserInfo("Usage: \\z [jobID]");
+        systemMessageQueue.logUserInfo("Alias for `\\suspend [jobID]`.");
+        return true;
+      case "resume":
+        systemMessageQueue.logUserInfo("{} - built-in command", command);
+        systemMessageQueue.logUserInfo("Usage: \\resume [jobID]");
+        systemMessageQueue.logUserInfo("Resumes the suspended job with the given ID.");
+        return true;
+      case "killjob":
+        systemMessageQueue.logUserInfo("{} - built-in command", command);
+        systemMessageQueue.logUserInfo("Usage: \\killjob [jobID]");
+        systemMessageQueue.logUserInfo("Kills the job with the given ID.");
+        return true;
+      case "undo":
+        systemMessageQueue.logUserInfo("{} - built-in command", command);
+        systemMessageQueue.logUserInfo("Usage: \\undo");
+        systemMessageQueue.logUserInfo(
+            "Undoes the setblock and fill commands of the most recent job.");
+        systemMessageQueue.logUserInfo("`undo` can be run multiple times to undo multiple jobs.");
+        return true;
+      case "which":
+        systemMessageQueue.logUserInfo("{} - built-in command", command);
+        systemMessageQueue.logUserInfo("Usage: \\which [command]");
+        systemMessageQueue.logUserInfo("Prints the location of the given command.");
+        return true;
+      case "config":
+        systemMessageQueue.logUserInfo("{} - built-in command", command);
+        systemMessageQueue.logUserInfo("Usage: \\config [name [value]]");
+        systemMessageQueue.logUserInfo("`\\config`: lists all config values");
+        systemMessageQueue.logUserInfo("`\\config name`: echoes the value of the named variable");
+        systemMessageQueue.logUserInfo(
+            "`\\config name value`: sets the value of the named variable");
+        return true;
+      case "reload_minescript_resources":
+        systemMessageQueue.logUserInfo("{} - built-in command", command);
+        systemMessageQueue.logUserInfo("Usage: \\reload_minescript_resources");
+        systemMessageQueue.logUserInfo(
+            "Reloads resources from the Minescript jar to the `minescript` dir.");
+        return true;
+      default:
+        return false;
+    }
+  }
+
   private static void runParsedMinescriptCommand(List<Token> tokens) {
     if (tokens.isEmpty()) {
       return;
@@ -1008,6 +1083,21 @@ public class Minescript {
       String[] command = substituteMinecraftVars(tokenStrings.toArray(EMPTY_STRING_ARRAY));
 
       switch (command[0]) {
+        case "help":
+          // TODO(maxuser)! If first and only param is a built-in command, print help and return.
+          // Otherwise fall through to the help.py script for printing help of an external script.
+          if (!checkParamTypes(command, ParamType.STRING)) {
+            systemMessageQueue.logUserError(
+                "Expected one param (command name), instead got `{}`", getParamsAsString(command));
+            runParsedMinescriptCommand(nextCommand);
+            return;
+          } else if (printBuiltinHelp(command[1])) {
+            runParsedMinescriptCommand(nextCommand);
+            return;
+          }
+          // Handle below as an external script command via `help.py`.
+          break;
+
         case "jobs":
           if (checkParamTypes(command)) {
             listJobs();

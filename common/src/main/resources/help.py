@@ -29,8 +29,9 @@ def ReadDocString(script_name):
   nlines = 0
   src = ""
   script_path = ResolveScriptName(script_name)
+  short_name = script_name.split(".py")[0]
   if script_path is None:
-    print(f'Script named "{script_name}" not found.', file=sys.stderr)
+    print(f'Command "{short_name}" not found.', file=sys.stderr)
     return None
   try:
     script = open(script_path)
@@ -55,6 +56,8 @@ def ReadDocString(script_name):
     src += line
     if line.rstrip().endswith(docstr_start_quote):
       return eval(src)
+  print(f'No documentation found for "{short_name}".', file=sys.stderr)
+  print(f'(source location: "{script_path}")', file=sys.stderr)
   return None
 
 def run(argv):
@@ -65,7 +68,7 @@ def run(argv):
   script_name = argv[1] if argv[1].endswith(".py") else argv[1] + ".py"
   docstr = ReadDocString(script_name)
   if docstr is None:
-    return 1
+    return 0
   print(docstr, file=sys.stderr)
   return 0
 

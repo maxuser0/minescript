@@ -223,7 +223,7 @@ public class Config {
     consumer.accept("commands_per_cycle", getValue("commands_per_cycle"));
     consumer.accept("ticks_per_cycle", getValue("ticks_per_cycle"));
     consumer.accept("incremental_command_suggestions", getValue("incremental_command_suggestions"));
-    consumer.accept("debug_output", getValue("debug_outptut"));
+    consumer.accept("debug_output", getValue("debug_output"));
     consumer.accept("stderr_chat_ignore_pattern", getValue("stderr_chat_ignore_pattern"));
     consumer.accept(
         "minescript_on_chat_received_event", getValue("minescript_on_chat_received_event"));
@@ -399,7 +399,7 @@ public class Config {
 
       case "debug_output":
         debugOutput = Boolean.valueOf(value);
-        reportInfo(out, "Setting debug_outptut to {}", debugOutput);
+        reportInfo(out, "Setting debug_output to {}", debugOutput);
         break;
 
       case "stderr_chat_ignore_pattern":
