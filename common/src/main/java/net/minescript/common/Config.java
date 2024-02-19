@@ -34,6 +34,24 @@ public class Config {
   private static final Pattern CONFIG_AUTORUN_RE = Pattern.compile("autorun\\[(.*)\\]");
   private static Gson GSON = new GsonBuilder().serializeNulls().create();
 
+  private static final ImmutableList<String> VARIABLE_LIST =
+      ImmutableList.of(
+          "python",
+          "command",
+          "escape_command_double_quotes",
+          "path",
+          "minescript_commands_per_cycle",
+          "minescript_ticks_per_cycle",
+          "minescript_incremental_command_suggestions",
+          "minescript_script_function_debug_outptut",
+          "minescript_log_chunk_load_events",
+          "stderr_chat_ignore_pattern",
+          "autorun[");
+
+  private static final ImmutableList<String> CONFIG_VARIABLE_LIST =
+      ImmutableList.copyOf(
+          VARIABLE_LIST.stream().map(s -> "config " + s).collect(Collectors.toList()));
+
   private final String minescriptDirName;
   private final Path absMinescriptDir;
   private final File file;
@@ -204,6 +222,10 @@ public class Config {
     return minescriptTicksPerCycle;
   }
 
+  public ImmutableList<String> getConfigVariables() {
+    return CONFIG_VARIABLE_LIST;
+  }
+
   public void forEachValue(BiConsumer<String, String> consumer) {
     consumer.accept("python", getValue("python"));
     consumer.accept("command", getValue("command"));
@@ -289,23 +311,23 @@ public class Config {
   public void setValue(String name, String value, Consumer<Status> out) {
     switch (name) {
       case "python":
+        final String python;
         if (System.getProperty("os.name").startsWith("Windows")) {
-          pythonLocation =
+          python =
               value.startsWith("%userprofile%\\")
                   ? value.replace("%userprofile%", System.getProperty("user.home"))
                   : value;
         } else {
           // This does not support "~otheruser/..." syntax. But that would be odd anyway.
-          pythonLocation =
+          python =
               value.startsWith("~/")
                   ? value.replaceFirst(
                       "~", Matcher.quoteReplacement(System.getProperty("user.home")))
                   : value;
         }
-        reportInfo(out, "Setting config var: {} = \"{}\" (\"{}\")", name, value, pythonLocation);
 
         // `python3 -u` for unbuffered stdout and stderr.
-        var commandPattern = ImmutableList.of(pythonLocation, "-u", "{command}", "{args}");
+        var commandPattern = ImmutableList.of(python, "-u", "{command}", "{args}");
 
         var environmentVars =
             ImmutableList.of(
@@ -319,6 +341,8 @@ public class Config {
         try {
           scriptConfig.configureFileType(
               new ScriptConfig.CommandConfig(".py", commandPattern, environmentVars));
+          reportInfo(out, "Setting config var: {} = \"{}\" (\"{}\")", name, value, python);
+          pythonLocation = python;
         } catch (Exception e) {
           reportError(out, "Failed to configure .py script execution: {}", e.toString());
         }

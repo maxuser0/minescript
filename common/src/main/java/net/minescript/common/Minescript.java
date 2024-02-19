@@ -1099,7 +1099,11 @@ public class Minescript {
                 (name, value) -> systemMessageQueue.logUserInfo("  {} = \"{}\"", name, value));
           } else if (command.length == 2) {
             String name = command[1];
-            systemMessageQueue.logUserInfo("{} = \"{}\"", name, config.getValue(name));
+            try {
+              systemMessageQueue.logUserInfo("{} = \"{}\"", name, config.getValue(name));
+            } catch (IllegalArgumentException e) {
+              systemMessageQueue.logUserError("{}", e.getMessage());
+            }
           } else if (command.length == 3) {
             String name = command[1];
             String value = command[2];
@@ -1391,6 +1395,34 @@ public class Minescript {
     return true;
   }
 
+  private static String getCompletableCommand(String input) {
+    String[] words = input.split("\\s+");
+    String command = words.length > 0 ? words[0] : "";
+    if ((input.startsWith("config ") || input.startsWith("help ")) && words.length > 1) {
+      return command + " " + words[1];
+    }
+    return command;
+  }
+
+  private static List<String> getCommandCompletions(String command) {
+    if (command.equals("config") || command.startsWith("config ")) {
+      return config.getConfigVariables().stream()
+          .filter(s -> s.startsWith(command))
+          .sorted()
+          .collect(Collectors.toList());
+    } else if (command.equals("help") || command.startsWith("help ")) {
+      return config.scriptConfig().findCommandPrefixMatches("").stream()
+          .sorted()
+          .map(s -> "help " + s)
+          .filter(s -> s.startsWith(command))
+          .collect(Collectors.toList());
+    } else {
+      var completions = config.scriptConfig().findCommandPrefixMatches(command);
+      completions.sort(null);
+      return completions;
+    }
+  }
+
   public static boolean onKeyboardKeyPressed(Screen screen, int key) {
     boolean cancel = false;
     if (screen != null && screen instanceof ChatScreen) {
@@ -1446,9 +1478,9 @@ public class Minescript {
         value = eraseChar(value, cursorPos);
       }
       if (value.stripTrailing().length() > 0) {
-        String[] words = value.substring(1).split("\\s+");
-        String command = words.length > 0 ? words[0] : "";
+        String command = getCompletableCommand(value.substring(1));
         if (key == TAB_KEY && !commandSuggestions.isEmpty()) {
+          cancel = true;
           if (cursorPos == command.length() + 1) {
             // Insert the remainder of the completed command.
             String maybeTrailingSpace =
@@ -1457,9 +1489,21 @@ public class Minescript {
                         || commandSuggestions.get(0).endsWith(File.separator))
                     ? ""
                     : " ";
-            chatEditBox.insertText(
-                longestCommonPrefix(commandSuggestions).substring(command.length())
-                    + maybeTrailingSpace);
+            try {
+              chatEditBox.insertText(
+                  longestCommonPrefix(commandSuggestions).substring(command.length())
+                      + maybeTrailingSpace);
+            } catch (StringIndexOutOfBoundsException e) {
+              systemMessageQueue.logUserError(
+                  "Minescript internal error: "
+                      + "StringIndexOutOfBoundsException from "
+                      + "(longestCommonPrefix([\"{}\"]) = \"{}\").substring(\"{}\".length() = {})",
+                  String.join("\", \"", commandSuggestions),
+                  longestCommonPrefix(commandSuggestions),
+                  command,
+                  command.length());
+              return cancel;
+            }
             if (commandSuggestions.size() > 1) {
               chatEditBox.setTextColor(0x5ee8e8); // cyan for partial completion
             } else {
@@ -1469,34 +1513,32 @@ public class Minescript {
             return cancel;
           }
         }
-        try {
-          var scriptCommandNames = config.scriptConfig().findCommandPrefixMatches(command);
-          scriptCommandNames.sort(null);
-          if (scriptCommandNames.contains(command)) {
-            chatEditBox.setTextColor(0x5ee85e); // green
-            commandSuggestions = new ArrayList<>();
-          } else {
-            List<String> newCommandSuggestions = new ArrayList<>();
-            newCommandSuggestions.addAll(scriptCommandNames);
-            if (!newCommandSuggestions.isEmpty()) {
-              if (!newCommandSuggestions.equals(commandSuggestions)) {
-                if (key == TAB_KEY || config.incrementalCommandSuggestions()) {
-                  systemMessageQueue.add(Message.formatAsJsonColoredText("completions:", "aqua"));
-                  for (String suggestion : newCommandSuggestions) {
-                    systemMessageQueue.add(
-                        Message.formatAsJsonColoredText("  " + suggestion, "aqua"));
-                  }
+        var completions = getCommandCompletions(command);
+        if (completions.contains(command)) {
+          chatEditBox.setTextColor(0x5ee85e); // green
+          commandSuggestions = new ArrayList<>();
+        } else {
+          List<String> newCommandSuggestions = new ArrayList<>();
+          newCommandSuggestions.addAll(completions);
+          if (!newCommandSuggestions.isEmpty()) {
+            if (!newCommandSuggestions.equals(commandSuggestions)) {
+              if (key == TAB_KEY || config.incrementalCommandSuggestions()) {
+                if (key == TAB_KEY) {
+                  cancel = true;
                 }
-                commandSuggestions = newCommandSuggestions;
+                systemMessageQueue.add(Message.formatAsJsonColoredText("completions:", "aqua"));
+                for (String suggestion : newCommandSuggestions) {
+                  systemMessageQueue.add(
+                      Message.formatAsJsonColoredText("  " + suggestion, "aqua"));
+                }
               }
-              chatEditBox.setTextColor(0x5ee8e8); // cyan
-            } else {
-              chatEditBox.setTextColor(0xe85e5e); // red
-              commandSuggestions = new ArrayList<>();
+              commandSuggestions = newCommandSuggestions;
             }
+            chatEditBox.setTextColor(0x5ee8e8); // cyan
+          } else {
+            chatEditBox.setTextColor(0xe85e5e); // red
+            commandSuggestions = new ArrayList<>();
           }
-        } catch (IOException e) {
-          systemMessageQueue.logException(e);
         }
       }
     }

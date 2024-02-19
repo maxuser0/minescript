@@ -29,9 +29,12 @@ public class ScriptConfig {
   private final ImmutableSet<String> ignoreDirs;
 
   private boolean escapeCommandDoubleQuotes = System.getProperty("os.name").startsWith("Windows");
+
   private ImmutableList<Path> commandPath =
       ImmutableList.of(Paths.get("system", "exec"), Paths.get(""));
-  private String minescriptCommandPathEnvVar = "";
+
+  private String minescriptCommandPathEnvVar;
+
   private Map<String, FileTypeConfig> fileTypeMap = new ConcurrentHashMap<>();
   private List<String> fileExtensions = new ArrayList<>();
 
@@ -42,6 +45,14 @@ public class ScriptConfig {
     this.minescriptDir = Paths.get(System.getProperty("user.dir"), minescriptDirName);
     this.builtinCommands = builtinCommands;
     this.ignoreDirs = ignoreDirs;
+
+    minescriptCommandPathEnvVar =
+        "MINESCRIPT_COMMAND_PATH="
+            + String.join(
+                File.pathSeparator,
+                commandPath.stream()
+                    .map(p -> minescriptDir.resolve(p).toString())
+                    .collect(Collectors.toList()));
   }
 
   public void setCommandPath(List<Path> commandPath) {
@@ -71,7 +82,7 @@ public class ScriptConfig {
   /**
    * Returns names of commands and directories accessible from command path that match the prefix.
    */
-  public List<String> findCommandPrefixMatches(String prefix) throws IOException {
+  public List<String> findCommandPrefixMatches(String prefix) {
     var matches = new ArrayList<String>();
     for (String builtin : builtinCommands) {
       if (builtin.startsWith(prefix)) {
@@ -109,43 +120,49 @@ public class ScriptConfig {
       if (!Files.isDirectory(resolvedDir)) {
         continue commandDirLoop;
       }
-      Files.list(resolvedDir)
-          .forEach(
-              path -> {
-                String fileName = path.getFileName().toString();
-                if (Files.isDirectory(path)) {
-                  if (fileName.startsWith(prefixFileName)) {
-                    try {
-                      String relativeName = resolvedCommandDir.relativize(path).toString();
-                      if (!(commandDir.toString().isEmpty() && ignoreDirs.contains(relativeName))) {
-                        matches.add(relativeName + File.separator);
+      try {
+        Files.list(resolvedDir)
+            .forEach(
+                path -> {
+                  String fileName = path.getFileName().toString();
+                  if (Files.isDirectory(path)) {
+                    if (fileName.startsWith(prefixFileName)) {
+                      try {
+                        String relativeName = resolvedCommandDir.relativize(path).toString();
+                        if (!(commandDir.toString().isEmpty()
+                            && ignoreDirs.contains(relativeName))) {
+                          matches.add(relativeName + File.separator);
+                        }
+                      } catch (IllegalArgumentException e) {
+                        LOGGER.info(
+                            "Dir completion: resolvedCommandDir: {}  path: {}",
+                            resolvedCommandDir,
+                            path);
+                        throw e;
                       }
-                    } catch (IllegalArgumentException e) {
-                      LOGGER.info(
-                          "Dir completion: resolvedCommandDir: {}  path: {}",
-                          resolvedCommandDir,
-                          path);
-                      throw e;
+                    }
+                  } else {
+                    if (fileExtensions.contains(getFileExtension(fileName))) {
+                      try {
+                        String scriptName =
+                            removeFileExtension(resolvedCommandDir.relativize(path).toString());
+                        if (scriptName.startsWith(prefix) && !matches.contains(scriptName)) {
+                          matches.add(scriptName);
+                        }
+                      } catch (IllegalArgumentException e) {
+                        LOGGER.info(
+                            "File completion: resolvedCommandDir: {}  path: {}",
+                            resolvedCommandDir,
+                            path);
+                        throw e;
+                      }
                     }
                   }
-                } else {
-                  if (fileExtensions.contains(getFileExtension(fileName))) {
-                    try {
-                      String scriptName =
-                          removeFileExtension(resolvedCommandDir.relativize(path).toString());
-                      if (scriptName.startsWith(prefix) && !matches.contains(scriptName)) {
-                        matches.add(scriptName);
-                      }
-                    } catch (IllegalArgumentException e) {
-                      LOGGER.info(
-                          "File completion: resolvedCommandDir: {}  path: {}",
-                          resolvedCommandDir,
-                          path);
-                      throw e;
-                    }
-                  }
-                }
-              });
+                });
+      } catch (IOException e) {
+        LOGGER.error("Error listing files inside dir `{}`: {}", resolvedDir, e);
+        continue commandDirLoop;
+      }
     }
     return matches;
   }
