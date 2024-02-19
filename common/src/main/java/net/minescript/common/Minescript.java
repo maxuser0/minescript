@@ -300,6 +300,7 @@ public class Minescript {
           "killjob",
           "undo",
           "which",
+          "config",
           "reload_minescript_resources",
           "minescript_commands_per_cycle",
           "minescript_ticks_per_cycle",
@@ -1087,6 +1088,40 @@ public class Minescript {
           } else {
             systemMessageQueue.logUserError(
                 "Expected 1 param of type string, instead got `{}`", getParamsAsString(command));
+          }
+          runParsedMinescriptCommand(nextCommand);
+          return;
+
+        case "config":
+          if (command.length == 1) {
+            systemMessageQueue.logUserInfo("Minescript config:");
+            config.forEachValue(
+                (name, value) -> systemMessageQueue.logUserInfo("  {} = \"{}\"", name, value));
+          } else if (command.length == 2) {
+            String name = command[1];
+            systemMessageQueue.logUserInfo("{} = \"{}\"", name, config.getValue(name));
+          } else if (command.length == 3) {
+            String name = command[1];
+            String value = command[2];
+            int[] infoMessages = new int[1]; // wrap in an array to allow mutable int in lambda
+            config.setValue(
+                name,
+                value,
+                status -> {
+                  if (status.success()) {
+                    systemMessageQueue.logUserInfo(status.message());
+                    ++infoMessages[0];
+                  } else {
+                    systemMessageQueue.logUserError(status.message());
+                  }
+                });
+            if (infoMessages[0] > 0) {
+              systemMessageQueue.logUserInfo(
+                  "(Note: Config value will revert when config.txt is reloaded.)");
+            }
+          } else {
+            systemMessageQueue.logUserError(
+                "Expected 2 or fewer params, instead got `{}`", getParamsAsString(command));
           }
           runParsedMinescriptCommand(nextCommand);
           return;

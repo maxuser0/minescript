@@ -60,6 +60,10 @@ public class ScriptConfig {
     this.escapeCommandDoubleQuotes = enable;
   }
 
+  public boolean escapeCommandDoubleQuotes() {
+    return escapeCommandDoubleQuotes;
+  }
+
   public ImmutableList<Path> commandPath() {
     return commandPath;
   }
@@ -102,6 +106,9 @@ public class ScriptConfig {
         prefixFileName = prefixPath.getFileName().toString();
       }
 
+      if (!Files.isDirectory(resolvedDir)) {
+        continue commandDirLoop;
+      }
       Files.list(resolvedDir)
           .forEach(
               path -> {
