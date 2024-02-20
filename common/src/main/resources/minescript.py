@@ -527,6 +527,25 @@ def player_get_targeted_block(max_distance: float = 20):
   return await_script_function("player_get_targeted_block", (max_distance,))
 
 
+def player_get_targeted_entity(max_distance: float = 20, nbt: bool = False):
+  """Gets the entity targeted in the local player's crosshairs, if any.
+
+  Args:
+    max_distance: maximum distance to check for targeted entities
+    nbt: if `True`, populate an `"nbt"` attribute for the player
+
+  Returns:
+    Entity represented as a dict containing:
+    `"name": str, "health": float (living entities only), "type": str, "uuid": str,
+    "position": [float, float, float], "yaw": float, "pitch": float,
+    "velocity": [float, float, float]`. Living entities have
+    `"health": float`. The`"nbt"` attribute is present if `nbt` arg is `True`.
+
+  Since: v4.0
+  """
+  return await_script_function("player_get_targeted_entity", (max_distance, nbt))
+
+
 def player_health() -> float:
   """Gets the local player's health.
 

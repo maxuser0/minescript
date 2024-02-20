@@ -59,6 +59,7 @@ import net.minecraft.client.gui.screens.ReceivingLevelScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
+import net.minecraft.client.renderer.debug.DebugRenderer;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -2297,6 +2298,22 @@ public class Minescript {
           } else {
             return OPTIONAL_JSON_NULL;
           }
+        }
+
+      case "player_get_targeted_entity":
+        {
+          args.expectArgs("max_distance", "nbt");
+          double maxDistance = args.getDouble(0);
+          boolean nbt = args.getBoolean(1);
+          return Optional.of(
+              DebugRenderer.getTargetedEntity(player, (int) maxDistance)
+                  .map(e -> entityToJsonObject(e, nbt))
+                  .map(
+                      obj -> {
+                        JsonElement element = obj; // implicit cast
+                        return element;
+                      })
+                  .orElse(JsonNull.INSTANCE));
         }
 
       case "player_health":
