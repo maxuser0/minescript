@@ -27,6 +27,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayDeque;
@@ -229,7 +230,7 @@ public class Minescript {
         var reader = new BufferedReader(new InputStreamReader(in))) {
       return reader.readLine().strip();
     } catch (IOException e) {
-      LOGGER.error("Exception loading version resource: {}", e);
+      LOGGER.error("Exception loading version resource: {}", e.toString());
       return "";
     }
   }
@@ -249,7 +250,7 @@ public class Minescript {
     try {
       return Files.readString(versionPath).strip();
     } catch (IOException e) {
-      LOGGER.error("Exception loading version file: {}", e);
+      LOGGER.error("Exception loading version file: {}", e.toString());
       return "";
     }
   }
@@ -1398,21 +1399,26 @@ public class Minescript {
   }
 
   private static List<String> getCommandCompletions(String command) {
-    if (command.equals("config") || command.startsWith("config ")) {
-      return config.getConfigVariables().stream()
-          .filter(s -> s.startsWith(command))
-          .sorted()
-          .collect(Collectors.toList());
-    } else if (command.equals("help") || command.startsWith("help ")) {
-      return config.scriptConfig().findCommandPrefixMatches("").stream()
-          .sorted()
-          .map(s -> "help " + s)
-          .filter(s -> s.startsWith(command))
-          .collect(Collectors.toList());
-    } else {
-      var completions = config.scriptConfig().findCommandPrefixMatches(command);
-      completions.sort(null);
-      return completions;
+    try {
+      if (command.equals("config") || command.startsWith("config ")) {
+        return config.getConfigVariables().stream()
+            .filter(s -> s.startsWith(command))
+            .sorted()
+            .collect(Collectors.toList());
+      } else if (command.equals("help") || command.startsWith("help ")) {
+        return config.scriptConfig().findCommandPrefixMatches("").stream()
+            .sorted()
+            .map(s -> "help " + s)
+            .filter(s -> s.startsWith(command))
+            .collect(Collectors.toList());
+      } else {
+        var completions = config.scriptConfig().findCommandPrefixMatches(command);
+        completions.sort(null);
+        return completions;
+      }
+    } catch (InvalidPathException e) {
+      LOGGER.warn("Exception while finding command completions: {}", e.toString());
+      return new ArrayList<>();
     }
   }
 
@@ -2983,7 +2989,7 @@ public class Minescript {
                       rawArgs = GSON.fromJson(argsString, ArrayList.class);
                     } catch (JsonSyntaxException e) {
                       systemMessageQueue.logUserError(
-                          "JSON syntax error in args to `{}`: `{}`", functionName, argsString);
+                          "JSON syntax error in args to `{}`: `{}`", functionName, message.value());
                       continue;
                     }
                     var args = new ScriptFunctionArgList(functionName, rawArgs, argsString);

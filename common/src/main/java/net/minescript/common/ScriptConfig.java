@@ -79,91 +79,108 @@ public class ScriptConfig {
     return commandPath;
   }
 
+  // Add to `matches` all the files in `commandDir` that match `prefix`.
+  private void addMatchingFilesInDir(
+      String prefix, Path prefixPath, Path commandDir, List<String> matches) {
+    Path resolvedCommandDir = minescriptDir.resolve(commandDir);
+    Path resolvedDir = resolvedCommandDir;
+
+    // Iterate all but the last component of the prefix path to walk the path within commandDir.
+    for (int i = 0; i < prefixPath.getNameCount() - 1; ++i) {
+      resolvedDir = resolvedDir.resolve(prefixPath.getName(i));
+      if (resolvedDir == null || !Files.isDirectory(resolvedDir)) {
+        return;
+      }
+    }
+
+    if (resolvedDir == null) {
+      return;
+    }
+    // When prefix ends with File.separator ("\" on Windows, "/" otherwise), the last name
+    // component of the path is the component before the final separator. Treat the last name
+    // component as empty instead.
+    final String prefixFileName;
+    if (prefix.length() > 1 && prefix.endsWith(File.separator)) {
+      resolvedDir = resolvedDir.resolve(prefixPath.getFileName());
+      if (resolvedDir == null || !Files.isDirectory(resolvedDir)) {
+        return;
+      }
+      prefixFileName = "";
+    } else {
+      Path fileName = prefixPath.getFileName();
+      if (fileName == null) {
+        return;
+      }
+      prefixFileName = fileName.toString();
+    }
+
+    if (resolvedDir == null || !Files.isDirectory(resolvedDir)) {
+      return;
+    }
+    try {
+      Files.list(resolvedDir)
+          .forEach(
+              path -> {
+                String fileName = path.getFileName().toString();
+                if (Files.isDirectory(path)) {
+                  if (fileName.startsWith(prefixFileName)) {
+                    try {
+                      String relativeName = resolvedCommandDir.relativize(path).toString();
+                      if (!(commandDir.toString().isEmpty() && ignoreDirs.contains(relativeName))) {
+                        matches.add(relativeName + File.separator);
+                      }
+                    } catch (IllegalArgumentException e) {
+                      LOGGER.info(
+                          "Dir completion: resolvedCommandDir: {}  path: {}",
+                          resolvedCommandDir,
+                          path);
+                      throw e;
+                    }
+                  }
+                } else {
+                  if (fileExtensions.contains(getFileExtension(fileName))) {
+                    try {
+                      String scriptName =
+                          removeFileExtension(resolvedCommandDir.relativize(path).toString());
+                      if (scriptName.startsWith(prefix) && !matches.contains(scriptName)) {
+                        matches.add(scriptName);
+                      }
+                    } catch (IllegalArgumentException e) {
+                      LOGGER.info(
+                          "File completion: resolvedCommandDir: {}  path: {}",
+                          resolvedCommandDir,
+                          path);
+                      throw e;
+                    }
+                  }
+                }
+              });
+    } catch (IOException e) {
+      LOGGER.error("Error listing files inside dir `{}`: {}", resolvedDir, e);
+    }
+  }
+
   /**
    * Returns names of commands and directories accessible from command path that match the prefix.
    */
   public List<String> findCommandPrefixMatches(String prefix) {
     var matches = new ArrayList<String>();
+
+    Path prefixPath = Paths.get(prefix);
+    if (prefixPath.isAbsolute()) {
+      return new ArrayList<>();
+    }
+
     for (String builtin : builtinCommands) {
       if (builtin.startsWith(prefix)) {
         matches.add(builtin);
       }
     }
-    Path prefixPath = Paths.get(prefix);
-    commandDirLoop:
+
     for (Path commandDir : commandPath) {
-      Path resolvedCommandDir = minescriptDir.resolve(commandDir);
-      Path resolvedDir = resolvedCommandDir;
-
-      // Iterate all but the last component of the prefix path to walk the path within commandDir.
-      for (int i = 0; i < prefixPath.getNameCount() - 1; ++i) {
-        resolvedDir = resolvedDir.resolve(prefixPath.getName(i));
-        if (!Files.isDirectory(resolvedDir)) {
-          continue commandDirLoop;
-        }
-      }
-
-      // When prefix ends with File.separator ("\" on Windows, "/" otherwise), the last name
-      // component of the path is the component before the final separator. Treat the last name
-      // component as empty instead.
-      final String prefixFileName;
-      if (prefix.endsWith(File.separator)) {
-        resolvedDir = resolvedDir.resolve(prefixPath.getFileName());
-        if (!Files.isDirectory(resolvedDir)) {
-          continue commandDirLoop;
-        }
-        prefixFileName = "";
-      } else {
-        prefixFileName = prefixPath.getFileName().toString();
-      }
-
-      if (!Files.isDirectory(resolvedDir)) {
-        continue commandDirLoop;
-      }
-      try {
-        Files.list(resolvedDir)
-            .forEach(
-                path -> {
-                  String fileName = path.getFileName().toString();
-                  if (Files.isDirectory(path)) {
-                    if (fileName.startsWith(prefixFileName)) {
-                      try {
-                        String relativeName = resolvedCommandDir.relativize(path).toString();
-                        if (!(commandDir.toString().isEmpty()
-                            && ignoreDirs.contains(relativeName))) {
-                          matches.add(relativeName + File.separator);
-                        }
-                      } catch (IllegalArgumentException e) {
-                        LOGGER.info(
-                            "Dir completion: resolvedCommandDir: {}  path: {}",
-                            resolvedCommandDir,
-                            path);
-                        throw e;
-                      }
-                    }
-                  } else {
-                    if (fileExtensions.contains(getFileExtension(fileName))) {
-                      try {
-                        String scriptName =
-                            removeFileExtension(resolvedCommandDir.relativize(path).toString());
-                        if (scriptName.startsWith(prefix) && !matches.contains(scriptName)) {
-                          matches.add(scriptName);
-                        }
-                      } catch (IllegalArgumentException e) {
-                        LOGGER.info(
-                            "File completion: resolvedCommandDir: {}  path: {}",
-                            resolvedCommandDir,
-                            path);
-                        throw e;
-                      }
-                    }
-                  }
-                });
-      } catch (IOException e) {
-        LOGGER.error("Error listing files inside dir `{}`: {}", resolvedDir, e);
-        continue commandDirLoop;
-      }
+      addMatchingFilesInDir(prefix, prefixPath, commandDir, matches);
     }
+
     return matches;
   }
 
