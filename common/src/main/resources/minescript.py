@@ -57,21 +57,24 @@ def echo(*messages):
 
   Echoed messages are visible only to the local player.
 
-  If `len(messages)` is greater than 1, join messages with a space separating
-  them. If `messages[0]` is a dict or list, interpret as JSON-formatted text;
-  `len(messages)` must be 1 in this case.
+  If `len(messages)` is 1 and `messages[0]` is a dict or list, interpret as
+  JSON-formatted text; otherwise, join messages with a space separating them.
+
+  To echo a single arg that's a dict or list, but not interpret it as
+  JSON-formatted text, pass an empty string as an additional arg, e.g.
+  `echo(my_list, "")`
 
   Update in v4.0:
-    Support multiple plain-text messages. Interpret dict or list as a JSON-formatted message.
+    Interpret single-arg dict or list as a JSON-formatted message.
+    Support multiple plain-text messages.
 
   Since: v2.0
   """
   if not messages:
     return
 
-  if type(messages[0]) in (dict, list):
-    # Interpret as JSON-formatted text.  Subsequent messages are silently
-    # dropped in this case.
+  if len(messages) == 1 and type(messages[0]) in (dict, list):
+    # Interpret as JSON-formatted text.
     await_script_function("echo_json_text", (json.dumps(messages[0]),))
   else:
     await_script_function("echo_plain_text", (" ".join([str(m) for m in messages]),))
