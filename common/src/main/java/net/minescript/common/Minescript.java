@@ -84,6 +84,8 @@ import org.apache.logging.log4j.Logger;
 public class Minescript {
   private static final Logger LOGGER = LogManager.getLogger();
 
+  public static Config config;
+
   // MINESCRIPT_DIR is relative to the minecraft directory which is the working directory.
   private static final String MINESCRIPT_DIR = "minescript";
 
@@ -94,7 +96,6 @@ public class Minescript {
 
   private static Platform platform;
   private static Thread worldListenerThread;
-  private static Config config;
 
   public static void init(Platform platform) {
     Minescript.platform = platform;
@@ -1434,7 +1435,7 @@ public class Minescript {
       String value = chatEditBox.getValue();
       if (!value.startsWith("\\")) {
         minescriptCommandHistory.moveToEnd();
-        if (key == ENTER_KEY
+        if ((key == ENTER_KEY || key == config.secondaryEnterKeyCode())
             && (customNickname != null || chatInterceptor != null)
             && !value.startsWith("/")) {
           cancel = true;
@@ -1460,7 +1461,7 @@ public class Minescript {
           chatEditBox.setCursorPosition(value.length());
         }
         cancel = true;
-      } else if (key == ENTER_KEY) {
+      } else if (key == ENTER_KEY || key == config.secondaryEnterKeyCode()) {
         cancel = true;
         String text = chatEditBox.getValue();
         chatEditBox.setValue("");

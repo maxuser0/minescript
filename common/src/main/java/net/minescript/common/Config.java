@@ -46,6 +46,7 @@ public class Config {
           "debug_output",
           "stderr_chat_ignore_pattern",
           "minescript_on_chat_received_event",
+          "secondary_enter_key_code",
           "autorun[");
 
   private static final ImmutableList<String> CONFIG_VARIABLE_LIST =
@@ -67,6 +68,9 @@ public class Config {
   private Pattern stderrChatIgnorePattern = Pattern.compile("^$");
 
   private boolean minescriptOnChatReceivedEvent = false;
+
+  // Default secondary `enter` key code to value of KEY_KP_ENTER from GLFW.
+  private int secondaryEnterKeyCode = 335;
 
   // Map from world name (or "*" for all) to a list of Minescript/Minecraft commands.
   private Map<String, List<Message>> autorunCommands = new ConcurrentHashMap<>();
@@ -187,6 +191,10 @@ public class Config {
     return minescriptOnChatReceivedEvent;
   }
 
+  public int secondaryEnterKeyCode() {
+    return secondaryEnterKeyCode;
+  }
+
   public void setDebugOutptut(boolean enable) {
     debugOutput = enable;
   }
@@ -227,6 +235,8 @@ public class Config {
     consumer.accept("stderr_chat_ignore_pattern", getValue("stderr_chat_ignore_pattern"));
     consumer.accept(
         "minescript_on_chat_received_event", getValue("minescript_on_chat_received_event"));
+    consumer.accept(
+        "secondary_enter_key_code", getValue("secondary_enter_key_code"));
 
     for (var entry : autorunCommands.entrySet()) {
       var worldName = entry.getKey();
@@ -273,6 +283,9 @@ public class Config {
 
       case "minescript_on_chat_received_event":
         return String.valueOf(minescriptOnChatReceivedEvent);
+
+      case "secondary_enter_key_code":
+        return String.valueOf(secondaryEnterKeyCode);
 
       default:
         {
@@ -420,6 +433,15 @@ public class Config {
                 out,
                 "e.g. add command to command block: [execute as Player run tell Player \\help]");
           }
+        }
+        break;
+
+      case "secondary_enter_key_code":
+        try {
+          secondaryEnterKeyCode = Integer.valueOf(value);
+          reportInfo(out, "Setting secondary_enter_key_code to {}", secondaryEnterKeyCode);
+        } catch (NumberFormatException e) {
+          reportError(out, "Unable to secondary_enter_key_code ticks_per_cycle as integer: {}", value);
         }
         break;
 

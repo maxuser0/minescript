@@ -4,6 +4,7 @@
 package net.minescript.fabric.mixin;
 
 import static net.minescript.common.Minescript.ENTER_KEY;
+import static net.minescript.common.Minescript.config;
 
 import net.minecraft.client.KeyboardHandler;
 import net.minecraft.client.Minecraft;
@@ -32,7 +33,7 @@ public class KeyboardMixin {
     var screen = Minecraft.getInstance().screen;
     if (screen == null) {
       Minescript.onKeyInput(key);
-    } else if (key == ENTER_KEY
+    } else if ((key == ENTER_KEY || key == config.secondaryEnterKeyCode())
         && action == KEY_ACTION_DOWN
         && Minescript.onKeyboardKeyPressed(screen, key)) {
       ci.cancel();

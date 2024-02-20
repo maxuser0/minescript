@@ -4,6 +4,7 @@
 package net.minescript.neoforge;
 
 import static net.minescript.common.Minescript.ENTER_KEY;
+import static net.minescript.common.Minescript.config;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -56,7 +57,7 @@ public class MinescriptNeoForgeClientMod {
       var screen = Minecraft.getInstance().screen;
       if (screen == null) {
         Minescript.onKeyInput(key);
-      } else if (key == ENTER_KEY
+      } else if ((key == ENTER_KEY || key == config.secondaryEnterKeyCode())
           && action == Constants.KEY_ACTION_DOWN
           && Minescript.onKeyboardKeyPressed(screen, key)) {
         // TODO(maxuser): InputEvent.Key isn't cancellable with NeoForge.
