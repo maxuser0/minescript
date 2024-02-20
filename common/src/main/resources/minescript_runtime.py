@@ -47,7 +47,8 @@ def call_noreturn_function(command: str, args):
 
   Make a fire-and-forget function call with a call id of 0 and no return value.
   """
-  print(f"{_FUNCTION_PREFIX}0 {command} {json.dumps(args)}")
+  with _script_function_calls_lock:
+    print(f"{_FUNCTION_PREFIX}0 {command} {json.dumps(args)}")
 
 
 def send_script_function_request(func_name: str, args: Tuple[Any, ...],
@@ -70,7 +71,7 @@ def send_script_function_request(func_name: str, args: Tuple[Any, ...],
     _next_fcallid += 1
     func_call_id = _next_fcallid
     _script_function_calls[func_call_id] = (func_name, retval_handler, exception_handler)
-  print(f"{_FUNCTION_PREFIX}{func_call_id} {func_name} {json.dumps(args)}")
+    print(f"{_FUNCTION_PREFIX}{func_call_id} {func_name} {json.dumps(args)}")
   return func_call_id
 
 
