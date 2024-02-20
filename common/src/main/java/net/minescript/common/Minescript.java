@@ -3003,18 +3003,26 @@ public class Minescript {
                     long funcCallId = Long.valueOf(functionCall[0]);
                     String functionName = functionCall[1];
                     String argsString = functionCall[2];
-                    // TODO(maxuser): This sometimes throws com.google.gson.JsonSyntaxException
-                    // warpping com.google.gson.stream.MalformedJsonException .
-                    List<?> rawArgs;
+
+                    final List<?> rawArgs;
                     try {
                       rawArgs = GSON.fromJson(argsString, ArrayList.class);
                     } catch (JsonSyntaxException e) {
-                      systemMessageQueue.logUserError(
-                          "JSON syntax error in args to `{}`: `{}`", functionName, message.value());
+                      String exceptionMessage =
+                          String.format(
+                              "Syntax error in script function args to `%s`: `%s`. This is likely"
+                                  + " caused by unsynchronized output printed to stdout elsewhere"
+                                  + " in this script. If the error persists, try replacing those"
+                                  + " raw print() calls with minescript.echo() or printing to"
+                                  + " stderr instead.",
+                              functionName, message.value());
+                      job.raiseException(
+                          funcCallId,
+                          ExceptionInfo.fromException(
+                              new IllegalArgumentException(exceptionMessage)));
                       continue;
                     }
                     var args = new ScriptFunctionArgList(functionName, rawArgs, argsString);
-
                     try {
                       Optional<JsonElement> response =
                           handleScriptFunction(job, funcCallId, functionName, args, argsString);
