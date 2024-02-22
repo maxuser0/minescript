@@ -1485,13 +1485,15 @@ public class Minescript {
     return true;
   }
 
+  private static final ImmutableSet<String> COMMANDS_WITH_FIRST_PARAM_COMPLETIONS =
+      ImmutableSet.of("config", "help", "which");
+
   private static String getCompletableCommand(String input) {
-    String[] words = input.split("\\s+");
-    String command = words.length > 0 ? words[0] : "";
-    if ((input.startsWith("config ") || input.startsWith("help ")) && words.length > 1) {
-      return command + " " + words[1];
+    String[] words = input.split("\\s+", -1);
+    if (words.length > 1 && COMMANDS_WITH_FIRST_PARAM_COMPLETIONS.contains(words[0])) {
+      return words[0] + " " + words[1];
     }
-    return command;
+    return words.length > 0 ? words[0] : "";
   }
 
   private static List<String> getCommandCompletions(String command) {
@@ -1505,6 +1507,12 @@ public class Minescript {
         return config.scriptConfig().findCommandPrefixMatches("").stream()
             .sorted()
             .map(s -> "help " + s)
+            .filter(s -> s.startsWith(command))
+            .collect(Collectors.toList());
+      } else if (command.equals("which") || command.startsWith("which ")) {
+        return config.scriptConfig().findCommandPrefixMatches("").stream()
+            .sorted()
+            .map(s -> "which " + s)
             .filter(s -> s.startsWith(command))
             .collect(Collectors.toList());
       } else {
