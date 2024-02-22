@@ -9,8 +9,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonPrimitive;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,7 +38,6 @@ public class Job implements JobControl {
   private Queue<Message> jobMessageQueue = new ConcurrentLinkedQueue<Message>();
   private Lock lock = new ReentrantLock(true); // true indicates a fair lock to avoid starvation
   private Map<Long, Operation> operations = new ConcurrentHashMap<>(); // key is func call id
-  private List<Runnable> atExitHandlers = new ArrayList<>();
 
   // Special prefix for commands and function calls emitted from stdout of scripts, for example:
   // - script function call: "?mnsc:123 my_func [4, 5, 6]"
@@ -48,6 +45,8 @@ public class Job implements JobControl {
   private static final String FUNCTION_PREFIX = "?mnsc:";
 
   public interface Operation {
+    String name();
+
     void suspend();
 
     boolean resumeAndCheckDone();
@@ -73,25 +72,27 @@ public class Job implements JobControl {
   }
 
   public void addOperation(long funcCallId, Operation op) {
-    operations.put(funcCallId, op);
+    if (operations.put(funcCallId, op) != null) {
+      throw new IllegalStateException("Job added operation with duplicate ID: " + funcCallId);
+    }
   }
 
-  public void removeOperation(long funcCallId) {
-    operations.remove(funcCallId);
+  public boolean removeOperation(long funcCallId) {
+    return operations.remove(funcCallId) == null;
   }
 
-  /** Attempts to cancel operation associated with funcCallId, returning true if found. */
+  /**
+   * Attempts to cancel an operation associated with funcCallId, returning true if found.
+   *
+   * <p>If operation is found, it is cancelled and removed from this job.
+   */
   public boolean cancelOperation(long funcCallId) {
-    var op = operations.get(funcCallId);
+    var op = operations.remove(funcCallId);
     if (op != null) {
       op.cancel();
       return true;
     }
     return false;
-  }
-
-  public void addAtExitHandler(Runnable handler) {
-    atExitHandlers.add(handler);
   }
 
   @Override
@@ -125,8 +126,8 @@ public class Job implements JobControl {
   }
 
   @Override
-  public void raiseException(long functionCallId, ExceptionInfo exception) {
-    task.sendException(functionCallId, exception);
+  public boolean raiseException(long functionCallId, ExceptionInfo exception) {
+    return task.sendException(functionCallId, exception);
   }
 
   @Override
@@ -303,11 +304,6 @@ public class Job implements JobControl {
       }
       operations.clear();
 
-      for (Runnable handler : atExitHandlers) {
-        handler.run();
-      }
-      atExitHandlers.clear();
-
       blockpacks.releaseAll();
       blockpackers.releaseAll();
 
@@ -315,6 +311,7 @@ public class Job implements JobControl {
     }
   }
 
+  @Override
   public int jobId() {
     return jobId;
   }

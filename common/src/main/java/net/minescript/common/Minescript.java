@@ -42,11 +42,11 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import net.minecraft.client.KeyMapping;
@@ -196,6 +196,43 @@ public class Minescript {
     }
   }
 
+  private static void checkLeakedOperations(
+      Map<JobOperationId, ? extends Job.Operation> operations) {
+    if (!operations.isEmpty()) {
+      LOGGER.warn(
+          "Cancelling leaked operations when exiting world: {}",
+          operations.entrySet().stream()
+              .map(e -> String.format("%s %s", e.getValue().name(), e.getKey()))
+              .collect(Collectors.toList()));
+
+      // Stash values in a new list so that the operations map isn't modified while being
+      // iterated/streamed, because Job.Operation::cancel removes a listener from the map.
+      new ArrayList<>(operations.values()).stream().forEach(Job.Operation::cancel);
+    }
+  }
+
+  private static void killAllJobs() {
+    for (var job : jobs.getMap().values()) {
+      LOGGER.info("Killing job: {}", job.jobSummary());
+      job.kill();
+    }
+
+    // Job operations should have been cleaned up when killing jobs, but the jobs killed above might
+    // still be in the process of shutting down, or operations may have been leaked accidentally.
+    // Clear any leaked operations here.
+    checkLeakedOperations(keyEventListeners);
+    checkLeakedOperations(mouseEventListeners);
+    checkLeakedOperations(clientChatReceivedEventListeners);
+    checkLeakedOperations(chunkLoadEventListeners);
+
+    if (chatInterceptor != null) {
+      LOGGER.warn("Caught leaked chat interceptor when exiting world");
+      chatInterceptor = null;
+    }
+
+    customNickname = null;
+  }
+
   private static AtomicBoolean autorunHandled = new AtomicBoolean(false);
 
   private static void runWorldListenerThread() {
@@ -208,9 +245,7 @@ public class Minescript {
         if (noWorldNow) {
           autorunHandled.set(false);
           LOGGER.info("Exited world");
-          for (var job : jobs.getMap().values()) {
-            job.kill();
-          }
+          killAllJobs();
           systemMessageQueue.clear();
         } else {
           LOGGER.info("Entered world");
@@ -561,21 +596,73 @@ public class Minescript {
     }
   }
 
-  static class ScriptFunctionCall {
+  static class EventHandler implements Job.Operation {
     private final JobControl job;
-    private final long funcCallId;
+    private final String funcName;
+    private OptionalLong funcCallId = OptionalLong.empty();
+    private State state = State.IDLE;
+    private boolean suspended = false;
+    private Runnable doneCallback;
 
-    public ScriptFunctionCall(JobControl job, long funcCallId) {
+    public enum State {
+      IDLE,
+      ACTIVE,
+      CANCELLED
+    }
+
+    public EventHandler(JobControl job, String funcName, Runnable doneCallback) {
       this.job = job;
-      this.funcCallId = funcCallId;
+      this.funcName = funcName;
+      this.doneCallback = doneCallback;
     }
 
-    public boolean respond(JsonElement returnValue, boolean finalReply) {
-      return job.respond(funcCallId, returnValue, finalReply);
+    int jobId() {
+      return job.jobId();
     }
 
-    public void raiseException(ExceptionInfo exception) {
-      job.raiseException(funcCallId, exception);
+    @Override
+    public String name() {
+      return funcName;
+    }
+
+    public synchronized void start(long funcCallId) {
+      if (state != State.CANCELLED) {
+        this.funcCallId = OptionalLong.of(funcCallId);
+        state = State.ACTIVE;
+      }
+    }
+
+    public synchronized boolean isActive() {
+      return !suspended && state == State.ACTIVE;
+    }
+
+    @Override
+    public synchronized void suspend() {
+      suspended = true;
+    }
+
+    @Override
+    public boolean resumeAndCheckDone() {
+      if (state == State.CANCELLED) {
+        return true;
+      }
+      suspended = false;
+      return false;
+    }
+
+    @Override
+    public synchronized void cancel() {
+      state = State.CANCELLED;
+      funcCallId = OptionalLong.empty();
+      doneCallback.run();
+    }
+
+    public synchronized boolean respond(JsonElement returnValue, boolean finalReply) {
+      if (funcCallId.isPresent()) {
+        return job.respond(funcCallId.getAsLong(), returnValue, finalReply);
+      } else {
+        return false;
+      }
     }
   }
 
@@ -1325,23 +1412,24 @@ public class Minescript {
     var iter = keyEventListeners.entrySet().iterator();
     JsonObject json = null;
     while (iter.hasNext()) {
-      var listener = iter.next();
-      if (json == null) {
-        String screenName = getScreenName().orElse(null);
-        long timeMillis = System.currentTimeMillis();
-        json = new JsonObject();
-        json.addProperty("key", key);
-        json.addProperty("scanCode", scanCode);
-        json.addProperty("action", action);
-        json.addProperty("modifiers", modifiers);
-        json.addProperty("timeMillis", timeMillis);
-        json.addProperty("screen", screenName);
-      }
-      if (config.debugOutput()) {
-        LOGGER.info("Forwarding key event to listener {}: {}", listener.getKey(), json);
-      }
-      if (!listener.getValue().respond(json, false)) {
-        iter.remove();
+      var entry = iter.next();
+      var listener = entry.getValue();
+      if (listener.isActive()) {
+        if (json == null) {
+          String screenName = getScreenName().orElse(null);
+          long timeMillis = System.currentTimeMillis();
+          json = new JsonObject();
+          json.addProperty("key", key);
+          json.addProperty("scanCode", scanCode);
+          json.addProperty("action", action);
+          json.addProperty("modifiers", modifiers);
+          json.addProperty("timeMillis", timeMillis);
+          json.addProperty("screen", screenName);
+        }
+        if (config.debugOutput()) {
+          LOGGER.info("Forwarding key event to listener {}: {}", entry.getKey(), json);
+        }
+        listener.respond(json, false);
       }
     }
   }
@@ -1351,22 +1439,25 @@ public class Minescript {
     var iter = mouseEventListeners.entrySet().iterator();
     JsonObject json = null;
     while (iter.hasNext()) {
-      var listener = iter.next();
-      if (json == null) {
-        String screenName = getScreenName().orElse(null);
-        long timeMillis = System.currentTimeMillis();
-        json = new JsonObject();
-        json.addProperty("button", button);
-        json.addProperty("action", action);
-        json.addProperty("modifiers", modifiers);
-        json.addProperty("timeMillis", timeMillis);
-        json.addProperty("x", x);
-        json.addProperty("y", y);
-        json.addProperty("screen", screenName);
-      }
-      LOGGER.info("Forwarding mouse event to listener {}: {}", listener.getKey(), json);
-      if (!listener.getValue().respond(json, false)) {
-        iter.remove();
+      var entry = iter.next();
+      var listener = entry.getValue();
+      if (listener.isActive()) {
+        if (json == null) {
+          String screenName = getScreenName().orElse(null);
+          long timeMillis = System.currentTimeMillis();
+          json = new JsonObject();
+          json.addProperty("button", button);
+          json.addProperty("action", action);
+          json.addProperty("modifiers", modifiers);
+          json.addProperty("timeMillis", timeMillis);
+          json.addProperty("x", x);
+          json.addProperty("y", y);
+          json.addProperty("screen", screenName);
+        }
+        if (config.debugOutput()) {
+          LOGGER.info("Forwarding mouse event to listener {}: {}", entry.getKey(), json);
+        }
+        listener.respond(json, false);
       }
     }
   }
@@ -1567,11 +1658,14 @@ public class Minescript {
 
     var iter = clientChatReceivedEventListeners.entrySet().iterator();
     while (iter.hasNext()) {
-      var listener = iter.next();
-      var jsonText = new JsonPrimitive(text);
-      LOGGER.info("Forwarding chat message to listener {}: {}", listener.getKey(), jsonText);
-      if (!listener.getValue().respond(jsonText, false)) {
-        iter.remove();
+      var entry = iter.next();
+      var listener = entry.getValue();
+      if (listener.isActive()) {
+        var jsonText = new JsonPrimitive(text);
+        if (config.debugOutput()) {
+          LOGGER.info("Forwarding chat message to listener {}: {}", entry.getKey(), jsonText);
+        }
+        listener.respond(jsonText, false);
       }
     }
 
@@ -1601,11 +1695,6 @@ public class Minescript {
       var entry = iter.next();
       var listener = entry.getValue();
       if (listener.onChunkLoaded(chunkLevel, chunkX, chunkZ)) {
-        JobFunctionCallId key = entry.getKey();
-        Job job = jobs.getMap().get(key.jobId());
-        if (job != null) {
-          job.removeOperation(key.funcCallId());
-        }
         iter.remove();
       }
     }
@@ -1632,7 +1721,7 @@ public class Minescript {
       runMinescriptCommand(message.substring(1));
       cancel = true;
     } else if (chatInterceptor != null && !message.startsWith("/")) {
-      chatInterceptor.accept(message);
+      chatInterceptor.respond(new JsonPrimitive(message), false);
       cancel = true;
     } else if (customNickname != null && !message.startsWith("/")) {
       String tellrawCommand = "tellraw @a " + String.format(customNickname, message);
@@ -1705,18 +1794,22 @@ public class Minescript {
 
   private static ServerBlockList serverBlockList = new ServerBlockList();
 
-  private static Map<Integer, ScriptFunctionCall> keyEventListeners = new ConcurrentHashMap<>();
-  private static Map<Integer, ScriptFunctionCall> mouseEventListeners = new ConcurrentHashMap<>();
-  private static Map<Integer, ScriptFunctionCall> clientChatReceivedEventListeners =
+  // The keys in the event listener maps are based on the funcCallId of the register method (e.g.
+  // "register_key_event_listener") which is considered the listener ID. But the funcCallId
+  // associated with the actual listening within the EventHandler corresponds to the start method
+  // (e.g. "start_key_event_listener").
+  private static Map<JobOperationId, EventHandler> keyEventListeners = new ConcurrentHashMap<>();
+  private static Map<JobOperationId, EventHandler> mouseEventListeners = new ConcurrentHashMap<>();
+  private static Map<JobOperationId, EventHandler> clientChatReceivedEventListeners =
       new ConcurrentHashMap<>();
 
-  public record JobFunctionCallId(int jobId, long funcCallId) {}
+  public record JobOperationId(int jobId, long funcCallId) {}
 
-  private static Map<JobFunctionCallId, ChunkLoadEventListener> chunkLoadEventListeners =
-      new ConcurrentHashMap<JobFunctionCallId, ChunkLoadEventListener>();
+  private static Map<JobOperationId, ChunkLoadEventListener> chunkLoadEventListeners =
+      new ConcurrentHashMap<JobOperationId, ChunkLoadEventListener>();
 
   private static String customNickname = null;
-  private static Consumer<String> chatInterceptor = null;
+  private static EventHandler chatInterceptor = null;
 
   private static boolean areCommandsAllowed() {
     var minecraft = Minecraft.getInstance();
@@ -2014,106 +2107,129 @@ public class Minescript {
       case "register_key_event_listener":
         {
           args.expectSize(0);
-          if (keyEventListeners.containsKey(job.jobId())) {
+          var jobOpId = new JobOperationId(job.jobId(), funcCallId);
+          if (keyEventListeners.containsKey(jobOpId)) {
             throw new IllegalStateException(
-                "Failed to create listener because a listener is already registered for job: "
+                "Failed to create listener because listener ID is already registered for job: "
                     + job.jobSummary());
           }
-          keyEventListeners.put(job.jobId(), new ScriptFunctionCall(job, funcCallId));
-          job.addAtExitHandler(() -> keyEventListeners.remove(job.jobId()));
-          return Optional.empty();
+          var listener =
+              new EventHandler(job, functionName, () -> keyEventListeners.remove(jobOpId));
+          keyEventListeners.put(jobOpId, listener);
+          return Optional.of(new JsonPrimitive(funcCallId));
         }
 
-      case "unregister_key_event_listener":
+      case "start_key_event_listener":
         {
-          args.expectSize(0);
-          if (!keyEventListeners.containsKey(job.jobId())) {
+          args.expectArgs("listener_id");
+          int listenerId = args.getStrictInt(0);
+          var jobOpId = new JobOperationId(job.jobId(), listenerId);
+          var listener = keyEventListeners.get(jobOpId);
+          if (listener == null) {
             throw new IllegalStateException(
-                String.format(
-                    "`%s` has no listeners to unregister for job: %s",
-                    functionName, job.jobSummary()));
+                "Listener not found with requested ID: " + jobOpId.toString());
           }
-          keyEventListeners.remove(job.jobId());
-          return OPTIONAL_JSON_TRUE;
+          job.addOperation(funcCallId, listener);
+          listener.start(funcCallId);
+          return Optional.empty();
         }
 
       case "register_mouse_event_listener":
         {
           args.expectSize(0);
-          if (mouseEventListeners.containsKey(job.jobId())) {
+          var jobOpId = new JobOperationId(job.jobId(), funcCallId);
+          if (mouseEventListeners.containsKey(jobOpId)) {
             throw new IllegalStateException(
-                "Failed to create listener because a listener is already registered for job: "
+                "Failed to create listener because a listener ID is already registered for job: "
                     + job.jobSummary());
           }
-          mouseEventListeners.put(job.jobId(), new ScriptFunctionCall(job, funcCallId));
-          job.addAtExitHandler(() -> mouseEventListeners.remove(job.jobId()));
-          return Optional.empty();
+          var listener =
+              new EventHandler(job, functionName, () -> mouseEventListeners.remove(jobOpId));
+          mouseEventListeners.put(jobOpId, listener);
+          return Optional.of(new JsonPrimitive(funcCallId));
         }
 
-      case "unregister_mouse_event_listener":
+      case "start_mouse_event_listener":
         {
-          args.expectSize(0);
-          if (!mouseEventListeners.containsKey(job.jobId())) {
+          args.expectArgs("listener_id");
+          int listenerId = args.getStrictInt(0);
+          var jobOpId = new JobOperationId(job.jobId(), listenerId);
+          var listener = mouseEventListeners.get(jobOpId);
+          if (listener == null) {
             throw new IllegalStateException(
-                String.format(
-                    "`%s` has no listeners to unregister for job: %s",
-                    functionName, job.jobSummary()));
+                "Listener not found with requested ID: " + jobOpId.toString());
           }
-          mouseEventListeners.remove(job.jobId());
-          return OPTIONAL_JSON_TRUE;
+          job.addOperation(funcCallId, listener);
+          listener.start(funcCallId);
+          return Optional.empty();
         }
 
       case "register_chat_message_listener":
         {
           args.expectSize(0);
-          if (clientChatReceivedEventListeners.containsKey(job.jobId())) {
+          var jobOpId = new JobOperationId(job.jobId(), funcCallId);
+          if (clientChatReceivedEventListeners.containsKey(jobOpId)) {
             throw new IllegalStateException(
-                "Failed to create listener because a listener is already registered for job: "
+                "Failed to create listener because a listener ID is already registered for job: "
                     + job.jobSummary());
           }
-          clientChatReceivedEventListeners.put(
-              job.jobId(), new ScriptFunctionCall(job, funcCallId));
-          job.addAtExitHandler(() -> clientChatReceivedEventListeners.remove(job.jobId()));
-          return Optional.empty();
+          var listener =
+              new EventHandler(
+                  job, functionName, () -> clientChatReceivedEventListeners.remove(jobOpId));
+          clientChatReceivedEventListeners.put(jobOpId, listener);
+          return Optional.of(new JsonPrimitive(funcCallId));
         }
 
-      case "unregister_chat_message_listener":
+      case "start_chat_message_listener":
         {
-          args.expectSize(0);
-          if (!clientChatReceivedEventListeners.containsKey(job.jobId())) {
+          args.expectArgs("listener_id");
+          int listenerId = args.getStrictInt(0);
+          var jobOpId = new JobOperationId(job.jobId(), listenerId);
+          var listener = clientChatReceivedEventListeners.get(jobOpId);
+          if (listener == null) {
             throw new IllegalStateException(
-                String.format(
-                    "`%s` has no listeners to unregister for job: %s",
-                    functionName, job.jobSummary()));
+                "Listener not found with requested ID: " + jobOpId.toString());
           }
-          clientChatReceivedEventListeners.remove(job.jobId());
-          return OPTIONAL_JSON_TRUE;
+          job.addOperation(funcCallId, listener);
+          listener.start(funcCallId);
+          return Optional.empty();
         }
 
       case "register_chat_message_interceptor":
         {
           args.expectSize(0);
+          var jobOpId = new JobOperationId(job.jobId(), funcCallId);
           if (chatInterceptor != null) {
-            throw new IllegalStateException("Chat interceptor already enabled for another job.");
+            throw new IllegalStateException(
+                String.format(
+                    "Failed to create interceptor because one is already registered to job [%s]",
+                    chatInterceptor.jobId()));
           }
-          chatInterceptor =
-              s -> {
-                job.respond(funcCallId, new JsonPrimitive(s), false);
-              };
-          job.addAtExitHandler(() -> chatInterceptor = null);
+          chatInterceptor = new EventHandler(job, functionName, () -> chatInterceptor = null);
           systemMessageQueue.logUserInfo("Chat interceptor enabled for job: {}", job.jobSummary());
+          return Optional.of(new JsonPrimitive(funcCallId));
+        }
+
+      case "start_chat_message_interceptor":
+        {
+          args.expectArgs("listener_id");
+          int listenerId = args.getStrictInt(0);
+          var jobOpId = new JobOperationId(job.jobId(), listenerId);
+          if (chatInterceptor == null) {
+            throw new IllegalStateException(
+                "Chat interceptor not found with requested ID: " + jobOpId.toString());
+          }
+          job.addOperation(funcCallId, chatInterceptor);
+          chatInterceptor.start(funcCallId);
           return Optional.empty();
         }
 
-      case "unregister_chat_message_interceptor":
+      case "unregister_event_handler":
         {
-          args.expectSize(0);
-          if (chatInterceptor == null) {
-            throw new IllegalStateException(
-                "Chat interceptor already disabled: " + job.jobSummary());
-          }
-          chatInterceptor = null;
-          systemMessageQueue.logUserInfo("Chat interceptor disabled for job: {}", job.jobSummary());
+          args.expectSize(1);
+          int listenerId = args.getStrictInt(0);
+          var jobOpId = new JobOperationId(job.jobId(), listenerId);
+          job.cancelOperation(listenerId);
           return OPTIONAL_JSON_TRUE;
         }
 
@@ -2124,22 +2240,24 @@ public class Minescript {
           int arg1 = args.getStrictInt(1);
           int arg2 = args.getStrictInt(2);
           int arg3 = args.getStrictInt(3);
+          var jobOpId = new JobOperationId(job.jobId(), funcCallId);
           var listener =
               new ChunkLoadEventListener(
                   arg0,
                   arg1,
                   arg2,
                   arg3,
-                  (boolean success) -> {
+                  (boolean success, boolean removeFromListeners) -> {
                     job.respond(funcCallId, new JsonPrimitive(success), true);
-                    chunkLoadEventListeners.remove(new JobFunctionCallId(job.jobId(), funcCallId));
+                    job.removeOperation(funcCallId);
+                    if (removeFromListeners) {
+                      chunkLoadEventListeners.remove(jobOpId);
+                    }
                   });
           listener.updateChunkStatuses();
-          if (listener.isFullyLoaded()) {
-            listener.onFinished(true);
-          } else {
+          if (!listener.checkFullyLoaded()) {
             job.addOperation(funcCallId, listener);
-            chunkLoadEventListeners.put(new JobFunctionCallId(job.jobId, funcCallId), listener);
+            chunkLoadEventListeners.put(jobOpId, listener);
           }
           return Optional.empty();
         }
@@ -2895,7 +3013,6 @@ public class Minescript {
               funcName,
               job.jobSummary());
         }
-        job.removeOperation(funcIdToCancel);
         return cancelfnRetval;
 
       case "exit!":

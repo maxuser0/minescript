@@ -769,24 +769,26 @@ class EventRegistrationHandler:
       register: if `True`, register the handler upon construction
     """
     self.queue = queue.Queue()
-    self.registered = False
+    self.handler_id = None
     self.registration_func = registration_func
     self.unregistration_func = unregistration_func
     if register:
       self.register()
 
   def register(self) -> bool:
-    if self.registered:
+    if self.handler_id is not None:
       return False
-    self.registration_func(self.queue.put, self.queue.put)
-    self.registered = True
+    handler_id = self.registration_func(self.queue.put, self.queue.put)
+    if type(handler_id) is not int:
+      raise ValueError(f"Expected registration function to return int but got `{self.handler_id}`")
+    self.handler_id = handler_id
     return True
 
   def unregister(self) -> bool:
-    if not self.registered:
+    if self.handler_id is None:
       return False
-    self.unregistration_func()
-    self.registered = False
+    self.unregistration_func(self.handler_id)
+    self.handler_id = None
     return True
 
   def get(self, block: bool = True, timeout: float = None) -> Any:
@@ -881,7 +883,7 @@ class KeyEventListener(EventRegistrationHandler):
 
 
 def register_key_event_listener(
-    listener: Callable[[str], None], exception_handler: ExceptionHandler = None):
+    listener: Callable[[str], None], exception_handler: ExceptionHandler = None) -> int:
   """Registers a listener for receiving keyboard events. One listener allowed per job.
 
   For a more user-friendly API, use `KeyEventListener` instead. (__internal__)
@@ -890,22 +892,34 @@ def register_key_event_listener(
     listener: callable that repeatedly accepts a string representing key events
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
 
+  Returns:
+    ID for the new listener. This ID can be passed to `unregister_key_event_listener(...)`.
+
+  Update in v4.0:
+    Added return value for identifying the newly registered listener.
+
   Since: v3.2
   """
-  send_script_function_request("register_key_event_listener", (), listener, exception_handler)
+  listener_id = await_script_function("register_key_event_listener", ())
+  send_script_function_request(
+      "start_key_event_listener", (listener_id,), listener, exception_handler)
+  return listener_id
 
 
-def unregister_key_event_listener():
-  """Unregisters a key event listener, if any, for the currently running job.
+def unregister_key_event_listener(listener_id: int):
+  """Unregisters a key event listener.
 
   For a more user-friendly API, use `KeyEventListener` instead. (__internal__)
 
-  Returns:
-    `True` if successfully unregistered a listener.
+  Args:
+    listener_id: ID of a listener returned from `register_key_event_listener(...)`.
+
+  Update in v4.0:
+    Require `listener_id` arg. Upon failure, raises an exception rather than returning false.
 
   Since: v3.2
   """
-  await_script_function("unregister_key_event_listener", ())
+  await_script_function("unregister_event_handler", (listener_id,))
 
 
 class MouseEventListener(EventRegistrationHandler):
@@ -963,7 +977,7 @@ class MouseEventListener(EventRegistrationHandler):
 
 
 def register_mouse_event_listener(
-    listener: Callable[[str], None], exception_handler: ExceptionHandler = None):
+    listener: Callable[[str], None], exception_handler: ExceptionHandler = None) -> int:
   """Registers a listener for receiving mouse events. One listener allowed per job.
 
   For a more user-friendly API, use `MouseEventListener` instead. (__internal__)
@@ -972,22 +986,28 @@ def register_mouse_event_listener(
     listener: callable that repeatedly accepts a string representing mouse events
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
 
+  Update in v4.0:
+    Added return value for identifying the newly registered listener.
+
   Since: v4.0
   """
-  send_script_function_request("register_mouse_event_listener", (), listener, exception_handler)
+  listener_id = await_script_function("register_mouse_event_listener", ())
+  send_script_function_request(
+      "start_mouse_event_listener", (listener_id,), listener, exception_handler)
+  return listener_id
 
 
-def unregister_mouse_event_listener():
+def unregister_mouse_event_listener(listener_id: int):
   """Unregisters a mouse event listener, if any, for the currently running job.
 
   For a more user-friendly API, use `MouseEventListener` instead. (__internal__)
 
-  Returns:
-    `True` if successfully unregistered a listener.
+  Args:
+    listener_id: ID of a listener returned from `register_mouse_event_listener(...)`.
 
   Since: v4.0
   """
-  await_script_function("unregister_mouse_event_listener", ())
+  await_script_function("unregister_event_handler", (listener_id,))
 
 
 class ChatEventListener(EventRegistrationHandler):
@@ -1052,7 +1072,7 @@ class ChatEventListener(EventRegistrationHandler):
 
 
 def register_chat_message_listener(
-    listener: Callable[[str], None], exception_handler: ExceptionHandler = None):
+    listener: Callable[[str], None], exception_handler: ExceptionHandler = None) -> int:
   """Registers a listener for receiving chat messages. One listener allowed per job.
 
   Listener receives both incoming and outgoing chat messages.
@@ -1063,6 +1083,9 @@ def register_chat_message_listener(
     listener: callable that repeatedly accepts a string representing chat messages
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
 
+  Update in v4.0:
+    Added return value for identifying the newly registered listener.
+
   Update in v3.2:
     Added optional arg `exception_handler`.
 
@@ -1071,20 +1094,26 @@ def register_chat_message_listener(
   See also:
     `register_chat_message_interceptor()` for swallowing outgoing chat messages
   """
-  send_script_function_request("register_chat_message_listener", (), listener, exception_handler)
+  listener_id = await_script_function("register_chat_message_listener", ())
+  send_script_function_request(
+      "start_chat_message_listener", (listener_id,), listener, exception_handler)
+  return listener_id
 
 
-def unregister_chat_message_listener():
+def unregister_chat_message_listener(listener_id: int):
   """Unregisters a chat message listener, if any, for the currently running job.
 
   For a more user-friendly API, use `ChatEventListener` instead.  (__internal__)
 
-  Returns:
-    `True` if successfully unregistered a listener.
+  Args:
+    listener_id: ID of a listener returned from `register_chat_message_listener(...)`.
+
+  Update in v4.0:
+    Require `listener_id` arg. Upon failure, raises an exception rather than returning false.
 
   Since: v2.0
   """
-  await_script_function("unregister_chat_message_listener", ())
+  await_script_function("unregister_event_handler", (listener_id,))
 
 
 class ChatMessageInterceptor(EventRegistrationHandler):
@@ -1143,7 +1172,7 @@ class ChatMessageInterceptor(EventRegistrationHandler):
 
 
 def register_chat_message_interceptor(
-    interceptor: Callable[[str], None], exception_handler: ExceptionHandler = None):
+    interceptor: Callable[[str], None], exception_handler: ExceptionHandler = None) -> int:
   """Registers an interceptor for swallowing chat messages.
 
   For a more user-friendly API, use `ChatMessageInterceptor` instead.  (__internal__)
@@ -1158,26 +1187,37 @@ def register_chat_message_interceptor(
     interceptor: callable that repeatedly accepts a string representing chat messages
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
 
+  Returns:
+    ID for the new interceptor. This ID can be passed to `unregister_chat_message_interceptor(...)`.
+
+  Update in v4.0:
+    Added return value for identifying the newly registered listener.
+
   Since: v2.1
 
   See also:
     `register_chat_message_listener()` for non-destructive listening of chat messages
   """
+  interceptor_id = await_script_function("register_chat_message_interceptor", ())
   send_script_function_request(
-      "register_chat_message_interceptor", (), interceptor, exception_handler)
+      "start_chat_message_interceptor", (interceptor_id,), interceptor, exception_handler)
+  return interceptor_id
 
 
-def unregister_chat_message_interceptor():
+def unregister_chat_message_interceptor(interceptor_id: int):
   """Unregisters the chat message interceptor, if one is currently registered.
 
   For a more user-friendly API, use `ChatMessageInterceptor` instead.  (__internal__)
 
-  Returns:
-    `True` if successfully unregistered an interceptor.
+  Args:
+    interceptor_id: ID of a listener returned from `register_chat_message_interceptor(...)`.
+
+  Update in v4.0:
+    Require `interceptor_id` arg. Upon failure, raises an exception rather than returning false.
 
   Since: v2.1
   """
-  await_script_function("unregister_chat_message_interceptor", ())
+  await_script_function("unregister_event_handler", (interceptor_id,))
 
 
 def screen_name() -> str:

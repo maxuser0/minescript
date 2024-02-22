@@ -8,6 +8,8 @@ import java.util.Queue;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 
 public interface JobControl {
+  int jobId();
+
   JobState state();
 
   void yield();
@@ -16,7 +18,7 @@ public interface JobControl {
 
   boolean respond(long functionCallId, JsonElement returnValue, boolean finalReply);
 
-  void raiseException(long functionCallId, ExceptionInfo exception);
+  boolean raiseException(long functionCallId, ExceptionInfo exception);
 
   void processStdout(String text);
 

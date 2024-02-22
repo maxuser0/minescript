@@ -14,7 +14,7 @@ public class ChunkLoadEventListener implements Job.Operation {
   private static final Logger LOGGER = LogManager.getLogger();
 
   interface DoneCallback {
-    void done(boolean success);
+    void done(boolean success, boolean removeFromListeners);
   }
 
   // Map packed chunk (x, z) to boolean: true if chunk is loaded, false otherwise.
@@ -53,6 +53,11 @@ public class ChunkLoadEventListener implements Job.Operation {
   }
 
   @Override
+  public String name() {
+    return "chunk_load_listener";
+  }
+
+  @Override
   public synchronized void suspend() {
     suspended = true;
   }
@@ -63,8 +68,7 @@ public class ChunkLoadEventListener implements Job.Operation {
     suspended = false;
 
     updateChunkStatuses();
-    if (isFullyLoaded()) {
-      onFinished(true);
+    if (checkFullyLoaded()) {
       return true;
     }
     return false;
@@ -72,7 +76,7 @@ public class ChunkLoadEventListener implements Job.Operation {
 
   @Override
   public synchronized void cancel() {
-    onFinished(false);
+    onFinished(/*success=*/ false, /*removeFromListeners=*/ true);
   }
 
   public synchronized void updateChunkStatuses() {
@@ -115,7 +119,7 @@ public class ChunkLoadEventListener implements Job.Operation {
       LOGGER.info("listener chunk loaded for level {}: {} {}", levelHashCode, chunkX, chunkZ);
       numUnloadedChunks--;
       if (numUnloadedChunks == 0) {
-        onFinished(true);
+        onFinished(/*success=*/ true, /*removeFromListeners=*/ false);
         return true;
       }
     }
@@ -139,12 +143,17 @@ public class ChunkLoadEventListener implements Job.Operation {
     }
   }
 
-  public synchronized boolean isFullyLoaded() {
-    return numUnloadedChunks == 0;
+  public synchronized boolean checkFullyLoaded() {
+    if (numUnloadedChunks == 0) {
+      onFinished(/*success=*/ true, /*removeFromListeners=*/ true);
+      return true;
+    } else {
+      return false;
+    }
   }
 
   /** To be called when either all requested chunks are loaded or operation is cancelled. */
-  public synchronized void onFinished(boolean success) {
+  private synchronized void onFinished(boolean success, boolean removeFromListeners) {
     if (finished) {
       LOGGER.warn(
           "ChunkLoadEventListener already finished; finished again with {}",
@@ -152,7 +161,7 @@ public class ChunkLoadEventListener implements Job.Operation {
       return;
     }
     finished = true;
-    doneCallback.done(success);
+    doneCallback.done(success, removeFromListeners);
   }
 
   private static int worldCoordToChunkCoord(int x) {

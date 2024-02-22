@@ -107,7 +107,7 @@ public class SubprocessTask implements Task {
 
   @Override
   public boolean sendResponse(long functionCallId, JsonElement returnValue, boolean finalReply) {
-    if (!isReadyToRespond()) {
+    if (!canRespond()) {
       return false;
     }
     try {
@@ -129,7 +129,7 @@ public class SubprocessTask implements Task {
 
   @Override
   public boolean sendException(long functionCallId, ExceptionInfo exception) {
-    if (!isReadyToRespond()) {
+    if (!canRespond()) {
       return false;
     }
     try {
@@ -150,7 +150,7 @@ public class SubprocessTask implements Task {
     }
   }
 
-  private boolean isReadyToRespond() {
+  private boolean canRespond() {
     return process != null && process.isAlive() && stdinWriter != null;
   }
 }
