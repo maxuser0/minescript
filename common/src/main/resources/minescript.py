@@ -142,6 +142,18 @@ def screenshot(filename=None):
   await_script_function("screenshot", (filename,))
 
 
+def job_info():
+  """Return info about active Minescript jobs.
+
+  Returns:
+    Dict structured as: `[{"job_id": ..., "command": [...], "source": ..., "status": ...}, ...]`
+    The enclosing job additionally has an entry `"self": true`.
+
+  Since: v4.0
+  """
+  return await_script_function("job_info", ())
+
+
 def flush():
   """Wait for all previously issued script commands from this job to complete.
 

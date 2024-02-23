@@ -71,6 +71,10 @@ public class Job implements JobControl {
     blockpackers = new ResourceTracker<>(BlockPacker.class, jobId);
   }
 
+  public ScriptConfig.BoundCommand boundCommand() {
+    return command;
+  }
+
   public void addOperation(long funcCallId, Operation op) {
     if (operations.put(funcCallId, op) != null) {
       throw new IllegalStateException("Job added operation with duplicate ID: " + funcCallId);

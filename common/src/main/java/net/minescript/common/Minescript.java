@@ -2047,6 +2047,9 @@ public class Minescript {
     return s.map(str -> (JsonElement) new JsonPrimitive(str)).orElse(JsonNull.INSTANCE);
   }
 
+  private record JobInfo(
+      int job_id, String[] command, String source, String status, Boolean self) {}
+
   /** Returns a JSON response if a script function is called. */
   private static Optional<JsonElement> handleScriptFunction(
       Job job, long funcCallId, String functionName, ScriptFunctionArgList args, String argsString)
@@ -3024,6 +3027,28 @@ public class Minescript {
             }
           }
           return result;
+        }
+
+      case "job_info":
+        {
+          args.expectSize(0);
+          var result = new ArrayList<JobInfo>();
+          jobs.getMap().entrySet().stream()
+              .sorted(Map.Entry.comparingByKey())
+              .map(Map.Entry::getValue)
+              .forEach(
+                  j -> {
+                    Path path = j.boundCommand().scriptPath();
+                    result.add(
+                        new JobInfo(
+                            j.jobId(),
+                            j.boundCommand().command(),
+                            path == null ? null : path.toString(),
+                            j.state().name(),
+                            j == job ? Boolean.valueOf(true) : null));
+                  });
+          // Use default-constructed Gson (instead of GSON) so that nulls are not serialized.
+          return Optional.of(new Gson().toJsonTree(result));
         }
 
       case "flush":
