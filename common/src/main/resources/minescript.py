@@ -1145,14 +1145,23 @@ class ChatMessageInterceptor(EventRegistrationHandler):
   Since: v4.0
   """
 
-  def __init__(self, register=True):
+  def __init__(self, *, prefix: str = None, pattern: str = None, register: bool = True):
     """Creates a `ChatMessageInterceptor` to intercept chat messages.
 
+    `prefix` or `pattern` can be specified, but not both. If neither `prefix`
+    nor `pattern` is specified, all chat messages are intercepted.
+
     Args:
+      prefix: if specified, intercept only the messages starting with this literal prefix
+      pattern: if specified, intercept only the messages matching this regular expression
       register: if `True`, register the interceptor upon construction
     """
     super().__init__(
-        register, register_chat_message_interceptor, unregister_chat_message_interceptor)
+        register,
+        lambda interceptor, exception_handler: \
+            register_chat_message_interceptor(
+                interceptor, exception_handler, prefix=prefix, pattern=pattern),
+        unregister_chat_message_interceptor)
 
   def get(self, block: bool = True, timeout: float = None) -> str:
     """Gets the next intercepted chat message in the queue.
@@ -1172,7 +1181,8 @@ class ChatMessageInterceptor(EventRegistrationHandler):
 
 
 def register_chat_message_interceptor(
-    interceptor: Callable[[str], None], exception_handler: ExceptionHandler = None) -> int:
+    interceptor: Callable[[str], None], exception_handler: ExceptionHandler = None,
+    *, prefix: str = None, pattern: str = None) -> int:
   """Registers an interceptor for swallowing chat messages.
 
   For a more user-friendly API, use `ChatMessageInterceptor` instead.  (__internal__)
@@ -1183,14 +1193,20 @@ def register_chat_message_interceptor(
   to the server.  Only one interceptor is allowed at a time within a Minecraft
   instance.
 
+  `prefix` or `pattern` can be specified, but not both. If neither `prefix` nor
+  `pattern` is specified, all chat messages are intercepted.
+
   Args:
     interceptor: callable that repeatedly accepts a string representing chat messages
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
+    prefix: if specified, intercept only the messages starting with this literal prefix
+    pattern: if specified, intercept only the messages matching this regular expression
 
   Returns:
     ID for the new interceptor. This ID can be passed to `unregister_chat_message_interceptor(...)`.
 
   Update in v4.0:
+    Support filtering of intercepted messages via `prefix` and `pattern`.
     Added return value for identifying the newly registered listener.
 
   Since: v2.1
@@ -1198,9 +1214,12 @@ def register_chat_message_interceptor(
   See also:
     `register_chat_message_listener()` for non-destructive listening of chat messages
   """
-  interceptor_id = await_script_function("register_chat_message_interceptor", ())
+  interceptor_id = await_script_function(
+      "register_chat_message_interceptor", (prefix, pattern))
+
   send_script_function_request(
       "start_chat_message_interceptor", (interceptor_id,), interceptor, exception_handler)
+
   return interceptor_id
 
 

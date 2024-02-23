@@ -47,6 +47,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import net.minecraft.client.KeyMapping;
@@ -224,11 +225,7 @@ public class Minescript {
     checkLeakedOperations(mouseEventListeners);
     checkLeakedOperations(clientChatReceivedEventListeners);
     checkLeakedOperations(chunkLoadEventListeners);
-
-    if (chatInterceptor != null) {
-      LOGGER.warn("Caught leaked chat interceptor when exiting world");
-      chatInterceptor = null;
-    }
+    checkLeakedOperations(chatInterceptors);
 
     customNickname = null;
   }
@@ -603,6 +600,7 @@ public class Minescript {
     private State state = State.IDLE;
     private boolean suspended = false;
     private Runnable doneCallback;
+    private Optional<Predicate<Object>> filter;
 
     public enum State {
       IDLE,
@@ -614,6 +612,17 @@ public class Minescript {
       this.job = job;
       this.funcName = funcName;
       this.doneCallback = doneCallback;
+    }
+
+    public void setFilter(Predicate<Object> filter) {
+      this.filter = Optional.of(filter);
+    }
+
+    public boolean applies(Object event) {
+      if (filter.isPresent()) {
+        return filter.get().test(event);
+      }
+      return true;
     }
 
     int jobId() {
@@ -1536,8 +1545,8 @@ public class Minescript {
       if (!value.startsWith("\\")) {
         minescriptCommandHistory.moveToEnd();
         if ((key == ENTER_KEY || key == config.secondaryEnterKeyCode())
-            && (customNickname != null || chatInterceptor != null)
-            && !value.startsWith("/")) {
+            && !value.startsWith("/")
+            && (customNickname != null || matchesChatInterceptor(value))) {
           cancel = true;
           chatEditBox.setValue("");
           onClientChat(value);
@@ -1720,6 +1729,25 @@ public class Minescript {
     }
   }
 
+  private static boolean matchesChatInterceptor(String message) {
+    for (var interceptor : chatInterceptors.values()) {
+      if (interceptor.applies(message)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean applyChatInterceptors(String message) {
+    for (var interceptor : chatInterceptors.values()) {
+      if (interceptor.applies(message)) {
+        interceptor.respond(new JsonPrimitive(message), false);
+        return true;
+      }
+    }
+    return false;
+  }
+
   public static boolean onClientChat(String message) {
     boolean cancel = false;
     if (message.startsWith("\\")) {
@@ -1728,8 +1756,7 @@ public class Minescript {
       LOGGER.info("Processing command from chat event: {}", message);
       runMinescriptCommand(message.substring(1));
       cancel = true;
-    } else if (chatInterceptor != null && !message.startsWith("/")) {
-      chatInterceptor.respond(new JsonPrimitive(message), false);
+    } else if (!message.startsWith("/") && applyChatInterceptors(message)) {
       cancel = true;
     } else if (customNickname != null && !message.startsWith("/")) {
       String tellrawCommand = "tellraw @a " + String.format(customNickname, message);
@@ -1810,6 +1837,7 @@ public class Minescript {
   private static Map<JobOperationId, EventHandler> mouseEventListeners = new ConcurrentHashMap<>();
   private static Map<JobOperationId, EventHandler> clientChatReceivedEventListeners =
       new ConcurrentHashMap<>();
+  private static Map<JobOperationId, EventHandler> chatInterceptors = new ConcurrentHashMap<>();
 
   public record JobOperationId(int jobId, long funcCallId) {}
 
@@ -1817,7 +1845,6 @@ public class Minescript {
       new ConcurrentHashMap<JobOperationId, ChunkLoadEventListener>();
 
   private static String customNickname = null;
-  private static EventHandler chatInterceptor = null;
 
   private static boolean areCommandsAllowed() {
     var minecraft = Minecraft.getInstance();
@@ -2148,7 +2175,7 @@ public class Minescript {
           var jobOpId = new JobOperationId(job.jobId(), funcCallId);
           if (mouseEventListeners.containsKey(jobOpId)) {
             throw new IllegalStateException(
-                "Failed to create listener because a listener ID is already registered for job: "
+                "Failed to create listener because listener ID is already registered for job: "
                     + job.jobSummary());
           }
           var listener =
@@ -2178,7 +2205,7 @@ public class Minescript {
           var jobOpId = new JobOperationId(job.jobId(), funcCallId);
           if (clientChatReceivedEventListeners.containsKey(jobOpId)) {
             throw new IllegalStateException(
-                "Failed to create listener because a listener ID is already registered for job: "
+                "Failed to create listener because listener ID is already registered for job: "
                     + job.jobSummary());
           }
           var listener =
@@ -2205,30 +2232,45 @@ public class Minescript {
 
       case "register_chat_message_interceptor":
         {
-          args.expectSize(0);
-          var jobOpId = new JobOperationId(job.jobId(), funcCallId);
-          if (chatInterceptor != null) {
-            throw new IllegalStateException(
-                String.format(
-                    "Failed to create interceptor because one is already registered to job [%s]",
-                    chatInterceptor.jobId()));
+          args.expectArgs("prefix", "pattern");
+          Optional<String> prefixArg = args.getOptionalString(0);
+          Optional<String> patternArg = args.getOptionalString(1);
+          if (prefixArg.isPresent() && patternArg.isPresent()) {
+            throw new IllegalArgumentException(
+                "Only one of `prefix` and `pattern` can be specified");
           }
-          chatInterceptor = new EventHandler(job, functionName, () -> chatInterceptor = null);
-          systemMessageQueue.logUserInfo("Chat interceptor enabled for job: {}", job.jobSummary());
+          var jobOpId = new JobOperationId(job.jobId(), funcCallId);
+          if (chatInterceptors.containsKey(jobOpId)) {
+            throw new IllegalStateException(
+                "Failed to create interceptor because interceptor ID is already registered for job:"
+                    + " "
+                    + job.jobSummary());
+          }
+          var interceptor =
+              new EventHandler(job, functionName, () -> chatInterceptors.remove(jobOpId));
+          if (prefixArg.isPresent()) {
+            String prefix = prefixArg.get();
+            interceptor.setFilter(o -> o instanceof String s && s.startsWith(prefix));
+          } else if (patternArg.isPresent()) {
+            Pattern pattern = Pattern.compile(patternArg.get());
+            interceptor.setFilter(o -> o instanceof String s && pattern.matcher(s).matches());
+          }
+          chatInterceptors.put(jobOpId, interceptor);
           return Optional.of(new JsonPrimitive(funcCallId));
         }
 
       case "start_chat_message_interceptor":
         {
-          args.expectArgs("listener_id");
-          int listenerId = args.getStrictInt(0);
-          var jobOpId = new JobOperationId(job.jobId(), listenerId);
-          if (chatInterceptor == null) {
+          args.expectArgs("interceptor_id");
+          int interceptorId = args.getStrictInt(0);
+          var jobOpId = new JobOperationId(job.jobId(), interceptorId);
+          var interceptor = chatInterceptors.get(jobOpId);
+          if (interceptor == null) {
             throw new IllegalStateException(
                 "Chat interceptor not found with requested ID: " + jobOpId.toString());
           }
-          job.addOperation(funcCallId, chatInterceptor);
-          chatInterceptor.start(funcCallId);
+          job.addOperation(funcCallId, interceptor);
+          interceptor.start(funcCallId);
           return Optional.empty();
         }
 
