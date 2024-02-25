@@ -24,6 +24,7 @@ import sys
 import minescript_runtime
 
 from array import array
+from dataclasses import dataclass, asdict
 from minescript_runtime import (
     await_script_function,
     call_async_script_function,
@@ -34,6 +35,13 @@ from typing import Any, List, Set, Dict, Tuple, Optional, Callable, Awaitable
 
 Vector3f = Tuple[float, float, float]
 """Tuple representing `(x: float, y: float, z: float)` position or offset in 3D space."""
+
+
+@dataclass
+class MinescriptRuntimeConfig:
+  return_entities_as_dicts: bool = False  # set to `True` to emulate behavior before v4.0
+
+config = MinescriptRuntimeConfig()
 
 
 def execute(command: str):
@@ -569,22 +577,38 @@ def player_health() -> float:
   return await_script_function("player_health", ())
 
 
+@dataclass
+class Entity:
+  name: str
+  type: str
+  uuid: str
+  position: Vector3f
+  yaw: float
+  pitch: float
+  velocity: Vector3f
+  health: float = None
+  local: bool = None  # `True` if this the local player
+  passengers: List[str] = None  # UUIDs of passengers as strings
+  nbt: Dict[str, Any] = None
+
+
 def player(*, nbt: bool = False):
   """Gets attributes for the local player.
 
   Args:
-    nbt: if `True`, populate an `"nbt"` attribute for the player
+    nbt: if `True`, populate the `nbt` field for the player
 
   Returns:
-    Attributes of the local player represented as a dict containing:
-    `"name": str, "health": float, "type": str, "uuid": str,
-    "position": [float, float, float], "yaw": float, "pitch": float,
-    "velocity": [float, float, float]`.
-    The`"nbt"` attribute is present if `nbt` arg is `True`.
+    `Entity` representing a snapshot of values for the local player.
+    (Legacy-style returned dict can be restored with `config.return_entities_as_dicts = True`)
 
   Since: v4.0
   """
-  return await_script_function("player", (nbt,));
+  entity = await_script_function("player", (nbt,))
+  if config.return_entities_as_dicts:
+    return entity
+  else:
+    return Entity(**entity)
 
 
 def players(
@@ -606,15 +630,13 @@ def players(
     limit: maximum number of entities to return (optional)
 
   Returns:
-    List of players where each player is represented as a dict containing:
-    `"name": str, "health": float, "type": str, "uuid": str,
-    "position": [float, float, float], "yaw": float, "pitch": float,
-    "velocity": [float, float, float]`. The local player has the attribute
-    `"local": True`. The`"nbt"` attribute is present if `nbt` arg is `True`.
+    `List[Entity]` representing a snapshot of values for the selected players.
+    (Legacy returned dicts can be restored with `config.return_entities_as_dicts = True`)
 
   Update in v4.0:
     Added args: uuid, name, type, position, offset, min_distance, max_distance, sort, limit.
-    Added `"uuid"` attribute to output.
+    Return `List[Entity]` instead of `List[Dict[str, Any]]` by default.
+    Added `uuid` to returned players.
 
   Update in v3.1:
     Added `"health"` and `"local"` attributes, and `nbt` arg to output `"nbt"`
@@ -622,8 +644,12 @@ def players(
 
   Since: v2.1
   """
-  return await_script_function("players",
-      (nbt, uuid, name, position, offset, min_distance, max_distance, sort, limit));
+  entities = await_script_function("players",
+      (nbt, uuid, name, position, offset, min_distance, max_distance, sort, limit))
+  if config.return_entities_as_dicts:
+    return entities
+  else:
+    return [Entity(**e) for e in entities]
 
 
 def entities(
@@ -646,15 +672,13 @@ def entities(
     limit: maximum number of entities to return (optional)
 
   Returns:
-    List of entities where each entity is represented as a dict containing:
-    `"name": str, "health": float (living entities only), "type": str, "uuid": str,
-    "position": [float, float, float], "yaw": float, "pitch": float,
-    "velocity": [float, float, float]`, and `"passengers": [str]` (UUIDs of passengers, if any).
-    The local player has `"local": True`.  The`"nbt"` attribute is present if `nbt` arg is `True`.
+    `List[Entity]` representing a snapshot of values for the selected entities.
+    (Legacy returned dicts can be restored with `config.return_entities_as_dicts = True`)
 
   Update in v4.0:
     Added args: uuid, name, type, position, offset, min_distance, max_distance, sort, limit.
-    Added `"uuid"` and `"passengers"` (only for entities with passengers) to returned dict.
+    Return `List[Entity]` instead of `List[Dict[str, Any]]` by default.
+    Added `uuid` and `passengers` (only for entities with passengers) to returned entities.
 
   Update in v3.1:
     Added `"health"` and `"local"` attributes, and `nbt` arg to output `"nbt"`
@@ -662,8 +686,12 @@ def entities(
 
   Since: v2.1
   """
-  return await_script_function("entities",
-      (nbt, uuid, name, type, position, offset, min_distance, max_distance, sort, limit));
+  entities = await_script_function("entities",
+      (nbt, uuid, name, type, position, offset, min_distance, max_distance, sort, limit))
+  if config.return_entities_as_dicts:
+    return entities
+  else:
+    return [Entity(**e) for e in entities]
 
 
 def world_properties() -> Dict[str, Any]:

@@ -105,7 +105,7 @@ public class EntityExporter {
       jsonEntity.addProperty("health", livingEntity.getHealth());
     }
     if (entity == minecraft.player) {
-      jsonEntity.addProperty("local", "true");
+      jsonEntity.addProperty("local", true);
     }
     var position = new JsonArray();
     position.add(entity.getX());
