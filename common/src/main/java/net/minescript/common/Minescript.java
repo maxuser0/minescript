@@ -63,13 +63,10 @@ import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.client.renderer.debug.DebugRenderer;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.network.protocol.game.ServerboundPickItemPacket;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
@@ -1934,50 +1931,6 @@ public class Minescript {
     }
   }
 
-  private static JsonObject entityToJsonObject(Entity entity, boolean includeNbt) {
-    var minecraft = Minecraft.getInstance();
-    var jsonEntity = new JsonObject();
-    jsonEntity.addProperty("name", entity.getName().getString());
-    jsonEntity.addProperty("type", entity.getType().toString());
-    jsonEntity.addProperty("uuid", entity.getUUID().toString());
-    if (entity instanceof LivingEntity livingEntity) {
-      jsonEntity.addProperty("health", livingEntity.getHealth());
-    }
-    if (entity == minecraft.player) {
-      jsonEntity.addProperty("local", "true");
-    }
-    var position = new JsonArray();
-    position.add(entity.getX());
-    position.add(entity.getY());
-    position.add(entity.getZ());
-    jsonEntity.add("position", position);
-
-    jsonEntity.addProperty("yaw", entity.getYRot());
-    jsonEntity.addProperty("pitch", entity.getXRot());
-
-    var v = entity.getDeltaMovement();
-    var velocity = new JsonArray();
-    velocity.add(v.x);
-    velocity.add(v.y);
-    velocity.add(v.z);
-    jsonEntity.add("velocity", velocity);
-
-    if (includeNbt) {
-      var nbt = new CompoundTag();
-      jsonEntity.addProperty("nbt", entity.saveWithoutId(nbt).toString());
-    }
-    return jsonEntity;
-  }
-
-  private static JsonArray entitiesToJsonArray(
-      Iterable<? extends Entity> entities, boolean includeNbt) {
-    var jsonEntities = new JsonArray();
-    for (var entity : entities) {
-      jsonEntities.add(entityToJsonObject(entity, includeNbt));
-    }
-    return jsonEntities;
-  }
-
   // String key: KeyMapping.getName()
   private static final Map<String, InputConstants.Key> keyBinds = new ConcurrentHashMap<>();
 
@@ -2475,10 +2428,10 @@ public class Minescript {
         {
           args.expectArgs("max_distance", "nbt");
           double maxDistance = args.getDouble(0);
-          boolean nbt = args.getBoolean(1);
+          boolean includeNbt = args.getBoolean(1);
           return Optional.of(
               DebugRenderer.getTargetedEntity(player, (int) maxDistance)
-                  .map(e -> entityToJsonObject(e, nbt))
+                  .map(e -> new EntityExporter(includeNbt).export(e))
                   .map(
                       obj -> {
                         JsonElement element = obj; // implicit cast
@@ -2493,8 +2446,8 @@ public class Minescript {
       case "player":
         {
           args.expectArgs("nbt");
-          boolean nbt = args.getBoolean(0);
-          return Optional.of(entityToJsonObject(player, nbt));
+          boolean includeNbt = args.getBoolean(0);
+          return Optional.of(new EntityExporter(includeNbt).export(player));
         }
 
       case "players":
@@ -2509,7 +2462,7 @@ public class Minescript {
               "max_distance",
               "sort",
               "limit");
-          boolean nbt = args.getBoolean(0);
+          boolean includeNbt = args.getBoolean(0);
           Optional<String> uuid = args.getOptionalString(1);
           Optional<String> name = args.getOptionalString(2);
           Optional<String> type = Optional.empty();
@@ -2523,11 +2476,19 @@ public class Minescript {
                   .map(EntitySelection.SortType::valueOf);
           OptionalInt limit = args.getOptionalStrictInt(8);
           return Optional.of(
-              entitiesToJsonArray(
-                  new EntitySelection(
-                          uuid, name, type, position, offset, minDistance, maxDistance, sort, limit)
-                      .selectFrom(world.players()),
-                  nbt));
+              new EntityExporter(includeNbt)
+                  .export(
+                      new EntitySelection(
+                              uuid,
+                              name,
+                              type,
+                              position,
+                              offset,
+                              minDistance,
+                              maxDistance,
+                              sort,
+                              limit)
+                          .selectFrom(world.players())));
         }
 
       case "entities":
@@ -2543,7 +2504,7 @@ public class Minescript {
               "max_distance",
               "sort",
               "limit");
-          boolean nbt = args.getBoolean(0);
+          boolean includeNbt = args.getBoolean(0);
           Optional<String> uuid = args.getOptionalString(1);
           Optional<String> name = args.getOptionalString(2);
           Optional<String> type = args.getOptionalString(3);
@@ -2557,11 +2518,19 @@ public class Minescript {
                   .map(EntitySelection.SortType::valueOf);
           OptionalInt limit = args.getOptionalStrictInt(9);
           return Optional.of(
-              entitiesToJsonArray(
-                  new EntitySelection(
-                          uuid, name, type, position, offset, minDistance, maxDistance, sort, limit)
-                      .selectFrom(world.entitiesForRendering()),
-                  nbt));
+              new EntityExporter(includeNbt)
+                  .export(
+                      new EntitySelection(
+                              uuid,
+                              name,
+                              type,
+                              position,
+                              offset,
+                              minDistance,
+                              maxDistance,
+                              sort,
+                              limit)
+                          .selectFrom(world.entitiesForRendering())));
         }
 
       case "world_properties":

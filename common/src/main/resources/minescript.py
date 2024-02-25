@@ -649,13 +649,12 @@ def entities(
     List of entities where each entity is represented as a dict containing:
     `"name": str, "health": float (living entities only), "type": str, "uuid": str,
     "position": [float, float, float], "yaw": float, "pitch": float,
-    "velocity": [float, float, float]`. Living entities have
-    `"health": float` and the local player has `"local": True`. The`"nbt"`
-    attribute is present if `nbt` arg is `True`.
+    "velocity": [float, float, float]`, and `"passengers": [str]` (UUIDs of passengers, if any).
+    The local player has `"local": True`.  The`"nbt"` attribute is present if `nbt` arg is `True`.
 
   Update in v4.0:
-    Added args: uuid, name, type, position, offset, min_distance, max_distance, sort, limit
-    Added `"uuid"` attribute to output.
+    Added args: uuid, name, type, position, offset, min_distance, max_distance, sort, limit.
+    Added `"uuid"` and `"passengers"` (only for entities with passengers) to returned dict.
 
   Update in v3.1:
     Added `"health"` and `"local"` attributes, and `nbt` arg to output `"nbt"`
