@@ -337,7 +337,7 @@ public class Minescript {
           "reload_minescript_resources");
 
   private static final ImmutableSet<String> IGNORE_DIRS_FOR_COMPLETIONS =
-      ImmutableSet.of("blockpacks", "copies", "undo");
+      ImmutableSet.of("blockpacks", "undo");
 
   private static final Pattern TILDE_RE = Pattern.compile("^~([-\\+]?)([0-9]*)$");
 
