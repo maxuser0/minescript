@@ -33,15 +33,18 @@ from minescript_runtime import (
 from typing import Any, List, Set, Dict, Tuple, Optional, Callable, Awaitable
 
 
+BlockPos = Tuple[int, int, int]
+"""Tuple representing `(x: int, y: int, z: int)` position in block space."""
+
 Vector3f = Tuple[float, float, float]
 """Tuple representing `(x: float, y: float, z: float)` position or offset in 3D space."""
 
 
 @dataclass
-class MinescriptRuntimeConfig:
-  return_entities_as_dicts: bool = False  # set to `True` to emulate behavior before v4.0
+class MinescriptRuntimeOptions:
+  legacy_dict_return_values: bool = False  # set to `True` to emulate behavior before v4.0
 
-config = MinescriptRuntimeConfig()
+options = MinescriptRuntimeOptions()
 
 
 def execute(command: str):
@@ -237,47 +240,69 @@ def async_player_set_position(
   return call_async_script_function("player_set_position", (x, y, z, yaw, pitch))
 
 
-def player_hand_items() -> List[Dict[str, Any]]:
+@dataclass
+class ItemStack:
+  item: str
+  count: int
+  nbt: str = None
+  slot: int = None
+  selected: bool = None
+
+@dataclass
+class HandItems:
+  main_hand: ItemStack
+  off_hand: ItemStack
+
+def player_hand_items() -> HandItems:
   """Gets the items in the local player's hands.
 
   Returns:
-    Items in player's hands as a list of items where each item is a dict:
-    `{"item": str, "count": int}`, plus `"nbt": str` if the item has NBT data;
-    main-hand item is at list index 0, off-hand item at index 1.
+    Items in player's hands.
+    (Legacy-style return value can be restored with `options.legacy_dict_return_values = True`)
 
   Update in v4.0:
+    Return `HandItems` instead of `List[Dict[str, Any]]` by default.
     Removed `done_callback` arg. Use `async_player_hand_items()` for async execution.
 
   Since: v2.0
   """
-  return await_script_function("player_hand_items", ())
+  items = await_script_function("player_hand_items", ())
+  if options.legacy_dict_return_values:
+    return items
+  main, off = items
+  return HandItems(
+      main_hand=None if main is None else ItemStack(**main),
+      off_hand=None if off is None else ItemStack(**off))
 
 
-def async_player_hand_items() -> Awaitable[List[Dict[str, Any]]]:
+def async_player_hand_items() -> Awaitable[HandItems]:
   """Gets the items in the local player's hands.
 
   Returns:
-    Awaitable items in player's hands as a list of items where each item is a
-    dict: `{"item": str, "count": int}`, plus `"nbt": str` if the item has NBT
-    data; main-hand item is at list index 0, off-hand item at index 1.
+    Awaitable items in player's hands.
 
   Similar to `player_hand_items()`, but can be used with `await` and `asyncio`.
 
   Since: v4.0
   """
-  return call_async_script_function("player_hand_items", ())
+  def to_dataclass(items: List[Dict[str, Any]]) -> HandItems:
+    main, off = items
+    return HandItems(
+        main_hand=None if main is None else ItemStack(**main),
+        off_hand=None if off is None else ItemStack(**off))
+
+  return call_async_script_function("player_hand_items", (), to_dataclass)
 
 
-def player_inventory() -> List[Dict[str, Any]]:
+def player_inventory() -> List[ItemStack]:
   """Gets the items in the local player's inventory.
 
   Returns:
-    Items in player's inventory as list of items where each item is a dict:
-    `{"item": str, "count": int, "slot": int}`, plus `"nbt": str` if an item
-    has NBT data and `"selected": True` for the item selected in the player's
-    main hand.
+    Items in player's inventory.
+    (Legacy-style return value can be restored with `options.legacy_dict_return_values = True`)
 
   Update in v4.0:
+    Return `List[ItemStack]` instead of `List[Dict[str, Any]]` by default.
     Removed `done_callback` arg. Use `async_player_inventory()` for async execution.
 
   Update in v3.0:
@@ -288,23 +313,24 @@ def player_inventory() -> List[Dict[str, Any]]:
 
   Since: v2.0
   """
-  return await_script_function("player_inventory", ())
+  items = await_script_function("player_inventory", ())
+  if options.legacy_dict_return_values:
+    return items
+  return [ItemStack(**item) for item in items]
 
 
-def async_player_inventory() -> Awaitable[List[Dict[str, Any]]]:
+def async_player_inventory() -> Awaitable[List[ItemStack]]:
   """Gets the items in the local player's inventory.
 
   Similar to `player_inventory()`, but can be used with `await` and `asyncio`.
 
   Returns:
-    Awaitable items in player's inventory as list of items where each item is a
-    dict: `{"item": str, "count": int, "slot": int}`, plus `"nbt": str` if an
-    item has NBT data and `"selected": True` for the item selected in the
-    player's main hand.
+    Awaitable items in player's inventory.
 
   Since: v4.0
   """
-  return call_async_script_function("player_inventory", ())
+  return call_async_script_function(
+      "player_inventory", (), lambda items: [ItemStack(**item) for item in items])
 
 
 def player_inventory_slot_to_hotbar(slot: int) -> int:
@@ -550,35 +576,8 @@ def player_get_targeted_block(max_distance: float = 20):
   return await_script_function("player_get_targeted_block", (max_distance,))
 
 
-def player_get_targeted_entity(max_distance: float = 20, nbt: bool = False):
-  """Gets the entity targeted in the local player's crosshairs, if any.
-
-  Args:
-    max_distance: maximum distance to check for targeted entities
-    nbt: if `True`, populate an `"nbt"` attribute for the player
-
-  Returns:
-    Entity represented as a dict containing:
-    `"name": str, "health": float (living entities only), "type": str, "uuid": str,
-    "position": [float, float, float], "yaw": float, "pitch": float,
-    "velocity": [float, float, float]`. Living entities have
-    `"health": float`. The`"nbt"` attribute is present if `nbt` arg is `True`.
-
-  Since: v4.0
-  """
-  return await_script_function("player_get_targeted_entity", (max_distance, nbt))
-
-
-def player_health() -> float:
-  """Gets the local player's health.
-
-  Since: v3.1
-  """
-  return await_script_function("player_health", ())
-
-
 @dataclass
-class Entity:
+class EntityData:
   name: str
   type: str
   uuid: str
@@ -592,6 +591,33 @@ class Entity:
   nbt: Dict[str, Any] = None
 
 
+def player_get_targeted_entity(max_distance: float = 20, nbt: bool = False) -> EntityData:
+  """Gets the entity targeted in the local player's crosshairs, if any.
+
+  Args:
+    max_distance: maximum distance to check for targeted entities
+    nbt: if `True`, populate an `"nbt"` attribute for the player
+
+  Returns:
+    `EntityData` for the entity targeted by the player, or None if no entity is targeted.
+    (Legacy-style returned dict can be restored with `options.legacy_dict_return_values = True`)
+
+  Since: v4.0
+  """
+  entity = await_script_function("player_get_targeted_entity", (max_distance, nbt))
+  if options.legacy_dict_return_values:
+    return entity
+  return None if entity is None else EntityData(**entity)
+
+
+def player_health() -> float:
+  """Gets the local player's health.
+
+  Since: v3.1
+  """
+  return await_script_function("player_health", ())
+
+
 def player(*, nbt: bool = False):
   """Gets attributes for the local player.
 
@@ -599,16 +625,15 @@ def player(*, nbt: bool = False):
     nbt: if `True`, populate the `nbt` field for the player
 
   Returns:
-    `Entity` representing a snapshot of values for the local player.
-    (Legacy-style returned dict can be restored with `config.return_entities_as_dicts = True`)
+    `EntityData` representing a snapshot of values for the local player.
+    (Legacy-style returned dict can be restored with `options.legacy_dict_return_values = True`)
 
   Since: v4.0
   """
   entity = await_script_function("player", (nbt,))
-  if config.return_entities_as_dicts:
+  if options.legacy_dict_return_values:
     return entity
-  else:
-    return Entity(**entity)
+  return EntityData(**entity)
 
 
 def players(
@@ -630,12 +655,12 @@ def players(
     limit: maximum number of entities to return (optional)
 
   Returns:
-    `List[Entity]` representing a snapshot of values for the selected players.
-    (Legacy returned dicts can be restored with `config.return_entities_as_dicts = True`)
+    `List[EntityData]` representing a snapshot of values for the selected players.
+    (Legacy returned dicts can be restored with `options.legacy_dict_return_values = True`)
 
   Update in v4.0:
     Added args: uuid, name, type, position, offset, min_distance, max_distance, sort, limit.
-    Return `List[Entity]` instead of `List[Dict[str, Any]]` by default.
+    Return `List[EntityData]` instead of `List[Dict[str, Any]]` by default.
     Added `uuid` to returned players.
 
   Update in v3.1:
@@ -646,10 +671,9 @@ def players(
   """
   entities = await_script_function("players",
       (nbt, uuid, name, position, offset, min_distance, max_distance, sort, limit))
-  if config.return_entities_as_dicts:
+  if options.legacy_dict_return_values:
     return entities
-  else:
-    return [Entity(**e) for e in entities]
+  return [EntityData(**e) for e in entities]
 
 
 def entities(
@@ -672,12 +696,12 @@ def entities(
     limit: maximum number of entities to return (optional)
 
   Returns:
-    `List[Entity]` representing a snapshot of values for the selected entities.
-    (Legacy returned dicts can be restored with `config.return_entities_as_dicts = True`)
+    `List[EntityData]` representing a snapshot of values for the selected entities.
+    (Legacy returned dicts can be restored with `options.legacy_dict_return_values = True`)
 
   Update in v4.0:
     Added args: uuid, name, type, position, offset, min_distance, max_distance, sort, limit.
-    Return `List[Entity]` instead of `List[Dict[str, Any]]` by default.
+    Return `List[EntityData]` instead of `List[Dict[str, Any]]` by default.
     Added `uuid` and `passengers` (only for entities with passengers) to returned entities.
 
   Update in v3.1:
@@ -688,13 +712,24 @@ def entities(
   """
   entities = await_script_function("entities",
       (nbt, uuid, name, type, position, offset, min_distance, max_distance, sort, limit))
-  if config.return_entities_as_dicts:
+  if options.legacy_dict_return_values:
     return entities
-  else:
-    return [Entity(**e) for e in entities]
+  return [EntityData(**e) for e in entities]
 
 
-def world_properties() -> Dict[str, Any]:
+@dataclass
+class WorldInfo:
+  game_ticks: int
+  day_ticks: int
+  raining: bool
+  thundering: bool
+  spawn: BlockPos
+  hardcore: bool
+  difficulty: str
+  name: str
+  address: str
+
+def world_info() -> WorldInfo:
   """Gets world properties.
 
   If the current world is a multiplayer world loaded from the server list, then
@@ -702,7 +737,20 @@ def world_properties() -> Dict[str, Any]:
   the server list; otherwise `name` is the name of the locally saved world and
   `address` is `localhost`.
 
-  `"day_ticks"` are the ticks associated with the day-night cycle.
+  `day_ticks` are the ticks associated with the day-night cycle.
+
+  Returns:
+    WorldInfo
+
+  Since: v4.0
+  """
+  return WorldInfo(**await_script_function("world_info", ()))
+
+
+def world_properties() -> Dict[str, Any]:
+  """Gets world properties.
+
+  This function is deprecated. Use `world_info()` instead.
 
   Returns:
     Dict containing: `"game_ticks": int, "day_ticks": int, "raining": bool,
@@ -711,7 +759,8 @@ def world_properties() -> Dict[str, Any]:
 
   Since: v3.1
   """
-  return await_script_function("world_properties", ())
+  print("Warning: world_properties() is deprecated. Use world_info() instead.", file=sys.stderr)
+  return await_script_function("world_info", ())
 
 
 def getblock(x: int, y: int, z: int) -> str:
@@ -860,6 +909,15 @@ class EventRegistrationHandler:
     self.unregister()
 
 
+@dataclass
+class KeyEvent:
+  key: int
+  scan_code: int
+  action: int
+  modifiers: int
+  time: float
+  screen: str
+
 class KeyEventListener(EventRegistrationHandler):
   """Listener for keyboard events.
 
@@ -902,7 +960,7 @@ class KeyEventListener(EventRegistrationHandler):
     """
     super().__init__(register, register_key_event_listener, unregister_key_event_listener)
 
-  def get(self, block: bool = True, timeout: float = None) -> Dict[str, Any]:
+  def get(self, block: bool = True, timeout: float = None) -> KeyEvent:
     """Gets the next key event in the queue.
 
     Args:
@@ -910,25 +968,33 @@ class KeyEventListener(EventRegistrationHandler):
       timeout: timeout in seconds to wait for an event if `block` is `True`
 
     Returns:
-      event dict: `{"key": int, "scanCode": int, "action": int, "modifiers": int,
-      "timeMillis": int, "screen": str}` where `action` is 0 for key up, 1 for
-      key down, and 2 for key repeat.
+      `KeyEvent`, where `action` is 0 for key up, 1 for key down, and 2 for key repeat.
 
     Raises:
       `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
       queue is empty.
     """
-    return super().get(block, timeout)
+    event = super().get(block, timeout)
+
+    if options.legacy_dict_return_values:
+      # Restore legacy names and values from before v4.0.
+      event["scanCode"] = event["scan_code"]
+      event["timeMillis"] = int(event["time"] * 1000)
+      del event["scan_code"]
+      del event["time"]
+      return event
+
+    return KeyEvent(**event)
 
 
 def register_key_event_listener(
-    listener: Callable[[str], None], exception_handler: ExceptionHandler = None) -> int:
+    listener: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
   """Registers a listener for receiving keyboard events. One listener allowed per job.
 
   For a more user-friendly API, use `KeyEventListener` instead. (__internal__)
 
   Args:
-    listener: callable that repeatedly accepts a string representing key events
+    listener: callable that repeatedly accepts a dict representing key events
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
 
   Returns:
@@ -960,6 +1026,16 @@ def unregister_key_event_listener(listener_id: int):
   """
   await_script_function("unregister_event_handler", (listener_id,))
 
+
+@dataclass
+class MouseEvent:
+  button: int
+  action: int
+  modifiers: int
+  time: float
+  x: float
+  y: float
+  screen: str = None
 
 class MouseEventListener(EventRegistrationHandler):
   """Listener for mouse click events.
@@ -996,7 +1072,7 @@ class MouseEventListener(EventRegistrationHandler):
     """
     super().__init__(register, register_mouse_event_listener, unregister_mouse_event_listener)
 
-  def get(self, block: bool = True, timeout: float = None) -> Dict[str, Any]:
+  def get(self, block: bool = True, timeout: float = None) -> MouseEvent:
     """Gets the next mouse event in the queue.
 
     Args:
@@ -1004,25 +1080,31 @@ class MouseEventListener(EventRegistrationHandler):
       timeout: timeout in seconds to wait for an event if `block` is `True`
 
     Returns:
-      event dict: `{"button": int, "action": int, "modifiers": int,
-      "timeMillis": int, "screen": str, "x": float, "y": float}` where `action`
-      is 0 for mouse up and 1 for mouse down.
+      `MouseEvent`, where `action` is 0 for mouse up and 1 for mouse down.
 
     Raises:
       `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
       queue is empty.
     """
-    return super().get(block, timeout)
+    event = super().get(block, timeout)
+
+    if options.legacy_dict_return_values:
+      # Restore legacy name and value from before v4.0.
+      event["timeMillis"] = int(event["time"] * 1000)
+      del event["time"]
+      return event
+
+    return MouseEvent(**event)
 
 
 def register_mouse_event_listener(
-    listener: Callable[[str], None], exception_handler: ExceptionHandler = None) -> int:
+    listener: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
   """Registers a listener for receiving mouse events. One listener allowed per job.
 
   For a more user-friendly API, use `MouseEventListener` instead. (__internal__)
 
   Args:
-    listener: callable that repeatedly accepts a string representing mouse events
+    listener: callable that repeatedly accepts a dict representing mouse events
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
 
   Update in v4.0:
@@ -1304,15 +1386,18 @@ def show_chat_screen(show: bool, prompt: str = None) -> str:
   return await_script_function("show_chat_screen", (show, prompt))
 
 
-def container_get_items():
+def container_get_items() -> List[ItemStack]:
   """Gets all items in an open container (chest, furnace, etc. with slots).
 
   Returns:
-    List of dictionaries of item data if a container's contents are displayed; `None` otherwise.
+    List of items if a container's contents are displayed; `None` otherwise.
 
   Since: v4.0
   """
-  return await_script_function("container_get_items", ())
+  items = await_script_function("container_get_items", ())
+  if options.legacy_dict_return_values:
+    return items
+  return None if items is None else [ItemStack(**item) for item in items]
 
 
 def container_click_slot(slot: int) -> bool:
@@ -1340,10 +1425,6 @@ def player_look_at(x: float, y: float, z: float):
   Since: v4.0
   """
   await_script_function("player_look_at", (x, y, z))
-
-
-BlockPos = Tuple[int, int, int]
-"""Tuple representing `(x: int, y: int, z: int)` position in block space."""
 
 
 Rotation = Tuple[int, int, int, int, int, int, int, int, int]

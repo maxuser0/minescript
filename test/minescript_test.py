@@ -193,7 +193,13 @@ def await_loaded_region_test():
 
 @test
 def player_hand_items_test():
-  expect_equal(list, type(minescript.player_hand_items()))
+  try:
+    minescript.options.legacy_dict_return_values = True
+    expect_equal(list, type(minescript.player_hand_items()))
+  finally:
+    minescript.options.legacy_dict_return_values = False
+
+  expect_equal(minescript.HandItems, type(minescript.player_hand_items()))
 
 
 @test
@@ -209,33 +215,50 @@ def player_test():
   x, y, z = minescript.player_position()
   yaw, pitch = minescript.player_orientation()
 
+  try:
+    minescript.options.legacy_dict_return_values = True
+    players = minescript.players(nbt=True)
+    for p in players:
+      expect_contains(p, "name")
+      expect_contains(p, "type")
+      expect_contains(p, "health")
+      expect_contains(p, "position")
+      expect_contains(p, "yaw")
+      expect_contains(p, "pitch")
+      expect_contains(p, "velocity")
+      expect_contains(p, "nbt")
+    players_with_my_name = [
+        (p["name"], p["position"], p["yaw"], p["pitch"])
+            for p in filter(lambda p: p["name"] == name,
+        players)]
+    expect_equal(players_with_my_name, [(name, [x, y, z], yaw, pitch)])
+
+    entities = minescript.entities(nbt=True)
+    for e in entities:
+      expect_contains(e, "name")
+      expect_contains(e, "type")
+      expect_contains(e, "position")
+      expect_contains(e, "yaw")
+      expect_contains(e, "pitch")
+      expect_contains(e, "velocity")
+      expect_contains(e, "nbt")
+    entities_with_my_name = [
+        (e["name"], e["position"], e["yaw"], e["pitch"])
+        for e in filter(lambda e: e["name"] == name, entities)]
+    expect_equal(entities_with_my_name, [(name, [x, y, z], yaw, pitch)])
+  finally:
+    minescript.options.legacy_dict_return_values = False
+
   players = minescript.players(nbt=True)
-  for p in players:
-    expect_contains(p, "name")
-    expect_contains(p, "type")
-    expect_contains(p, "health")
-    expect_contains(p, "position")
-    expect_contains(p, "yaw")
-    expect_contains(p, "pitch")
-    expect_contains(p, "velocity")
-    expect_contains(p, "nbt")
   players_with_my_name = [
-      (p["name"], p["position"], p["yaw"], p["pitch"]) for p in filter(lambda p: p["name"] == name,
+      (p.name, p.position, p.yaw, p.pitch) for p in filter(lambda p: p.name == name,
       players)]
   expect_equal(players_with_my_name, [(name, [x, y, z], yaw, pitch)])
 
   entities = minescript.entities(nbt=True)
-  for e in entities:
-    expect_contains(e, "name")
-    expect_contains(e, "type")
-    expect_contains(e, "position")
-    expect_contains(e, "yaw")
-    expect_contains(e, "pitch")
-    expect_contains(e, "velocity")
-    expect_contains(e, "nbt")
   entities_with_my_name = [
-      (e["name"], e["position"], e["yaw"], e["pitch"])
-      for e in filter(lambda e: e["name"] == name, entities)]
+      (e.name, e.position, e.yaw, e.pitch)
+      for e in filter(lambda e: e.name == name, entities)]
   expect_equal(entities_with_my_name, [(name, [x, y, z], yaw, pitch)])
 
   # yaw == 0 <-> look +z-axis

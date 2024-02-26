@@ -75,11 +75,15 @@ def send_script_function_request(func_name: str, args: Tuple[Any, ...],
   return func_call_id
 
 
-async def call_async_script_function(func_name: str, args: Tuple[Any, ...]) -> Awaitable[Any]:
+async def call_async_script_function(
+    func_name: str,
+    args: Tuple[Any, ...],
+    result_transform: Callable[[Any], Any] = None) -> Awaitable[Any]:
   """Calls a script function and awaits the function's return value.
 
   Args:
     func_name: name of Minescript function to call
+    result_transform: if given, transform the return value
 
   Returns:
     script function's return value: number, string, list, or dict
@@ -105,7 +109,8 @@ async def call_async_script_function(func_name: str, args: Tuple[Any, ...]) -> A
   if exception_holder:
     raise exception_holder[0]
   if retval_holder:
-    return retval_holder[0]
+    result = retval_holder[0]
+    return result if result_transform is None else result_transform(result)
 
 
 def await_script_function(func_name: str, args: Tuple[Any, ...], timeout: float = None) -> Any:

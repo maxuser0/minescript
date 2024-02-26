@@ -1426,10 +1426,10 @@ public class Minescript {
           long timeMillis = System.currentTimeMillis();
           json = new JsonObject();
           json.addProperty("key", key);
-          json.addProperty("scanCode", scanCode);
+          json.addProperty("scan_code", scanCode);
           json.addProperty("action", action);
           json.addProperty("modifiers", modifiers);
-          json.addProperty("timeMillis", timeMillis);
+          json.addProperty("time", timeMillis / 1000.);
           json.addProperty("screen", screenName);
         }
         if (config.debugOutput()) {
@@ -1455,7 +1455,7 @@ public class Minescript {
           json.addProperty("button", button);
           json.addProperty("action", action);
           json.addProperty("modifiers", modifiers);
-          json.addProperty("timeMillis", timeMillis);
+          json.addProperty("time", timeMillis / 1000.);
           json.addProperty("x", x);
           json.addProperty("y", y);
           json.addProperty("screen", screenName);
@@ -2533,7 +2533,7 @@ public class Minescript {
                           .selectFrom(world.entitiesForRendering())));
         }
 
-      case "world_properties":
+      case "world_info":
         {
           args.expectSize(0);
           var levelProperties = world.getLevelData();
