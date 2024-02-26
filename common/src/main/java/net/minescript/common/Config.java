@@ -46,6 +46,8 @@ public class Config {
           "debug_output",
           "stderr_chat_ignore_pattern",
           "minescript_on_chat_received_event",
+          "blockpack_min_y",
+          "blockpack_max_y",
           "secondary_enter_key_code",
           "autorun[");
 
@@ -68,6 +70,9 @@ public class Config {
   private Pattern stderrChatIgnorePattern = Pattern.compile("^$");
 
   private boolean minescriptOnChatReceivedEvent = false;
+
+  private int blockpackMinY = -64;
+  private int blockpackMaxY = 320;
 
   // Default secondary `enter` key code to value of KEY_KP_ENTER from GLFW.
   private int secondaryEnterKeyCode = 335;
@@ -191,6 +196,14 @@ public class Config {
     return minescriptOnChatReceivedEvent;
   }
 
+  public int blockpackMinY() {
+    return blockpackMinY;
+  }
+
+  public int blockpackMaxY() {
+    return blockpackMaxY;
+  }
+
   public int secondaryEnterKeyCode() {
     return secondaryEnterKeyCode;
   }
@@ -235,8 +248,9 @@ public class Config {
     consumer.accept("stderr_chat_ignore_pattern", getValue("stderr_chat_ignore_pattern"));
     consumer.accept(
         "minescript_on_chat_received_event", getValue("minescript_on_chat_received_event"));
-    consumer.accept(
-        "secondary_enter_key_code", getValue("secondary_enter_key_code"));
+    consumer.accept("blockpack_min_y", getValue("blockpack_min_y"));
+    consumer.accept("blockpack_max_y", getValue("blockpack_max_y"));
+    consumer.accept("secondary_enter_key_code", getValue("secondary_enter_key_code"));
 
     for (var entry : autorunCommands.entrySet()) {
       var worldName = entry.getKey();
@@ -283,6 +297,12 @@ public class Config {
 
       case "minescript_on_chat_received_event":
         return String.valueOf(minescriptOnChatReceivedEvent);
+
+      case "blockpack_min_y":
+        return String.valueOf(blockpackMinY);
+
+      case "blockpack_max_y":
+        return String.valueOf(blockpackMaxY);
 
       case "secondary_enter_key_code":
         return String.valueOf(secondaryEnterKeyCode);
@@ -436,12 +456,30 @@ public class Config {
         }
         break;
 
+      case "blockpack_min_y":
+        try {
+          blockpackMinY = Integer.valueOf(value);
+          reportInfo(out, "Setting blockpack_min_y to {}", blockpackMinY);
+        } catch (NumberFormatException e) {
+          reportError(out, "Unable to parse blockpack_min_y as integer: {}", value);
+        }
+        break;
+
+      case "blockpack_max_y":
+        try {
+          blockpackMaxY = Integer.valueOf(value);
+          reportInfo(out, "Setting blockpack_max_y to {}", blockpackMaxY);
+        } catch (NumberFormatException e) {
+          reportError(out, "Unable to parse blockpack_max_y as integer: {}", value);
+        }
+        break;
+
       case "secondary_enter_key_code":
         try {
           secondaryEnterKeyCode = Integer.valueOf(value);
           reportInfo(out, "Setting secondary_enter_key_code to {}", secondaryEnterKeyCode);
         } catch (NumberFormatException e) {
-          reportError(out, "Unable to secondary_enter_key_code ticks_per_cycle as integer: {}", value);
+          reportError(out, "Unable to parse secondary_enter_key_code as integer: {}", value);
         }
         break;
 

@@ -1002,11 +1002,11 @@ public class Minescript {
     int playerZ = (int) player.getZ();
 
     int xMin = Math.min(x0, x1);
-    int yMin = Math.max(Math.min(y0, y1), -64); // TODO(maxuser): Use an API for min build height.
+    int yMin = Math.max(Math.min(y0, y1), config.blockpackMinY());
     int zMin = Math.min(z0, z1);
 
     int xMax = Math.max(x0, x1);
-    int yMax = Math.min(Math.max(y0, y1), 320); // TODO(maxuser): Use an API for max build height.
+    int yMax = Math.min(Math.max(y0, y1), config.blockpackMaxY());
     int zMax = Math.max(z0, z1);
 
     if (safetyLimit) {
