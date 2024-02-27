@@ -997,16 +997,18 @@ public class Minescript {
       throw new IllegalStateException("Unable to read blocks because player is null.");
     }
 
+    Level level = player.getCommandSenderWorld();
+
     int playerX = (int) player.getX();
     int playerY = (int) player.getY();
     int playerZ = (int) player.getZ();
 
     int xMin = Math.min(x0, x1);
-    int yMin = Math.max(Math.min(y0, y1), config.blockpackMinY());
+    int yMin = Math.max(Math.min(y0, y1), level.getMinBuildHeight());
     int zMin = Math.min(z0, z1);
 
     int xMax = Math.max(x0, x1);
-    int yMax = Math.min(Math.max(y0, y1), config.blockpackMaxY());
+    int yMax = Math.min(Math.max(y0, y1), level.getMaxBuildHeight());
     int zMax = Math.max(z0, z1);
 
     if (safetyLimit) {
@@ -1021,8 +1023,6 @@ public class Minescript {
                 + "`safety_limit=False` to `blockpack_read_world` function).");
       }
     }
-
-    Level level = player.getCommandSenderWorld();
 
     var pos = new BlockPos.MutableBlockPos();
     for (int x = xMin; x <= xMax; x += 16) {
