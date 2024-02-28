@@ -718,6 +718,26 @@ def entities(
 
 
 @dataclass
+class VersionInfo:
+  minecraft: str
+  minescript: str
+  mod_loader: str
+  launcher: str
+  os_name: str
+  os_version: str
+
+def version_info() -> VersionInfo:
+  """Gets version info for Minecraft, Minescript, mod loader, launcher, and OS.
+
+  Returns:
+    `VersionInfo`
+
+  Since: v4.0
+  """
+  return VersionInfo(**await_script_function("version_info", ()))
+
+
+@dataclass
 class WorldInfo:
   game_ticks: int
   day_ticks: int
@@ -740,7 +760,7 @@ def world_info() -> WorldInfo:
   `day_ticks` are the ticks associated with the day-night cycle.
 
   Returns:
-    WorldInfo
+    `WorldInfo`
 
   Since: v4.0
   """

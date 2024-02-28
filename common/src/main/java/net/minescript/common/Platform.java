@@ -3,4 +3,6 @@
 
 package net.minescript.common;
 
-public interface Platform {}
+public interface Platform {
+  String modLoaderName();
+}

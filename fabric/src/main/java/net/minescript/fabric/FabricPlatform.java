@@ -5,4 +5,9 @@ package net.minescript.fabric;
 
 import net.minescript.common.Platform;
 
-class FabricPlatform implements Platform {}
+class FabricPlatform implements Platform {
+  @Override
+  public String modLoaderName() {
+    return "Fabric";
+  }
+}

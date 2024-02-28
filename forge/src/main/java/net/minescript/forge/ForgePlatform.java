@@ -5,4 +5,9 @@ package net.minescript.forge;
 
 import net.minescript.common.Platform;
 
-class ForgePlatform implements Platform {}
+class ForgePlatform implements Platform {
+  @Override
+  public String modLoaderName() {
+    return "Forge";
+  }
+}

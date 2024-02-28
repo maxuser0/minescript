@@ -5,4 +5,9 @@ package net.minescript.neoforge;
 
 import net.minescript.common.Platform;
 
-class NeoForgePlatform implements Platform {}
+class NeoForgePlatform implements Platform {
+  @Override
+  public String modLoaderName() {
+    return "NeoForge";
+  }
+}

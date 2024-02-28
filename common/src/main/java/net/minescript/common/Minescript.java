@@ -50,6 +50,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import net.minecraft.SharedConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
@@ -94,6 +95,7 @@ public class Minescript {
   }
 
   private static Platform platform;
+  private static String version;
   private static Thread worldListenerThread;
 
   public static void init(Platform platform) {
@@ -126,11 +128,11 @@ public class Minescript {
     if (lastRunVersion.equals(LEGACY_VERSION)) {
       deleteLegacyFiles();
     }
-    String currentVersion = getCurrentVersion();
-    if (!currentVersion.equals(lastRunVersion)) {
+    Minescript.version = getCurrentVersion();
+    if (!version.equals(lastRunVersion)) {
       LOGGER.info(
           "Current version ({}) does not match last run version ({})",
-          currentVersion,
+          Minescript.version,
           lastRunVersion);
 
       loadMinescriptResources();
@@ -2531,6 +2533,20 @@ public class Minescript {
                               sort,
                               limit)
                           .selectFrom(world.entitiesForRendering())));
+        }
+
+      case "version_info":
+        {
+          args.expectSize(0);
+
+          var result = new JsonObject();
+          result.addProperty("minecraft", SharedConstants.getCurrentVersion().getName());
+          result.addProperty("minescript", Minescript.version);
+          result.addProperty("mod_loader", platform.modLoaderName());
+          result.addProperty("launcher", minecraft.getLaunchedVersion());
+          result.addProperty("os_name", System.getProperty("os.name"));
+          result.addProperty("os_version", System.getProperty("os.version"));
+          return Optional.of(result);
         }
 
       case "world_info":
