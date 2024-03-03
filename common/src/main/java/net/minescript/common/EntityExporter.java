@@ -20,6 +20,7 @@ import org.apache.logging.log4j.Logger;
 public class EntityExporter {
   private static final Logger LOGGER = LogManager.getLogger();
 
+  private final double positionInterpolation;
   private final boolean includeNbt;
 
   // UUIDs of entities that have already been exported from this EntityExporter.
@@ -37,7 +38,14 @@ public class EntityExporter {
     }
   }
 
-  public EntityExporter(boolean includeNbt) {
+  /**
+   * Create {@code EntityExporter}.
+   *
+   * @param positionInterpolation value from 0 to 1 indicating time ratio from last tick to next
+   * @param includeNbt if true, export NBT data for each entity
+   */
+  public EntityExporter(double positionInterpolation, boolean includeNbt) {
+    this.positionInterpolation = positionInterpolation;
     this.includeNbt = includeNbt;
   }
 
@@ -107,16 +115,27 @@ public class EntityExporter {
     if (entity == minecraft.player) {
       jsonEntity.addProperty("local", true);
     }
+
+    var v = entity.getDeltaMovement();
+
+    double x = entity.getX();
+    double y = entity.getY();
+    double z = entity.getZ();
+    if (positionInterpolation > 0.0001) {
+      x += v.x * positionInterpolation;
+      y += v.y * positionInterpolation;
+      z += v.z * positionInterpolation;
+    }
+
     var position = new JsonArray();
-    position.add(entity.getX());
-    position.add(entity.getY());
-    position.add(entity.getZ());
+    position.add(x);
+    position.add(y);
+    position.add(z);
     jsonEntity.add("position", position);
 
     jsonEntity.addProperty("yaw", entity.getYRot());
     jsonEntity.addProperty("pitch", entity.getXRot());
 
-    var v = entity.getDeltaMovement();
     var velocity = new JsonArray();
     velocity.add(v.x);
     velocity.add(v.y);

@@ -3,7 +3,9 @@
 
 package net.minescript.common;
 
-public record Message(Message.Type type, String value) {
+import java.util.List;
+
+public record Message(Message.Type type, String value, Record data) {
   public enum Type {
     FUNCTION_CALL,
     MINECRAFT_COMMAND,
@@ -13,8 +15,16 @@ public record Message(Message.Type type, String value) {
     JSON_FORMATTED_TEXT
   }
 
-  public static Message createFunctionCall(String value) {
-    return new Message(Type.FUNCTION_CALL, value);
+  public record FunctionCallData(long funcCallId, String argsString, List<?> args) {}
+
+  public Message(Message.Type type, String value) {
+    this(type, value, null);
+  }
+
+  public static Message createFunctionCall(
+      long funcCallId, String functionName, String argsString, List<?> args) {
+    return new Message(
+        Type.FUNCTION_CALL, functionName, new FunctionCallData(funcCallId, argsString, args));
   }
 
   public static Message createMinecraftCommand(String value) {

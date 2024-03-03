@@ -17,7 +17,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
-import com.google.gson.JsonSyntaxException;
 import com.mojang.blaze3d.platform.InputConstants;
 import io.netty.buffer.Unpooled;
 import java.io.BufferedReader;
@@ -703,8 +702,8 @@ public class Minescript {
           new Job(
               allocateJobId(),
               command,
-              new SubprocessTask(config.scriptConfig()),
-              config.stderrChatIgnorePattern(),
+              new SubprocessTask(config),
+              config,
               systemMessageQueue,
               i -> finishJob(i, nextCommand));
       var undo = new UndoableActionBlockPack(job.jobId(), command.command());
@@ -744,7 +743,7 @@ public class Minescript {
               new ScriptConfig.BoundCommand(
                   null, undo.derivativeCommand(), ScriptRedirect.Pair.DEFAULTS),
               new UndoTask(undo),
-              config.stderrChatIgnorePattern(),
+              config,
               systemMessageQueue,
               i -> finishJob(i, Collections.emptyList()));
       jobMap.put(undoJob.jobId(), undoJob);
@@ -999,7 +998,7 @@ public class Minescript {
       throw new IllegalStateException("Unable to read blocks because player is null.");
     }
 
-    Level level = player.getCommandSenderWorld();
+    Level level = minecraft.level;
 
     int playerX = (int) player.getX();
     int playerY = (int) player.getY();
@@ -1368,7 +1367,7 @@ public class Minescript {
     }
   }
 
-  private static int clientTickEventCounter = 0;
+  private static long clientTickEventCounter = 0;
 
   private static int BACKSLASH_KEY = 92;
   private static int ESCAPE_KEY = 256;
@@ -2005,8 +2004,41 @@ public class Minescript {
   private record JobInfo(
       int job_id, String[] command, String source, String status, Boolean self) {}
 
+  public static void processScriptFunction(
+      Job job, String functionName, long funcCallId, String argsString, List<?> parsedArgs) {
+    var args = new ScriptFunctionArgList(functionName, parsedArgs, argsString);
+    try {
+      Optional<JsonElement> response =
+          runScriptFunction(job, funcCallId, functionName, args, argsString);
+      if (response.isPresent()) {
+        job.respond(funcCallId, response.get(), true);
+      }
+      if (config.debugOutput()) {
+        LOGGER.info(
+            "(debug) Script function `{}`: {} / {}  ->  {}",
+            functionName,
+            quoteString(argsString),
+            parsedArgs,
+            response.map(JsonElement::toString).orElse("<no response>"));
+      }
+    } catch (Exception e) {
+      if (funcCallId == 0) {
+        // Functions with call ID 0 do not wait for return values and cannot catch
+        // exceptions. So, log the exception to the chat and log file, attributed to
+        // the job and function name.
+        job.logJobException(
+            new RuntimeException(
+                String.format(
+                    "Exception while calling script function `%s` with args %s: %s",
+                    functionName, argsString, e.toString())));
+      } else {
+        job.raiseException(funcCallId, ExceptionInfo.fromException(e));
+      }
+    }
+  }
+
   /** Returns a JSON response if a script function is called. */
-  private static Optional<JsonElement> handleScriptFunction(
+  private static Optional<JsonElement> runScriptFunction(
       Job job, long funcCallId, String functionName, ScriptFunctionArgList args, String argsString)
       throws Exception {
     var minecraft = Minecraft.getInstance();
@@ -2050,7 +2082,7 @@ public class Minescript {
       case "getblock":
         {
           args.expectSize(3);
-          Level level = player.getCommandSenderWorld();
+          Level level = minecraft.level;
           int arg0 = args.getConvertibleInt(0);
           int arg1 = args.getConvertibleInt(1);
           int arg2 = args.getConvertibleInt(2);
@@ -2074,7 +2106,7 @@ public class Minescript {
             badArgsResponse.run();
           }
           List<?> positions = (List<?>) args.get(0);
-          Level level = player.getCommandSenderWorld();
+          Level level = minecraft.level;
           var blocks = new JsonArray();
           var pos = new BlockPos.MutableBlockPos();
           for (var position : positions) {
@@ -2409,7 +2441,7 @@ public class Minescript {
                     blockPos.getX(),
                     blockPos.getY(),
                     blockPos.getZ());
-            Level level = player.getCommandSenderWorld();
+            Level level = minecraft.level;
             Optional<String> block = blockStateToString(level.getBlockState(blockPos));
             var result = new JsonArray();
             var pos = new JsonArray();
@@ -2433,7 +2465,7 @@ public class Minescript {
           boolean includeNbt = args.getBoolean(1);
           return Optional.of(
               DebugRenderer.getTargetedEntity(player, (int) maxDistance)
-                  .map(e -> new EntityExporter(includeNbt).export(e))
+                  .map(e -> new EntityExporter(entityPositionInterpolation(), includeNbt).export(e))
                   .map(
                       obj -> {
                         JsonElement element = obj; // implicit cast
@@ -2449,7 +2481,8 @@ public class Minescript {
         {
           args.expectArgs("nbt");
           boolean includeNbt = args.getBoolean(0);
-          return Optional.of(new EntityExporter(includeNbt).export(player));
+          return Optional.of(
+              new EntityExporter(entityPositionInterpolation(), includeNbt).export(player));
         }
 
       case "players":
@@ -2478,7 +2511,7 @@ public class Minescript {
                   .map(EntitySelection.SortType::valueOf);
           OptionalInt limit = args.getOptionalStrictInt(8);
           return Optional.of(
-              new EntityExporter(includeNbt)
+              new EntityExporter(entityPositionInterpolation(), includeNbt)
                   .export(
                       new EntitySelection(
                               uuid,
@@ -2520,7 +2553,7 @@ public class Minescript {
                   .map(EntitySelection.SortType::valueOf);
           OptionalInt limit = args.getOptionalStrictInt(9);
           return Optional.of(
-              new EntityExporter(includeNbt)
+              new EntityExporter(entityPositionInterpolation(), includeNbt)
                   .export(
                       new EntitySelection(
                               uuid,
@@ -2592,7 +2625,7 @@ public class Minescript {
           args.expectArgs("message");
           var message = args.getString(0);
           processJsonFormattedText(message);
-          return OPTIONAL_JSON_TRUE;
+          return Optional.empty();
         }
 
       case "echo_plain_text":
@@ -2600,7 +2633,7 @@ public class Minescript {
           args.expectArgs("message");
           var message = args.getString(0);
           processPlainText(message);
-          return OPTIONAL_JSON_TRUE;
+          return Optional.empty();
         }
 
       case "chat":
@@ -3141,7 +3174,21 @@ public class Minescript {
     }
   }
 
+  private static volatile long lastTickStartTime = 0;
+
+  private static double entityPositionInterpolation() {
+    if (config.interpolateEntityPositions()) {
+      var minecraft = Minecraft.getInstance();
+      double millisPerTick = minecraft.level.tickRateManager().millisecondsPerTick();
+      long now = System.currentTimeMillis();
+      return Math.min(1., (now - lastTickStartTime) / millisPerTick);
+    } else {
+      return 0;
+    }
+  }
+
   public static void onClientWorldTick() {
+    lastTickStartTime = System.currentTimeMillis();
     if (++clientTickEventCounter % config.ticksPerCycle() == 0) {
       var minecraft = Minecraft.getInstance();
       var player = minecraft.player;
@@ -3154,15 +3201,17 @@ public class Minescript {
       }
 
       if (player != null && (!systemMessageQueue.isEmpty() || !jobs.getMap().isEmpty())) {
-        Level level = player.getCommandSenderWorld();
         boolean hasMessage;
         int iterations = 0;
+        int debugNumMessages = 0;
+        long startTimeNanos = System.nanoTime();
         do {
           hasMessage = false;
           ++iterations;
           Message sysMessage = systemMessageQueue.poll();
           if (sysMessage != null) {
             hasMessage = true;
+            ++debugNumMessages;
             processMessage(sysMessage);
           }
           for (var job : jobs.getMap().values()) {
@@ -3171,53 +3220,22 @@ public class Minescript {
                 Message message = job.messageQueue().poll();
                 if (message != null) {
                   hasMessage = true;
+                  ++debugNumMessages;
                   if (message.type() == Message.Type.FUNCTION_CALL) {
-                    // Function call messages have values formatted as:
-                    // "{funcCallId} {functionName} {argsString}"
-                    //
-                    // argsString may have spaces, e.g. "123 my_func [4, 5, 6]"
-                    String[] functionCall = message.value().split("\\s+", 3);
-                    long funcCallId = Long.valueOf(functionCall[0]);
-                    String functionName = functionCall[1];
-                    String argsString = functionCall[2];
+                    String functionName = message.value();
+                    var funcCallData = (Message.FunctionCallData) message.data();
+                    processScriptFunction(
+                        job,
+                        functionName,
+                        funcCallData.funcCallId(),
+                        funcCallData.argsString(),
+                        funcCallData.args());
 
-                    final List<?> rawArgs;
-                    try {
-                      rawArgs = GSON.fromJson(argsString, ArrayList.class);
-                    } catch (JsonSyntaxException e) {
-                      String exceptionMessage =
-                          String.format(
-                              "Syntax error in script function args to `%s`: `%s`. This is likely"
-                                  + " caused by unsynchronized output printed to stdout elsewhere"
-                                  + " in this script. If the error persists, try replacing those"
-                                  + " raw print() calls with minescript.echo() or printing to"
-                                  + " stderr instead.",
-                              functionName, message.value());
-                      job.raiseException(
-                          funcCallId,
-                          ExceptionInfo.fromException(
-                              new IllegalArgumentException(exceptionMessage)));
-                      continue;
-                    }
-                    var args = new ScriptFunctionArgList(functionName, rawArgs, argsString);
-                    try {
-                      Optional<JsonElement> response =
-                          handleScriptFunction(job, funcCallId, functionName, args, argsString);
-                      if (response.isPresent()) {
-                        job.respond(funcCallId, response.get(), true);
-                      }
-                      if (config.debugOutput()) {
-                        LOGGER.info(
-                            "(debug) Script function `{}`: {} / {}  ->  {}",
-                            functionName,
-                            quoteString(argsString),
-                            rawArgs,
-                            response.map(JsonElement::toString).orElse("<no response>"));
-                      }
-                    } catch (Exception e) {
-                      job.raiseException(funcCallId, ExceptionInfo.fromException(e));
-                    }
                   } else {
+                    // TODO(maxuser): Stash level in UndoableAction as a WeakReference<Level> so
+                    // that an undo operation gets applied only to the world at existed at the time
+                    // the UndoableAction was created.
+                    Level level = minecraft.level;
                     jobs.getUndoForJob(job).ifPresent(u -> u.processCommandToUndo(level, message));
                     processMessage(message);
                   }
@@ -3228,6 +3246,15 @@ public class Minescript {
             }
           }
         } while (hasMessage && iterations < config.commandsPerCycle());
+
+        if (config.debugOutput()) {
+          long endTimeNanos = System.nanoTime();
+          LOGGER.info(
+              "Message loop processed {} messages across {} iterations in {} usec",
+              debugNumMessages,
+              iterations,
+              (endTimeNanos - startTimeNanos) / 1000);
+        }
       }
     }
   }

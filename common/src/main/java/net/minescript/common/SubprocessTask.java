@@ -17,19 +17,19 @@ import org.apache.logging.log4j.Logger;
 
 public class SubprocessTask implements Task {
   private static final Logger LOGGER = LogManager.getLogger();
-  private static Gson GSON = new GsonBuilder().serializeNulls().create();
+  private static final Gson GSON = new GsonBuilder().serializeNulls().create();
 
-  private final ScriptConfig scriptConfig;
+  private final Config config;
   private Process process;
   private BufferedWriter stdinWriter;
 
-  public SubprocessTask(ScriptConfig scriptConfig) {
-    this.scriptConfig = scriptConfig;
+  public SubprocessTask(Config config) {
+    this.config = config;
   }
 
   @Override
   public int run(ScriptConfig.BoundCommand command, JobControl jobControl) {
-    var exec = scriptConfig.getExecutableCommand(command);
+    var exec = config.scriptConfig().getExecutableCommand(command);
     if (exec == null) {
       jobControl.log(
           "Cannot run \"{}\" because execution is not configured for \"{}\" files.",
@@ -50,26 +50,36 @@ public class SubprocessTask implements Task {
     try (var stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
         var stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
       final int millisToSleep = 1;
-      final long trailingReadTimeoutMillis = 5000;
+      final long trailingReadTimeoutMillis = config.subprocessTrailingReadTimeoutMillis();
       long lastReadTime = System.currentTimeMillis();
       String line;
+      long debugFirstRead = -1;
+      int debugNumReads = 0;
       while (jobControl.state() != JobState.KILLED
           && jobControl.state() != JobState.DONE
           && (process.isAlive()
               || System.currentTimeMillis() - lastReadTime < trailingReadTimeoutMillis)) {
-        if (stdoutReader.ready()) {
-          if ((line = stdoutReader.readLine()) == null) {
-            break;
+        while (stdoutReader.ready() || stderrReader.ready()) {
+          if (stdoutReader.ready()) {
+            if ((line = stdoutReader.readLine()) == null) {
+              break;
+            }
+            long currentTime = System.currentTimeMillis();
+            if (debugFirstRead < 0) debugFirstRead = currentTime;
+            ++debugNumReads;
+            lastReadTime = currentTime;
+            jobControl.processStdout(line);
           }
-          lastReadTime = System.currentTimeMillis();
-          jobControl.processStdout(line);
-        }
-        if (stderrReader.ready()) {
-          if ((line = stderrReader.readLine()) == null) {
-            break;
+          if (stderrReader.ready()) {
+            if ((line = stderrReader.readLine()) == null) {
+              break;
+            }
+            long currentTime = System.currentTimeMillis();
+            if (debugFirstRead < 0) debugFirstRead = currentTime;
+            ++debugNumReads;
+            lastReadTime = currentTime;
+            jobControl.log(line);
           }
-          lastReadTime = System.currentTimeMillis();
-          jobControl.log(line);
         }
         try {
           Thread.sleep(millisToSleep);
@@ -77,6 +87,10 @@ public class SubprocessTask implements Task {
           jobControl.logJobException(e);
         }
         jobControl.yield();
+      }
+      if (config.debugOutput()) {
+        LOGGER.info(
+            "Subprocess reads: {} reads in {} ms", debugNumReads, lastReadTime - debugFirstRead);
       }
     } catch (IOException e) {
       jobControl.logJobException(e);

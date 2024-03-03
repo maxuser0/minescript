@@ -5,10 +5,15 @@ package net.minescript.common;
 
 import static net.minescript.common.CommandSyntax.quoteCommand;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSyntaxException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,12 +22,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
-import java.util.regex.Pattern;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public class Job implements JobControl {
   private static final Logger LOGGER = LogManager.getLogger();
+  private static final Gson GSON = new GsonBuilder().serializeNulls().create();
 
   public final int jobId;
   public final ResourceTracker<BlockPack> blockpacks;
@@ -30,7 +35,7 @@ public class Job implements JobControl {
 
   private final ScriptConfig.BoundCommand command;
   private final Task task;
-  private final Pattern stderrChatIgnorePattern;
+  private final Config config;
   private final SystemMessageQueue systemMessageQueue;
   private Thread thread;
   private volatile JobState state = JobState.NOT_STARTED;
@@ -58,13 +63,13 @@ public class Job implements JobControl {
       int jobId,
       ScriptConfig.BoundCommand command,
       Task task,
-      Pattern stderrChatIgnorePattern,
+      Config config,
       SystemMessageQueue systemMessageQueue,
       Consumer<Integer> doneCallback) {
     this.jobId = jobId;
     this.command = command;
     this.task = task;
-    this.stderrChatIgnorePattern = stderrChatIgnorePattern;
+    this.config = config;
     this.systemMessageQueue = systemMessageQueue;
     this.doneCallback = doneCallback;
     blockpacks = new ResourceTracker<>(BlockPack.class, jobId);
@@ -138,7 +143,7 @@ public class Job implements JobControl {
   public void processStdout(String text) {
     // Stdout lines with FUNCTION_PREFIX are handled as function calls regardless of redirection.
     if (text.startsWith(FUNCTION_PREFIX)) {
-      jobMessageQueue.add(Message.createFunctionCall(text.substring(FUNCTION_PREFIX.length())));
+      processFunctionCall(text.substring(FUNCTION_PREFIX.length()));
       return;
     }
 
@@ -164,9 +169,45 @@ public class Job implements JobControl {
     }
   }
 
+  private void processFunctionCall(String functionCallLine) {
+    // Function call messages have values formatted as:
+    // "{funcCallId} {functionName} {argsString}"
+    //
+    // argsString may have spaces, e.g. "123 my_func [4, 5, 6]"
+
+    String[] functionCall = functionCallLine.split("\\s+", 3);
+    long funcCallId = Long.valueOf(functionCall[0]);
+    String functionName = functionCall[1];
+    String argsString = functionCall[2];
+
+    final List<?> args;
+    try {
+      args = GSON.fromJson(argsString, ArrayList.class);
+    } catch (JsonSyntaxException e) {
+      String exceptionMessage =
+          String.format(
+              "Syntax error in script function args to `%s`: `%s`. This is likely"
+                  + " caused by unsynchronized output printed to stdout elsewhere"
+                  + " in this script. If the error persists, try replacing those"
+                  + " raw print() calls with minescript.echo() or printing to"
+                  + " stderr instead.",
+              functionName, functionCallLine);
+      raiseException(
+          funcCallId, ExceptionInfo.fromException(new IllegalArgumentException(exceptionMessage)));
+      return;
+    }
+
+    if (config.experimentalFastFunctions().contains(functionName)) {
+      Minescript.processScriptFunction(this, functionName, funcCallId, argsString, args);
+      return;
+    }
+
+    jobMessageQueue.add(Message.createFunctionCall(funcCallId, functionName, argsString, args));
+  }
+
   @Override
   public void processStderr(String text) {
-    if (stderrChatIgnorePattern.matcher(text).find()) {
+    if (config.stderrChatIgnorePattern().matcher(text).find()) {
       return;
     }
 

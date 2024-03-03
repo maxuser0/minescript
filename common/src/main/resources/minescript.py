@@ -86,9 +86,11 @@ def echo(*messages):
 
   if len(messages) == 1 and type(messages[0]) in (dict, list):
     # Interpret as JSON-formatted text.
-    await_script_function("echo_json_text", (json.dumps(messages[0]),))
+    minescript_runtime.call_noreturn_function(
+        "echo_json_text", (json.dumps(messages[0]),))
   else:
-    await_script_function("echo_plain_text", (" ".join([str(m) for m in messages]),))
+    minescript_runtime.call_noreturn_function(
+        "echo_plain_text", (" ".join([str(m) for m in messages]),))
 
 
 def chat(*messages):

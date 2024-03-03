@@ -15,8 +15,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -47,6 +49,9 @@ public class Config {
           "stderr_chat_ignore_pattern",
           "minescript_on_chat_received_event",
           "secondary_enter_key_code",
+          "experimental_fast_functions",
+          "interpolate_entity_positions",
+          "subprocess_trailing_read_timeout_millis",
           "autorun[");
 
   private static final ImmutableList<String> CONFIG_VARIABLE_LIST =
@@ -71,6 +76,14 @@ public class Config {
 
   // Default secondary `enter` key code to value of KEY_KP_ENTER from GLFW.
   private int secondaryEnterKeyCode = 335;
+
+  private Set<String> experimentalFastFunctions = new HashSet<>();
+
+  // If true, interpolate entity positions based on time since start of most recent tick.
+  private boolean interpolateEntityPositions = false;
+
+  // Timeout in milliseconds to wait for reading the output of a subprocess that's exited.
+  private int subprocessTrailingReadTimeoutMillis = 500;
 
   // Map from world name (or "*" for all) to a list of Minescript/Minecraft commands.
   private Map<String, List<Message>> autorunCommands = new ConcurrentHashMap<>();
@@ -195,6 +208,18 @@ public class Config {
     return secondaryEnterKeyCode;
   }
 
+  public Set<String> experimentalFastFunctions() {
+    return experimentalFastFunctions;
+  }
+
+  public boolean interpolateEntityPositions() {
+    return interpolateEntityPositions;
+  }
+
+  public int subprocessTrailingReadTimeoutMillis() {
+    return subprocessTrailingReadTimeoutMillis;
+  }
+
   public void setDebugOutptut(boolean enable) {
     debugOutput = enable;
   }
@@ -236,6 +261,11 @@ public class Config {
     consumer.accept(
         "minescript_on_chat_received_event", getValue("minescript_on_chat_received_event"));
     consumer.accept("secondary_enter_key_code", getValue("secondary_enter_key_code"));
+    consumer.accept("experimental_fast_functions", getValue("experimental_fast_functions"));
+    consumer.accept("interpolate_entity_positions", getValue("interpolate_entity_positions"));
+    consumer.accept(
+        "subprocess_trailing_read_timeout_millis",
+        getValue("subprocess_trailing_read_timeout_millis"));
 
     for (var entry : autorunCommands.entrySet()) {
       var worldName = entry.getKey();
@@ -285,6 +315,15 @@ public class Config {
 
       case "secondary_enter_key_code":
         return String.valueOf(secondaryEnterKeyCode);
+
+      case "experimental_fast_functions":
+        return String.join(", ", experimentalFastFunctions.stream().collect(Collectors.toList()));
+
+      case "interpolate_entity_positions":
+        return String.valueOf(interpolateEntityPositions);
+
+      case "subprocess_trailing_read_timeout_millis":
+        return String.valueOf(subprocessTrailingReadTimeoutMillis);
 
       default:
         {
@@ -441,6 +480,42 @@ public class Config {
           reportInfo(out, "Setting secondary_enter_key_code to {}", secondaryEnterKeyCode);
         } catch (NumberFormatException e) {
           reportError(out, "Unable to parse secondary_enter_key_code as integer: {}", value);
+        }
+        break;
+
+      case "experimental_fast_functions":
+        experimentalFastFunctions =
+            new HashSet<String>(
+                Arrays.asList(value.split(",")).stream()
+                    .map(String::trim)
+                    .collect(Collectors.toList()));
+        reportInfo(
+            out,
+            "Setting experimental_fast_functions to {}",
+            getValue("experimental_fast_functions"));
+        break;
+
+      case "interpolate_entity_positions":
+        {
+          boolean enable = Boolean.valueOf(value);
+          interpolateEntityPositions = enable;
+          reportInfo(
+              out,
+              "interpolate_entity_positions {}.",
+              enable ? "enabled" : "disabled");
+        }
+        break;
+
+      case "subprocess_trailing_read_timeout_millis":
+        try {
+          subprocessTrailingReadTimeoutMillis = Integer.valueOf(value);
+          reportInfo(
+              out,
+              "Setting subprocess_trailing_read_timeout_millis to {}",
+              subprocessTrailingReadTimeoutMillis);
+        } catch (NumberFormatException e) {
+          reportError(
+              out, "Unable to parse subprocess_trailing_read_timeout_millis as integer: {}", value);
         }
         break;
 
