@@ -121,17 +121,22 @@ public class EntityExporter {
     double x = entity.getX();
     double y = entity.getY();
     double z = entity.getZ();
-    if (positionInterpolation > 0.0001) {
-      x += v.x * positionInterpolation;
-      y += v.y * positionInterpolation;
-      z += v.z * positionInterpolation;
-    }
 
     var position = new JsonArray();
     position.add(x);
     position.add(y);
     position.add(z);
     jsonEntity.add("position", position);
+
+    final double epsilon = 0.0001;
+    if (positionInterpolation > epsilon
+        && (Math.abs(v.x) > epsilon || Math.abs(v.y) > epsilon || Math.abs(v.z) > epsilon)) {
+      var interpolatedPosition = new JsonArray();
+      interpolatedPosition.add(x + v.x * positionInterpolation);
+      interpolatedPosition.add(y + v.y * positionInterpolation);
+      interpolatedPosition.add(z + v.z * positionInterpolation);
+      jsonEntity.add("interpolated_position", interpolatedPosition);
+    }
 
     jsonEntity.addProperty("yaw", entity.getYRot());
     jsonEntity.addProperty("pitch", entity.getXRot());

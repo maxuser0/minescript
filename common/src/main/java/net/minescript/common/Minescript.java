@@ -3177,14 +3177,10 @@ public class Minescript {
   private static volatile long lastTickStartTime = 0;
 
   private static double entityPositionInterpolation() {
-    if (config.interpolateEntityPositions()) {
-      var minecraft = Minecraft.getInstance();
-      double millisPerTick = minecraft.level.tickRateManager().millisecondsPerTick();
-      long now = System.currentTimeMillis();
-      return Math.min(1., (now - lastTickStartTime) / millisPerTick);
-    } else {
-      return 0;
-    }
+    var minecraft = Minecraft.getInstance();
+    double millisPerTick = minecraft.level.tickRateManager().millisecondsPerTick();
+    long now = System.currentTimeMillis();
+    return Math.min(1., (now - lastTickStartTime) / millisPerTick);
   }
 
   public static void onClientWorldTick() {

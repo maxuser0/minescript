@@ -50,7 +50,6 @@ public class Config {
           "minescript_on_chat_received_event",
           "secondary_enter_key_code",
           "experimental_fast_functions",
-          "interpolate_entity_positions",
           "subprocess_trailing_read_timeout_millis",
           "autorun[");
 
@@ -78,9 +77,6 @@ public class Config {
   private int secondaryEnterKeyCode = 335;
 
   private Set<String> experimentalFastFunctions = new HashSet<>();
-
-  // If true, interpolate entity positions based on time since start of most recent tick.
-  private boolean interpolateEntityPositions = false;
 
   // Timeout in milliseconds to wait for reading the output of a subprocess that's exited.
   private int subprocessTrailingReadTimeoutMillis = 500;
@@ -212,10 +208,6 @@ public class Config {
     return experimentalFastFunctions;
   }
 
-  public boolean interpolateEntityPositions() {
-    return interpolateEntityPositions;
-  }
-
   public int subprocessTrailingReadTimeoutMillis() {
     return subprocessTrailingReadTimeoutMillis;
   }
@@ -262,7 +254,6 @@ public class Config {
         "minescript_on_chat_received_event", getValue("minescript_on_chat_received_event"));
     consumer.accept("secondary_enter_key_code", getValue("secondary_enter_key_code"));
     consumer.accept("experimental_fast_functions", getValue("experimental_fast_functions"));
-    consumer.accept("interpolate_entity_positions", getValue("interpolate_entity_positions"));
     consumer.accept(
         "subprocess_trailing_read_timeout_millis",
         getValue("subprocess_trailing_read_timeout_millis"));
@@ -318,9 +309,6 @@ public class Config {
 
       case "experimental_fast_functions":
         return String.join(", ", experimentalFastFunctions.stream().collect(Collectors.toList()));
-
-      case "interpolate_entity_positions":
-        return String.valueOf(interpolateEntityPositions);
 
       case "subprocess_trailing_read_timeout_millis":
         return String.valueOf(subprocessTrailingReadTimeoutMillis);
@@ -493,17 +481,6 @@ public class Config {
             out,
             "Setting experimental_fast_functions to {}",
             getValue("experimental_fast_functions"));
-        break;
-
-      case "interpolate_entity_positions":
-        {
-          boolean enable = Boolean.valueOf(value);
-          interpolateEntityPositions = enable;
-          reportInfo(
-              out,
-              "interpolate_entity_positions {}.",
-              enable ? "enabled" : "disabled");
-        }
         break;
 
       case "subprocess_trailing_read_timeout_millis":
