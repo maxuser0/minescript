@@ -195,11 +195,11 @@ public class Minescript {
     }
   }
 
-  private static void checkLeakedOperations(
+  private static void cancelOrphanedOperations(
       Map<JobOperationId, ? extends Job.Operation> operations) {
     if (!operations.isEmpty()) {
-      LOGGER.warn(
-          "Cancelling leaked operations when exiting world: {}",
+      LOGGER.info(
+          "Cancelling orphaned operations when exiting world: {}",
           operations.entrySet().stream()
               .map(e -> String.format("%s %s", e.getValue().name(), e.getKey()))
               .collect(Collectors.toList()));
@@ -219,11 +219,11 @@ public class Minescript {
     // Job operations should have been cleaned up when killing jobs, but the jobs killed above might
     // still be in the process of shutting down, or operations may have been leaked accidentally.
     // Clear any leaked operations here.
-    checkLeakedOperations(keyEventListeners);
-    checkLeakedOperations(mouseEventListeners);
-    checkLeakedOperations(clientChatReceivedEventListeners);
-    checkLeakedOperations(chunkLoadEventListeners);
-    checkLeakedOperations(chatInterceptors);
+    cancelOrphanedOperations(keyEventListeners);
+    cancelOrphanedOperations(mouseEventListeners);
+    cancelOrphanedOperations(clientChatReceivedEventListeners);
+    cancelOrphanedOperations(chunkLoadEventListeners);
+    cancelOrphanedOperations(chatInterceptors);
 
     customNickname = null;
   }
@@ -659,6 +659,9 @@ public class Minescript {
 
     @Override
     public synchronized void cancel() {
+      if (config.debugOutput()) {
+        LOGGER.info("Cancelling EventHandler for job {} func {}", jobId(), funcCallId);
+      }
       state = State.CANCELLED;
       funcCallId = OptionalLong.empty();
       doneCallback.run();
@@ -1676,11 +1679,13 @@ public class Minescript {
       var entry = iter.next();
       var listener = entry.getValue();
       if (listener.isActive()) {
-        var jsonText = new JsonPrimitive(text);
+        var json = new JsonObject();
+        json.addProperty("message", text);
+        json.addProperty("time", System.currentTimeMillis() / 1000.);
         if (config.debugOutput()) {
-          LOGGER.info("Forwarding chat message to listener {}: {}", entry.getKey(), jsonText);
+          LOGGER.info("Forwarding chat message to listener {}: {}", entry.getKey(), json);
         }
-        listener.respond(jsonText, false);
+        listener.respond(json, false);
       }
     }
 
@@ -1739,7 +1744,10 @@ public class Minescript {
   private static boolean applyChatInterceptors(String message) {
     for (var interceptor : chatInterceptors.values()) {
       if (interceptor.applies(message)) {
-        interceptor.respond(new JsonPrimitive(message), false);
+        var json = new JsonObject();
+        json.addProperty("message", message);
+        json.addProperty("time", System.currentTimeMillis() / 1000.);
+        interceptor.respond(json, false);
         return true;
       }
     }
@@ -1837,7 +1845,7 @@ public class Minescript {
       new ConcurrentHashMap<>();
   private static Map<JobOperationId, EventHandler> chatInterceptors = new ConcurrentHashMap<>();
 
-  public record JobOperationId(int jobId, long funcCallId) {}
+  public record JobOperationId(int jobId, long opId) {}
 
   private static Map<JobOperationId, ChunkLoadEventListener> chunkLoadEventListeners =
       new ConcurrentHashMap<JobOperationId, ChunkLoadEventListener>();
@@ -2154,7 +2162,7 @@ public class Minescript {
             throw new IllegalStateException(
                 "Listener not found with requested ID: " + jobOpId.toString());
           }
-          job.addOperation(funcCallId, listener);
+          job.addOperation(listenerId, listener);
           listener.start(funcCallId);
           return Optional.empty();
         }
@@ -2184,7 +2192,7 @@ public class Minescript {
             throw new IllegalStateException(
                 "Listener not found with requested ID: " + jobOpId.toString());
           }
-          job.addOperation(funcCallId, listener);
+          job.addOperation(listenerId, listener);
           listener.start(funcCallId);
           return Optional.empty();
         }
@@ -2215,7 +2223,7 @@ public class Minescript {
             throw new IllegalStateException(
                 "Listener not found with requested ID: " + jobOpId.toString());
           }
-          job.addOperation(funcCallId, listener);
+          job.addOperation(listenerId, listener);
           listener.start(funcCallId);
           return Optional.empty();
         }
@@ -2259,7 +2267,7 @@ public class Minescript {
             throw new IllegalStateException(
                 "Chat interceptor not found with requested ID: " + jobOpId.toString());
           }
-          job.addOperation(funcCallId, interceptor);
+          job.addOperation(interceptorId, interceptor);
           interceptor.start(funcCallId);
           return Optional.empty();
         }
@@ -3199,15 +3207,12 @@ public class Minescript {
       if (player != null && (!systemMessageQueue.isEmpty() || !jobs.getMap().isEmpty())) {
         boolean hasMessage;
         int iterations = 0;
-        int debugNumMessages = 0;
-        long startTimeNanos = System.nanoTime();
         do {
           hasMessage = false;
           ++iterations;
           Message sysMessage = systemMessageQueue.poll();
           if (sysMessage != null) {
             hasMessage = true;
-            ++debugNumMessages;
             processMessage(sysMessage);
           }
           for (var job : jobs.getMap().values()) {
@@ -3216,7 +3221,6 @@ public class Minescript {
                 Message message = job.messageQueue().poll();
                 if (message != null) {
                   hasMessage = true;
-                  ++debugNumMessages;
                   if (message.type() == Message.Type.FUNCTION_CALL) {
                     String functionName = message.value();
                     var funcCallData = (Message.FunctionCallData) message.data();
@@ -3242,15 +3246,6 @@ public class Minescript {
             }
           }
         } while (hasMessage && iterations < config.commandsPerCycle());
-
-        if (config.debugOutput()) {
-          long endTimeNanos = System.nanoTime();
-          LOGGER.info(
-              "Message loop processed {} messages across {} iterations in {} usec",
-              debugNumMessages,
-              iterations,
-              (endTimeNanos - startTimeNanos) / 1000);
-        }
       }
     }
   }

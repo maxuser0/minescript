@@ -42,7 +42,9 @@ public class Job implements JobControl {
   private Consumer<Integer> doneCallback;
   private Queue<Message> jobMessageQueue = new ConcurrentLinkedQueue<Message>();
   private Lock lock = new ReentrantLock(true); // true indicates a fair lock to avoid starvation
-  private Map<Long, Operation> operations = new ConcurrentHashMap<>(); // key is func call id
+
+  // Key is unique within this job, typically a func call ID.
+  private Map<Long, Operation> operations = new ConcurrentHashMap<>();
 
   // Special prefix for commands and function calls emitted from stdout of scripts, for example:
   // - script function call: "?mnsc:123 my_func [4, 5, 6]"
@@ -80,27 +82,35 @@ public class Job implements JobControl {
     return command;
   }
 
-  public void addOperation(long funcCallId, Operation op) {
-    if (operations.put(funcCallId, op) != null) {
-      throw new IllegalStateException("Job added operation with duplicate ID: " + funcCallId);
+  public void addOperation(long opId, Operation op) {
+    if (operations.put(opId, op) != null) {
+      throw new IllegalStateException("Job added operation with duplicate ID: " + opId);
     }
   }
 
-  public boolean removeOperation(long funcCallId) {
-    return operations.remove(funcCallId) == null;
+  public boolean removeOperation(long opId) {
+    return operations.remove(opId) == null;
   }
 
   /**
-   * Attempts to cancel an operation associated with funcCallId, returning true if found.
+   * Attempts to cancel an operation associated with opId, returning true if found.
    *
    * <p>If operation is found, it is cancelled and removed from this job.
    */
-  public boolean cancelOperation(long funcCallId) {
-    var op = operations.remove(funcCallId);
+  public boolean cancelOperation(long opId) {
+    if (config.debugOutput()) {
+      LOGGER.info(
+          "Cancelling operation {} among {} in job {}", opId, operations.keySet(), jobId);
+    }
+
+    var op = operations.remove(opId);
     if (op != null) {
       op.cancel();
       return true;
     }
+
+    LOGGER.warn(
+        "Failed to cancel operation {} among {} in job {}", opId, operations.keySet(), jobId);
     return false;
   }
 

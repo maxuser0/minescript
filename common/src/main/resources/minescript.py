@@ -867,149 +867,6 @@ def await_loaded_region(x1: int, z1: int, x2: int, z2: int, timeout: float = Non
     return False
 
 
-class EventRegistrationHandler:
-  """Base class for event registration handlers. (__internal__)
-
-  Since: v4.0
-  """
-
-  def __init__(self, register, registration_func, unregistration_func):
-    """Creates an event registration handler.
-
-    Args:
-      register: if `True`, register the handler upon construction
-    """
-    self.queue = queue.Queue()
-    self.handler_id = None
-    self.registration_func = registration_func
-    self.unregistration_func = unregistration_func
-    if register:
-      self.register()
-
-  def register(self) -> bool:
-    if self.handler_id is not None:
-      return False
-    handler_id = self.registration_func(self.queue.put, self.queue.put)
-    if type(handler_id) is not int:
-      raise ValueError(f"Expected registration function to return int but got `{self.handler_id}`")
-    self.handler_id = handler_id
-    return True
-
-  def unregister(self) -> bool:
-    if self.handler_id is None:
-      return False
-    self.unregistration_func(self.handler_id)
-    self.handler_id = None
-    return True
-
-  def get(self, block: bool = True, timeout: float = None) -> Any:
-    """Gets the next event in the queue.
-
-    Args:
-      block: if `True`, block until an event fires
-      timeout: timeout in seconds to wait for an event if `block` is `True`
-
-    Returns:
-      subclass-dependent event
-
-    Raises:
-      `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
-      queue is empty.
-    """
-    value = self.queue.get(block, timeout)
-    if isinstance(value, Exception):
-      raise value
-    return value
-
-  def __enter__(self):
-    self.register()
-    return self
-
-  def __exit__(self, exc_type, exc_val, exc_tb):
-    self.unregister()
-
-  def __del__(self):
-    self.unregister()
-
-
-@dataclass
-class KeyEvent:
-  key: int
-  scan_code: int
-  action: int
-  modifiers: int
-  time: float
-  screen: str
-
-class KeyEventListener(EventRegistrationHandler):
-  """Listener for keyboard events.
-
-  Only one `KeyEventListener` can be instantiated at a time within a job. For a
-  list of key codes, see: https://www.glfw.org/docs/3.4/group__keys.html
-
-  Inherits `register()` and `unregister()` methods from the base class,
-  `EventRegistrationHandler`. These methods both return `bool` indicating
-  whether the operation succeeded. Calling `register()` on a listener that's
-  already registered returns `False`, and similarly for calling `unregister()`
-  on a listener that's already unregistered.
-
-  Implements context management so that it can be used with a `with` expression
-  to automatically unregister the listener at the end of the block, e.g.
-
-  ```
-  events = []
-  with KeyEventListener() as listener:
-    # Listen for next 3 key events:
-    for i in range(3):
-      events.append(listener.get())
-
-  # listener no longer registered here...
-  ```
-
-  Update in v4.0:
-    Addition of `register()`, `unregister()`, and context management via `with` expression.
-
-  Since: v3.2
-  """
-
-  def __init__(self, register=True):
-    """Creates a `KeyEventListener` for listening to keyboard events.
-
-    Args:
-      register: if `True`, register the listener upon construction
-
-    Update in v4.0:
-      Added optional arg `register`.
-    """
-    super().__init__(register, register_key_event_listener, unregister_key_event_listener)
-
-  def get(self, block: bool = True, timeout: float = None) -> KeyEvent:
-    """Gets the next key event in the queue.
-
-    Args:
-      block: if `True`, block until an event fires
-      timeout: timeout in seconds to wait for an event if `block` is `True`
-
-    Returns:
-      `KeyEvent`, where `action` is 0 for key up, 1 for key down, and 2 for key repeat.
-
-    Raises:
-      `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
-      queue is empty.
-    """
-    event = super().get(block, timeout)
-
-    if options.legacy_dict_return_values:
-      # Restore legacy names and values from before v4.0.
-      event["scanCode"] = event["scan_code"]
-      event["timeMillis"] = int(event["time"] * 1000)
-      del event["scan_code"]
-      del event["time"]
-      return event
-
-    return KeyEvent(**event)
-
-
 def register_key_event_listener(
     listener: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
   """Registers a listener for receiving keyboard events. One listener allowed per job.
@@ -1034,92 +891,6 @@ def register_key_event_listener(
   return listener_id
 
 
-def unregister_key_event_listener(listener_id: int):
-  """Unregisters a key event listener.
-
-  For a more user-friendly API, use `KeyEventListener` instead. (__internal__)
-
-  Args:
-    listener_id: ID of a listener returned from `register_key_event_listener(...)`.
-
-  Update in v4.0:
-    Require `listener_id` arg. Upon failure, raises an exception rather than returning false.
-
-  Since: v3.2
-  """
-  await_script_function("unregister_event_handler", (listener_id,))
-
-
-@dataclass
-class MouseEvent:
-  button: int
-  action: int
-  modifiers: int
-  time: float
-  x: float
-  y: float
-  screen: str = None
-
-class MouseEventListener(EventRegistrationHandler):
-  """Listener for mouse click events.
-
-  Only one `MouseEventListener` can be instantiated at a time within a job.
-
-  Inherits `register()` and `unregister()` methods from the base class,
-  `EventRegistrationHandler`. These methods both return `bool` indicating
-  whether the operation succeeded. Calling `register()` on a listener that's
-  already registered returns `False`, and similarly for calling `unregister()`
-  on a listener that's already unregistered.
-
-  Implements context management so that it can be used with a `with` expression
-  to automatically unregister the listener at the end of the block, e.g.
-
-  ```
-  events = []
-  with MouseEventListener() as listener:
-    # Listen for next 3 mouse events:
-    for i in range(3):
-      events.append(listener.get())
-
-  # listener no longer registered here...
-  ```
-
-  Since: v4.0
-  """
-
-  def __init__(self, register=True):
-    """Creates a `MouseEventListener` for listening to mouseboard events.
-
-    Args:
-      register: if `True`, register the listener upon construction
-    """
-    super().__init__(register, register_mouse_event_listener, unregister_mouse_event_listener)
-
-  def get(self, block: bool = True, timeout: float = None) -> MouseEvent:
-    """Gets the next mouse event in the queue.
-
-    Args:
-      block: if `True`, block until an event fires
-      timeout: timeout in seconds to wait for an event if `block` is `True`
-
-    Returns:
-      `MouseEvent`, where `action` is 0 for mouse up and 1 for mouse down.
-
-    Raises:
-      `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
-      queue is empty.
-    """
-    event = super().get(block, timeout)
-
-    if options.legacy_dict_return_values:
-      # Restore legacy name and value from before v4.0.
-      event["timeMillis"] = int(event["time"] * 1000)
-      del event["time"]
-      return event
-
-    return MouseEvent(**event)
-
-
 def register_mouse_event_listener(
     listener: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
   """Registers a listener for receiving mouse events. One listener allowed per job.
@@ -1139,80 +910,6 @@ def register_mouse_event_listener(
   send_script_function_request(
       "start_mouse_event_listener", (listener_id,), listener, exception_handler)
   return listener_id
-
-
-def unregister_mouse_event_listener(listener_id: int):
-  """Unregisters a mouse event listener, if any, for the currently running job.
-
-  For a more user-friendly API, use `MouseEventListener` instead. (__internal__)
-
-  Args:
-    listener_id: ID of a listener returned from `register_mouse_event_listener(...)`.
-
-  Since: v4.0
-  """
-  await_script_function("unregister_event_handler", (listener_id,))
-
-
-class ChatEventListener(EventRegistrationHandler):
-  """Listener for chat message events.
-
-  Only one `ChatEventListener` can be instantiated at a time within a job.
-
-  Listener receives both incoming and outgoing chat messages.
-
-  Inherits `register()` and `unregister()` methods from the base class,
-  `EventRegistrationHandler`. These methods both return `bool` indicating
-  whether the operation succeeded. Calling `register()` on a listener that's
-  already registered returns `False`, and similarly for calling `unregister()`
-  on a listener that's already unregistered.
-
-  Implements context management so that it can be used with a `with` expression
-  to automatically unregister the listener at the end of the block, e.g.
-
-  ```
-  messages = []
-  with ChatEventListener() as listener:
-    # Read next 3 messages from chat:
-    for i in range(3):
-      messages.append(listener.get())
-
-  # listener no longer registered here...
-  ```
-
-  Update in v4.0:
-    Addition of `register()`, `unregister()`, and context management via `with` expression.
-
-  Since: v3.2
-  """
-
-  def __init__(self, register=True):
-    """Creates a `ChatEventListener` to listen for chat messages.
-
-    Args:
-      register: if `True`, register the listener upon construction
-
-    Update in v4.0:
-      Added optional arg `register`.
-    """
-    super().__init__(
-        register, register_chat_message_listener, unregister_chat_message_listener)
-
-  def get(self, block: bool = True, timeout: float = None) -> str:
-    """Gets the next chat event in the queue.
-
-    Args:
-      block: if `True`, block until an event fires
-      timeout: timeout in seconds to wait for an event if `block` is `True`
-
-    Returns:
-      message from chat
-
-    Raises:
-      `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
-      queue is empty.
-    """
-    return super().get(block, timeout)
 
 
 def register_chat_message_listener(
@@ -1242,86 +939,6 @@ def register_chat_message_listener(
   send_script_function_request(
       "start_chat_message_listener", (listener_id,), listener, exception_handler)
   return listener_id
-
-
-def unregister_chat_message_listener(listener_id: int):
-  """Unregisters a chat message listener, if any, for the currently running job.
-
-  For a more user-friendly API, use `ChatEventListener` instead.  (__internal__)
-
-  Args:
-    listener_id: ID of a listener returned from `register_chat_message_listener(...)`.
-
-  Update in v4.0:
-    Require `listener_id` arg. Upon failure, raises an exception rather than returning false.
-
-  Since: v2.0
-  """
-  await_script_function("unregister_event_handler", (listener_id,))
-
-
-class ChatMessageInterceptor(EventRegistrationHandler):
-  """Interceptor of outgoing chat messages.
-
-  Only one `ChatMessageInterceptor` can be registered per Minecraft instance.
-
-  Intercepts outgoing chat messages and returns those intercepted messages from get().
-
-  Inherits `register()` and `unregister()` methods from the base class,
-  `EventRegistrationHandler`. These methods both return `bool` indicating
-  whether the operation succeeded. Calling `register()` on an interceptor
-  that's already registered returns `False`, and similarly for calling
-  `unregister()` on an interceptor that's already unregistered.
-
-  Implements context management so that it can be used with a `with` expression
-  to automatically unregister the interceptor at the end of the block, e.g.
-
-  ```
-  messages = []
-  with ChatMessageInterceptor() as interceptor:
-    # Intercept next 3 messages from chat:
-    for i in range(3):
-      messages.append(interceptor.get())
-
-  # interceptor no longer registered here...
-  ```
-
-  Since: v4.0
-  """
-
-  def __init__(self, *, prefix: str = None, pattern: str = None, register: bool = True):
-    """Creates a `ChatMessageInterceptor` to intercept chat messages.
-
-    `prefix` or `pattern` can be specified, but not both. If neither `prefix`
-    nor `pattern` is specified, all chat messages are intercepted.
-
-    Args:
-      prefix: if specified, intercept only the messages starting with this literal prefix
-      pattern: if specified, intercept only the messages matching this regular expression
-      register: if `True`, register the interceptor upon construction
-    """
-    super().__init__(
-        register,
-        lambda interceptor, exception_handler: \
-            register_chat_message_interceptor(
-                interceptor, exception_handler, prefix=prefix, pattern=pattern),
-        unregister_chat_message_interceptor)
-
-  def get(self, block: bool = True, timeout: float = None) -> str:
-    """Gets the next intercepted chat message in the queue.
-
-    Args:
-      block: if `True`, block until an event fires
-      timeout: timeout in seconds to wait for an event if `block` is `True`
-
-    Returns:
-      outgoing message intercepted from chat
-
-    Raises:
-      `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
-      queue is empty.
-    """
-    return super().get(block, timeout)
 
 
 def register_chat_message_interceptor(
@@ -1367,20 +984,193 @@ def register_chat_message_interceptor(
   return interceptor_id
 
 
-def unregister_chat_message_interceptor(interceptor_id: int):
-  """Unregisters the chat message interceptor, if one is currently registered.
-
-  For a more user-friendly API, use `ChatMessageInterceptor` instead.  (__internal__)
+def unregister_event_handler(handler_id: int):
+  """Unregisters an event handler, if any, for the currently running job. (__internal__)
 
   Args:
-    interceptor_id: ID of a listener returned from `register_chat_message_interceptor(...)`.
+    handler_id: ID of an event handler returned from a `register_...()` function.
+
+  Since: v4.0
+  """
+  await_script_function("unregister_event_handler", (handler_id,))
+
+
+@dataclass
+class _EventType:
+  KEY: str = "key"
+  MOUSE: str = "mouse"
+  INCOMING_CHAT: str = "incoming_chat"
+  OUTGOING_CHAT_INTERCEPT: str = "outgoing_chat_intercept"
+
+EventType = _EventType()
+
+@dataclass
+class KeyEvent:
+  """Key event data.
+
+  For a list of key codes, see: https://www.glfw.org/docs/3.4/group__keys.html
+  `action` is 0 for key up, 1 for key down, and 2 for key repeat.
+  """
+  type: str
+  time: float
+  key: int
+  scan_code: int
+  action: int
+  modifiers: int
+  screen: str
+
+@dataclass
+class MouseEvent:
+  type: str
+  time: float
+  button: int
+  action: int
+  modifiers: int
+  x: float
+  y: float
+  screen: str = None
+
+@dataclass
+class ChatEvent:
+  type: str
+  time: float
+  message: str
+
+_EVENT_TYPE_DICT = {
+  EventType.KEY: KeyEvent,
+  EventType.MOUSE: MouseEvent,
+  EventType.INCOMING_CHAT: ChatEvent,
+  EventType.OUTGOING_CHAT_INTERCEPT: ChatEvent,
+}
+
+class EventQueue:
+  """Queue for managing events.
+
+  Implements context management so that it can be used with a `with` expression
+  to automatically unregister event listeners at the end of the block, e.g.
+
+  ```
+  with EventQueue() as event_queue:
+    echo("Capturing key events...")
+    event_queue.register_key_event_listener()
+    while True:
+      event = event_queue.get()
+      if event.type == EventType.KEY:
+        # Key code 93 is the `]` key.
+        if event.key == 93:
+          break
+        echo(f"Captured key with code {event.key}.")
+
+  echo("No longer capturing key events.")
+  ```
+
+  Since: v4.0
+  """
+
+  def __init__(self):
+    """Creates an event registration handler."""
+    self.queue = queue.Queue()
+    self.event_handler_ids = []
+
+  def register_key_event_listener(self):
+    self._register(EventType.KEY, register_key_event_listener)
+
+  def register_mouse_event_listener(self):
+    self._register(EventType.MOUSE, register_mouse_event_listener)
+
+  def register_incoming_chat_listener(self):
+    self._register(EventType.INCOMING_CHAT, register_chat_message_listener)
+
+  def register_outgoing_chat_interceptor(self, *, prefix: str = None, pattern: str = None):
+    self._register(
+        EventType.OUTGOING_CHAT_INTERCEPT,
+        lambda interceptor, exception_handler: \
+            register_chat_message_interceptor(
+                interceptor, exception_handler, prefix=prefix, pattern=pattern))
+
+  def _register(self, event_type: str, registration_func):
+    def put_typed_event(event):
+      try:
+        event["type"] = event_type
+        self.queue.put(event)
+      except Exception as e:
+        print(f"Exception in event handler for `{event_type}`: {e}")
+
+    handler_id = registration_func(put_typed_event, self.queue.put)
+    if type(handler_id) is not int:
+      raise ValueError(f"Expected registration function to return int but got `{self.handler_id}`")
+    self.event_handler_ids.append(handler_id)
+
+  def unregister_all(self):
+    handler_ids = self.event_handler_ids
+    self.event_handler_ids = []
+    for handler_id in handler_ids:
+      unregister_event_handler(handler_id)
+
+  def get(self, block: bool = True, timeout: float = None) -> Any:
+    """Gets the next event in the queue.
+
+    Args:
+      block: if `True`, block until an event fires
+      timeout: timeout in seconds to wait for an event if `block` is `True`
+
+    Returns:
+      subclass-dependent event
+
+    Raises:
+      `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
+      queue is empty.
+    """
+    value = self.queue.get(block, timeout)
+    if isinstance(value, Exception):
+      raise value
+    if type(value) is not dict or not "type" in value:
+      raise ValueError(f"Expected event dict with key `type` but got: {value}")
+    return _EVENT_TYPE_DICT[value["type"]](**value)
+
+  def __enter__(self):
+    return self
+
+  def __exit__(self, exc_type, exc_val, exc_tb):
+    self.unregister_all()
+
+  def __del__(self):
+    self.unregister_all()
+
+
+def KeyEventListener():
+  """Deprecated listener for keyboard events. Use `EventQueue.register_key_event_listener` instead.
 
   Update in v4.0:
-    Require `interceptor_id` arg. Upon failure, raises an exception rather than returning false.
+    Deprecated in favor of `EventQueue.register_key_event_listener`.
 
-  Since: v2.1
+  Since: v3.2
   """
-  await_script_function("unregister_event_handler", (interceptor_id,))
+  print(
+      "KeyEventListener is deprecated. Use `EventQueue.register_key_event_listener` instead.",
+      file=sys.stderr)
+  event_queue = EventQueue()
+  event_queue.register_key_event_listener()
+  return event_queue
+
+
+def ChatEventListener():
+  """Deprecated listener for chat message events.
+
+  Use `EventQueue.register_chat_message_listener` instead.
+
+  Update in v4.0:
+    Deprecated in favor of `EventQueue.register_chat_message_listener`.
+
+  Since: v3.2
+  """
+  print(
+      "ChatEventListener is deprecated. "
+      "Use `EventQueue.register_incoming_chat_listener()` instead.",
+      file=sys.stderr)
+  event_queue = EventQueue()
+  event_queue.register_incoming_chat_listener()
+  return event_queue
 
 
 def screen_name() -> str:
