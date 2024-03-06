@@ -2045,6 +2045,37 @@ public class Minescript {
     }
   }
 
+  private static Optional<JsonElement> registerEventHandler(
+      Job job,
+      String functionName,
+      long funcCallId,
+      Map<JobOperationId, EventHandler> handlerMap,
+      Optional<Predicate<Object>> filter) {
+    var jobOpId = new JobOperationId(job.jobId(), funcCallId);
+    if (handlerMap.containsKey(jobOpId)) {
+      throw new IllegalStateException(
+          "Failed to create event handler because handler ID is already registered for job: "
+              + job.jobSummary());
+    }
+    var handler = new EventHandler(job, functionName, () -> handlerMap.remove(jobOpId));
+    filter.ifPresent(handler::setFilter);
+    handlerMap.put(jobOpId, handler);
+    return Optional.of(new JsonPrimitive(funcCallId));
+  }
+
+  private static Optional<JsonElement> startEventHandler(
+      Job job, long funcCallId, Map<JobOperationId, EventHandler> handlerMap, int handlerId) {
+    var jobOpId = new JobOperationId(job.jobId(), handlerId);
+    var handler = handlerMap.get(jobOpId);
+    if (handler == null) {
+      throw new IllegalStateException(
+          "Event handler not found with requested ID: " + jobOpId.toString());
+    }
+    job.addOperation(handlerId, handler);
+    handler.start(funcCallId);
+    return Optional.empty();
+  }
+
   /** Returns a JSON response if a script function is called. */
   private static Optional<JsonElement> runScriptFunction(
       Job job, long funcCallId, String functionName, ScriptFunctionArgList args, String argsString)
@@ -2138,95 +2169,32 @@ public class Minescript {
         }
 
       case "register_key_event_listener":
-        {
-          args.expectSize(0);
-          var jobOpId = new JobOperationId(job.jobId(), funcCallId);
-          if (keyEventListeners.containsKey(jobOpId)) {
-            throw new IllegalStateException(
-                "Failed to create listener because listener ID is already registered for job: "
-                    + job.jobSummary());
-          }
-          var listener =
-              new EventHandler(job, functionName, () -> keyEventListeners.remove(jobOpId));
-          keyEventListeners.put(jobOpId, listener);
-          return Optional.of(new JsonPrimitive(funcCallId));
-        }
+        args.expectSize(0);
+        return registerEventHandler(
+            job, functionName, funcCallId, keyEventListeners, Optional.empty());
 
       case "start_key_event_listener":
-        {
-          args.expectArgs("listener_id");
-          int listenerId = args.getStrictInt(0);
-          var jobOpId = new JobOperationId(job.jobId(), listenerId);
-          var listener = keyEventListeners.get(jobOpId);
-          if (listener == null) {
-            throw new IllegalStateException(
-                "Listener not found with requested ID: " + jobOpId.toString());
-          }
-          job.addOperation(listenerId, listener);
-          listener.start(funcCallId);
-          return Optional.empty();
-        }
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, keyEventListeners, args.getStrictInt(0));
 
       case "register_mouse_event_listener":
-        {
-          args.expectSize(0);
-          var jobOpId = new JobOperationId(job.jobId(), funcCallId);
-          if (mouseEventListeners.containsKey(jobOpId)) {
-            throw new IllegalStateException(
-                "Failed to create listener because listener ID is already registered for job: "
-                    + job.jobSummary());
-          }
-          var listener =
-              new EventHandler(job, functionName, () -> mouseEventListeners.remove(jobOpId));
-          mouseEventListeners.put(jobOpId, listener);
-          return Optional.of(new JsonPrimitive(funcCallId));
-        }
+        args.expectSize(0);
+        return registerEventHandler(
+            job, functionName, funcCallId, mouseEventListeners, Optional.empty());
 
       case "start_mouse_event_listener":
-        {
-          args.expectArgs("listener_id");
-          int listenerId = args.getStrictInt(0);
-          var jobOpId = new JobOperationId(job.jobId(), listenerId);
-          var listener = mouseEventListeners.get(jobOpId);
-          if (listener == null) {
-            throw new IllegalStateException(
-                "Listener not found with requested ID: " + jobOpId.toString());
-          }
-          job.addOperation(listenerId, listener);
-          listener.start(funcCallId);
-          return Optional.empty();
-        }
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, mouseEventListeners, args.getStrictInt(0));
 
       case "register_chat_message_listener":
-        {
-          args.expectSize(0);
-          var jobOpId = new JobOperationId(job.jobId(), funcCallId);
-          if (clientChatReceivedEventListeners.containsKey(jobOpId)) {
-            throw new IllegalStateException(
-                "Failed to create listener because listener ID is already registered for job: "
-                    + job.jobSummary());
-          }
-          var listener =
-              new EventHandler(
-                  job, functionName, () -> clientChatReceivedEventListeners.remove(jobOpId));
-          clientChatReceivedEventListeners.put(jobOpId, listener);
-          return Optional.of(new JsonPrimitive(funcCallId));
-        }
+        args.expectSize(0);
+        return registerEventHandler(
+            job, functionName, funcCallId, clientChatReceivedEventListeners, Optional.empty());
 
       case "start_chat_message_listener":
-        {
-          args.expectArgs("listener_id");
-          int listenerId = args.getStrictInt(0);
-          var jobOpId = new JobOperationId(job.jobId(), listenerId);
-          var listener = clientChatReceivedEventListeners.get(jobOpId);
-          if (listener == null) {
-            throw new IllegalStateException(
-                "Listener not found with requested ID: " + jobOpId.toString());
-          }
-          job.addOperation(listenerId, listener);
-          listener.start(funcCallId);
-          return Optional.empty();
-        }
+        args.expectArgs("handler_id");
+        return startEventHandler(
+            job, funcCallId, clientChatReceivedEventListeners, args.getStrictInt(0));
 
       case "register_chat_message_interceptor":
         {
@@ -2237,40 +2205,20 @@ public class Minescript {
             throw new IllegalArgumentException(
                 "Only one of `prefix` and `pattern` can be specified");
           }
-          var jobOpId = new JobOperationId(job.jobId(), funcCallId);
-          if (chatInterceptors.containsKey(jobOpId)) {
-            throw new IllegalStateException(
-                "Failed to create interceptor because interceptor ID is already registered for job:"
-                    + " "
-                    + job.jobSummary());
-          }
-          var interceptor =
-              new EventHandler(job, functionName, () -> chatInterceptors.remove(jobOpId));
+          Optional<Predicate<Object>> filter = Optional.empty();
           if (prefixArg.isPresent()) {
             String prefix = prefixArg.get();
-            interceptor.setFilter(o -> o instanceof String s && s.startsWith(prefix));
+            filter = Optional.of(o -> o instanceof String s && s.startsWith(prefix));
           } else if (patternArg.isPresent()) {
             Pattern pattern = Pattern.compile(patternArg.get());
-            interceptor.setFilter(o -> o instanceof String s && pattern.matcher(s).matches());
+            filter = Optional.of(o -> o instanceof String s && pattern.matcher(s).matches());
           }
-          chatInterceptors.put(jobOpId, interceptor);
-          return Optional.of(new JsonPrimitive(funcCallId));
+          return registerEventHandler(job, functionName, funcCallId, chatInterceptors, filter);
         }
 
       case "start_chat_message_interceptor":
-        {
-          args.expectArgs("interceptor_id");
-          int interceptorId = args.getStrictInt(0);
-          var jobOpId = new JobOperationId(job.jobId(), interceptorId);
-          var interceptor = chatInterceptors.get(jobOpId);
-          if (interceptor == null) {
-            throw new IllegalStateException(
-                "Chat interceptor not found with requested ID: " + jobOpId.toString());
-          }
-          job.addOperation(interceptorId, interceptor);
-          interceptor.start(funcCallId);
-          return Optional.empty();
-        }
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, chatInterceptors, args.getStrictInt(0));
 
       case "unregister_event_handler":
         {

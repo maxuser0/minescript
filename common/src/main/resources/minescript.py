@@ -868,64 +868,64 @@ def await_loaded_region(x1: int, z1: int, x2: int, z2: int, timeout: float = Non
 
 
 def register_key_event_listener(
-    listener: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
-  """Registers a listener for receiving keyboard events. One listener allowed per job.
+    handler: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
+  """Registers a handler for receiving keyboard events.
 
-  For a more user-friendly API, use `KeyEventListener` instead. (__internal__)
+  For a more user-friendly API, use `EventQueue` instead. (__internal__)
 
   Args:
-    listener: callable that repeatedly accepts a dict representing key events
+    handler: callable that repeatedly accepts a dict representing key events
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
 
   Returns:
-    ID for the new listener. This ID can be passed to `unregister_key_event_listener(...)`.
+    ID for the new handler. This ID can be passed to `unregister_key_event_listener(...)`.
 
   Update in v4.0:
-    Added return value for identifying the newly registered listener.
+    Added return value for identifying the newly registered handler.
 
   Since: v3.2
   """
-  listener_id = await_script_function("register_key_event_listener", ())
+  handler_id = await_script_function("register_key_event_listener", ())
   send_script_function_request(
-      "start_key_event_listener", (listener_id,), listener, exception_handler)
-  return listener_id
+      "start_key_event_listener", (handler_id,), handler, exception_handler)
+  return handler_id
 
 
 def register_mouse_event_listener(
-    listener: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
-  """Registers a listener for receiving mouse events. One listener allowed per job.
+    handler: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
+  """Registers a handler for receiving mouse events.
 
-  For a more user-friendly API, use `MouseEventListener` instead. (__internal__)
+  For a more user-friendly API, use `EventQueue` instead. (__internal__)
 
   Args:
-    listener: callable that repeatedly accepts a dict representing mouse events
+    handler: callable that repeatedly accepts a dict representing mouse events
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
 
   Update in v4.0:
-    Added return value for identifying the newly registered listener.
+    Added return value for identifying the newly registered handler.
 
   Since: v4.0
   """
-  listener_id = await_script_function("register_mouse_event_listener", ())
+  handler_id = await_script_function("register_mouse_event_listener", ())
   send_script_function_request(
-      "start_mouse_event_listener", (listener_id,), listener, exception_handler)
-  return listener_id
+      "start_mouse_event_listener", (handler_id,), handler, exception_handler)
+  return handler_id
 
 
 def register_chat_message_listener(
-    listener: Callable[[str], None], exception_handler: ExceptionHandler = None) -> int:
-  """Registers a listener for receiving chat messages. One listener allowed per job.
+    handler: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
+  """Registers a handler for listening to chat messages.
 
-  Listener receives both incoming and outgoing chat messages.
+  Handler receives both incoming and outgoing chat messages.
 
-  For a more user-friendly API, use `ChatEventListener` instead.  (__internal__)
+  For a more user-friendly API, use `EventQueue` instead.  (__internal__)
 
   Args:
-    listener: callable that repeatedly accepts a string representing chat messages
+    handler: callable that repeatedly accepts a dict representing chat message events
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
 
   Update in v4.0:
-    Added return value for identifying the newly registered listener.
+    Added return value for identifying the newly registered handler.
 
   Update in v3.2:
     Added optional arg `exception_handler`.
@@ -935,36 +935,35 @@ def register_chat_message_listener(
   See also:
     `register_chat_message_interceptor()` for swallowing outgoing chat messages
   """
-  listener_id = await_script_function("register_chat_message_listener", ())
+  handler_id = await_script_function("register_chat_message_listener", ())
   send_script_function_request(
-      "start_chat_message_listener", (listener_id,), listener, exception_handler)
-  return listener_id
+      "start_chat_message_listener", (handler_id,), handler, exception_handler)
+  return handler_id
 
 
 def register_chat_message_interceptor(
-    interceptor: Callable[[str], None], exception_handler: ExceptionHandler = None,
+    handler: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None,
     *, prefix: str = None, pattern: str = None) -> int:
-  """Registers an interceptor for swallowing chat messages.
+  """Registers a handler for swallowing outgoing chat messages matching a prefix or pattern.
 
-  For a more user-friendly API, use `ChatMessageInterceptor` instead.  (__internal__)
+  For a more user-friendly API, use `EventQueue` instead.  (__internal__)
 
-  An interceptor swallows outgoing chat messages, typically for use in
+  The handler swallows outgoing chat messages, typically for use in
   rewriting outgoing chat messages by calling minecraft.chat(str), e.g. to
   decorate or post-process outgoing messages automatically before they're sent
-  to the server.  Only one interceptor is allowed at a time within a Minecraft
-  instance.
+  to the server.
 
   `prefix` or `pattern` can be specified, but not both. If neither `prefix` nor
-  `pattern` is specified, all chat messages are intercepted.
+  `pattern` is specified, all outgoing chat messages are intercepted.
 
   Args:
-    interceptor: callable that repeatedly accepts a string representing chat messages
+    handler: callable that repeatedly accepts chat message events
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
     prefix: if specified, intercept only the messages starting with this literal prefix
     pattern: if specified, intercept only the messages matching this regular expression
 
   Returns:
-    ID for the new interceptor. This ID can be passed to `unregister_chat_message_interceptor(...)`.
+    ID for the new handler. This ID can be passed to `unregister_chat_message_interceptor(...)`.
 
   Update in v4.0:
     Support filtering of intercepted messages via `prefix` and `pattern`.
@@ -975,13 +974,12 @@ def register_chat_message_interceptor(
   See also:
     `register_chat_message_listener()` for non-destructive listening of chat messages
   """
-  interceptor_id = await_script_function(
-      "register_chat_message_interceptor", (prefix, pattern))
+  handler_id = await_script_function("register_chat_message_interceptor", (prefix, pattern))
 
   send_script_function_request(
-      "start_chat_message_interceptor", (interceptor_id,), interceptor, exception_handler)
+      "start_chat_message_interceptor", (handler_id,), handler, exception_handler)
 
-  return interceptor_id
+  return handler_id
 
 
 def unregister_event_handler(handler_id: int):
@@ -999,7 +997,7 @@ def unregister_event_handler(handler_id: int):
 class _EventType:
   KEY: str = "key"
   MOUSE: str = "mouse"
-  INCOMING_CHAT: str = "incoming_chat"
+  CHAT: str = "chat"
   OUTGOING_CHAT_INTERCEPT: str = "outgoing_chat_intercept"
 
 EventType = _EventType()
@@ -1021,6 +1019,10 @@ class KeyEvent:
 
 @dataclass
 class MouseEvent:
+  """Mouse event data.
+
+  `action` is 0 for mouse up and 1 for mouse down.
+  """
   type: str
   time: float
   button: int
@@ -1039,7 +1041,7 @@ class ChatEvent:
 _EVENT_TYPE_DICT = {
   EventType.KEY: KeyEvent,
   EventType.MOUSE: MouseEvent,
-  EventType.INCOMING_CHAT: ChatEvent,
+  EventType.CHAT: ChatEvent,
   EventType.OUTGOING_CHAT_INTERCEPT: ChatEvent,
 }
 
@@ -1078,15 +1080,15 @@ class EventQueue:
   def register_mouse_event_listener(self):
     self._register(EventType.MOUSE, register_mouse_event_listener)
 
-  def register_incoming_chat_listener(self):
-    self._register(EventType.INCOMING_CHAT, register_chat_message_listener)
+  def register_chat_listener(self):
+    self._register(EventType.CHAT, register_chat_message_listener)
 
   def register_outgoing_chat_interceptor(self, *, prefix: str = None, pattern: str = None):
     self._register(
         EventType.OUTGOING_CHAT_INTERCEPT,
-        lambda interceptor, exception_handler: \
+        lambda handler, exception_handler: \
             register_chat_message_interceptor(
-                interceptor, exception_handler, prefix=prefix, pattern=pattern))
+                handler, exception_handler, prefix=prefix, pattern=pattern))
 
   def _register(self, event_type: str, registration_func):
     def put_typed_event(event):
@@ -1166,10 +1168,10 @@ def ChatEventListener():
   """
   print(
       "ChatEventListener is deprecated. "
-      "Use `EventQueue.register_incoming_chat_listener()` instead.",
+      "Use `EventQueue.register_chat_listener()` instead.",
       file=sys.stderr)
   event_queue = EventQueue()
-  event_queue.register_incoming_chat_listener()
+  event_queue.register_chat_listener()
   return event_queue
 
 
