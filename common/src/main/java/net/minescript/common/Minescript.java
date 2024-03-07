@@ -67,6 +67,7 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.network.protocol.game.ServerboundPickItemPacket;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
@@ -219,11 +220,9 @@ public class Minescript {
     // Job operations should have been cleaned up when killing jobs, but the jobs killed above might
     // still be in the process of shutting down, or operations may have been leaked accidentally.
     // Clear any leaked operations here.
-    cancelOrphanedOperations(keyEventListeners);
-    cancelOrphanedOperations(mouseEventListeners);
-    cancelOrphanedOperations(clientChatReceivedEventListeners);
-    cancelOrphanedOperations(chunkLoadEventListeners);
-    cancelOrphanedOperations(chatInterceptors);
+    for (var handlerMap : eventHandlerMaps) {
+      cancelOrphanedOperations(handlerMap);
+    }
 
     customNickname = null;
   }
@@ -1674,7 +1673,7 @@ public class Minescript {
     boolean cancel = false;
     String text = message.getString();
 
-    var iter = clientChatReceivedEventListeners.entrySet().iterator();
+    var iter = chatEventListeners.entrySet().iterator();
     while (iter.hasNext()) {
       var entry = iter.next();
       var listener = entry.getValue();
@@ -1835,20 +1834,149 @@ public class Minescript {
 
   private static ServerBlockList serverBlockList = new ServerBlockList();
 
+  public record JobOperationId(int jobId, long opId) {}
+
   // The keys in the event listener maps are based on the funcCallId of the register method (e.g.
-  // "register_key_event_listener") which is considered the listener ID. But the funcCallId
+  // "register_key_listener") which is considered the listener ID. But the funcCallId
   // associated with the actual listening within the EventHandler corresponds to the start method
-  // (e.g. "start_key_event_listener").
+  // (e.g. "start_key_listener").
   private static Map<JobOperationId, EventHandler> keyEventListeners = new ConcurrentHashMap<>();
   private static Map<JobOperationId, EventHandler> mouseEventListeners = new ConcurrentHashMap<>();
-  private static Map<JobOperationId, EventHandler> clientChatReceivedEventListeners =
-      new ConcurrentHashMap<>();
+  private static Map<JobOperationId, EventHandler> chatEventListeners = new ConcurrentHashMap<>();
   private static Map<JobOperationId, EventHandler> chatInterceptors = new ConcurrentHashMap<>();
+  private static Map<JobOperationId, EventHandler> addEntityEventListeners =
+      new ConcurrentHashMap<>();
+  private static Map<JobOperationId, EventHandler> blockUpdateEventListeners =
+      new ConcurrentHashMap<>();
+  private static Map<JobOperationId, EventHandler> takeItemEventListeners =
+      new ConcurrentHashMap<>();
+  private static Map<JobOperationId, EventHandler> damageEventListeners = new ConcurrentHashMap<>();
+  private static Map<JobOperationId, EventHandler> explosionEventListeners =
+      new ConcurrentHashMap<>();
 
-  public record JobOperationId(int jobId, long opId) {}
+  private static ImmutableList<Map<JobOperationId, EventHandler>> eventHandlerMaps =
+      ImmutableList.of(
+          keyEventListeners,
+          mouseEventListeners,
+          chatEventListeners,
+          chatInterceptors,
+          addEntityEventListeners,
+          blockUpdateEventListeners,
+          takeItemEventListeners,
+          damageEventListeners,
+          explosionEventListeners);
 
   private static Map<JobOperationId, ChunkLoadEventListener> chunkLoadEventListeners =
       new ConcurrentHashMap<JobOperationId, ChunkLoadEventListener>();
+
+  public static void onAddEntityEvent(Entity entity) {
+    JsonObject json = null;
+    for (var handler : addEntityEventListeners.values()) {
+      if (handler.isActive()) {
+        if (json == null) {
+          json = new JsonObject();
+          boolean includeNbt = false;
+          json.add(
+              "entity",
+              new EntityExporter(entityPositionInterpolation(), includeNbt).export(entity));
+          json.addProperty("time", System.currentTimeMillis() / 1000.);
+        }
+        handler.respond(json, false);
+      }
+    }
+  }
+
+  public static void onBlockUpdateEvent(BlockPos pos, BlockState newState) {
+    var minecraft = Minecraft.getInstance();
+    var level = minecraft.level;
+    JsonObject json = null;
+    for (var handler : blockUpdateEventListeners.values()) {
+      if (handler.isActive()) {
+        if (json == null) {
+          json = new JsonObject();
+          var position = new JsonArray();
+          position.add(pos.getX());
+          position.add(pos.getY());
+          position.add(pos.getZ());
+          json.add("position", position);
+
+          // TODO(maxuser): If a block changes due to local player's mouse click or key press,
+          // the block can change locally before the BlockUpdate packet is received by the client.
+          // Maybe track the current block during mouse and key events via
+          // minecraft.getCameraEntity().pick(...). (see player_get_targeted_block())
+          json.addProperty("old_state", blockStateToString(level.getBlockState(pos)).orElse(null));
+          json.addProperty("new_state", blockStateToString(newState).orElse(null));
+          json.addProperty("time", System.currentTimeMillis() / 1000.);
+        }
+        handler.respond(json, false);
+      }
+    }
+  }
+
+  public static void onTakeItemEvent(Entity player, Entity item, int amount) {
+    JsonObject json = null;
+    for (var handler : takeItemEventListeners.values()) {
+      if (handler.isActive()) {
+        if (json == null) {
+          json = new JsonObject();
+          boolean includeNbt = false;
+          json.addProperty("player_uuid", player.getUUID().toString());
+          json.add(
+              "item", new EntityExporter(entityPositionInterpolation(), includeNbt).export(item));
+          json.addProperty("amount", amount);
+          json.addProperty("time", System.currentTimeMillis() / 1000.);
+        }
+        handler.respond(json, false);
+      }
+    }
+  }
+
+  public static void onDamageEvent(Entity entity, Entity cause, String source) {
+    JsonObject json = null;
+    for (var handler : damageEventListeners.values()) {
+      if (handler.isActive()) {
+        if (json == null) {
+          json = new JsonObject();
+          json.addProperty("entity_uuid", entity.getUUID().toString());
+          json.addProperty("cause_uuid", cause == null ? null : cause.getUUID().toString());
+          json.addProperty("source", source);
+          json.addProperty("time", System.currentTimeMillis() / 1000.);
+        }
+        handler.respond(json, false);
+      }
+    }
+  }
+
+  public static void onExplosionEvent(double x, double y, double z, List<BlockPos> toExplode) {
+    var minecraft = Minecraft.getInstance();
+    var level = minecraft.level;
+    JsonObject json = null;
+    for (var handler : explosionEventListeners.values()) {
+      if (handler.isActive()) {
+        if (json == null) {
+          json = new JsonObject();
+
+          var blockpacker = new BlockPacker();
+          for (var pos : toExplode) {
+            blockStateToString(level.getBlockState(pos))
+                .ifPresent(
+                    block -> blockpacker.setblock(pos.getX(), pos.getY(), pos.getZ(), block));
+          }
+          String encodedBlockpack = blockpacker.pack().toBase64EncodedString();
+
+          var position = new JsonArray();
+          position.add(x);
+          position.add(y);
+          position.add(z);
+          json.add("position", position);
+
+          json.addProperty("blockpack_base64", encodedBlockpack);
+          json.addProperty("time", System.currentTimeMillis() / 1000.);
+        }
+        handler.respond(json, false);
+      }
+    }
+  }
 
   private static String customNickname = null;
 
@@ -2168,33 +2296,32 @@ public class Minescript {
           return Optional.of(blocks);
         }
 
-      case "register_key_event_listener":
+      case "register_key_listener":
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, keyEventListeners, Optional.empty());
 
-      case "start_key_event_listener":
+      case "start_key_listener":
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, keyEventListeners, args.getStrictInt(0));
 
-      case "register_mouse_event_listener":
+      case "register_mouse_listener":
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, mouseEventListeners, Optional.empty());
 
-      case "start_mouse_event_listener":
+      case "start_mouse_listener":
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, mouseEventListeners, args.getStrictInt(0));
 
       case "register_chat_message_listener":
         args.expectSize(0);
         return registerEventHandler(
-            job, functionName, funcCallId, clientChatReceivedEventListeners, Optional.empty());
+            job, functionName, funcCallId, chatEventListeners, Optional.empty());
 
       case "start_chat_message_listener":
         args.expectArgs("handler_id");
-        return startEventHandler(
-            job, funcCallId, clientChatReceivedEventListeners, args.getStrictInt(0));
+        return startEventHandler(job, funcCallId, chatEventListeners, args.getStrictInt(0));
 
       case "register_chat_message_interceptor":
         {
@@ -2219,6 +2346,51 @@ public class Minescript {
       case "start_chat_message_interceptor":
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, chatInterceptors, args.getStrictInt(0));
+
+      case "register_add_entity_listener":
+        args.expectSize(0);
+        return registerEventHandler(
+            job, functionName, funcCallId, addEntityEventListeners, Optional.empty());
+
+      case "start_add_entity_listener":
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, addEntityEventListeners, args.getStrictInt(0));
+
+      case "register_block_update_listener":
+        args.expectSize(0);
+        return registerEventHandler(
+            job, functionName, funcCallId, blockUpdateEventListeners, Optional.empty());
+
+      case "start_block_update_listener":
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, blockUpdateEventListeners, args.getStrictInt(0));
+
+      case "register_take_item_listener":
+        args.expectSize(0);
+        return registerEventHandler(
+            job, functionName, funcCallId, takeItemEventListeners, Optional.empty());
+
+      case "start_take_item_listener":
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, takeItemEventListeners, args.getStrictInt(0));
+
+      case "register_damage_listener":
+        args.expectSize(0);
+        return registerEventHandler(
+            job, functionName, funcCallId, damageEventListeners, Optional.empty());
+
+      case "start_damage_listener":
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, damageEventListeners, args.getStrictInt(0));
+
+      case "register_explosion_listener":
+        args.expectSize(0);
+        return registerEventHandler(
+            job, functionName, funcCallId, explosionEventListeners, Optional.empty());
+
+      case "start_explosion_listener":
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, explosionEventListeners, args.getStrictInt(0));
 
       case "unregister_event_handler":
         {

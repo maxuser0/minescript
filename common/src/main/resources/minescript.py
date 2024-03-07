@@ -867,7 +867,7 @@ def await_loaded_region(x1: int, z1: int, x2: int, z2: int, timeout: float = Non
     return False
 
 
-def register_key_event_listener(
+def register_key_listener(
     handler: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
   """Registers a handler for receiving keyboard events.
 
@@ -878,20 +878,20 @@ def register_key_event_listener(
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
 
   Returns:
-    ID for the new handler. This ID can be passed to `unregister_key_event_listener(...)`.
+    ID for the new handler.
 
   Update in v4.0:
     Added return value for identifying the newly registered handler.
 
   Since: v3.2
   """
-  handler_id = await_script_function("register_key_event_listener", ())
+  handler_id = await_script_function("register_key_listener", ())
   send_script_function_request(
-      "start_key_event_listener", (handler_id,), handler, exception_handler)
+      "start_key_listener", (handler_id,), handler, exception_handler)
   return handler_id
 
 
-def register_mouse_event_listener(
+def register_mouse_listener(
     handler: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
   """Registers a handler for receiving mouse events.
 
@@ -906,15 +906,15 @@ def register_mouse_event_listener(
 
   Since: v4.0
   """
-  handler_id = await_script_function("register_mouse_event_listener", ())
+  handler_id = await_script_function("register_mouse_listener", ())
   send_script_function_request(
-      "start_mouse_event_listener", (handler_id,), handler, exception_handler)
+      "start_mouse_listener", (handler_id,), handler, exception_handler)
   return handler_id
 
 
 def register_chat_message_listener(
     handler: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
-  """Registers a handler for listening to chat messages.
+  """Registers a handler to listen for chat messages.
 
   Handler receives both incoming and outgoing chat messages.
 
@@ -963,7 +963,7 @@ def register_chat_message_interceptor(
     pattern: if specified, intercept only the messages matching this regular expression
 
   Returns:
-    ID for the new handler. This ID can be passed to `unregister_chat_message_interceptor(...)`.
+    ID for the new handler.
 
   Update in v4.0:
     Support filtering of intercepted messages via `prefix` and `pattern`.
@@ -979,6 +979,96 @@ def register_chat_message_interceptor(
   send_script_function_request(
       "start_chat_message_interceptor", (handler_id,), handler, exception_handler)
 
+  return handler_id
+
+
+def register_add_entity_listener(
+    handler: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
+  """Registers a handler to listen for entities being added.
+
+  For a more user-friendly API, use `EventQueue` instead.  (__internal__)
+
+  Args:
+    handler: callable that repeatedly accepts a dict representing added entities
+    exception_handler: callable for handling an `Exception` thrown from Java (optional)
+
+  Since: v4.0
+  """
+  handler_id = await_script_function("register_add_entity_listener", ())
+  send_script_function_request(
+      "start_add_entity_listener", (handler_id,), handler, exception_handler)
+  return handler_id
+
+
+def register_block_update_listener(
+    handler: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
+  """Registers a handler to listen for block update events.
+
+  For a more user-friendly API, use `EventQueue` instead.  (__internal__)
+
+  Args:
+    handler: callable that repeatedly accepts a dict representing block updates
+    exception_handler: callable for handling an `Exception` thrown from Java (optional)
+
+  Since: v4.0
+  """
+  handler_id = await_script_function("register_block_update_listener", ())
+  send_script_function_request(
+      "start_block_update_listener", (handler_id,), handler, exception_handler)
+  return handler_id
+
+
+def register_take_item_listener(
+    handler: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
+  """Registers a handler to listen for items being taken.
+
+  For a more user-friendly API, use `EventQueue` instead.  (__internal__)
+
+  Args:
+    handler: callable that repeatedly accepts a dict representing a taken item
+    exception_handler: callable for handling an `Exception` thrown from Java (optional)
+
+  Since: v4.0
+  """
+  handler_id = await_script_function("register_take_item_listener", ())
+  send_script_function_request(
+      "start_take_item_listener", (handler_id,), handler, exception_handler)
+  return handler_id
+
+
+def register_damage_listener(
+    handler: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
+  """Registers a handler to listen for damage events.
+
+  For a more user-friendly API, use `EventQueue` instead.  (__internal__)
+
+  Args:
+    handler: callable that repeatedly accepts a dict representing damage events
+    exception_handler: callable for handling an `Exception` thrown from Java (optional)
+
+  Since: v4.0
+  """
+  handler_id = await_script_function("register_damage_listener", ())
+  send_script_function_request(
+      "start_damage_listener", (handler_id,), handler, exception_handler)
+  return handler_id
+
+
+def register_explosion_listener(
+    handler: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
+  """Registers a handler to listen for explosion events.
+
+  For a more user-friendly API, use `EventQueue` instead.  (__internal__)
+
+  Args:
+    handler: callable that repeatedly accepts a dict representing explosion events
+    exception_handler: callable for handling an `Exception` thrown from Java (optional)
+
+  Since: v4.0
+  """
+  handler_id = await_script_function("register_explosion_listener", ())
+  send_script_function_request(
+      "start_explosion_listener", (handler_id,), handler, exception_handler)
   return handler_id
 
 
@@ -999,6 +1089,11 @@ class _EventType:
   MOUSE: str = "mouse"
   CHAT: str = "chat"
   OUTGOING_CHAT_INTERCEPT: str = "outgoing_chat_intercept"
+  ADD_ENTITY: str = "add_entity"
+  BLOCK_UPDATE: str = "block_update"
+  TAKE_ITEM: str = "take_item"
+  DAMAGE: str = "damage"
+  EXPLOSION: str = "explosion"
 
 EventType = _EventType()
 
@@ -1038,11 +1133,61 @@ class ChatEvent:
   time: float
   message: str
 
-_EVENT_TYPE_DICT = {
+@dataclass
+class AddEntityEvent:
+  type: str
+  time: float
+  entity: EntityData
+
+@dataclass
+class BlockUpdateEvent:
+  type: str
+  time: float
+  position: BlockPos
+  old_state: str
+  new_state: str
+
+@dataclass
+class TakeItemEvent:
+  type: str
+  time: float
+  player_uuid: str
+  item: EntityData
+  amount: int
+
+@dataclass
+class DamageEvent:
+  type: str
+  time: float
+  entity_uuid: str
+  cause_uuid: str
+  source: str
+
+@dataclass
+class ExplosionEvent:
+  type: str
+  time: float
+  position: Vector3f
+  blockpack_base64: str
+
+def _create_add_entity_event(**kwargs):
+  kwargs["entity"] = EntityData(**kwargs["entity"])
+  return AddEntityEvent(**kwargs)
+
+def _create_take_item_event(**kwargs):
+  kwargs["item"] = EntityData(**kwargs["item"])
+  return TakeItemEvent(**kwargs)
+
+_EVENT_CONSTRUCTORS = {
   EventType.KEY: KeyEvent,
   EventType.MOUSE: MouseEvent,
   EventType.CHAT: ChatEvent,
   EventType.OUTGOING_CHAT_INTERCEPT: ChatEvent,
+  EventType.ADD_ENTITY: _create_add_entity_event,
+  EventType.BLOCK_UPDATE: BlockUpdateEvent,
+  EventType.TAKE_ITEM: _create_take_item_event,
+  EventType.DAMAGE: DamageEvent,
+  EventType.EXPLOSION: ExplosionEvent,
 }
 
 class EventQueue:
@@ -1054,7 +1199,7 @@ class EventQueue:
   ```
   with EventQueue() as event_queue:
     echo("Capturing key events...")
-    event_queue.register_key_event_listener()
+    event_queue.register_key_listener()
     while True:
       event = event_queue.get()
       if event.type == EventType.KEY:
@@ -1074,11 +1219,11 @@ class EventQueue:
     self.queue = queue.Queue()
     self.event_handler_ids = []
 
-  def register_key_event_listener(self):
-    self._register(EventType.KEY, register_key_event_listener)
+  def register_key_listener(self):
+    self._register(EventType.KEY, register_key_listener)
 
-  def register_mouse_event_listener(self):
-    self._register(EventType.MOUSE, register_mouse_event_listener)
+  def register_mouse_listener(self):
+    self._register(EventType.MOUSE, register_mouse_listener)
 
   def register_chat_listener(self):
     self._register(EventType.CHAT, register_chat_message_listener)
@@ -1089,6 +1234,21 @@ class EventQueue:
         lambda handler, exception_handler: \
             register_chat_message_interceptor(
                 handler, exception_handler, prefix=prefix, pattern=pattern))
+
+  def register_add_entity_listener(self):
+    self._register(EventType.ADD_ENTITY, register_add_entity_listener)
+
+  def register_block_update_listener(self):
+    self._register(EventType.BLOCK_UPDATE, register_block_update_listener)
+
+  def register_take_item_listener(self):
+    self._register(EventType.TAKE_ITEM, register_take_item_listener)
+
+  def register_damage_listener(self):
+    self._register(EventType.DAMAGE, register_damage_listener)
+
+  def register_explosion_listener(self):
+    self._register(EventType.EXPLOSION, register_explosion_listener)
 
   def _register(self, event_type: str, registration_func):
     def put_typed_event(event):
@@ -1128,7 +1288,7 @@ class EventQueue:
       raise value
     if type(value) is not dict or not "type" in value:
       raise ValueError(f"Expected event dict with key `type` but got: {value}")
-    return _EVENT_TYPE_DICT[value["type"]](**value)
+    return _EVENT_CONSTRUCTORS[value["type"]](**value)
 
   def __enter__(self):
     return self
@@ -1141,18 +1301,18 @@ class EventQueue:
 
 
 def KeyEventListener():
-  """Deprecated listener for keyboard events. Use `EventQueue.register_key_event_listener` instead.
+  """Deprecated listener for keyboard events. Use `EventQueue.register_key_listener` instead.
 
   Update in v4.0:
-    Deprecated in favor of `EventQueue.register_key_event_listener`.
+    Deprecated in favor of `EventQueue.register_key_listener`.
 
   Since: v3.2
   """
   print(
-      "KeyEventListener is deprecated. Use `EventQueue.register_key_event_listener` instead.",
+      "KeyEventListener is deprecated. Use `EventQueue.register_key_listener` instead.",
       file=sys.stderr)
   event_queue = EventQueue()
-  event_queue.register_key_event_listener()
+  event_queue.register_key_listener()
   return event_queue
 
 
