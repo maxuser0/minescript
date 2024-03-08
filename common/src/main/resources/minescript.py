@@ -1072,6 +1072,24 @@ def register_explosion_listener(
   return handler_id
 
 
+def register_chunk_listener(
+    handler: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
+  """Registers a handler to listen for chunk load/unload events.
+
+  For a more user-friendly API, use `EventQueue` instead.  (__internal__)
+
+  Args:
+    handler: callable that repeatedly accepts a dict representing chunk events
+    exception_handler: callable for handling an `Exception` thrown from Java (optional)
+
+  Since: v4.0
+  """
+  handler_id = await_script_function("register_chunk_listener", ())
+  send_script_function_request(
+      "start_chunk_listener", (handler_id,), handler, exception_handler)
+  return handler_id
+
+
 def unregister_event_handler(handler_id: int):
   """Unregisters an event handler, if any, for the currently running job. (__internal__)
 
@@ -1094,6 +1112,7 @@ class _EventType:
   TAKE_ITEM: str = "take_item"
   DAMAGE: str = "damage"
   EXPLOSION: str = "explosion"
+  CHUNK: str = "chunk"
 
 EventType = _EventType()
 
@@ -1170,6 +1189,16 @@ class ExplosionEvent:
   position: Vector3f
   blockpack_base64: str
 
+@dataclass
+class ChunkEvent:
+  type: str
+  time: float
+  loaded: bool
+  x_min: int
+  z_min: int
+  x_max: int
+  z_max: int
+
 def _create_add_entity_event(**kwargs):
   kwargs["entity"] = EntityData(**kwargs["entity"])
   return AddEntityEvent(**kwargs)
@@ -1188,6 +1217,7 @@ _EVENT_CONSTRUCTORS = {
   EventType.TAKE_ITEM: _create_take_item_event,
   EventType.DAMAGE: DamageEvent,
   EventType.EXPLOSION: ExplosionEvent,
+  EventType.CHUNK: ChunkEvent,
 }
 
 class EventQueue:
@@ -1249,6 +1279,9 @@ class EventQueue:
 
   def register_explosion_listener(self):
     self._register(EventType.EXPLOSION, register_explosion_listener)
+
+  def register_chunk_listener(self):
+    self._register(EventType.CHUNK, register_chunk_listener)
 
   def _register(self, event_type: str, registration_func):
     def put_typed_event(event):

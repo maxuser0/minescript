@@ -1703,6 +1703,32 @@ public class Minescript {
     return cancel;
   }
 
+  private static int chunkCoordToWorldCoord(int x) {
+    return (x >= 0) ? (16 * x) : (16 * (x + 1) - 1);
+  }
+
+  private static void handleChunkEvent(int chunkX, int chunkZ, boolean loaded) {
+    var minecraft = Minecraft.getInstance();
+    var level = minecraft.level;
+    JsonObject json = null;
+    for (var handler : chunkEventListeners.values()) {
+      if (handler.isActive()) {
+        if (json == null) {
+          json = new JsonObject();
+          int worldX = chunkCoordToWorldCoord(chunkX);
+          int worldZ = chunkCoordToWorldCoord(chunkZ);
+          json.addProperty("loaded", loaded);
+          json.addProperty("x_min", worldX);
+          json.addProperty("z_min", worldZ);
+          json.addProperty("x_max", worldX + 15);
+          json.addProperty("z_max", worldZ + 15);
+          json.addProperty("time", System.currentTimeMillis() / 1000.);
+        }
+        handler.respond(json, false);
+      }
+    }
+  }
+
   public static void onChunkLoad(LevelAccessor chunkLevel, ChunkAccess chunk) {
     int chunkX = chunk.getPos().x;
     int chunkZ = chunk.getPos().z;
@@ -1717,6 +1743,8 @@ public class Minescript {
         iter.remove();
       }
     }
+
+    handleChunkEvent(chunkX, chunkZ, true);
   }
 
   public static void onChunkUnload(LevelAccessor chunkLevel, ChunkAccess chunk) {
@@ -1729,6 +1757,8 @@ public class Minescript {
       var listener = entry.getValue();
       listener.onChunkUnloaded(chunkLevel, chunkX, chunkZ);
     }
+
+    handleChunkEvent(chunkX, chunkZ, false);
   }
 
   private static boolean matchesChatInterceptor(String message) {
@@ -1853,6 +1883,7 @@ public class Minescript {
   private static Map<JobOperationId, EventHandler> damageEventListeners = new ConcurrentHashMap<>();
   private static Map<JobOperationId, EventHandler> explosionEventListeners =
       new ConcurrentHashMap<>();
+  private static Map<JobOperationId, EventHandler> chunkEventListeners = new ConcurrentHashMap<>();
 
   private static ImmutableList<Map<JobOperationId, EventHandler>> eventHandlerMaps =
       ImmutableList.of(
@@ -1864,7 +1895,8 @@ public class Minescript {
           blockUpdateEventListeners,
           takeItemEventListeners,
           damageEventListeners,
-          explosionEventListeners);
+          explosionEventListeners,
+          chunkEventListeners);
 
   private static Map<JobOperationId, ChunkLoadEventListener> chunkLoadEventListeners =
       new ConcurrentHashMap<JobOperationId, ChunkLoadEventListener>();
@@ -2391,6 +2423,15 @@ public class Minescript {
       case "start_explosion_listener":
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, explosionEventListeners, args.getStrictInt(0));
+
+      case "register_chunk_listener":
+        args.expectSize(0);
+        return registerEventHandler(
+            job, functionName, funcCallId, chunkEventListeners, Optional.empty());
+
+      case "start_chunk_listener":
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, chunkEventListeners, args.getStrictInt(0));
 
       case "unregister_event_handler":
         {
