@@ -587,7 +587,7 @@ class EntityData:
   yaw: float
   pitch: float
   velocity: Vector3f
-  interpolated_position: Vector3f = None
+  lerp_position: Vector3f = None
   health: float = None
   local: bool = None  # `True` if this the local player
   passengers: List[str] = None  # UUIDs of passengers as strings

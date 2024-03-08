@@ -131,11 +131,11 @@ public class EntityExporter {
     final double epsilon = 0.0001;
     if (positionInterpolation > epsilon
         && (Math.abs(v.x) > epsilon || Math.abs(v.y) > epsilon || Math.abs(v.z) > epsilon)) {
-      var interpolatedPosition = new JsonArray();
-      interpolatedPosition.add(x + v.x * positionInterpolation);
-      interpolatedPosition.add(y + v.y * positionInterpolation);
-      interpolatedPosition.add(z + v.z * positionInterpolation);
-      jsonEntity.add("interpolated_position", interpolatedPosition);
+      var lerpPosition = new JsonArray();
+      lerpPosition.add(x + v.x * positionInterpolation);
+      lerpPosition.add(y + v.y * positionInterpolation);
+      lerpPosition.add(z + v.z * positionInterpolation);
+      jsonEntity.add("lerp_position", lerpPosition);
     }
 
     jsonEntity.addProperty("yaw", entity.getYRot());
