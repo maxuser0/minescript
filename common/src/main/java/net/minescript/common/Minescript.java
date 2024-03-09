@@ -3509,6 +3509,7 @@ public class Minescript {
       if (player != null && (!systemMessageQueue.isEmpty() || !jobs.getMap().isEmpty())) {
         boolean hasMessage;
         int iterations = 0;
+        long loopStartTimeUsecs = System.nanoTime() / 1000;
         do {
           hasMessage = false;
           ++iterations;
@@ -3535,8 +3536,8 @@ public class Minescript {
 
                   } else {
                     // TODO(maxuser): Stash level in UndoableAction as a WeakReference<Level> so
-                    // that an undo operation gets applied only to the world at existed at the time
-                    // the UndoableAction was created.
+                    // that an undo operation gets applied only to the world that at existed at the
+                    // time the UndoableAction was created.
                     Level level = minecraft.level;
                     jobs.getUndoForJob(job).ifPresent(u -> u.processCommandToUndo(level, message));
                     processMessage(message);
@@ -3547,7 +3548,22 @@ public class Minescript {
               }
             }
           }
-        } while (hasMessage && iterations < config.commandsPerCycle());
+        } while (hasMessage
+            && iterations < config.maxCommandsPerCycle()
+            && System.nanoTime() / 1000 - loopStartTimeUsecs < config.commandCycleDeadlineUsecs());
+
+        if (config.debugOutput()) {
+          long elapsedUsecs = System.nanoTime() / 1000 - loopStartTimeUsecs;
+          if (elapsedUsecs >= config.commandCycleDeadlineUsecs()) {
+            LOGGER.info(
+                "Tick loop processed {} iterations in {} usecs (exceeded deadline of {} usecs)",
+                iterations,
+                elapsedUsecs,
+                config.commandCycleDeadlineUsecs());
+          } else {
+            LOGGER.info("Tick loop processed {} iterations in {} usecs", iterations, elapsedUsecs);
+          }
+        }
       }
     }
   }

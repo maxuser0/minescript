@@ -42,7 +42,8 @@ public class Config {
           "command",
           "escape_command_double_quotes",
           "path",
-          "commands_per_cycle",
+          "max_commands_per_cycle",
+          "command_cycle_deadline_usecs",
           "ticks_per_cycle",
           "incremental_command_suggestions",
           "debug_output",
@@ -87,7 +88,8 @@ public class Config {
   private boolean debugOutput = false;
   private boolean incrementalCommandSuggestions = false;
   private int ticksPerCycle = 1;
-  private int commandsPerCycle = 15;
+  private int maxCommandsPerCycle = 15;
+  private int commandCycleDeadlineUsecs = 10_000; // 10 milliseconds
 
   public Config(
       String minescriptDirName,
@@ -228,8 +230,12 @@ public class Config {
     return incrementalCommandSuggestions;
   }
 
-  public int commandsPerCycle() {
-    return commandsPerCycle;
+  public int maxCommandsPerCycle() {
+    return maxCommandsPerCycle;
+  }
+
+  public int commandCycleDeadlineUsecs() {
+    return commandCycleDeadlineUsecs;
   }
 
   public int ticksPerCycle() {
@@ -245,7 +251,8 @@ public class Config {
     consumer.accept("command", getValue("command"));
     consumer.accept("escape_command_double_quotes", getValue("escape_command_double_quotes"));
     consumer.accept("path", getValue("path"));
-    consumer.accept("commands_per_cycle", getValue("commands_per_cycle"));
+    consumer.accept("max_commands_per_cycle", getValue("max_commands_per_cycle"));
+    consumer.accept("command_cycle_deadline_usecs", getValue("command_cycle_deadline_usecs"));
     consumer.accept("ticks_per_cycle", getValue("ticks_per_cycle"));
     consumer.accept("incremental_command_suggestions", getValue("incremental_command_suggestions"));
     consumer.accept("debug_output", getValue("debug_output"));
@@ -283,9 +290,12 @@ public class Config {
             File.pathSeparator,
             scriptConfig.commandPath().stream().map(Path::toString).collect(Collectors.toList()));
 
-      case "commands_per_cycle":
+      case "max_commands_per_cycle":
       case "minescript_commands_per_cycle": // legacy name
-        return String.valueOf(commandsPerCycle);
+        return String.valueOf(maxCommandsPerCycle);
+
+      case "command_cycle_deadline_usecs":
+        return String.valueOf(commandCycleDeadlineUsecs);
 
       case "ticks_per_cycle":
       case "minescript_ticks_per_cycle": // legacy name
@@ -403,15 +413,26 @@ public class Config {
         reportInfo(out, "Setting path to {}", commandPath);
         break;
 
-      case "commands_per_cycle":
+      case "max_commands_per_cycle":
       case "minescript_commands_per_cycle": // legacy name
         try {
           int numCommands = Integer.valueOf(value);
           if (numCommands < 1) numCommands = 1;
-          commandsPerCycle = numCommands;
-          reportInfo(out, "Setting commands_per_cycle to {}", commandsPerCycle);
+          maxCommandsPerCycle = numCommands;
+          reportInfo(out, "Setting max_commands_per_cycle to {}", maxCommandsPerCycle);
         } catch (NumberFormatException e) {
-          reportError(out, "Unable to parse commands_per_cycle as integer: {}", value);
+          reportError(out, "Unable to parse max_commands_per_cycle as integer: {}", value);
+        }
+        break;
+
+      case "command_cycle_deadline_usecs":
+        try {
+          int deadline = Integer.valueOf(value);
+          if (deadline < 1) deadline = 1;
+          commandCycleDeadlineUsecs = deadline;
+          reportInfo(out, "Setting command_cycle_deadline_usecs to {}", commandCycleDeadlineUsecs);
+        } catch (NumberFormatException e) {
+          reportError(out, "Unable to parse command_cycle_deadline_usecs as integer: {}", value);
         }
         break;
 
