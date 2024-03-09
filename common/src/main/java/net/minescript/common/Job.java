@@ -30,6 +30,7 @@ public class Job implements JobControl {
   private static final Gson GSON = new GsonBuilder().serializeNulls().create();
 
   public final int jobId;
+  public final ResourceTracker<Object> objects;
   public final ResourceTracker<BlockPack> blockpacks;
   public final ResourceTracker<BlockPacker> blockpackers;
 
@@ -74,6 +75,7 @@ public class Job implements JobControl {
     this.config = config;
     this.systemMessageQueue = systemMessageQueue;
     this.doneCallback = doneCallback;
+    objects = new ResourceTracker<>(Object.class, jobId);
     blockpacks = new ResourceTracker<>(BlockPack.class, jobId);
     blockpackers = new ResourceTracker<>(BlockPacker.class, jobId);
   }
@@ -359,6 +361,7 @@ public class Job implements JobControl {
       }
       operations.clear();
 
+      objects.releaseAll();
       blockpacks.releaseAll();
       blockpackers.releaseAll();
 

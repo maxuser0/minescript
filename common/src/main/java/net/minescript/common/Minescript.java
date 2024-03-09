@@ -25,6 +25,8 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -3284,30 +3286,149 @@ public class Minescript {
           return OPTIONAL_JSON_NULL;
         }
 
-      case "IndexOutOfBoundsException":
+      case "java_string":
+        args.expectSize(1);
+        return Optional.of(new JsonPrimitive(job.objects.retain(args.getString(0))));
+
+      case "java_int":
+        args.expectSize(1);
+        return Optional.of(new JsonPrimitive(job.objects.retain(args.getStrictInt(0))));
+
+      case "java_bool":
+        args.expectSize(1);
+        return Optional.of(new JsonPrimitive(job.objects.retain(args.getBoolean(0))));
+
+      case "get_class":
         {
-          var array = new int[1];
-          int i = array[1];
-          return OPTIONAL_JSON_NULL;
+          args.expectSize(1);
+          var object = Class.forName(args.getString(0));
+          return Optional.of(new JsonPrimitive(job.objects.retain(object)));
         }
 
-      case "IllegalArgumentException":
-        throw new IllegalArgumentException("This is a test.");
-
-      case "NoSuchElementException":
+      case "get_ctor":
         {
-          var list = new ArrayList<String>();
-          list.iterator().next();
-          return OPTIONAL_JSON_NULL;
+          args.expectSize(1);
+          var target = (Class) job.objects.getById(args.getStrictInt(0));
+          var ctors = new ImmutableList.Builder<Constructor>();
+          var argCounts = new ImmutableSet.Builder<Integer>();
+          for (var ctor : target.getConstructors()) {
+            ctors.add(ctor);
+            argCounts.add(ctor.getParameterCount());
+          }
+          var ctorSet = new ConstructorSet(ctors.build(), argCounts.build());
+          return Optional.of(new JsonPrimitive(job.objects.retain(ctorSet)));
         }
 
-      case "IllegalStateException":
-        throw new IllegalStateException("This is a test.");
-
-      case "NullPointerException":
+      case "call_ctor":
         {
-          String string = null;
-          string.length();
+          var target = (Class) job.objects.getById(args.getStrictInt(0));
+          var ctorSet = (ConstructorSet) job.objects.getById(args.getStrictInt(1));
+          Object[] params = new Object[args.size() - 2];
+          for (int i = 0; i < params.length; ++i) {
+            params[i] = job.objects.getById(args.getStrictInt(i + 2));
+          }
+          if (!ctorSet.argCounts().contains(params.length)) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "Constructor for `%s` got %d args but expected %s",
+                    target.getClass().getSimpleName(), params.length, ctorSet.argCounts()));
+          }
+          // Catch IllegalArgumentException until all the ctors in the set with the right number
+          // of args have been exhausted.
+          IllegalArgumentException exception = null;
+          for (Constructor ctor : ctorSet.ctors()) {
+            if (ctor.getParameterCount() == params.length) {
+              try {
+                var result = ctor.newInstance(params);
+                return result == null
+                    ? OPTIONAL_JSON_NULL
+                    : Optional.of(new JsonPrimitive(job.objects.retain(result)));
+              } catch (IllegalArgumentException e) {
+                exception = e;
+              }
+            }
+          }
+          throw exception;
+        }
+
+      case "get_method":
+        {
+          args.expectSize(2);
+          String methodName = args.getString(1);
+          var target = (Class) job.objects.getById(args.getStrictInt(0));
+          var methods = new ImmutableList.Builder<Method>();
+          var argCounts = new ImmutableSet.Builder<Integer>();
+          for (var method : target.getMethods()) {
+            if (method.getName().equals(methodName)) {
+              methods.add(method);
+              argCounts.add(method.getParameterCount());
+            }
+          }
+          var methodSet = new MethodSet(methodName, methods.build(), argCounts.build());
+          if (!methodSet.methods().isEmpty()) {
+            return Optional.of(new JsonPrimitive(job.objects.retain(methodSet)));
+          }
+          throw new IllegalArgumentException("Method not found: " + methodName);
+        }
+
+      case "call_method":
+        {
+          var target = (Object) job.objects.getById(args.getStrictInt(0));
+          var methodSet = (MethodSet) job.objects.getById(args.getStrictInt(1));
+          Object[] params = new Object[args.size() - 2];
+          for (int i = 0; i < params.length; ++i) {
+            params[i] = job.objects.getById(args.getStrictInt(i + 2));
+          }
+          if (!methodSet.argCounts().contains(params.length)) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "Method `%s` got %d args but expected %s",
+                    methodSet.name(), params.length, methodSet.argCounts()));
+          }
+          // Catch IllegalArgumentException until all the methods in the set with the right number
+          // of args have been exhausted.
+          IllegalArgumentException exception = null;
+          for (Method method : methodSet.methods()) {
+            if (method.getParameterCount() == params.length) {
+              try {
+                var result = method.invoke(target, params);
+                return result == null
+                    ? OPTIONAL_JSON_NULL
+                    : Optional.of(new JsonPrimitive(job.objects.retain(result)));
+              } catch (IllegalArgumentException e) {
+                exception = e;
+              }
+            }
+          }
+          throw exception;
+        }
+
+      case "object_array_length":
+        {
+          args.expectSize(1);
+          var array = (Object[]) job.objects.getById(args.getStrictInt(0));
+          return Optional.of(new JsonPrimitive(array.length));
+        }
+
+      case "object_array_index":
+        {
+          args.expectSize(2);
+          var array = (Object[]) job.objects.getById(args.getStrictInt(0));
+          int index = args.getStrictInt(1);
+          var result = array[index];
+          return result == null
+              ? OPTIONAL_JSON_NULL
+              : Optional.of(new JsonPrimitive(job.objects.retain(result)));
+        }
+
+      case "to_string":
+        args.expectSize(1);
+        return Optional.of(new JsonPrimitive(job.objects.getById(args.getStrictInt(0)).toString()));
+
+      case "release_reference":
+        {
+          args.expectSize(1);
+          job.objects.releaseById(args.getStrictInt(1));
           return OPTIONAL_JSON_NULL;
         }
 
@@ -3317,6 +3438,12 @@ public class Minescript {
                 "Unknown function `%s` called from job: %s", functionName, job.jobSummary()));
     }
   }
+
+  private record ConstructorSet(
+      ImmutableList<Constructor> ctors, ImmutableSet<Integer> argCounts) {}
+
+  private record MethodSet(
+      String name, ImmutableList<Method> methods, ImmutableSet<Integer> argCounts) {}
 
   public static void handleAutorun(String worldName) {
     LOGGER.info("Handling autorun for world `{}`", worldName);
