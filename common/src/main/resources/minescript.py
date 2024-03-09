@@ -402,6 +402,18 @@ def async_player_inventory_select_slot(slot: int) -> Awaitable[int]:
   return call_async_script_function("player_inventory_select_slot", slot)
 
 
+def press_key_bind(key_mapping_name: str, pressed: bool):
+  """Presses/unpresses a mapped key binding.
+
+  Args:
+    key_mapping_name: name of key binding, e.g. "key.hotbar.1"
+    pressed: if `True`, press the bound key, otherwise unpress it
+
+  Since: v4.0
+  """
+  return await_script_function("press_key_bind", (key_mapping_name, pressed))
+
+
 def player_press_forward(pressed: bool):
   """Starts/stops moving the local player forward, simulating press/release of the 'w' key.
 

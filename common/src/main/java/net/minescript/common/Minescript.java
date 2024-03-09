@@ -2110,18 +2110,27 @@ public class Minescript {
     keyBinds.put(keyMappingName, key);
   }
 
-  private static Optional<JsonElement> doPlayerAction(
-      String functionName, KeyMapping keyMapping, ScriptFunctionArgList args, String argsString) {
-    args.expectSize(1);
-    boolean pressed = args.getBoolean(0);
-
-    var key = keyBinds.get(keyMapping.getName());
+  private static void pressKeyBind(String keyMappingName, boolean pressed) {
+    var key = keyBinds.get(keyMappingName);
+    if (key == null) {
+      throw new IllegalArgumentException(
+          String.format(
+              "No key mapping with name `%s`; assigned values are: %s",
+              keyMappingName, String.join(", ", keyBinds.keySet().toArray(new String[0]))));
+    }
     if (pressed) {
       KeyMapping.set(key, true);
       KeyMapping.click(key);
     } else {
       KeyMapping.set(key, false);
     }
+  }
+
+  private static Optional<JsonElement> doPlayerAction(
+      String functionName, KeyMapping keyMapping, ScriptFunctionArgList args, String argsString) {
+    args.expectSize(1);
+    boolean pressed = args.getBoolean(0);
+    pressKeyBind(keyMapping.getName(), pressed);
     return OPTIONAL_JSON_TRUE;
   }
 
@@ -2538,6 +2547,11 @@ public class Minescript {
           inventory.selected = slot;
           return Optional.of(new JsonPrimitive(previouslySelectedSlot));
         }
+
+      case "press_key_bind":
+        args.expectSize(2);
+        pressKeyBind(args.getString(0), args.getBoolean(1));
+        return OPTIONAL_JSON_TRUE;
 
       case "player_press_forward":
         return doPlayerAction(functionName, options.keyUp, args, argsString);
