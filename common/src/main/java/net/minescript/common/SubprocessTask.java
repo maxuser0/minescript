@@ -12,6 +12,7 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.util.concurrent.TimeUnit;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -20,6 +21,7 @@ public class SubprocessTask implements Task {
   private static final Gson GSON = new GsonBuilder().serializeNulls().create();
 
   private final Config config;
+  private JobControl jobControl;
   private Process process;
   private BufferedWriter stdinWriter;
 
@@ -29,6 +31,12 @@ public class SubprocessTask implements Task {
 
   @Override
   public int run(ScriptConfig.BoundCommand command, JobControl jobControl) {
+    if (this.jobControl != null) {
+      throw new IllegalStateException("SubprocessTask can be run only once: " + jobControl);
+    }
+
+    this.jobControl = jobControl;
+
     var exec = config.scriptConfig().getExecutableCommand(command);
     if (exec == null) {
       jobControl.log(
@@ -47,75 +55,68 @@ public class SubprocessTask implements Task {
 
     stdinWriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
 
-    try (var stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-        var stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-      final int millisToSleep = 1;
-      final long trailingReadTimeoutMillis = config.subprocessTrailingReadTimeoutMillis();
-      long lastReadTime = System.currentTimeMillis();
-      String line;
-      long debugFirstRead = -1;
-      int debugNumReads = 0;
-      while (jobControl.state() != JobState.KILLED
-          && jobControl.state() != JobState.DONE
-          && (process.isAlive()
-              || System.currentTimeMillis() - lastReadTime < trailingReadTimeoutMillis)) {
-        while (stdoutReader.ready() || stderrReader.ready()) {
-          if (stdoutReader.ready()) {
-            if ((line = stdoutReader.readLine()) == null) {
-              break;
-            }
-            long currentTime = System.currentTimeMillis();
-            if (debugFirstRead < 0) debugFirstRead = currentTime;
-            ++debugNumReads;
-            lastReadTime = currentTime;
-            jobControl.processStdout(line);
-          }
-          if (stderrReader.ready()) {
-            if ((line = stderrReader.readLine()) == null) {
-              break;
-            }
-            long currentTime = System.currentTimeMillis();
-            if (debugFirstRead < 0) debugFirstRead = currentTime;
-            ++debugNumReads;
-            lastReadTime = currentTime;
-            jobControl.log(line);
-          }
+    var stdoutThread =
+        new Thread(this::processStdout, Thread.currentThread().getName() + "-stdout");
+    stdoutThread.start();
+
+    var stderrThread =
+        new Thread(this::processStderr, Thread.currentThread().getName() + "-stderr");
+    stderrThread.start();
+
+    try {
+      while (!process.waitFor(100, TimeUnit.MILLISECONDS)) {
+        if (jobControl.state() == JobState.KILLED) {
+          LOGGER.info("Killing script process for job `{}`", jobControl);
+          process.destroy();
+          stdoutThread.interrupt();
+          stderrThread.interrupt();
+          return -5;
         }
-        try {
-          Thread.sleep(millisToSleep);
-        } catch (InterruptedException e) {
-          jobControl.logJobException(e);
-        }
-        jobControl.yield();
       }
-      if (config.debugOutput()) {
-        LOGGER.info(
-            "Subprocess reads: {} reads in {} ms", debugNumReads, lastReadTime - debugFirstRead);
+    } catch (InterruptedException e) {
+      LOGGER.warn("Task thread interrupted while awaiting subprocess for job `{}`", jobControl);
+    }
+
+    int result = process.exitValue();
+    LOGGER.info("Script process exited with {} for job `{}`", result, jobControl);
+    return result;
+  }
+
+  private void processStdout() {
+    try (var stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+      String line;
+      while ((line = stdoutReader.readLine()) != null) {
+        jobControl.yield();
+        jobControl.processStdout(line);
       }
     } catch (IOException e) {
-      jobControl.logJobException(e);
-      jobControl.log(e.getMessage());
-      return -3;
+      LOGGER.error(
+          "IOException while reading subprocess stdout for job `{}`: {}",
+          jobControl,
+          e.getMessage());
+    } finally {
+      if (Thread.interrupted()) {
+        LOGGER.warn("Thread interrupted while reading subprocess stdout for job `{}`", jobControl);
+      }
     }
+  }
 
-    LOGGER.info("Exited script event loop for job `{}`", jobControl.toString());
-
-    if (process == null) {
-      return -4;
-    }
-    if (jobControl.state() == JobState.KILLED) {
-      LOGGER.info("Killing script process for job `{}`", jobControl.toString());
-      process.destroy();
-      return -5;
-    }
-    try {
-      LOGGER.info("Waiting for script process to complete for job `{}`", jobControl.toString());
-      int result = process.waitFor();
-      LOGGER.info("Script process exited with {} for job `{}`", result, jobControl.toString());
-      return result;
-    } catch (InterruptedException e) {
-      jobControl.logJobException(e);
-      return -6;
+  private void processStderr() {
+    try (var stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+      String line;
+      while ((line = stderrReader.readLine()) != null) {
+        jobControl.yield();
+        jobControl.log(line);
+      }
+    } catch (IOException e) {
+      LOGGER.error(
+          "IOException while reading subprocess stderr for job `{}`: {}",
+          jobControl,
+          e.getMessage());
+    } finally {
+      if (Thread.interrupted()) {
+        LOGGER.warn("Thread interrupted while reading subprocess stderr for job `{}`", jobControl);
+      }
     }
   }
 
@@ -159,7 +160,7 @@ public class SubprocessTask implements Task {
       stdinWriter.flush();
       return true;
     } catch (IOException e) {
-      LOGGER.error("IOException in SubprocessTask sendResponse: {}", e.getMessage());
+      LOGGER.error("IOException in SubprocessTask sendException: {}", e.getMessage());
       return false;
     }
   }

@@ -51,7 +51,6 @@ public class Config {
           "minescript_on_chat_received_event",
           "secondary_enter_key_code",
           "experimental_fast_functions",
-          "subprocess_trailing_read_timeout_millis",
           "autorun[");
 
   private static final ImmutableList<String> CONFIG_VARIABLE_LIST =
@@ -78,9 +77,6 @@ public class Config {
   private int secondaryEnterKeyCode = 335;
 
   private Set<String> experimentalFastFunctions = new HashSet<>();
-
-  // Timeout in milliseconds to wait for reading the output of a subprocess that's exited.
-  private int subprocessTrailingReadTimeoutMillis = 500;
 
   // Map from world name (or "*" for all) to a list of Minescript/Minecraft commands.
   private Map<String, List<Message>> autorunCommands = new ConcurrentHashMap<>();
@@ -210,10 +206,6 @@ public class Config {
     return experimentalFastFunctions;
   }
 
-  public int subprocessTrailingReadTimeoutMillis() {
-    return subprocessTrailingReadTimeoutMillis;
-  }
-
   public void setDebugOutptut(boolean enable) {
     debugOutput = enable;
   }
@@ -261,9 +253,6 @@ public class Config {
         "minescript_on_chat_received_event", getValue("minescript_on_chat_received_event"));
     consumer.accept("secondary_enter_key_code", getValue("secondary_enter_key_code"));
     consumer.accept("experimental_fast_functions", getValue("experimental_fast_functions"));
-    consumer.accept(
-        "subprocess_trailing_read_timeout_millis",
-        getValue("subprocess_trailing_read_timeout_millis"));
 
     for (var entry : autorunCommands.entrySet()) {
       var worldName = entry.getKey();
@@ -319,9 +308,6 @@ public class Config {
 
       case "experimental_fast_functions":
         return String.join(", ", experimentalFastFunctions.stream().collect(Collectors.toList()));
-
-      case "subprocess_trailing_read_timeout_millis":
-        return String.valueOf(subprocessTrailingReadTimeoutMillis);
 
       default:
         {
@@ -502,19 +488,6 @@ public class Config {
             out,
             "Setting experimental_fast_functions to {}",
             getValue("experimental_fast_functions"));
-        break;
-
-      case "subprocess_trailing_read_timeout_millis":
-        try {
-          subprocessTrailingReadTimeoutMillis = Integer.valueOf(value);
-          reportInfo(
-              out,
-              "Setting subprocess_trailing_read_timeout_millis to {}",
-              subprocessTrailingReadTimeoutMillis);
-        } catch (NumberFormatException e) {
-          reportError(
-              out, "Unable to parse subprocess_trailing_read_timeout_millis as integer: {}", value);
-        }
         break;
 
       default:
