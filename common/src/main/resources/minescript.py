@@ -17,14 +17,12 @@ scripts and not run directly.
 
 import asyncio
 import base64
-import json
 import os
 import queue
 import sys
 import minescript_runtime
 
 from array import array
-from dataclasses import dataclass, asdict
 from minescript_runtime import (
     await_script_function,
     call_async_script_function,
@@ -33,103 +31,92 @@ from minescript_runtime import (
 from typing import Any, List, Set, Dict, Tuple, Optional, Callable, Awaitable
 
 
-BlockPos = Tuple[int, int, int]
-"""Tuple representing `(x: int, y: int, z: int)` position in block space."""
-
-Vector3f = Tuple[float, float, float]
-"""Tuple representing `(x: float, y: float, z: float)` position or offset in 3D space."""
-
-
-@dataclass
-class MinescriptRuntimeOptions:
-  legacy_dict_return_values: bool = False  # set to `True` to emulate behavior before v4.0
-
-options = MinescriptRuntimeOptions()
-
-
 def execute(command: str):
   """Executes the given command.
 
-  If `command` is prefixed by a backslash, it's treated as Minescript command,
-  otherwise it's treated as a Minecraft command (the slash prefix is optional).
+  If `command` doesn't already start with a slash or backslash, automatically
+  prepends a slash. Ignores leading and trailing whitespace, and ignores empty
+  commands.
 
   *Note: This was named `exec` in Minescript 2.0. The old name is no longer
   available in v3.0.*
 
   Since: v2.1
   """
-  if not isinstance(command, str):
-    raise TypeError("Argument must be a string.")
-  minescript_runtime.call_noreturn_function("execute", (command,))
+  command = command.strip()
+  if not command:
+    return
+  if command[0] not in ("/", "\\"):
+    command = "/" + command
+  print(command)
 
 
-def echo(*messages):
-  """Echoes messages to the chat.
+def echo(message: Any):
+  """Echoes message to the chat.
 
-  Echoed messages are visible only to the local player.
-
-  If `len(messages)` is 1 and `messages[0]` is a dict or list, interpret as
-  JSON-formatted text; otherwise, join messages with a space separating them.
-
-  To echo a single arg that's a dict or list, but not interpret it as
-  JSON-formatted text, pass an empty string as an additional arg, e.g.
-  `echo(my_list, "")`
-
-  Update in v4.0:
-    Interpret single-arg dict or list as a JSON-formatted message.
-    Support multiple plain-text messages.
+  The echoed message is visible only to the local player.
 
   Since: v2.0
   """
-  if not messages:
-    return
-
-  if len(messages) == 1 and type(messages[0]) in (dict, list):
-    # Interpret as JSON-formatted text.
-    await_script_function("echo_json_text", (json.dumps(messages[0]),))
-  else:
-    await_script_function("echo_plain_text", (" ".join([str(m) for m in messages]),))
+  print(message, file=sys.stderr)
 
 
-def chat(*messages):
-  """Sends messages to the chat.
+def chat(message: str):
+  """Sends the given message to the chat.
 
-  If `messages[0]` is a str starting with a slash or backslash, automatically
-  prepends a space so that the messages are sent as a chat and not executed as
-  a command. If `len(messages)` is greater than 1, join messages with a space
-  separating them.  Ignores empty `messages`.
-
-  Update in v4.0:
-    Support multiple messages.
+  If `message` starts with a slash or backslash, automatically prepends a space
+  so that the message is sent as a chat and not executed as a command.  Ignores
+  empty messages.
 
   Since: v2.0
   """
-  if not messages:
+  if not message:
     return
+  # If the message starts with a slash or backslash, prepend a space so that
+  # the message is printed and not executed as a command.
+  if message[0] in ("/", "\\"):
+    message = " " + message
+  print(message)
 
-  if type(messages[0]) is str:
-    # If the first message starts with a slash or backslash, prepend a space so
-    # that the first message is printed and not executed as a command.
-    if messages[0] in ("/", "\\"):
-      messages[0] = " " + messages[0]
-
-  minescript_runtime.call_noreturn_function("chat", (" ".join([str(m) for m in messages]),))
+def set_player_gamemode(gm: str) -> bool:
+  await_script_function("set_player_gamemode", (gm,))
 
 
-def log(*messages) -> bool:
-  """Sends messages to latest.log.
+def player_interact_at(x: int, y: int, z: int, offHand=False) -> bool:
+    await_script_function("player_interact_at", (x, y, z, offHand))
+
+def player_interact_item(offHand=False) -> bool:
+    await_script_function("player_interact_item", (offHand,))
+
+def get_player(nbt=False) -> dict:
+    return await_script_function("get_player", (nbt,))
+
+def set_player_fov(f: float) -> bool:
+    await_script_function("set_player_fov", (f, ))
+
+def player_start_break_block(x, y, z):
+    await_script_function("player_start_break_block", (x, y, z))
+
+def player_continue_break_block(x, y, z):
+    await_script_function("player_continue_break_block", (x, y, z))
+
+def player_stop_break_block():
+    await_script_function("player_stop_break_block", ())
+
+def log(message: str) -> bool:
+  """Sends the given message to latest.log.
+
+  Args:
+    message: string to send to the log
 
   Returns:
-    `True` if messages were logged successfully.
-
-  Update in v4.0:
-    Support multiple messages of any type. Auto-convert messages to str.
+    `True` if `message` was logged successfully.
 
   Since: v3.0
   """
-  if not messages:
-    return False
-  minescript_runtime.call_noreturn_function("log", (" ".join([str(m) for m in messages]),))
+  if not message:
+    return
+  await_script_function("log", (message,))
 
 
 def screenshot(filename=None):
@@ -153,24 +140,15 @@ def screenshot(filename=None):
   await_script_function("screenshot", (filename,))
 
 
-def job_info():
-  """Return info about active Minescript jobs.
-
-  Returns:
-    Dict structured as: `[{"job_id": ..., "command": [...], "source": ..., "status": ...}, ...]`
-    The enclosing job additionally has an entry `"self": true`.
-
-  Since: v4.0
-  """
-  return await_script_function("job_info", ())
-
-
 def flush():
   """Wait for all previously issued script commands from this job to complete.
 
   Since: v2.1
   """
   return await_script_function("flush", ())
+
+def player_attack_entity(uuid: str):
+  return await_script_function("player_attack_entity", (uuid,))
 
 
 def player_name() -> str:
@@ -221,6 +199,37 @@ def player_set_position(
   """
   return await_script_function("player_set_position", (x, y, z, yaw, pitch))
 
+def get_distance(P1: list, P2: list) -> str:
+  x, y, z = P1
+  x2, y2, z2 = P2
+  return await_script_function("get_distance", (x, y, z, x2, y2, z2))
+
+def get_online_players() -> dict:
+  return await_script_function("get_online_players", ())
+
+def player_remove_gravity(g: bool) -> bool:
+  return await_script_function("player_remove_gravity", (g, ))
+
+def player_swing_hand(h=False) -> bool:
+  return await_script_function("player_swing_hand", (h, ))
+
+def player_get_vehicle() -> dict | bool:
+    return await_script_function("player_get_vehicle", ())
+
+def player_add_velocity(
+    x: float, y: float, z: float) -> bool:
+    return await_script_function("player_add_velocity", (x, y, z))
+
+def player_set_velocity(
+    x: float, y: float, z: float) -> bool:
+    return await_script_function("player_set_velocity", (x, y, z))
+
+def player_set_vehicle_velocity(
+    x: float, y: float, z: float) -> bool:
+    return await_script_function("player_set_vehicle_velocity", (x, y, z))
+
+def player_set_strinting(x: bool) -> bool:
+    return await_script_function("player_set_sprinting", (x,))
 
 def async_player_set_position(
     x: float, y: float, z: float, yaw: float = None, pitch: float = None) -> Awaitable[bool]:
@@ -240,69 +249,49 @@ def async_player_set_position(
   return call_async_script_function("player_set_position", (x, y, z, yaw, pitch))
 
 
-@dataclass
-class ItemStack:
-  item: str
-  count: int
-  nbt: str = None
-  slot: int = None
-  selected: bool = None
-
-@dataclass
-class HandItems:
-  main_hand: ItemStack
-  off_hand: ItemStack
-
-def player_hand_items() -> HandItems:
+def player_hand_items() -> List[Dict[str, Any]]:
   """Gets the items in the local player's hands.
 
   Returns:
-    Items in player's hands.
-    (Legacy-style return value can be restored with `options.legacy_dict_return_values = True`)
+    Items in player's hands as a list of items where each item is a dict:
+    `{"item": str, "count": int}`, plus `"nbt": str` if the item has NBT data;
+    main-hand item is at list index 0, off-hand item at index 1.
 
   Update in v4.0:
-    Return `HandItems` instead of `List[Dict[str, Any]]` by default.
     Removed `done_callback` arg. Use `async_player_hand_items()` for async execution.
 
   Since: v2.0
   """
-  items = await_script_function("player_hand_items", ())
-  if options.legacy_dict_return_values:
-    return items
-  main, off = items
-  return HandItems(
-      main_hand=None if main is None else ItemStack(**main),
-      off_hand=None if off is None else ItemStack(**off))
+  return await_script_function("player_hand_items", ())
 
+def player_jump() -> bool:
+  return await_script_function("player_jump", ())
 
-def async_player_hand_items() -> Awaitable[HandItems]:
+def async_player_hand_items() -> Awaitable[List[Dict[str, Any]]]:
   """Gets the items in the local player's hands.
 
   Returns:
-    Awaitable items in player's hands.
+    Awaitable items in player's hands as a list of items where each item is a
+    dict: `{"item": str, "count": int}`, plus `"nbt": str` if the item has NBT
+    data; main-hand item is at list index 0, off-hand item at index 1.
 
   Similar to `player_hand_items()`, but can be used with `await` and `asyncio`.
 
   Since: v4.0
   """
-  def to_dataclass(items: List[Dict[str, Any]]) -> HandItems:
-    main, off = items
-    return HandItems(
-        main_hand=None if main is None else ItemStack(**main),
-        off_hand=None if off is None else ItemStack(**off))
-
-  return call_async_script_function("player_hand_items", (), to_dataclass)
+  return call_async_script_function("player_hand_items", ())
 
 
-def player_inventory() -> List[ItemStack]:
+def player_inventory() -> List[Dict[str, Any]]:
   """Gets the items in the local player's inventory.
 
   Returns:
-    Items in player's inventory.
-    (Legacy-style return value can be restored with `options.legacy_dict_return_values = True`)
+    Items in player's inventory as list of items where each item is a dict:
+    `{"item": str, "count": int, "slot": int}`, plus `"nbt": str` if an item
+    has NBT data and `"selected": True` for the item selected in the player's
+    main hand.
 
   Update in v4.0:
-    Return `List[ItemStack]` instead of `List[Dict[str, Any]]` by default.
     Removed `done_callback` arg. Use `async_player_inventory()` for async execution.
 
   Update in v3.0:
@@ -313,24 +302,23 @@ def player_inventory() -> List[ItemStack]:
 
   Since: v2.0
   """
-  items = await_script_function("player_inventory", ())
-  if options.legacy_dict_return_values:
-    return items
-  return [ItemStack(**item) for item in items]
+  return await_script_function("player_inventory", ())
 
 
-def async_player_inventory() -> Awaitable[List[ItemStack]]:
+def async_player_inventory() -> Awaitable[List[Dict[str, Any]]]:
   """Gets the items in the local player's inventory.
 
   Similar to `player_inventory()`, but can be used with `await` and `asyncio`.
 
   Returns:
-    Awaitable items in player's inventory.
+    Awaitable items in player's inventory as list of items where each item is a
+    dict: `{"item": str, "count": int, "slot": int}`, plus `"nbt": str` if an
+    item has NBT data and `"selected": True` for the item selected in the
+    player's main hand.
 
   Since: v4.0
   """
-  return call_async_script_function(
-      "player_inventory", (), lambda items: [ItemStack(**item) for item in items])
+  return call_async_script_function("player_inventory", ())
 
 
 def player_inventory_slot_to_hotbar(slot: int) -> int:
@@ -575,39 +563,8 @@ def player_get_targeted_block(max_distance: float = 20):
   """
   return await_script_function("player_get_targeted_block", (max_distance,))
 
-
-@dataclass
-class EntityData:
-  name: str
-  type: str
-  uuid: str
-  position: Vector3f
-  yaw: float
-  pitch: float
-  velocity: Vector3f
-  health: float = None
-  local: bool = None  # `True` if this the local player
-  passengers: List[str] = None  # UUIDs of passengers as strings
-  nbt: Dict[str, Any] = None
-
-
-def player_get_targeted_entity(max_distance: float = 20, nbt: bool = False) -> EntityData:
-  """Gets the entity targeted in the local player's crosshairs, if any.
-
-  Args:
-    max_distance: maximum distance to check for targeted entities
-    nbt: if `True`, populate an `"nbt"` attribute for the player
-
-  Returns:
-    `EntityData` for the entity targeted by the player, or None if no entity is targeted.
-    (Legacy-style returned dict can be restored with `options.legacy_dict_return_values = True`)
-
-  Since: v4.0
-  """
-  entity = await_script_function("player_get_targeted_entity", (max_distance, nbt))
-  if options.legacy_dict_return_values:
-    return entity
-  return None if entity is None else EntityData(**entity)
+def player_get_targeted_entity(max_distance: float = 20, nbt=False):
+  return await_script_function("player_get_targeted_entity", (max_distance, nbt))
 
 
 def player_health() -> float:
@@ -618,50 +575,18 @@ def player_health() -> float:
   return await_script_function("player_health", ())
 
 
-def player(*, nbt: bool = False):
-  """Gets attributes for the local player.
-
-  Args:
-    nbt: if `True`, populate the `nbt` field for the player
-
-  Returns:
-    `EntityData` representing a snapshot of values for the local player.
-    (Legacy-style returned dict can be restored with `options.legacy_dict_return_values = True`)
-
-  Since: v4.0
-  """
-  entity = await_script_function("player", (nbt,))
-  if options.legacy_dict_return_values:
-    return entity
-  return EntityData(**entity)
-
-
-def players(
-    *, nbt: bool = False, uuid: str = None, name: str = None,
-    position: Vector3f = None, offset: Vector3f = None, min_distance: float = None,
-    max_distance: float = None, sort: str = None, limit: int = None):
+def players(*, nbt: bool = False):
   """Gets a list of nearby players and their attributes.
 
   Args:
     nbt: if `True`, populate an `"nbt"` attribute for each returned player
-    uuid: regular expression for matching entities' UUIDs (optional)
-    name: regular expression for matching entities' names (optional)
-    position: position used with `offset`, `min_distance`, or `max_distance` to define a
-        volume for filtering entities; default is the local player's position (optional)
-    offset: offset relative to `position` for selecting entities (optional)
-    min_distance: min distance relative to `position` for selecting entities (optional)
-    max_distance: max distance relative to `position` for selecting entities (optional)
-    sort: one of "nearest", "furthest", "random", or "arbitrary" (optional)
-    limit: maximum number of entities to return (optional)
 
   Returns:
-    `List[EntityData]` representing a snapshot of values for the selected players.
-    (Legacy returned dicts can be restored with `options.legacy_dict_return_values = True`)
-
-  Update in v4.0:
-    Added args: uuid, name, type, position, offset, min_distance, max_distance, sort, limit.
-    Return `List[EntityData]` instead of `List[Dict[str, Any]]` by default.
-    Added `uuid` to returned players.
+    List of players where each player is represented as a dict containing:
+    `"name": str, "health": float, "type": str,
+    "position": [float, float, float], "yaw": float, "pitch": float,
+    "velocity": [float, float, float]`. The local player has the attribute
+    `"local": True`. The`"nbt"` attribute is present if `nbt` arg is `True`.
 
   Update in v3.1:
     Added `"health"` and `"local"` attributes, and `nbt` arg to output `"nbt"`
@@ -669,40 +594,27 @@ def players(
 
   Since: v2.1
   """
-  entities = await_script_function("players",
-      (nbt, uuid, name, position, offset, min_distance, max_distance, sort, limit))
-  if options.legacy_dict_return_values:
-    return entities
-  return [EntityData(**e) for e in entities]
+  return await_script_function("players", (nbt,))
 
+def send_packet(PacketName: str, Value=None):
+    '''
+    onGround: bool
+    '''
+    await_script_function("send_packet", (PacketName, Value))
 
-def entities(
-    *, nbt: bool = False, uuid: str = None, name: str = None, type: str = None,
-    position: Vector3f = None, offset: Vector3f = None, min_distance: float = None,
-    max_distance: float = None, sort: str = None, limit: int = None):
+def entities(*, nbt: bool = False):
   """Gets a list of nearby entities and their attributes.
 
   Args:
-    nbt: if `True`, populate an `"nbt"` attribute for each returned entity (optional)
-    uuid: regular expression for matching entities' UUIDs (optional)
-    name: regular expression for matching entities' names (optional)
-    type: regular expression for matching entities' types (optional)
-    position: position used with `offset`, `min_distance`, or `max_distance` to define a
-        volume for filtering entities; default is the local player's position (optional)
-    offset: offset relative to `position` for selecting entities (optional)
-    min_distance: min distance relative to `position` for selecting entities (optional)
-    max_distance: max distance relative to `position` for selecting entities (optional)
-    sort: one of "nearest", "furthest", "random", or "arbitrary" (optional)
-    limit: maximum number of entities to return (optional)
+    nbt: if `True`, populate an `"nbt"` attribute for each returned entity
 
   Returns:
-    `List[EntityData]` representing a snapshot of values for the selected entities.
-    (Legacy returned dicts can be restored with `options.legacy_dict_return_values = True`)
-
-  Update in v4.0:
-    Added args: uuid, name, type, position, offset, min_distance, max_distance, sort, limit.
-    Return `List[EntityData]` instead of `List[Dict[str, Any]]` by default.
-    Added `uuid` and `passengers` (only for entities with passengers) to returned entities.
+    List of entities where each entity is represented as a dict containing:
+    `"name": str, "health": float (living entities only), "type": str,
+    "position": [float, float, float], "yaw": float, "pitch": float,
+    "velocity": [float, float, float]`. Living entities have
+    `"health": float` and the local player has `"local": True`. The`"nbt"`
+    attribute is present if `nbt` arg is `True`.
 
   Update in v3.1:
     Added `"health"` and `"local"` attributes, and `nbt` arg to output `"nbt"`
@@ -710,46 +622,10 @@ def entities(
 
   Since: v2.1
   """
-  entities = await_script_function("entities",
-      (nbt, uuid, name, type, position, offset, min_distance, max_distance, sort, limit))
-  if options.legacy_dict_return_values:
-    return entities
-  return [EntityData(**e) for e in entities]
+  return await_script_function("entities", (nbt,))
 
 
-@dataclass
-class VersionInfo:
-  minecraft: str
-  minescript: str
-  mod_loader: str
-  launcher: str
-  os_name: str
-  os_version: str
-
-def version_info() -> VersionInfo:
-  """Gets version info for Minecraft, Minescript, mod loader, launcher, and OS.
-
-  Returns:
-    `VersionInfo`
-
-  Since: v4.0
-  """
-  return VersionInfo(**await_script_function("version_info", ()))
-
-
-@dataclass
-class WorldInfo:
-  game_ticks: int
-  day_ticks: int
-  raining: bool
-  thundering: bool
-  spawn: BlockPos
-  hardcore: bool
-  difficulty: str
-  name: str
-  address: str
-
-def world_info() -> WorldInfo:
+def world_properties() -> Dict[str, Any]:
   """Gets world properties.
 
   If the current world is a multiplayer world loaded from the server list, then
@@ -757,20 +633,7 @@ def world_info() -> WorldInfo:
   the server list; otherwise `name` is the name of the locally saved world and
   `address` is `localhost`.
 
-  `day_ticks` are the ticks associated with the day-night cycle.
-
-  Returns:
-    `WorldInfo`
-
-  Since: v4.0
-  """
-  return WorldInfo(**await_script_function("world_info", ()))
-
-
-def world_properties() -> Dict[str, Any]:
-  """Gets world properties.
-
-  This function is deprecated. Use `world_info()` instead.
+  `"day_ticks"` are the ticks associated with the day-night cycle.
 
   Returns:
     Dict containing: `"game_ticks": int, "day_ticks": int, "raining": bool,
@@ -779,8 +642,7 @@ def world_properties() -> Dict[str, Any]:
 
   Since: v3.1
   """
-  print("Warning: world_properties() is deprecated. Use world_info() instead.", file=sys.stderr)
-  return await_script_function("world_info", ())
+  return await_script_function("world_properties", ())
 
 
 def getblock(x: int, y: int, z: int) -> str:
@@ -877,26 +739,24 @@ class EventRegistrationHandler:
       register: if `True`, register the handler upon construction
     """
     self.queue = queue.Queue()
-    self.handler_id = None
+    self.registered = False
     self.registration_func = registration_func
     self.unregistration_func = unregistration_func
     if register:
       self.register()
 
   def register(self) -> bool:
-    if self.handler_id is not None:
+    if self.registered:
       return False
-    handler_id = self.registration_func(self.queue.put, self.queue.put)
-    if type(handler_id) is not int:
-      raise ValueError(f"Expected registration function to return int but got `{self.handler_id}`")
-    self.handler_id = handler_id
+    self.registration_func(self.queue.put, self.queue.put)
+    self.registered = True
     return True
 
   def unregister(self) -> bool:
-    if self.handler_id is None:
+    if not self.registered:
       return False
-    self.unregistration_func(self.handler_id)
-    self.handler_id = None
+    self.unregistration_func()
+    self.registered = False
     return True
 
   def get(self, block: bool = True, timeout: float = None) -> Any:
@@ -928,15 +788,6 @@ class EventRegistrationHandler:
   def __del__(self):
     self.unregister()
 
-
-@dataclass
-class KeyEvent:
-  key: int
-  scan_code: int
-  action: int
-  modifiers: int
-  time: float
-  screen: str
 
 class KeyEventListener(EventRegistrationHandler):
   """Listener for keyboard events.
@@ -980,7 +831,7 @@ class KeyEventListener(EventRegistrationHandler):
     """
     super().__init__(register, register_key_event_listener, unregister_key_event_listener)
 
-  def get(self, block: bool = True, timeout: float = None) -> KeyEvent:
+  def get(self, block: bool = True, timeout: float = None) -> Dict[str, Any]:
     """Gets the next key event in the queue.
 
     Args:
@@ -988,74 +839,44 @@ class KeyEventListener(EventRegistrationHandler):
       timeout: timeout in seconds to wait for an event if `block` is `True`
 
     Returns:
-      `KeyEvent`, where `action` is 0 for key up, 1 for key down, and 2 for key repeat.
+      event dict: `{"key": int, "scanCode": int, "action": int, "modifiers": int,
+      "timeMillis": int, "screen": str}` where `action` is 0 for key up, 1 for
+      key down, and 2 for key repeat.
 
     Raises:
       `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
       queue is empty.
     """
-    event = super().get(block, timeout)
-
-    if options.legacy_dict_return_values:
-      # Restore legacy names and values from before v4.0.
-      event["scanCode"] = event["scan_code"]
-      event["timeMillis"] = int(event["time"] * 1000)
-      del event["scan_code"]
-      del event["time"]
-      return event
-
-    return KeyEvent(**event)
+    return super().get(block, timeout)
 
 
 def register_key_event_listener(
-    listener: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
+    listener: Callable[[str], None], exception_handler: ExceptionHandler = None):
   """Registers a listener for receiving keyboard events. One listener allowed per job.
 
   For a more user-friendly API, use `KeyEventListener` instead. (__internal__)
 
   Args:
-    listener: callable that repeatedly accepts a dict representing key events
+    listener: callable that repeatedly accepts a string representing key events
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
-
-  Returns:
-    ID for the new listener. This ID can be passed to `unregister_key_event_listener(...)`.
-
-  Update in v4.0:
-    Added return value for identifying the newly registered listener.
 
   Since: v3.2
   """
-  listener_id = await_script_function("register_key_event_listener", ())
-  send_script_function_request(
-      "start_key_event_listener", (listener_id,), listener, exception_handler)
-  return listener_id
+  send_script_function_request("register_key_event_listener", (), listener, exception_handler)
 
 
-def unregister_key_event_listener(listener_id: int):
-  """Unregisters a key event listener.
+def unregister_key_event_listener():
+  """Unregisters a key event listener, if any, for the currently running job.
 
   For a more user-friendly API, use `KeyEventListener` instead. (__internal__)
 
-  Args:
-    listener_id: ID of a listener returned from `register_key_event_listener(...)`.
-
-  Update in v4.0:
-    Require `listener_id` arg. Upon failure, raises an exception rather than returning false.
+  Returns:
+    `True` if successfully unregistered a listener.
 
   Since: v3.2
   """
-  await_script_function("unregister_event_handler", (listener_id,))
+  await_script_function("unregister_key_event_listener", ())
 
-
-@dataclass
-class MouseEvent:
-  button: int
-  action: int
-  modifiers: int
-  time: float
-  x: float
-  y: float
-  screen: str = None
 
 class MouseEventListener(EventRegistrationHandler):
   """Listener for mouse click events.
@@ -1092,7 +913,7 @@ class MouseEventListener(EventRegistrationHandler):
     """
     super().__init__(register, register_mouse_event_listener, unregister_mouse_event_listener)
 
-  def get(self, block: bool = True, timeout: float = None) -> MouseEvent:
+  def get(self, block: bool = True, timeout: float = None) -> Dict[str, Any]:
     """Gets the next mouse event in the queue.
 
     Args:
@@ -1100,55 +921,43 @@ class MouseEventListener(EventRegistrationHandler):
       timeout: timeout in seconds to wait for an event if `block` is `True`
 
     Returns:
-      `MouseEvent`, where `action` is 0 for mouse up and 1 for mouse down.
+      event dict: `{"button": int, "action": int, "modifiers": int,
+      "timeMillis": int, "screen": str, "x": float, "y": float}` where `action`
+      is 0 for mouse up and 1 for mouse down.
 
     Raises:
       `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
       queue is empty.
     """
-    event = super().get(block, timeout)
-
-    if options.legacy_dict_return_values:
-      # Restore legacy name and value from before v4.0.
-      event["timeMillis"] = int(event["time"] * 1000)
-      del event["time"]
-      return event
-
-    return MouseEvent(**event)
+    return super().get(block, timeout)
 
 
 def register_mouse_event_listener(
-    listener: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
+    listener: Callable[[str], None], exception_handler: ExceptionHandler = None):
   """Registers a listener for receiving mouse events. One listener allowed per job.
 
   For a more user-friendly API, use `MouseEventListener` instead. (__internal__)
 
   Args:
-    listener: callable that repeatedly accepts a dict representing mouse events
+    listener: callable that repeatedly accepts a string representing mouse events
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
-
-  Update in v4.0:
-    Added return value for identifying the newly registered listener.
 
   Since: v4.0
   """
-  listener_id = await_script_function("register_mouse_event_listener", ())
-  send_script_function_request(
-      "start_mouse_event_listener", (listener_id,), listener, exception_handler)
-  return listener_id
+  send_script_function_request("register_mouse_event_listener", (), listener, exception_handler)
 
 
-def unregister_mouse_event_listener(listener_id: int):
+def unregister_mouse_event_listener():
   """Unregisters a mouse event listener, if any, for the currently running job.
 
   For a more user-friendly API, use `MouseEventListener` instead. (__internal__)
 
-  Args:
-    listener_id: ID of a listener returned from `register_mouse_event_listener(...)`.
+  Returns:
+    `True` if successfully unregistered a listener.
 
   Since: v4.0
   """
-  await_script_function("unregister_event_handler", (listener_id,))
+  await_script_function("unregister_mouse_event_listener", ())
 
 
 class ChatEventListener(EventRegistrationHandler):
@@ -1213,7 +1022,7 @@ class ChatEventListener(EventRegistrationHandler):
 
 
 def register_chat_message_listener(
-    listener: Callable[[str], None], exception_handler: ExceptionHandler = None) -> int:
+    listener: Callable[[str], None], exception_handler: ExceptionHandler = None):
   """Registers a listener for receiving chat messages. One listener allowed per job.
 
   Listener receives both incoming and outgoing chat messages.
@@ -1224,9 +1033,6 @@ def register_chat_message_listener(
     listener: callable that repeatedly accepts a string representing chat messages
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
 
-  Update in v4.0:
-    Added return value for identifying the newly registered listener.
-
   Update in v3.2:
     Added optional arg `exception_handler`.
 
@@ -1235,26 +1041,20 @@ def register_chat_message_listener(
   See also:
     `register_chat_message_interceptor()` for swallowing outgoing chat messages
   """
-  listener_id = await_script_function("register_chat_message_listener", ())
-  send_script_function_request(
-      "start_chat_message_listener", (listener_id,), listener, exception_handler)
-  return listener_id
+  send_script_function_request("register_chat_message_listener", (), listener, exception_handler)
 
 
-def unregister_chat_message_listener(listener_id: int):
+def unregister_chat_message_listener():
   """Unregisters a chat message listener, if any, for the currently running job.
 
   For a more user-friendly API, use `ChatEventListener` instead.  (__internal__)
 
-  Args:
-    listener_id: ID of a listener returned from `register_chat_message_listener(...)`.
-
-  Update in v4.0:
-    Require `listener_id` arg. Upon failure, raises an exception rather than returning false.
+  Returns:
+    `True` if successfully unregistered a listener.
 
   Since: v2.0
   """
-  await_script_function("unregister_event_handler", (listener_id,))
+  await_script_function("unregister_chat_message_listener", ())
 
 
 class ChatMessageInterceptor(EventRegistrationHandler):
@@ -1286,23 +1086,14 @@ class ChatMessageInterceptor(EventRegistrationHandler):
   Since: v4.0
   """
 
-  def __init__(self, *, prefix: str = None, pattern: str = None, register: bool = True):
+  def __init__(self, register=True):
     """Creates a `ChatMessageInterceptor` to intercept chat messages.
 
-    `prefix` or `pattern` can be specified, but not both. If neither `prefix`
-    nor `pattern` is specified, all chat messages are intercepted.
-
     Args:
-      prefix: if specified, intercept only the messages starting with this literal prefix
-      pattern: if specified, intercept only the messages matching this regular expression
       register: if `True`, register the interceptor upon construction
     """
     super().__init__(
-        register,
-        lambda interceptor, exception_handler: \
-            register_chat_message_interceptor(
-                interceptor, exception_handler, prefix=prefix, pattern=pattern),
-        unregister_chat_message_interceptor)
+        register, register_chat_message_interceptor, unregister_chat_message_interceptor)
 
   def get(self, block: bool = True, timeout: float = None) -> str:
     """Gets the next intercepted chat message in the queue.
@@ -1322,8 +1113,7 @@ class ChatMessageInterceptor(EventRegistrationHandler):
 
 
 def register_chat_message_interceptor(
-    interceptor: Callable[[str], None], exception_handler: ExceptionHandler = None,
-    *, prefix: str = None, pattern: str = None) -> int:
+    interceptor: Callable[[str], None], exception_handler: ExceptionHandler = None):
   """Registers an interceptor for swallowing chat messages.
 
   For a more user-friendly API, use `ChatMessageInterceptor` instead.  (__internal__)
@@ -1334,50 +1124,30 @@ def register_chat_message_interceptor(
   to the server.  Only one interceptor is allowed at a time within a Minecraft
   instance.
 
-  `prefix` or `pattern` can be specified, but not both. If neither `prefix` nor
-  `pattern` is specified, all chat messages are intercepted.
-
   Args:
     interceptor: callable that repeatedly accepts a string representing chat messages
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
-    prefix: if specified, intercept only the messages starting with this literal prefix
-    pattern: if specified, intercept only the messages matching this regular expression
-
-  Returns:
-    ID for the new interceptor. This ID can be passed to `unregister_chat_message_interceptor(...)`.
-
-  Update in v4.0:
-    Support filtering of intercepted messages via `prefix` and `pattern`.
-    Added return value for identifying the newly registered listener.
 
   Since: v2.1
 
   See also:
     `register_chat_message_listener()` for non-destructive listening of chat messages
   """
-  interceptor_id = await_script_function(
-      "register_chat_message_interceptor", (prefix, pattern))
-
   send_script_function_request(
-      "start_chat_message_interceptor", (interceptor_id,), interceptor, exception_handler)
-
-  return interceptor_id
+      "register_chat_message_interceptor", (), interceptor, exception_handler)
 
 
-def unregister_chat_message_interceptor(interceptor_id: int):
+def unregister_chat_message_interceptor():
   """Unregisters the chat message interceptor, if one is currently registered.
 
   For a more user-friendly API, use `ChatMessageInterceptor` instead.  (__internal__)
 
-  Args:
-    interceptor_id: ID of a listener returned from `register_chat_message_interceptor(...)`.
-
-  Update in v4.0:
-    Require `interceptor_id` arg. Upon failure, raises an exception rather than returning false.
+  Returns:
+    `True` if successfully unregistered an interceptor.
 
   Since: v2.1
   """
-  await_script_function("unregister_event_handler", (interceptor_id,))
+  await_script_function("unregister_chat_message_interceptor", ())
 
 
 def screen_name() -> str:
@@ -1391,33 +1161,15 @@ def screen_name() -> str:
   return await_script_function("screen_name", ())
 
 
-def show_chat_screen(show: bool, prompt: str = None) -> str:
-  """Shows or hides the chat screen.
-
-  Args:
-    show: if `True`, show the chat screen; otherwise hide it
-    prompt: if show is `True`, insert `prompt` into chat input box upon showing chat screen.
-
-  Returns:
-    `True` if chat screen was successfully shown (`show=True`) or hidden (`show=False`)
-
-  Since: v4.0
-  """
-  return await_script_function("show_chat_screen", (show, prompt))
-
-
-def container_get_items() -> List[ItemStack]:
+def container_get_items():
   """Gets all items in an open container (chest, furnace, etc. with slots).
 
   Returns:
-    List of items if a container's contents are displayed; `None` otherwise.
+    List of dictionaries of item data if a container's contents are displayed; `None` otherwise.
 
   Since: v4.0
   """
-  items = await_script_function("container_get_items", ())
-  if options.legacy_dict_return_values:
-    return items
-  return None if items is None else [ItemStack(**item) for item in items]
+  return await_script_function("container_get_items", ())
 
 
 def container_click_slot(slot: int) -> bool:
@@ -1445,6 +1197,10 @@ def player_look_at(x: float, y: float, z: float):
   Since: v4.0
   """
   await_script_function("player_look_at", (x, y, z))
+
+
+BlockPos = Tuple[int, int, int]
+"""Tuple representing `(x: int, y: int, z: int)` position in block space."""
 
 
 Rotation = Tuple[int, int, int, int, int, int, int, int, int]
