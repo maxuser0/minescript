@@ -8,6 +8,7 @@ import com.google.gson.*;
 import com.mojang.authlib.minecraft.client.MinecraftClient;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.shaders.Effect;
+import com.mojang.blaze3d.vertex.PoseStack;
 import io.netty.buffer.Unpooled;
 import it.unimi.dsi.fastutil.ints.IntIterator;
 import net.minecraft.client.KeyMapping;
@@ -31,23 +32,31 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleOptions;
+import net.minecraft.core.particles.ParticleType;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.PacketListener;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.ClientboundAddPlayerPacket;
-import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
-import net.minecraft.network.protocol.game.ServerboundPickItemPacket;
+import net.minecraft.network.protocol.game.*;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.stats.Stat;
+import net.minecraft.stats.StatType;
+import net.minecraft.stats.Stats;
 import net.minecraft.stats.StatsCounter;
 import net.minecraft.util.profiling.jfr.event.PacketSentEvent;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageSources;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.ai.attributes.Attribute;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
@@ -65,11 +74,12 @@ import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
-import javax.print.attribute.Attribute;
+
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.Key;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -82,6 +92,8 @@ import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import org.joml.Matrix4f;
 
 import static net.minescript.common.CommandSyntax.*;
 
@@ -2475,13 +2487,22 @@ public class Minescript {
   private static JsonObject entityToJsonObject(Entity entity, boolean includeNbt) {
     var minecraft = Minecraft.getInstance();
     var jsonEntity = new JsonObject();
+    var EyePosition = new JsonArray();
     jsonEntity.addProperty("name", entity.getName().getString());
     jsonEntity.addProperty("type", entity.getType().toString());
     if (entity instanceof LivingEntity livingEntity) {
+      EyePosition.add(livingEntity.getEyePosition().x);
+      EyePosition.add(livingEntity.getEyePosition().y);
+      EyePosition.add(livingEntity.getEyePosition().z);
       jsonEntity.addProperty("health", livingEntity.getHealth());
+      jsonEntity.add("EyePosition", EyePosition);
     }
     if (entity == minecraft.player) {
       jsonEntity.addProperty("local", "true");
+      jsonEntity.addProperty("onGround", entity.onGround());
+    }
+    else{
+      jsonEntity.addProperty("DistanceFromPlayer", minecraft.player.distanceTo(entity));
     }
 
     var position = new JsonArray();
@@ -3083,7 +3104,14 @@ public class Minescript {
             result.add(jsonPrimitiveOrNull(block));
             return Optional.of(result);
           } else {
-            return OPTIONAL_JSON_NULL;
+            var pos = new JsonArray();
+            var result = new JsonArray();
+            pos.add(blockHit.getLocation().x);
+            pos.add(blockHit.getLocation().y);
+            pos.add(blockHit.getLocation().z);
+            result.add(pos);
+            result.add(false);
+            return Optional.of(result);
           }
         }
 
@@ -3173,7 +3201,7 @@ public class Minescript {
         return OPTIONAL_JSON_TRUE;
       }
 
-      case "player_break_block":
+      case "player_continue_break_block":
       {
           args.expectSize(3);
 
@@ -3185,7 +3213,7 @@ public class Minescript {
           return OPTIONAL_JSON_TRUE;
       }
 
-      case "test":
+      case "player_start_break_block":
       {
         args.expectSize(3);
 
@@ -3193,20 +3221,81 @@ public class Minescript {
         int y = args.getConvertibleInt(1);
         int z = args.getConvertibleInt(2);
 
-        minecraft.level.addParticle(DustParticleOptions.REDSTONE, x, y, z, 0.0, 0.0, 0.0);
+        minecraft.gameMode.startDestroyBlock(new BlockPos(x, y, z), Direction.DOWN);
+        return OPTIONAL_JSON_TRUE;
+      }
+
+      case "player_stop_break_block":
+      {
+        args.expectSize(0);
+
+        minecraft.gameMode.stopDestroyBlock();
+        return OPTIONAL_JSON_TRUE;
+      }
+
+      case "set_player_fov":
+      {
+        args.expectSize(1);
+        int f = args.getConvertibleInt(0);
+        minecraft.options.fov().set(f);
+
+        return OPTIONAL_JSON_TRUE;
+      }
+
+      case "send_packet":
+      {
+        args.expectSize(2);
+
+        String PacketName = args.getString(0);
+
+        if (Objects.equals(PacketName, "onGround")) {
+          boolean value = args.getBoolean(1);
+          player.connection.getConnection().send(new ServerboundMovePlayerPacket.StatusOnly(value));
+        }
+        return OPTIONAL_JSON_TRUE;
+      }
+
+      case "get_player":
+      {
+        args.expectSize(1);
+        boolean nbt = args.getBoolean(0);
+
+        return  Optional.of(entityToJsonObject(player, nbt));
+      }
+
+      case "player_interact_at":
+      {
+        args.expectSize(4);
+
+        int x = args.getConvertibleInt(0);
+        int y = args.getConvertibleInt(1);
+        int z = args.getConvertibleInt(2);
+
+        boolean offHand = args.getBoolean(3);
+
+        if (!offHand){
+          minecraft.gameMode.useItemOn(player, InteractionHand.MAIN_HAND, new BlockHitResult(new Vec3(x, y, z), Direction.UP, new BlockPos(x, y, z), false));
+        }
+        else{
+          minecraft.gameMode.useItemOn(player, InteractionHand.OFF_HAND, new BlockHitResult(new Vec3(x, y, z), Direction.UP, new BlockPos(x, y, z), false));
+        }
 
         return  OPTIONAL_JSON_TRUE;
       }
 
-      case "player_place_block":
+      case "player_interact_item":
       {
-        args.expectSize(3);
+        args.expectSize(1);
 
-        int x = args.getConvertibleInt(0);
-        int y = args.getConvertibleInt(1);
-        int z = args.getConvertibleInt(2);
+        boolean offHand = args.getBoolean(0);
 
-        minecraft.gameMode.useItemOn(player, InteractionHand.MAIN_HAND, new BlockHitResult(new Vec3(x, y, z), Direction.UP, new BlockPos(x, y, z), false));
+        if (!offHand){
+          minecraft.gameMode.useItem(player, InteractionHand.MAIN_HAND);
+        }
+        else{
+          minecraft.gameMode.useItem(player, InteractionHand.OFF_HAND);
+        }
+
         return  OPTIONAL_JSON_TRUE;
       }
       
