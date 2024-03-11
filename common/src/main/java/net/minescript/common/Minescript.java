@@ -26,6 +26,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -3304,6 +3305,10 @@ public class Minescript {
         args.expectSize(1);
         return Optional.of(new JsonPrimitive(job.objects.retain(args.getString(0))));
 
+      case "java_double":
+        args.expectSize(1);
+        return Optional.of(new JsonPrimitive(job.objects.retain(args.getDouble(0))));
+
       case "java_int":
         args.expectSize(1);
         return Optional.of(new JsonPrimitive(job.objects.retain(args.getStrictInt(0))));
@@ -3312,14 +3317,14 @@ public class Minescript {
         args.expectSize(1);
         return Optional.of(new JsonPrimitive(job.objects.retain(args.getBoolean(0))));
 
-      case "get_class":
+      case "java_class":
         {
           args.expectSize(1);
           var object = Class.forName(args.getString(0));
           return Optional.of(new JsonPrimitive(job.objects.retain(object)));
         }
 
-      case "get_ctor":
+      case "java_ctor":
         {
           args.expectSize(1);
           var target = (Class) job.objects.getById(args.getStrictInt(0));
@@ -3333,7 +3338,7 @@ public class Minescript {
           return Optional.of(new JsonPrimitive(job.objects.retain(ctorSet)));
         }
 
-      case "call_ctor":
+      case "java_new_instance":
         {
           var target = (Class) job.objects.getById(args.getStrictInt(0));
           var ctorSet = (ConstructorSet) job.objects.getById(args.getStrictInt(1));
@@ -3365,44 +3370,50 @@ public class Minescript {
           throw exception;
         }
 
-      case "get_method":
+      case "java_member":
         {
           args.expectSize(2);
-          String methodName = args.getString(1);
+          String memberName = args.getString(1);
           var target = (Class) job.objects.getById(args.getStrictInt(0));
+          Optional<Field> field;
+          try {
+            field = Optional.of(target.getField(memberName));
+          } catch (NoSuchFieldException e) {
+            field = Optional.empty();
+          }
           var methods = new ImmutableList.Builder<Method>();
           var argCounts = new ImmutableSet.Builder<Integer>();
           for (var method : target.getMethods()) {
-            if (method.getName().equals(methodName)) {
+            if (method.getName().equals(memberName)) {
               methods.add(method);
               argCounts.add(method.getParameterCount());
             }
           }
-          var methodSet = new MethodSet(methodName, methods.build(), argCounts.build());
-          if (!methodSet.methods().isEmpty()) {
-            return Optional.of(new JsonPrimitive(job.objects.retain(methodSet)));
+          var memberSet = new MemberSet(memberName, field, methods.build(), argCounts.build());
+          if (!memberSet.methods().isEmpty() || !memberSet.field().isEmpty()) {
+            return Optional.of(new JsonPrimitive(job.objects.retain(memberSet)));
           }
-          throw new IllegalArgumentException("Method not found: " + methodName);
+          throw new IllegalArgumentException("Method not found: " + memberName);
         }
 
-      case "call_method":
+      case "java_call_method":
         {
           var target = (Object) job.objects.getById(args.getStrictInt(0));
-          var methodSet = (MethodSet) job.objects.getById(args.getStrictInt(1));
+          var memberSet = (MemberSet) job.objects.getById(args.getStrictInt(1));
           Object[] params = new Object[args.size() - 2];
           for (int i = 0; i < params.length; ++i) {
             params[i] = job.objects.getById(args.getStrictInt(i + 2));
           }
-          if (!methodSet.argCounts().contains(params.length)) {
+          if (!memberSet.argCounts().contains(params.length)) {
             throw new IllegalArgumentException(
                 String.format(
                     "Method `%s` got %d args but expected %s",
-                    methodSet.name(), params.length, methodSet.argCounts()));
+                    memberSet.name(), params.length, memberSet.argCounts()));
           }
           // Catch IllegalArgumentException until all the methods in the set with the right number
           // of args have been exhausted.
           IllegalArgumentException exception = null;
-          for (Method method : methodSet.methods()) {
+          for (Method method : memberSet.methods()) {
             if (method.getParameterCount() == params.length) {
               try {
                 var result = method.invoke(target, params);
@@ -3417,14 +3428,28 @@ public class Minescript {
           throw exception;
         }
 
-      case "object_array_length":
+      case "java_access_field":
+        {
+          var target = (Object) job.objects.getById(args.getStrictInt(0));
+          var memberSet = (MemberSet) job.objects.getById(args.getStrictInt(1));
+          var field = memberSet.field();
+          if (field.isEmpty()) {
+            throw new NoSuchFieldException(String.format("No field named `%s`", memberSet.name()));
+          }
+          var result = field.get().get(target);
+          return result == null
+              ? OPTIONAL_JSON_NULL
+              : Optional.of(new JsonPrimitive(job.objects.retain(result)));
+        }
+
+      case "java_array_length":
         {
           args.expectSize(1);
           var array = (Object[]) job.objects.getById(args.getStrictInt(0));
           return Optional.of(new JsonPrimitive(array.length));
         }
 
-      case "object_array_index":
+      case "java_array_index":
         {
           args.expectSize(2);
           var array = (Object[]) job.objects.getById(args.getStrictInt(0));
@@ -3435,11 +3460,11 @@ public class Minescript {
               : Optional.of(new JsonPrimitive(job.objects.retain(result)));
         }
 
-      case "to_string":
+      case "java_to_string":
         args.expectSize(1);
         return Optional.of(new JsonPrimitive(job.objects.getById(args.getStrictInt(0)).toString()));
 
-      case "release_reference":
+      case "java_release":
         {
           args.expectSize(1);
           job.objects.releaseById(args.getStrictInt(1));
@@ -3456,8 +3481,11 @@ public class Minescript {
   private record ConstructorSet(
       ImmutableList<Constructor> ctors, ImmutableSet<Integer> argCounts) {}
 
-  private record MethodSet(
-      String name, ImmutableList<Method> methods, ImmutableSet<Integer> argCounts) {}
+  private record MemberSet(
+      String name,
+      Optional<Field> field,
+      ImmutableList<Method> methods,
+      ImmutableSet<Integer> argCounts) {}
 
   public static void handleAutorun(String worldName) {
     LOGGER.info("Handling autorun for world `{}`", worldName);
