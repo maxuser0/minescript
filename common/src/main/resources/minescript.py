@@ -595,6 +595,7 @@ class EntityData:
   name: str
   type: str
   uuid: str
+  id: int
   position: Vector3f
   yaw: float
   pitch: float
@@ -676,7 +677,7 @@ def players(
   Update in v4.0:
     Added args: uuid, name, type, position, offset, min_distance, max_distance, sort, limit.
     Return `List[EntityData]` instead of `List[Dict[str, Any]]` by default.
-    Added `uuid` to returned players.
+    Added `uuid` and `id` to returned players.
 
   Update in v3.1:
     Added `"health"` and `"local"` attributes, and `nbt` arg to output `"nbt"`
@@ -717,7 +718,7 @@ def entities(
   Update in v4.0:
     Added args: uuid, name, type, position, offset, min_distance, max_distance, sort, limit.
     Return `List[EntityData]` instead of `List[Dict[str, Any]]` by default.
-    Added `uuid` and `passengers` (only for entities with passengers) to returned entities.
+    Added `uuid`, `id`, and `passengers` (only for entities with passengers) to returned entities.
 
   Update in v3.1:
     Added `"health"` and `"local"` attributes, and `nbt` arg to output `"nbt"`

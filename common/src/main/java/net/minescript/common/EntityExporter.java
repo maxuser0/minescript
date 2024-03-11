@@ -109,6 +109,7 @@ public class EntityExporter {
     jsonEntity.addProperty("name", entity.getName().getString());
     jsonEntity.addProperty("type", entity.getType().toString());
     jsonEntity.addProperty("uuid", uuid);
+    jsonEntity.addProperty("id", entity.getId());
     if (entity instanceof LivingEntity livingEntity) {
       jsonEntity.addProperty("health", livingEntity.getHealth());
     }
