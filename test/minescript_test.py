@@ -76,9 +76,10 @@ def expect_message(message):
   #minescript.flush()
   while time.time() < timeout:
     try:
-      msg = chat_listener_.get(timeout=0.01)
+      event = chat_listener_.get(timeout=0.01)
     except queue.Empty:
       continue
+    msg = event.message
     if expected_message_re.match(msg):
       print_success(f'Found message: {repr(msg)}')
       return True
