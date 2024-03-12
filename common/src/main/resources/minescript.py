@@ -2009,3 +2009,68 @@ class BlockPacker:
     """Frees this BlockPacker to be garbage collected."""
     blockpacker_delete(self._id)
 
+
+def java_class(name: str):
+  """Looks up Java class by fully qualified name. Returns handle to Java object."""
+  return await_script_function("java_class", (name,))
+
+def java_string(s):
+  """Creates Java String. Returns handle to Java object."""
+  return await_script_function("java_string", (s,))
+
+def java_double(d):
+  """Creates Java Double. Returns handle to Java object."""
+  return await_script_function("java_double", (d,))
+
+def java_int(i):
+  """Creates Java Integer. Returns handle to Java object."""
+  return await_script_function("java_int", (i,))
+
+def java_bool(b):
+  """Creates Java Boolean. Returns handle to Java object."""
+  return await_script_function("java_bool", (b,))
+
+def java_ctor(clss):
+  """Returns handle to constructor for `clss`."""
+  return await_script_function("java_ctor", (clss,))
+
+def java_new_instance(target, ctor, *args):
+  """Creates new Java instance from constructor handle. Returns handle to Java object.
+
+  Args:
+    args: handles to Java objects to pass as constructor params
+  """
+  return await_script_function("java_new_instance", (target, ctor, *args))
+
+def java_member(clss, name: str):
+  """Gets Java member(s) matching `name`. Returns handle to Java object."""
+  return await_script_function("java_member", (clss, name))
+
+def java_access_field(target, field):
+  """Accesses `field` on `target`. Returns handle to Java object, or `None` if `null`."""
+  return await_script_function("java_access_field", (target, field))
+
+def java_call_method(target, method, *args):
+  """Invokes method on target. Returns handle to Java object, or `None` if `null`.
+
+  Args:
+    args: handles to Java objects to pass as constructor params
+  """
+  return await_script_function("java_call_method", (target, method, *args))
+
+def java_array_length(array):
+  """Returns length of array handle as `int`."""
+  return await_script_function("java_array_length", (array,))
+
+def java_array_index(array, i):
+  """Gets element `i` of array handle. Returns handle to Java object, or `None` if `null`."""
+  return await_script_function("java_array_index", (array, i))
+
+def java_to_string(target):
+  """Returns `str` from calling `target.toString()` in Java."""
+  return await_script_function("java_to_string", (target,))
+
+def java_release(target):
+  """Release the Java reference to `target`."""
+  minescript_runtime.call_noreturn_function("java_release", (target,))
+

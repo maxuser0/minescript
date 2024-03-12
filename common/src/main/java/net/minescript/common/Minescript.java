@@ -3214,14 +3214,12 @@ public class Minescript {
           if (show) {
             if (screen == null) {
               minecraft.setScreen(new ChatScreen(""));
-              var prompt = args.get(1);
-              if (prompt != null && checkChatScreenInput()) {
-                chatEditBox.setValue(prompt.toString());
-              }
-              result = OPTIONAL_JSON_TRUE;
-            } else {
-              result = OPTIONAL_JSON_FALSE;
             }
+            var prompt = args.get(1);
+            if (prompt != null && checkChatScreenInput()) {
+              chatEditBox.setValue(prompt.toString());
+            }
+            result = OPTIONAL_JSON_TRUE;
           } else {
             if (screen != null && screen instanceof ChatScreen) {
               screen.onClose();
@@ -3465,11 +3463,9 @@ public class Minescript {
         return Optional.of(new JsonPrimitive(job.objects.getById(args.getStrictInt(0)).toString()));
 
       case "java_release":
-        {
-          args.expectSize(1);
-          job.objects.releaseById(args.getStrictInt(1));
-          return OPTIONAL_JSON_NULL;
-        }
+        args.expectSize(1);
+        job.objects.releaseById(args.getStrictInt(0));
+        return OPTIONAL_JSON_NULL;
 
       default:
         throw new IllegalArgumentException(
