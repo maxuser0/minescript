@@ -1448,6 +1448,33 @@ def player_look_at(x: float, y: float, z: float):
   await_script_function("player_look_at", (x, y, z))
 
 
+def append_chat_history(message: str):
+  """Appends `message` to chat history, available via up and down arrows in chat.
+
+  Since: v4.0
+  """
+  await_script_function("append_chat_history", (message,))
+
+
+def chat_input():
+  """Gets state of chat input text.
+
+  Returns:
+    `[text, position]` where `text` is `str` and `position` is `int` cursor position within `text`
+  """
+  return await_script_function("chat_input", ())
+
+
+def set_chat_input(text: str = None, position: int = None):
+  """Sets state of chat input text.
+
+  Args:
+    text: if specified, replace chat input text
+    position: if specified, move cursor to this position within the chat input box
+  """
+  await_script_function("set_chat_input", (text, position))
+
+
 Rotation = Tuple[int, int, int, int, int, int, int, int, int]
 """Tuple of 9 `int` values representing a flattened, row-major 3x3 rotation matrix."""
 
@@ -2071,6 +2098,6 @@ def java_to_string(target):
   return await_script_function("java_to_string", (target,))
 
 def java_release(target):
-  """Release the Java reference to `target`."""
+  """Releases the Java reference to `target`."""
   minescript_runtime.call_noreturn_function("java_release", (target,))
 

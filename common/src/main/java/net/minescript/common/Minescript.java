@@ -1481,8 +1481,6 @@ public class Minescript {
     chatEditBox = input;
   }
 
-  private static MinescriptCommandHistory minescriptCommandHistory = new MinescriptCommandHistory();
-
   private static boolean checkChatScreenInput() {
     if (chatEditBox == null) {
       if (!reportedChatEditBoxError) {
@@ -1544,9 +1542,11 @@ public class Minescript {
       if (!checkChatScreenInput()) {
         return cancel;
       }
+      if (key == UP_ARROW_KEY || key == DOWN_ARROW_KEY) {
+        return cancel;
+      }
       String value = chatEditBox.getValue();
       if (!value.startsWith("\\")) {
-        minescriptCommandHistory.moveToEnd();
         if ((key == ENTER_KEY || key == config.secondaryEnterKeyCode())
             && !value.startsWith("/")
             && (customNickname != null || matchesChatInterceptor(value))) {
@@ -1557,31 +1557,13 @@ public class Minescript {
         }
         return cancel;
       }
-      if (key == UP_ARROW_KEY) {
-        Optional<String> previousCommand = minescriptCommandHistory.moveBackwardAndGet(value);
-        if (previousCommand.isPresent()) {
-          value = previousCommand.get();
-          chatEditBox.setValue(value);
-          chatEditBox.setCursorPosition(value.length());
-        }
-        cancel = true;
-      } else if (key == DOWN_ARROW_KEY) {
-        Optional<String> nextCommand = minescriptCommandHistory.moveForwardAndGet();
-        if (nextCommand.isPresent()) {
-          value = nextCommand.get();
-          chatEditBox.setValue(value);
-          chatEditBox.setCursorPosition(value.length());
-        }
-        cancel = true;
-      } else if (key == ENTER_KEY || key == config.secondaryEnterKeyCode()) {
+      if (key == ENTER_KEY || key == config.secondaryEnterKeyCode()) {
         cancel = true;
         String text = chatEditBox.getValue();
         chatEditBox.setValue("");
         onClientChat(text);
         screen.onClose();
         return cancel;
-      } else {
-        minescriptCommandHistory.moveToEnd();
       }
       int cursorPos = chatEditBox.getCursorPosition();
       if (key >= 32 && key < 127) {
@@ -1788,8 +1770,9 @@ public class Minescript {
 
   public static boolean onClientChat(String message) {
     boolean cancel = false;
+    var minecraft = Minecraft.getInstance();
     if (message.startsWith("\\")) {
-      minescriptCommandHistory.addCommand(message);
+      minecraft.gui.getChat().addRecentChat(message);
 
       LOGGER.info("Processing command from chat event: {}", message);
       runMinescriptCommand(message.substring(1));
@@ -1799,7 +1782,6 @@ public class Minescript {
     } else if (customNickname != null && !message.startsWith("/")) {
       String tellrawCommand = "tellraw @a " + String.format(customNickname, message);
       systemMessageQueue.add(Message.createMinecraftCommand(tellrawCommand));
-      var minecraft = Minecraft.getInstance();
       var chat = minecraft.gui.getChat();
       // TODO(maxuser): There appears to be a bug truncating the chat HUD command history. It might
       // be that onClientChat(...) can get called on a different thread from what other callers are
@@ -3296,6 +3278,28 @@ public class Minescript {
         if (funcCallId == 0) {
           return Optional.of(new JsonPrimitive("exit!"));
         } else {
+          return OPTIONAL_JSON_NULL;
+        }
+
+      case "append_chat_history":
+        args.expectSize(1);
+        minecraft.gui.getChat().addRecentChat(args.getString(0));
+        return OPTIONAL_JSON_NULL;
+
+      case "chat_input":
+        {
+          args.expectSize(0);
+          var result = new JsonArray();
+          result.add(chatEditBox.getValue());
+          result.add(chatEditBox.getCursorPosition());
+          return Optional.of(result);
+        }
+
+      case "set_chat_input":
+        {
+          args.expectSize(2);
+          args.getOptionalString(0).ifPresent(chatEditBox::setValue);
+          args.getOptionalStrictInt(1).ifPresent(chatEditBox::setCursorPosition);
           return OPTIONAL_JSON_NULL;
         }
 
