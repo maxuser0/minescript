@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
-package net.minescript.fabric.mixin;
+package net.minescript.common.mixin;
 
 import static net.minescript.common.Minescript.ENTER_KEY;
 import static net.minescript.common.Minescript.config;
@@ -17,10 +17,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(KeyboardHandler.class)
-public class KeyboardMixin {
-  private static final Logger LOGGER = LoggerFactory.getLogger("KeyboardMixin");
-
-  private static int BACKSLASH_KEY = 92;
+public class KeyboardHandlerMixin {
+  private static final Logger LOGGER = LoggerFactory.getLogger("KeyboardHandlerMixin");
 
   private static int KEY_ACTION_DOWN = 1;
   private static int KEY_ACTION_REPEAT = 2;

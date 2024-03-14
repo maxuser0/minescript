@@ -7,6 +7,7 @@
     "ChatComponentMixin",
     "ChatScreenMixin",
     "ClientPacketListenerMixin",
+    "KeyboardHandlerMixin",
     "KeyMappingMixin",
     "MouseHandlerMixin"
   ],

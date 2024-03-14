@@ -6,7 +6,6 @@
   "mixins": [
   ],
   "client": [
-    "KeyboardMixin"
   ],
   "injectors": {
     "defaultRequire": 1

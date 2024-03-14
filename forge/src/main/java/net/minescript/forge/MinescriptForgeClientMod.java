@@ -50,10 +50,7 @@ public class MinescriptForgeClientMod {
     @SubscribeEvent
     public static void onKeyInputEvent(InputEvent.Key event) {
       var key = event.getKey();
-      var scanCode = event.getScanCode();
       var action = event.getAction();
-      var modifiers = event.getModifiers();
-      Minescript.onKeyboardEvent(key, scanCode, action, modifiers);
       var screen = Minecraft.getInstance().screen;
       if (screen == null) {
         Minescript.onKeyInput(key);
