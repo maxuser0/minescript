@@ -3297,9 +3297,10 @@ public class Minescript {
 
       case "set_chat_input":
         {
-          args.expectSize(2);
+          args.expectSize(3);
           args.getOptionalString(0).ifPresent(chatEditBox::setValue);
           args.getOptionalStrictInt(1).ifPresent(chatEditBox::setCursorPosition);
+          args.getOptionalStrictInt(2).ifPresent(chatEditBox::setTextColor);
           return OPTIONAL_JSON_NULL;
         }
 
@@ -3406,15 +3407,8 @@ public class Minescript {
           for (int i = 0; i < params.length; ++i) {
             params[i] = job.objects.getById(args.getStrictInt(i + 2));
           }
-          if (!memberSet.argCounts().contains(params.length)) {
-            throw new IllegalArgumentException(
-                String.format(
-                    "Method `%s` got %d args but expected %s",
-                    memberSet.name(), params.length, memberSet.argCounts()));
-          }
           // Catch IllegalArgumentException until all the methods in the set with the right number
           // of args have been exhausted.
-          IllegalArgumentException exception = null;
           for (Method method : memberSet.methods()) {
             if (method.getParameterCount() == params.length) {
               try {
@@ -3423,11 +3417,17 @@ public class Minescript {
                     ? OPTIONAL_JSON_NULL
                     : Optional.of(new JsonPrimitive(job.objects.retain(result)));
               } catch (IllegalArgumentException e) {
-                exception = e;
               }
             }
           }
-          throw exception;
+          // Fell through without successfully invoking a matching method. Throw an exception that
+          // reports the signatures of all methods in the overload set.
+          var signatures = new ArrayList<String>();
+          for (Method method : memberSet.methods()) {
+            signatures.add(method.toString());
+          }
+          throw new IllegalArgumentException(
+              "No matching methods:\n" + String.join("\n", signatures.toArray(new String[0])));
         }
 
       case "java_access_field":

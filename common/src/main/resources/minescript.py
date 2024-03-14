@@ -1465,14 +1465,15 @@ def chat_input():
   return await_script_function("chat_input", ())
 
 
-def set_chat_input(text: str = None, position: int = None):
+def set_chat_input(text: str = None, position: int = None, color: int = None):
   """Sets state of chat input text.
 
   Args:
     text: if specified, replace chat input text
     position: if specified, move cursor to this position within the chat input box
+    color: if specified, set input text color, formatted as 0xRRGGBB
   """
-  await_script_function("set_chat_input", (text, position))
+  await_script_function("set_chat_input", (text, position, color))
 
 
 Rotation = Tuple[int, int, int, int, int, int, int, int, int]
