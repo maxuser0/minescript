@@ -14,7 +14,9 @@ public interface JobControl {
 
   void yield();
 
-  Queue<Message> messageQueue();
+  Queue<Message> renderQueue();
+
+  Queue<Message> tickQueue();
 
   boolean respond(long functionCallId, JsonElement returnValue, boolean finalReply);
 

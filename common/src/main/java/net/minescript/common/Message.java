@@ -15,16 +15,23 @@ public record Message(Message.Type type, String value, Record data) {
     JSON_FORMATTED_TEXT
   }
 
-  public record FunctionCallData(long funcCallId, String argsString, List<?> args) {}
+  public record FunctionCallData(
+      long funcCallId, FunctionExecutor functionExecutor, String argsString, List<?> args) {}
 
   public Message(Message.Type type, String value) {
     this(type, value, null);
   }
 
   public static Message createFunctionCall(
-      long funcCallId, String functionName, String argsString, List<?> args) {
+      long funcCallId,
+      FunctionExecutor functionExecutor,
+      String functionName,
+      String argsString,
+      List<?> args) {
     return new Message(
-        Type.FUNCTION_CALL, functionName, new FunctionCallData(funcCallId, argsString, args));
+        Type.FUNCTION_CALL,
+        functionName,
+        new FunctionCallData(funcCallId, functionExecutor, argsString, args));
   }
 
   public static Message createMinecraftCommand(String value) {

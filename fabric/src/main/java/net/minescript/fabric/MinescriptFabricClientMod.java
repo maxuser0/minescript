@@ -6,6 +6,8 @@ package net.minescript.fabric;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents;
 import net.minecraft.client.Minecraft;
@@ -29,6 +31,7 @@ public final class MinescriptFabricClientMod implements ClientModInitializer {
     Minescript.init(new FabricPlatform());
     ClientTickEvents.START_WORLD_TICK.register(world -> Minescript.onClientWorldTick());
     ScreenEvents.AFTER_INIT.register(this::afterInitScreen);
+    WorldRenderEvents.LAST.register(this::onRender);
   }
 
   private void afterInitScreen(Minecraft client, Screen screen, int windowWidth, int windowHeight) {
@@ -38,5 +41,9 @@ public final class MinescriptFabricClientMod implements ClientModInitializer {
               (_screen, key, scancode, modifiers) ->
                   !Minescript.onKeyboardKeyPressed(_screen, key));
     }
+  }
+
+  private void onRender(WorldRenderContext context) {
+    Minescript.onRenderWorld();
   }
 }

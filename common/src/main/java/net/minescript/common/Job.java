@@ -41,15 +41,16 @@ public class Job implements JobControl {
   private Thread thread;
   private volatile JobState state = JobState.NOT_STARTED;
   private Consumer<Integer> doneCallback;
-  private Queue<Message> jobMessageQueue = new ConcurrentLinkedQueue<Message>();
+  private Queue<Message> jobTickQueue = new ConcurrentLinkedQueue<Message>();
+  private Queue<Message> jobRenderQueue = new ConcurrentLinkedQueue<Message>();
   private Lock lock = new ReentrantLock(true); // true indicates a fair lock to avoid starvation
 
   // Key is unique within this job, typically a func call ID.
   private Map<Long, Operation> operations = new ConcurrentHashMap<>();
 
   // Special prefix for commands and function calls emitted from stdout of scripts, for example:
-  // - script function call: "?mnsc:123 my_func [4, 5, 6]"
-  // - script system call: "?mnsc:0 exit! []"
+  // - script function call: "?mnsc:123 X my_func [4, 5, 6]"
+  // - script system call: "?mnsc:0 X exit! []"
   private static final String FUNCTION_PREFIX = "?mnsc:";
 
   public interface Operation {
@@ -101,8 +102,7 @@ public class Job implements JobControl {
    */
   public boolean cancelOperation(long opId) {
     if (config.debugOutput()) {
-      LOGGER.info(
-          "Cancelling operation {} among {} in job {}", opId, operations.keySet(), jobId);
+      LOGGER.info("Cancelling operation {} among {} in job {}", opId, operations.keySet(), jobId);
     }
 
     var op = operations.remove(opId);
@@ -129,8 +129,13 @@ public class Job implements JobControl {
   }
 
   @Override
-  public Queue<Message> messageQueue() {
-    return jobMessageQueue;
+  public Queue<Message> renderQueue() {
+    return jobRenderQueue;
+  }
+
+  @Override
+  public Queue<Message> tickQueue() {
+    return jobTickQueue;
   }
 
   @Override
@@ -162,16 +167,16 @@ public class Job implements JobControl {
     switch (command.redirects().stdout()) {
       case CHAT:
         if (text.startsWith("/")) {
-          jobMessageQueue.add(Message.createMinecraftCommand(text.substring(1)));
+          jobTickQueue.add(Message.createMinecraftCommand(text.substring(1)));
         } else if (text.startsWith("\\")) {
-          jobMessageQueue.add(Message.createMinescriptCommand(text.substring(1)));
+          jobTickQueue.add(Message.createMinescriptCommand(text.substring(1)));
         } else {
-          jobMessageQueue.add(Message.createChatMessage(text));
+          jobTickQueue.add(Message.createChatMessage(text));
         }
         break;
       case DEFAULT:
       case ECHO:
-        jobMessageQueue.add(Message.fromPlainText(text));
+        jobTickQueue.add(Message.fromPlainText(text));
         break;
       case LOG:
         LOGGER.info(text);
@@ -187,10 +192,17 @@ public class Job implements JobControl {
     //
     // argsString may have spaces, e.g. "123 my_func [4, 5, 6]"
 
-    String[] functionCall = functionCallLine.split("\\s+", 3);
+    String[] functionCall = functionCallLine.split("\\s+", 4);
     long funcCallId = Long.valueOf(functionCall[0]);
-    String functionName = functionCall[1];
-    String argsString = functionCall[2];
+    final FunctionExecutor executor;
+    try {
+      executor = FunctionExecutor.fromValue(functionCall[1]);
+    } catch (IllegalArgumentException e) {
+      raiseException(funcCallId, ExceptionInfo.fromException(e));
+      return;
+    }
+    String functionName = functionCall[2];
+    String argsString = functionCall[3];
 
     final List<?> args;
     try {
@@ -209,12 +221,23 @@ public class Job implements JobControl {
       return;
     }
 
-    if (config.experimentalFastFunctions().contains(functionName)) {
+    if (executor == FunctionExecutor.SCRIPT_LOOP
+        || (executor == FunctionExecutor.DEFAULT
+            && config.scriptLoopFunctions().contains(functionName))) {
       Minescript.processScriptFunction(this, functionName, funcCallId, argsString, args);
       return;
     }
 
-    jobMessageQueue.add(Message.createFunctionCall(funcCallId, functionName, argsString, args));
+    if (executor == FunctionExecutor.RENDER_LOOP
+        || (executor == FunctionExecutor.DEFAULT
+            && config.renderLoopFunctions().contains(functionName))) {
+      jobRenderQueue.add(
+          Message.createFunctionCall(funcCallId, executor, functionName, argsString, args));
+      return;
+    }
+
+    jobTickQueue.add(
+        Message.createFunctionCall(funcCallId, executor, functionName, argsString, args));
   }
 
   @Override
@@ -226,16 +249,16 @@ public class Job implements JobControl {
     switch (command.redirects().stderr()) {
       case CHAT:
         if (text.startsWith("/")) {
-          jobMessageQueue.add(Message.createMinecraftCommand(text.substring(1)));
+          jobTickQueue.add(Message.createMinecraftCommand(text.substring(1)));
         } else if (text.startsWith("\\")) {
-          jobMessageQueue.add(Message.createMinescriptCommand(text.substring(1)));
+          jobTickQueue.add(Message.createMinescriptCommand(text.substring(1)));
         } else {
-          jobMessageQueue.add(Message.createChatMessage(text));
+          jobTickQueue.add(Message.createChatMessage(text));
         }
         break;
       case DEFAULT:
       case ECHO:
-        jobMessageQueue.add(Message.formatAsJsonColoredText(text, "yellow"));
+        jobTickQueue.add(Message.formatAsJsonColoredText(text, "yellow"));
         break;
       case LOG:
         LOGGER.info(text);
@@ -339,7 +362,10 @@ public class Job implements JobControl {
       int exitCode = task.run(command, this);
 
       final int millisToSleep = 1000;
-      while (state != JobState.KILLED && state != JobState.DONE && !jobMessageQueue.isEmpty()) {
+      while (state != JobState.KILLED
+          && state != JobState.DONE
+          && !jobTickQueue.isEmpty()
+          && !jobRenderQueue.isEmpty()) {
         try {
           Thread.sleep(millisToSleep);
         } catch (InterruptedException e) {

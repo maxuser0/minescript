@@ -15,6 +15,7 @@ import net.neoforged.fml.LogicalSide;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
+import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.event.TickEvent;
 import net.neoforged.neoforge.event.level.ChunkEvent;
@@ -40,6 +41,14 @@ public class MinescriptNeoForgeClientMod {
 
   @Mod.EventBusSubscriber(Dist.CLIENT)
   public static class ClientEvents {
+    @SubscribeEvent
+    public static void onRender(RenderLevelStageEvent event) {
+      if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_LEVEL) {
+        return;
+      }
+      Minescript.onRenderWorld();
+    }
+
     @SubscribeEvent
     public static void onKeyboardKeyPressedEvent(ScreenEvent.KeyPressed.Pre event) {
       if (Minescript.onKeyboardKeyPressed(event.getScreen(), event.getKeyCode())) {

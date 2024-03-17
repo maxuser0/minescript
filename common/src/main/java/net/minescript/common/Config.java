@@ -50,7 +50,9 @@ public class Config {
           "stderr_chat_ignore_pattern",
           "minescript_on_chat_received_event",
           "secondary_enter_key_code",
-          "experimental_fast_functions",
+          "tick_loop_functions",
+          "render_loop_functions",
+          "script_loop_functions",
           "autorun[");
 
   private static final ImmutableList<String> CONFIG_VARIABLE_LIST =
@@ -76,7 +78,9 @@ public class Config {
   // Default secondary `enter` key code to value of KEY_KP_ENTER from GLFW.
   private int secondaryEnterKeyCode = 335;
 
-  private Set<String> experimentalFastFunctions = new HashSet<>();
+  private Set<String> tickLoopFunctions = new HashSet<>();
+  private Set<String> renderLoopFunctions = new HashSet<>();
+  private Set<String> scriptLoopFunctions = new HashSet<>();
 
   // Map from world name (or "*" for all) to a list of Minescript/Minecraft commands.
   private Map<String, List<Message>> autorunCommands = new ConcurrentHashMap<>();
@@ -202,8 +206,16 @@ public class Config {
     return secondaryEnterKeyCode;
   }
 
-  public Set<String> experimentalFastFunctions() {
-    return experimentalFastFunctions;
+  public Set<String> tickLoopFunctions() {
+    return tickLoopFunctions;
+  }
+
+  public Set<String> renderLoopFunctions() {
+    return renderLoopFunctions;
+  }
+
+  public Set<String> scriptLoopFunctions() {
+    return scriptLoopFunctions;
   }
 
   public void setDebugOutptut(boolean enable) {
@@ -252,7 +264,9 @@ public class Config {
     consumer.accept(
         "minescript_on_chat_received_event", getValue("minescript_on_chat_received_event"));
     consumer.accept("secondary_enter_key_code", getValue("secondary_enter_key_code"));
-    consumer.accept("experimental_fast_functions", getValue("experimental_fast_functions"));
+    consumer.accept("tick_loop_functions", getValue("tick_loop_functions"));
+    consumer.accept("render_loop_functions", getValue("render_loop_functions"));
+    consumer.accept("script_loop_functions", getValue("script_loop_functions"));
 
     for (var entry : autorunCommands.entrySet()) {
       var worldName = entry.getKey();
@@ -306,8 +320,14 @@ public class Config {
       case "secondary_enter_key_code":
         return String.valueOf(secondaryEnterKeyCode);
 
-      case "experimental_fast_functions":
-        return String.join(", ", experimentalFastFunctions.stream().collect(Collectors.toList()));
+      case "tick_loop_functions":
+        return String.join(", ", tickLoopFunctions.stream().collect(Collectors.toList()));
+
+      case "render_loop_functions":
+        return String.join(", ", renderLoopFunctions.stream().collect(Collectors.toList()));
+
+      case "script_loop_functions":
+        return String.join(", ", scriptLoopFunctions.stream().collect(Collectors.toList()));
 
       default:
         {
@@ -478,16 +498,40 @@ public class Config {
         }
         break;
 
-      case "experimental_fast_functions":
-        experimentalFastFunctions =
+      case "tick_loop_functions":
+        tickLoopFunctions =
             new HashSet<String>(
                 Arrays.asList(value.split(",")).stream()
                     .map(String::trim)
                     .collect(Collectors.toList()));
         reportInfo(
             out,
-            "Setting experimental_fast_functions to {}",
-            getValue("experimental_fast_functions"));
+            "Setting tick_loop_functions to {}",
+            getValue("tick_loop_functions"));
+        break;
+
+      case "render_loop_functions":
+        renderLoopFunctions =
+            new HashSet<String>(
+                Arrays.asList(value.split(",")).stream()
+                    .map(String::trim)
+                    .collect(Collectors.toList()));
+        reportInfo(
+            out,
+            "Setting render_loop_functions to {}",
+            getValue("render_loop_functions"));
+        break;
+
+      case "script_loop_functions":
+        scriptLoopFunctions =
+            new HashSet<String>(
+                Arrays.asList(value.split(",")).stream()
+                    .map(String::trim)
+                    .collect(Collectors.toList()));
+        reportInfo(
+            out,
+            "Setting script_loop_functions to {}",
+            getValue("script_loop_functions"));
         break;
 
       default:

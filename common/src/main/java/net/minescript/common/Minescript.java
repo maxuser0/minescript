@@ -49,6 +49,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -687,7 +688,7 @@ public class Minescript {
 
     @Override
     public int run(ScriptConfig.BoundCommand command, JobControl jobControl) {
-      undo.enqueueCommands(jobControl.messageQueue());
+      undo.enqueueCommands(jobControl.tickQueue());
       return 0;
     }
   }
@@ -1372,6 +1373,7 @@ public class Minescript {
     }
   }
 
+  private static long worldRenderEventCounter = 0;
   private static long clientTickEventCounter = 0;
 
   private static int BACKSLASH_KEY = 92;
@@ -1421,10 +1423,8 @@ public class Minescript {
   private static List<String> commandSuggestions = new ArrayList<>();
 
   public static void onKeyboardEvent(int key, int scanCode, int action, int modifiers) {
-    var iter = keyEventListeners.entrySet().iterator();
     JsonObject json = null;
-    while (iter.hasNext()) {
-      var entry = iter.next();
+    for (var entry : keyEventListeners.entrySet()) {
       var listener = entry.getValue();
       if (listener.isActive()) {
         if (json == null) {
@@ -1448,10 +1448,8 @@ public class Minescript {
 
   public static void onMouseClick(int button, int action, int modifiers, double x, double y) {
     var minecraft = Minecraft.getInstance();
-    var iter = mouseEventListeners.entrySet().iterator();
     JsonObject json = null;
-    while (iter.hasNext()) {
-      var entry = iter.next();
+    for (var entry : mouseEventListeners.entrySet()) {
       var listener = entry.getValue();
       if (listener.isActive()) {
         if (json == null) {
@@ -1470,6 +1468,16 @@ public class Minescript {
           LOGGER.info("Forwarding mouse event to listener {}: {}", entry.getKey(), json);
         }
         listener.respond(json, false);
+      }
+    }
+  }
+
+  public static void onRenderWorld() {
+    if (++worldRenderEventCounter % config.ticksPerCycle() == 0) {
+      var minecraft = Minecraft.getInstance();
+      var player = minecraft.player;
+      if (player != null && !jobs.getMap().isEmpty()) {
+        processMessageQueue(false /* processSystemMessages */, job -> job.renderQueue().poll());
       }
     }
   }
@@ -2965,7 +2973,7 @@ public class Minescript {
           }
 
           blockpack.getBlockCommands(
-              rotation, offset, s -> job.messageQueue().add(Message.createMinecraftCommand(s)));
+              rotation, offset, s -> job.tickQueue().add(Message.createMinecraftCommand(s)));
           return OPTIONAL_JSON_TRUE;
         }
 
@@ -3468,7 +3476,10 @@ public class Minescript {
 
       case "java_release":
         args.expectSize(1);
-        job.objects.releaseById(args.getStrictInt(0));
+        var object = job.objects.releaseById(args.getStrictInt(0));
+        if (config.debugOutput()) {
+          LOGGER.info("Released Java object[{}]: `{}`", args.getStrictInt(0), object.toString());
+        }
         return OPTIONAL_JSON_NULL;
 
       default:
@@ -3535,63 +3546,71 @@ public class Minescript {
       }
 
       if (player != null && (!systemMessageQueue.isEmpty() || !jobs.getMap().isEmpty())) {
-        boolean hasMessage;
-        int iterations = 0;
-        long loopStartTimeUsecs = System.nanoTime() / 1000;
-        do {
-          hasMessage = false;
-          ++iterations;
-          Message sysMessage = systemMessageQueue.poll();
-          if (sysMessage != null) {
-            hasMessage = true;
-            processMessage(sysMessage);
-          }
-          for (var job : jobs.getMap().values()) {
-            if (job.state() == JobState.RUNNING) {
-              try {
-                Message message = job.messageQueue().poll();
-                if (message != null) {
-                  hasMessage = true;
-                  if (message.type() == Message.Type.FUNCTION_CALL) {
-                    String functionName = message.value();
-                    var funcCallData = (Message.FunctionCallData) message.data();
-                    processScriptFunction(
-                        job,
-                        functionName,
-                        funcCallData.funcCallId(),
-                        funcCallData.argsString(),
-                        funcCallData.args());
+        processMessageQueue(true /* processSystemMessages */, job -> job.tickQueue().poll());
+      }
+    }
+  }
 
-                  } else {
-                    // TODO(maxuser): Stash level in UndoableAction as a WeakReference<Level> so
-                    // that an undo operation gets applied only to the world that at existed at the
-                    // time the UndoableAction was created.
-                    Level level = minecraft.level;
-                    jobs.getUndoForJob(job).ifPresent(u -> u.processCommandToUndo(level, message));
-                    processMessage(message);
-                  }
-                }
-              } catch (RuntimeException e) {
-                job.logJobException(e);
+  public static void processMessageQueue(
+      boolean processSystemMessages, Function<Job, Message> jobMessageQueue) {
+    var minecraft = Minecraft.getInstance();
+    boolean hasMessage;
+    int iterations = 0;
+    long loopStartTimeUsecs = System.nanoTime() / 1000;
+    do {
+      hasMessage = false;
+      ++iterations;
+      if (processSystemMessages) {
+        Message sysMessage = systemMessageQueue.poll();
+        if (sysMessage != null) {
+          hasMessage = true;
+          processMessage(sysMessage);
+        }
+      }
+      for (var job : jobs.getMap().values()) {
+        if (job.state() == JobState.RUNNING) {
+          try {
+            Message message = jobMessageQueue.apply(job);
+            if (message != null) {
+              hasMessage = true;
+              if (message.type() == Message.Type.FUNCTION_CALL) {
+                String functionName = message.value();
+                var funcCallData = (Message.FunctionCallData) message.data();
+                processScriptFunction(
+                    job,
+                    functionName,
+                    funcCallData.funcCallId(),
+                    funcCallData.argsString(),
+                    funcCallData.args());
+
+              } else {
+                // TODO(maxuser): Stash level in UndoableAction as a WeakReference<Level> so
+                // that an undo operation gets applied only to the world that at existed at the
+                // time the UndoableAction was created.
+                Level level = minecraft.level;
+                jobs.getUndoForJob(job).ifPresent(u -> u.processCommandToUndo(level, message));
+                processMessage(message);
               }
             }
-          }
-        } while (hasMessage
-            && iterations < config.maxCommandsPerCycle()
-            && System.nanoTime() / 1000 - loopStartTimeUsecs < config.commandCycleDeadlineUsecs());
-
-        if (config.debugOutput()) {
-          long elapsedUsecs = System.nanoTime() / 1000 - loopStartTimeUsecs;
-          if (elapsedUsecs >= config.commandCycleDeadlineUsecs()) {
-            LOGGER.info(
-                "Tick loop processed {} iterations in {} usecs (exceeded deadline of {} usecs)",
-                iterations,
-                elapsedUsecs,
-                config.commandCycleDeadlineUsecs());
-          } else {
-            LOGGER.info("Tick loop processed {} iterations in {} usecs", iterations, elapsedUsecs);
+          } catch (RuntimeException e) {
+            job.logJobException(e);
           }
         }
+      }
+    } while (hasMessage
+        && iterations < config.maxCommandsPerCycle()
+        && System.nanoTime() / 1000 - loopStartTimeUsecs < config.commandCycleDeadlineUsecs());
+
+    if (config.debugOutput()) {
+      long elapsedUsecs = System.nanoTime() / 1000 - loopStartTimeUsecs;
+      if (elapsedUsecs >= config.commandCycleDeadlineUsecs()) {
+        LOGGER.info(
+            "Tick loop processed {} iterations in {} usecs (exceeded deadline of {} usecs)",
+            iterations,
+            elapsedUsecs,
+            config.commandCycleDeadlineUsecs());
+      } else {
+        LOGGER.info("Tick loop processed {} iterations in {} usecs", iterations, elapsedUsecs);
       }
     }
   }

@@ -10,6 +10,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.InputEvent;
+import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.level.ChunkEvent;
@@ -40,6 +41,14 @@ public class MinescriptForgeClientMod {
 
   @Mod.EventBusSubscriber(Dist.CLIENT)
   public static class ClientEvents {
+    @SubscribeEvent
+    public static void onRender(RenderLevelStageEvent event) {
+      if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_LEVEL) {
+        return;
+      }
+      Minescript.onRenderWorld();
+    }
+
     @SubscribeEvent
     public static void onKeyboardKeyPressedEvent(ScreenEvent.KeyPressed event) {
       if (Minescript.onKeyboardKeyPressed(event.getScreen(), event.getKeyCode())) {

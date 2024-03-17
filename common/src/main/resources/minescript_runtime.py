@@ -41,14 +41,61 @@ _thread_pool = concurrent.futures.ThreadPoolExecutor()  # ThreadPool for corouti
 # Special prefix for emitting function calls, e.g. "?mnsc:123 my_func [4, 5, 6]"
 _FUNCTION_PREFIX = "?mnsc:"
 
+class _ExecutorStack:
+  """Stack of identifiers for function executors.
+
+  The last/top ID determines which executor to use for processing a script function.
+
+  The executor IDs are:
+    "X" -> defer to the default for each function
+    "T" -> execute on the tick loop
+    "R" -> execute on the render loop
+    "S" -> execute on the script loop
+  """
+  def __init__(self):
+    self.thread_local = threading.local()
+
+  def stack(self):
+    # "X" is the sentinel value signaling default behavior.
+    return self.thread_local.__dict__.setdefault("stack", ["X"])
+
+  def push(self, executor_id: str):
+    self.stack().append(executor_id)
+
+  def pop(self):
+    return self.stack().pop()
+
+  def peek(self):
+    return self.stack()[-1]
+
+_executor_stack = _ExecutorStack()
+
+
+class _FunctionExecutor:
+  def __init__(self, executor_id: str):
+    self.executor_id = executor_id
+
+  def __enter__(self):
+    _executor_stack.push(self.executor_id)
+    return self
+
+  def __exit__(self, exc_type, exc_val, exc_tb):
+    _executor_stack.pop()
+
+# See common/src/main/java/net/minescript/common/FunctionExecutor.java
+tick_loop = _FunctionExecutor("T")
+render_loop = _FunctionExecutor("R")
+script_loop = _FunctionExecutor("S")
+
 
 def call_noreturn_function(command: str, args):
   """Calls a function which does not return.
 
   Make a fire-and-forget function call with a call id of 0 and no return value.
   """
+  func_executor = _executor_stack.peek()
   with _script_function_calls_lock:
-    print(f"{_FUNCTION_PREFIX}0 {command} {json.dumps(args)}")
+    print(f"{_FUNCTION_PREFIX}0 {func_executor} {command} {json.dumps(args)}")
 
 
 def send_script_function_request(func_name: str, args: Tuple[Any, ...],
@@ -67,11 +114,12 @@ def send_script_function_request(func_name: str, args: Tuple[Any, ...],
     function call ID
   """
   global _next_fcallid
+  func_executor = _executor_stack.peek()
   with _script_function_calls_lock:
     _next_fcallid += 1
     func_call_id = _next_fcallid
     _script_function_calls[func_call_id] = (func_name, retval_handler, exception_handler)
-    print(f"{_FUNCTION_PREFIX}{func_call_id} {func_name} {json.dumps(args)}")
+    print(f"{_FUNCTION_PREFIX}{func_call_id} {func_executor} {func_name} {json.dumps(args)}")
   return func_call_id
 
 
