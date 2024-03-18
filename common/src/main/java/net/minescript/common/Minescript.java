@@ -2830,8 +2830,22 @@ public class Minescript {
 
       case "screenshot":
         {
-          args.expectSize(1);
+          args.expectArgs("filename");
           String filename = args.get(0) == null ? null : args.getString(0);
+
+          if (filename != null) {
+            if (filename.contains(File.separator)) {
+              throw new IllegalArgumentException(
+                  String.format(
+                      "`screenshot` does not support filenames with `%s` character.",
+                      File.separator));
+            }
+            int length = filename.length();
+            if (length > 4 && !filename.substring(length - 4).toLowerCase().equals(".png")) {
+              filename += ".png";
+            }
+          }
+
           Screenshot.grab(
               minecraft.gameDirectory,
               filename,
@@ -3482,11 +3496,38 @@ public class Minescript {
         }
         return OPTIONAL_JSON_NULL;
 
+      case "run_tasks":
+        return Optional.of(runTasks(job, args.args()));
+
       default:
         throw new IllegalArgumentException(
             String.format(
                 "Unknown function `%s` called from job: %s", functionName, job.jobSummary()));
     }
+  }
+
+  private static JsonElement runTasks(Job job, List<?> tasks) throws Exception {
+    // TODO(maxuser): Make results from earlier tasks available for substitution into deferred
+    // args of later tasks.
+    var jsonArray = new JsonArray();
+    for (var task : tasks) {
+      jsonArray.add(runTask(job, (List<?>) task));
+    }
+    return jsonArray;
+  }
+
+  private static JsonElement runTask(Job job, List<?> argList) throws Exception {
+    var args = new ScriptFunctionArgList("runTask", argList, argList.toString());
+    long funcCallId = args.getStrictInt(0);
+    String funcName = args.getString(1);
+    List<?> immediateArgs = (List<?>) args.get(2);
+    String argsString = immediateArgs.toString();
+
+    // TODO(maxuser): Support substitution of previously evaluated task results from deferred args.
+    // List<?> deferredArgs = (List<?>) args.get(3);
+
+    var embeddedArgs = new ScriptFunctionArgList(funcName, immediateArgs, argsString);
+    return runScriptFunction(job, funcCallId, funcName, embeddedArgs, argsString).get();
   }
 
   private record ConstructorSet(

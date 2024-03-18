@@ -29,8 +29,9 @@ from minescript_runtime import (
     await_script_function,
     call_async_script_function,
     send_script_function_request,
+    run_tasks,
     ExceptionHandler)
-from typing import Any, List, Set, Dict, Tuple, Optional, Callable, Awaitable
+from typing import Any, List, Set, Dict, Tuple, Optional, Callable
 
 
 BlockPos = Tuple[int, int, int]
@@ -45,6 +46,29 @@ class MinescriptRuntimeOptions:
   legacy_dict_return_values: bool = False  # set to `True` to emulate behavior before v4.0
 
 options = MinescriptRuntimeOptions()
+
+
+class ScriptFunction:
+  def __init__(self, name, args_func, result_transform=minescript_runtime._identity_fn):
+    self.name = name
+    self.args_func = args_func
+    self.result_transform = result_transform
+
+  def __call__(self, *args, **kwargs):
+    result = await_script_function(self.name, self.args_func(*args, **kwargs))
+    return self.result_transform(result)
+
+  def as_async(self, *args, **kwargs):
+    return call_async_script_function(
+        self.name, self.args_func(*args, **kwargs), self.result_transform)
+
+  def as_task(self, *args, **kwargs):
+    fcallid = minescript_runtime.get_next_fcallid()
+    args_list = self.args_func(*args, **kwargs)
+    immediate_args = minescript_runtime._get_immediate_args(args_list)
+    deferred_args = minescript_runtime._get_deferred_args(args_list)
+    return minescript_runtime.Task(
+        fcallid, self.name, immediate_args, deferred_args, self.result_transform)
 
 
 def execute(command: str):
@@ -143,16 +167,9 @@ def screenshot(filename=None):
 
   Since: v2.1
   """
-  if filename is None:
-    await_script_function("screenshot", (None,))
-    return
+  return (filename,)
 
-  if os.path.sep in filename:
-    raise Exception(f'`screenshot` does not support filenames with "{os.path.sep}" character.')
-
-  if not filename.lower().endswith(".png"):
-    filename += ".png"
-  await_script_function("screenshot", (filename,))
+screenshot = ScriptFunction("screenshot", screenshot)
 
 
 def job_info():
@@ -164,7 +181,9 @@ def job_info():
 
   Since: v4.0
   """
-  return await_script_function("job_info", ())
+  return ()
+
+job_info = ScriptFunction("job_info", job_info)
 
 
 def flush():
@@ -172,7 +191,9 @@ def flush():
 
   Since: v2.1
   """
-  return await_script_function("flush", ())
+  return ()
+
+flush = ScriptFunction("flush", flush)
 
 
 def player_name() -> str:
@@ -180,7 +201,9 @@ def player_name() -> str:
 
   Since: v2.1
   """
-  return await_script_function("player_name", ())
+  return ()
+
+player_name = ScriptFunction("player_name", player_name)
 
 
 def player_position() -> List[float]:
@@ -192,20 +215,9 @@ def player_position() -> List[float]:
   Update in v4.0:
     Removed `done_callback` arg. Use `async_player_position()` for async execution.
   """
-  return await_script_function("player_position", ())
+  return ()
 
-
-def async_player_position() -> Awaitable[List[float]]:
-  """Gets the local player's position.
-
-  Similar to `player_position()`, but can be used with `await` and `asyncio`.
-
-  Returns:
-    awaitable position of player as [x: float, y: float, z: float]
-
-  Since: v4.0
-  """
-  return call_async_script_function("player_position", ())
+player_position = ScriptFunction("player_position", player_position)
 
 
 def player_set_position(
@@ -221,25 +233,9 @@ def player_set_position(
 
   Since: v3.1
   """
-  return await_script_function("player_set_position", (x, y, z, yaw, pitch))
+  return (x, y, z, yaw, pitch)
 
-
-def async_player_set_position(
-    x: float, y: float, z: float, yaw: float = None, pitch: float = None) -> Awaitable[bool]:
-  """Sets the player's position, and optionally orientation.
-
-  Note that in survival mode the server may reject the new coordinates if they're too far
-  or require moving through walls.
-
-  Similar to `player_set_position(...)`, but can be used with `await` and `asyncio`.
-
-  Args:
-    x, y, z: position to try to move player to
-    yaw, pitch: if not None, player's new orientation
-
-  Since: v4.0
-  """
-  return call_async_script_function("player_set_position", (x, y, z, yaw, pitch))
+player_set_position = ScriptFunction("player_set_position", player_set_position)
 
 
 @dataclass
@@ -268,7 +264,10 @@ def player_hand_items() -> HandItems:
 
   Since: v2.0
   """
-  items = await_script_function("player_hand_items", ())
+  return ()
+
+def _player_hand_items_result_transform(items):
+  """(__internal__)"""
   if options.legacy_dict_return_values:
     return items
   main, off = items
@@ -276,24 +275,8 @@ def player_hand_items() -> HandItems:
       main_hand=None if main is None else ItemStack(**main),
       off_hand=None if off is None else ItemStack(**off))
 
-
-def async_player_hand_items() -> Awaitable[HandItems]:
-  """Gets the items in the local player's hands.
-
-  Returns:
-    Awaitable items in player's hands.
-
-  Similar to `player_hand_items()`, but can be used with `await` and `asyncio`.
-
-  Since: v4.0
-  """
-  def to_dataclass(items: List[Dict[str, Any]]) -> HandItems:
-    main, off = items
-    return HandItems(
-        main_hand=None if main is None else ItemStack(**main),
-        off_hand=None if off is None else ItemStack(**off))
-
-  return call_async_script_function("player_hand_items", (), to_dataclass)
+player_hand_items = ScriptFunction(
+    "player_hand_items", player_hand_items, _player_hand_items_result_transform)
 
 
 def player_inventory() -> List[ItemStack]:
@@ -315,24 +298,16 @@ def player_inventory() -> List[ItemStack]:
 
   Since: v2.0
   """
-  items = await_script_function("player_inventory", ())
+  return ()
+
+def _player_inventory_result_transform(items):
+  """(__internal__)"""
   if options.legacy_dict_return_values:
     return items
   return [ItemStack(**item) for item in items]
 
-
-def async_player_inventory() -> Awaitable[List[ItemStack]]:
-  """Gets the items in the local player's inventory.
-
-  Similar to `player_inventory()`, but can be used with `await` and `asyncio`.
-
-  Returns:
-    Awaitable items in player's inventory.
-
-  Since: v4.0
-  """
-  return call_async_script_function(
-      "player_inventory", (), lambda items: [ItemStack(**item) for item in items])
+player_inventory = ScriptFunction(
+    "player_inventory", player_inventory, _player_inventory_result_transform)
 
 
 def player_inventory_slot_to_hotbar(slot: int) -> int:
@@ -350,23 +325,10 @@ def player_inventory_slot_to_hotbar(slot: int) -> int:
 
   Since: v3.0
   """
-  return await_script_function("player_inventory_slot_to_hotbar", (slot,))
+  return (slot,)
 
-
-def async_player_inventory_slot_to_hotbar(slot: int) -> Awaitable[int]:
-  """Swaps an inventory item into the hotbar.
-
-  Similar to `player_inventory_slot_to_hotbar(...)`, but can be used with `await` and `asyncio`.
-
-  Args:
-    slot: inventory slot (9 or higher) to swap into the hotbar
-
-  Returns:
-    awaitable hotbar slot (0-8) into which the inventory item is swapped
-
-  Since: v4.0
-  """
-  return call_async_script_function("player_inventory_slot_to_hotbar", slot)
+player_inventory_slot_to_hotbar = ScriptFunction(
+    "player_inventory_slot_to_hotbar", player_inventory_slot_to_hotbar)
 
 
 def player_inventory_select_slot(slot: int) -> int:
@@ -383,23 +345,10 @@ def player_inventory_select_slot(slot: int) -> int:
 
   Since: v3.0
   """
-  return await_script_function("player_inventory_select_slot", (slot,))
+  return (slot,)
 
-
-def async_player_inventory_select_slot(slot: int) -> Awaitable[int]:
-  """Selects the given slot within the player's hotbar.
-
-  Similar to `player_inventory_select_slot(...)`, but can be used with `await` and `asyncio`.
-
-  Args:
-    slot: hotbar slot (0-8) to select in the player's hand
-
-  Returns:
-    awaitable of previously selected hotbar slot
-
-  Since: v4.0
-  """
-  return call_async_script_function("player_inventory_select_slot", slot)
+player_inventory_select_slot = ScriptFunction(
+    "player_inventory_select_slot", player_inventory_select_slot)
 
 
 def press_key_bind(key_mapping_name: str, pressed: bool):
@@ -411,7 +360,9 @@ def press_key_bind(key_mapping_name: str, pressed: bool):
 
   Since: v4.0
   """
-  return await_script_function("press_key_bind", (key_mapping_name, pressed))
+  return (key_mapping_name, pressed)
+
+press_key_bind = ScriptFunction("press_key_bind", press_key_bind)
 
 
 def player_press_forward(pressed: bool):
@@ -422,7 +373,9 @@ def player_press_forward(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_forward", (pressed,))
+  return (pressed,)
+
+player_press_forward = ScriptFunction("player_press_forward", player_press_forward)
 
 
 def player_press_backward(pressed: bool):
@@ -433,7 +386,9 @@ def player_press_backward(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_backward", (pressed,))
+  return (pressed,)
+
+player_press_backward = ScriptFunction("player_press_backward", player_press_backward)
 
 
 def player_press_left(pressed: bool):
@@ -444,7 +399,9 @@ def player_press_left(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_left", (pressed,))
+  return (pressed,)
+
+player_press_left = ScriptFunction("player_press_left", player_press_left)
 
 
 def player_press_right(pressed: bool):
@@ -455,7 +412,9 @@ def player_press_right(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_right", (pressed,))
+  return (pressed,)
+
+player_press_right = ScriptFunction("player_press_right", player_press_right)
 
 
 def player_press_jump(pressed: bool):
@@ -466,7 +425,9 @@ def player_press_jump(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_jump", (pressed,))
+  return (pressed,)
+
+player_press_jump = ScriptFunction("player_press_jump", player_press_jump)
 
 
 def player_press_sprint(pressed: bool):
@@ -477,7 +438,9 @@ def player_press_sprint(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_sprint", (pressed,))
+  return (pressed,)
+
+player_press_sprint = ScriptFunction("player_press_sprint", player_press_sprint)
 
 
 def player_press_sneak(pressed: bool):
@@ -488,7 +451,9 @@ def player_press_sneak(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_sneak", (pressed,))
+  return (pressed,)
+
+player_press_sneak = ScriptFunction("player_press_sneak", player_press_sneak)
 
 
 def player_press_pick_item(pressed: bool):
@@ -499,7 +464,9 @@ def player_press_pick_item(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_pick_item", (pressed,))
+  return (pressed,)
+
+player_press_pick_item = ScriptFunction("player_press_pick_item", player_press_pick_item)
 
 
 def player_press_use(pressed: bool):
@@ -510,7 +477,9 @@ def player_press_use(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_use", (pressed,))
+  return (pressed,)
+
+player_press_use = ScriptFunction("player_press_use", player_press_use)
 
 
 def player_press_attack(pressed: bool):
@@ -521,7 +490,9 @@ def player_press_attack(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_attack", (pressed,))
+  return (pressed,)
+
+player_press_attack = ScriptFunction("player_press_attack", player_press_attack)
 
 
 def player_press_swap_hands(pressed: bool):
@@ -532,7 +503,9 @@ def player_press_swap_hands(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_swap_hands", (pressed,))
+  return (pressed,)
+
+player_press_swap_hands = ScriptFunction("player_press_swap_hands", player_press_swap_hands)
 
 
 def player_press_drop(pressed: bool):
@@ -543,7 +516,9 @@ def player_press_drop(pressed: bool):
 
   Since: v2.1
   """
-  return await_script_function("player_press_drop", (pressed,))
+  return (pressed,)
+
+player_press_drop = ScriptFunction("player_press_drop", player_press_drop)
 
 
 def player_orientation():
@@ -554,7 +529,9 @@ def player_orientation():
 
   Since: v2.1
   """
-  return await_script_function("player_orientation", ())
+  return ()
+
+player_orientation = ScriptFunction("player_orientation", player_orientation)
 
 
 def player_set_orientation(yaw: float, pitch: float):
@@ -569,7 +546,9 @@ def player_set_orientation(yaw: float, pitch: float):
 
   Since: v2.1
   """
-  return await_script_function("player_set_orientation", (yaw, pitch))
+  return (yaw, pitch)
+
+player_set_orientation = ScriptFunction("player_set_orientation", player_set_orientation)
 
 
 def player_get_targeted_block(max_distance: float = 20):
@@ -587,7 +566,9 @@ def player_get_targeted_block(max_distance: float = 20):
 
   Since: v3.0
   """
-  return await_script_function("player_get_targeted_block", (max_distance,))
+  return (max_distance,)
+
+player_get_targeted_block = ScriptFunction("player_get_targeted_block", player_get_targeted_block)
 
 
 @dataclass
@@ -620,10 +601,16 @@ def player_get_targeted_entity(max_distance: float = 20, nbt: bool = False) -> E
 
   Since: v4.0
   """
-  entity = await_script_function("player_get_targeted_entity", (max_distance, nbt))
+  return (max_distance, nbt)
+
+def _player_get_targeted_entity_result_transform(entity):
   if options.legacy_dict_return_values:
     return entity
   return None if entity is None else EntityData(**entity)
+
+player_get_targeted_entity = ScriptFunction(
+    "player_get_targeted_entity", player_get_targeted_entity,
+    _player_get_targeted_entity_result_transform)
 
 
 def player_health() -> float:
@@ -631,7 +618,9 @@ def player_health() -> float:
 
   Since: v3.1
   """
-  return await_script_function("player_health", ())
+  return ()
+
+player_health = ScriptFunction("player_health", player_health)
 
 
 def player(*, nbt: bool = False):
@@ -646,10 +635,15 @@ def player(*, nbt: bool = False):
 
   Since: v4.0
   """
-  entity = await_script_function("player", (nbt,))
+  return (nbt,)
+
+def _player_result_transform(entity):
   if options.legacy_dict_return_values:
     return entity
   return EntityData(**entity)
+
+player = ScriptFunction("player", player, _player_result_transform)
+get_player = player  # Alias for scripts with `player` variables.
 
 
 def players(
@@ -685,11 +679,15 @@ def players(
 
   Since: v2.1
   """
-  entities = await_script_function("players",
-      (nbt, uuid, name, position, offset, min_distance, max_distance, sort, limit))
+  return (nbt, uuid, name, position, offset, min_distance, max_distance, sort, limit)
+
+def _players_result_transform(ents):
   if options.legacy_dict_return_values:
-    return entities
-  return [EntityData(**e) for e in entities]
+    return ents
+  return [EntityData(**e) for e in ents]
+
+players = ScriptFunction("players", players, _players_result_transform)
+get_players = players  # Alias for scripts with `players` variables.
 
 
 def entities(
@@ -726,11 +724,16 @@ def entities(
 
   Since: v2.1
   """
-  entities = await_script_function("entities",
-      (nbt, uuid, name, type, position, offset, min_distance, max_distance, sort, limit))
+  return (nbt, uuid, name, type, position, offset, min_distance, max_distance, sort, limit)
+
+def _entities_result_transform(ents):
+  """(__internal__)"""
   if options.legacy_dict_return_values:
-    return entities
-  return [EntityData(**e) for e in entities]
+    return ents
+  return [EntityData(**e) for e in ents]
+
+entities = ScriptFunction("entities", entities, _entities_result_transform)
+get_entities = entities  # Alias for scripts with `entities` variables.
 
 
 @dataclass
@@ -750,7 +753,12 @@ def version_info() -> VersionInfo:
 
   Since: v4.0
   """
-  return VersionInfo(**await_script_function("version_info", ()))
+  return ()
+
+def _version_info_result_transform(info):
+  return VersionInfo(**info)
+
+version_info = ScriptFunction("version_info", version_info, _version_info_result_transform)
 
 
 @dataclass
@@ -775,28 +783,19 @@ def world_info() -> WorldInfo:
 
   `day_ticks` are the ticks associated with the day-night cycle.
 
+  Renamed from `world_properties()` from v3.1.
+
   Returns:
     `WorldInfo`
 
   Since: v4.0
   """
-  return WorldInfo(**await_script_function("world_info", ()))
+  return ()
 
+def _world_info_result_transform(info):
+  return WorldInfo(**info)
 
-def world_properties() -> Dict[str, Any]:
-  """Gets world properties.
-
-  This function is deprecated. Use `world_info()` instead.
-
-  Returns:
-    Dict containing: `"game_ticks": int, "day_ticks": int, "raining": bool,
-    "thundering": bool, "spawn": BlockPos, "hardcore": bool,
-    "difficulty": str, "name": str, "address": str`
-
-  Since: v3.1
-  """
-  print("Warning: world_properties() is deprecated. Use world_info() instead.", file=sys.stderr)
-  return await_script_function("world_info", ())
+world_info = ScriptFunction("world_info", world_info, _world_info_result_transform)
 
 
 def getblock(x: int, y: int, z: int) -> str:
@@ -808,23 +807,9 @@ def getblock(x: int, y: int, z: int) -> str:
   Returns:
     block type at (x, y, z) as a string
   """
-  return await_script_function("getblock", (x, y, z))
+  return (x, y, z)
 
-
-def async_getblock(x: int, y: int, z: int) -> Awaitable[str]:
-  """Gets the type of block at position (x, y, z).
-
-  Similar to `getblock(...)`, but can be used with `await` and `asyncio`.
-
-  Args:
-    x, y, z: position of block to get
-
-  Returns:
-    awaitable block type at (x, y, z) as a string
-
-  Since: v4.0
-  """
-  return call_async_script_function("getblock", (x, y, z))
+getblock = ScriptFunction("getblock", getblock)
 
 
 def getblocklist(positions: List[List[int]]) -> List[str]:
@@ -841,43 +826,24 @@ def getblocklist(positions: List[List[int]]) -> List[str]:
 
   Since: v2.1
   """
-  return await_script_function("getblocklist", (positions,))
+  return (positions,)
+
+getblocklist = ScriptFunction("getblocklist", getblocklist)
 
 
-def async_getblocklist(positions: List[List[int]]) -> Awaitable[List[str]]:
-  """Gets the types of block at the specified [x, y, z] positions.
-
-  Similar to `getblocklist(...)`, but can be used with `await` and `asyncio`.
-
-  Args:
-    awaitable list of positions as lists of x, y, z int coordinates, e.g. [[0, 0, 0], [0, 0, 1]]
-
-  Returns:
-    awaitable block types at given positions as list of strings
-
-  Since: v4.0
-  """
-  return call_async_script_function("getblocklist", (positions,))
-
-
-def await_loaded_region(x1: int, z1: int, x2: int, z2: int, timeout: float = None) -> bool:
+def await_loaded_region(x1: int, z1: int, x2: int, z2: int):
   """Waits for chunks to load in the region from (x1, z1) to (x2, z2).
 
   Args:
     x1, z1, x2, z2: bounds of the region for awaiting loaded chunks
     timeout: if specified, timeout in seconds to wait for the region to load
 
-  Returns:
-    `True` if the requested region has fully loaded.
-
   Update in v4.0:
-    Removed `done_callback` arg. Call now always blocks until region is loaded
-    or timeout (if specified) is reached.
+    Removed `done_callback` arg. Call now always blocks until region is loaded.
   """
-  try:
-    return await_script_function("await_loaded_region", (x1, z1, x2, z2), timeout=timeout)
-  except TimeoutError:
-    return False
+  return (x1, z1, x2, z2)
+
+await_loaded_region = ScriptFunction("await_loaded_region", await_loaded_region)
 
 
 def register_key_listener(
@@ -1389,7 +1355,9 @@ def screen_name() -> str:
 
   Since: v3.2
   """
-  return await_script_function("screen_name", ())
+  return ()
+
+screen_name = ScriptFunction("screen_name", screen_name)
 
 
 def show_chat_screen(show: bool, prompt: str = None) -> str:
@@ -1404,48 +1372,9 @@ def show_chat_screen(show: bool, prompt: str = None) -> str:
 
   Since: v4.0
   """
-  return await_script_function("show_chat_screen", (show, prompt))
+  return (show, prompt)
 
-
-def container_get_items() -> List[ItemStack]:
-  """Gets all items in an open container (chest, furnace, etc. with slots).
-
-  Returns:
-    List of items if a container's contents are displayed; `None` otherwise.
-
-  Since: v4.0
-  """
-  items = await_script_function("container_get_items", ())
-  if options.legacy_dict_return_values:
-    return items
-  return None if items is None else [ItemStack(**item) for item in items]
-
-
-def container_click_slot(slot: int) -> bool:
-  """Simulates a left click on a slot in an open container, if any.
-
-  Args:
-    slot: slot number to click
-
-  Returns:
-    `True` upon success
-
-  Since: v4.0
-  """
-  return await_script_function("container_click_slot", (slot,))
-
-
-def player_look_at(x: float, y: float, z: float):
-  """Rotates the camera to look at a position.
-
-  Args:
-    x: x position
-    y: y position
-    z: z position
-
-  Since: v4.0
-  """
-  await_script_function("player_look_at", (x, y, z))
+show_chat_screen = ScriptFunction("show_chat_screen", show_chat_screen)
 
 
 def append_chat_history(message: str):
@@ -1461,6 +1390,8 @@ def chat_input():
 
   Returns:
     `[text, position]` where `text` is `str` and `position` is `int` cursor position within `text`
+
+  Since: v4.0
   """
   return await_script_function("chat_input", ())
 
@@ -1472,8 +1403,60 @@ def set_chat_input(text: str = None, position: int = None, color: int = None):
     text: if specified, replace chat input text
     position: if specified, move cursor to this position within the chat input box
     color: if specified, set input text color, formatted as 0xRRGGBB
+
+  Since: v4.0
   """
   await_script_function("set_chat_input", (text, position, color))
+
+
+def container_get_items() -> List[ItemStack]:
+  """Gets all items in an open container (chest, furnace, etc. with slots).
+
+  Returns:
+    List of items if a container's contents are displayed; `None` otherwise.
+
+  Since: v4.0
+  """
+  return ()
+
+def _container_get_items_result_transform(items):
+  if options.legacy_dict_return_values:
+    return items
+  return None if items is None else [ItemStack(**item) for item in items]
+
+container_get_items = ScriptFunction(
+    "container_get_items", container_get_items, _container_get_items_result_transform)
+
+
+def container_click_slot(slot: int) -> bool:
+  """Simulates a left click on a slot in an open container, if any.
+
+  Args:
+    slot: slot number to click
+
+  Returns:
+    `True` upon success
+
+  Since: v4.0
+  """
+  return (slot,)
+
+container_click_slot = ScriptFunction("container_click_slot", container_click_slot)
+
+
+def player_look_at(x: float, y: float, z: float):
+  """Rotates the camera to look at a position.
+
+  Args:
+    x: x position
+    y: y position
+    z: z position
+
+  Since: v4.0
+  """
+  return (x, y, z)
+
+player_look_at = ScriptFunction("player_look_at", player_look_at)
 
 
 Rotation = Tuple[int, int, int, int, int, int, int, int, int]
@@ -1564,8 +1547,9 @@ def blockpack_read_world(
 
   Since: v3.0
   """
-  return await_script_function(
-      "blockpack_read_world", (pos1, pos2, rotation, offset, comments, safety_limit))
+  return (pos1, pos2, rotation, offset, comments, safety_limit)
+
+blockpack_read_world = ScriptFunction("blockpack_read_world", blockpack_read_world)
 
 
 def blockpack_read_file(filename: str) -> int:
@@ -1582,7 +1566,9 @@ def blockpack_read_file(filename: str) -> int:
 
   Since: v3.0
   """
-  return await_script_function("blockpack_read_file", (filename,))
+  return (filename,)
+
+blockpack_read_file = ScriptFunction("blockpack_read_file", blockpack_read_file)
 
 
 def blockpack_import_data(base64_data: str) -> int:
@@ -1598,7 +1584,9 @@ def blockpack_import_data(base64_data: str) -> int:
 
   Since: v3.0
   """
-  return await_script_function("blockpack_import_data", (base64_data,))
+  return (base64_data,)
+
+blockpack_import_data = ScriptFunction("blockpack_import_data", blockpack_import_data)
 
 
 def blockpack_block_bounds(blockpack_id: int) -> (BlockPos, BlockPos):
@@ -1608,7 +1596,9 @@ def blockpack_block_bounds(blockpack_id: int) -> (BlockPos, BlockPos):
 
   Since: v3.0
   """
-  return await_script_function("blockpack_block_bounds", (blockpack_id,))
+  return (blockpack_id,)
+
+blockpack_block_bounds = ScriptFunction("blockpack_block_bounds", blockpack_block_bounds)
 
 
 def blockpack_comments(blockpack_id: int) -> Dict[str, str]:
@@ -1618,7 +1608,9 @@ def blockpack_comments(blockpack_id: int) -> Dict[str, str]:
 
   Since: v3.0
   """
-  return await_script_function("blockpack_comments", (blockpack_id,))
+  return (blockpack_id,)
+
+blockpack_comments = ScriptFunction("blockpack_comments", blockpack_comments)
 
 
 def blockpack_write_world(
@@ -1637,7 +1629,9 @@ def blockpack_write_world(
 
   Since: v3.0
   """
-  return await_script_function("blockpack_write_world", (blockpack_id, rotation, offset))
+  return (blockpack_id, rotation, offset)
+
+blockpack_write_world = ScriptFunction("blockpack_write_world", blockpack_write_world)
 
 
 def blockpack_write_file(blockpack_id: int, filename: str) -> bool:
@@ -1655,7 +1649,9 @@ def blockpack_write_file(blockpack_id: int, filename: str) -> bool:
 
   Since: v3.0
   """
-  return await_script_function("blockpack_write_file", (blockpack_id, filename))
+  return (blockpack_id, filename)
+
+blockpack_write_file = ScriptFunction("blockpack_write_file", blockpack_write_file)
 
 
 def blockpack_export_data(blockpack_id: int) -> str:
@@ -1671,7 +1667,9 @@ def blockpack_export_data(blockpack_id: int) -> str:
 
   Since: v3.0
   """
-  return await_script_function("blockpack_export_data", (blockpack_id,))
+  return (blockpack_id,)
+
+blockpack_export_data = ScriptFunction("blockpack_export_data", blockpack_export_data)
 
 
 def blockpack_delete(blockpack_id: int) -> bool:
@@ -1687,7 +1685,9 @@ def blockpack_delete(blockpack_id: int) -> bool:
 
   Since: v3.0
   """
-  return await_script_function("blockpack_delete", (blockpack_id,))
+  return (blockpack_id,)
+
+blockpack_delete = ScriptFunction("blockpack_delete", blockpack_delete)
 
 
 def blockpacker_create() -> int:
@@ -1700,7 +1700,9 @@ def blockpacker_create() -> int:
 
   Since: v3.0
   """
-  return await_script_function("blockpacker_create", ())
+  return ()
+
+blockpacker_create = ScriptFunction("blockpacker_create", blockpacker_create)
 
 
 def blockpacker_add_blocks(
@@ -1724,8 +1726,9 @@ def blockpacker_add_blocks(
 
   Since: v3.1
   """
-  return await_script_function(
-      "blockpacker_add_blocks", (blockpacker_id, offset, base64_setblocks, base64_fills, blocks))
+  return (blockpacker_id, offset, base64_setblocks, base64_fills, blocks)
+
+blockpacker_add_blocks = ScriptFunction("blockpacker_add_blocks", blockpacker_add_blocks)
 
 
 def blockpacker_add_blockpack(
@@ -1746,8 +1749,9 @@ def blockpacker_add_blockpack(
 
   Since: v3.0
   """
-  return await_script_function(
-      "blockpacker_add_blockpack", (blockpacker_id, blockpack_id, rotation, offset))
+  return (blockpacker_id, blockpack_id, rotation, offset)
+
+blockpacker_add_blockpack = ScriptFunction("blockpacker_add_blockpack", blockpacker_add_blockpack)
 
 
 def blockpacker_pack(blockpacker_id: int, comments: Dict[str, str]) -> int:
@@ -1764,7 +1768,9 @@ def blockpacker_pack(blockpacker_id: int, comments: Dict[str, str]) -> int:
 
   Since: v3.0
   """
-  return await_script_function("blockpacker_pack", (blockpacker_id, comments))
+  return (blockpacker_id, comments)
+
+blockpacker_pack = ScriptFunction("blockpacker_pack", blockpacker_pack)
 
 
 def blockpacker_delete(blockpacker_id: int) -> bool:
@@ -1780,7 +1786,9 @@ def blockpacker_delete(blockpacker_id: int) -> bool:
 
   Since: v3.0
   """
-  return await_script_function("blockpacker_delete", (blockpacker_id,))
+  return (blockpacker_id,)
+
+blockpacker_delete = ScriptFunction("blockpacker_delete", blockpacker_delete)
 
 
 class BlockPack:
@@ -2040,27 +2048,39 @@ class BlockPacker:
 
 def java_class(name: str):
   """Looks up Java class by fully qualified name. Returns handle to Java object."""
-  return await_script_function("java_class", (name,))
+  return (name,)
+
+java_class = ScriptFunction("java_class", java_class)
 
 def java_string(s):
   """Creates Java String. Returns handle to Java object."""
-  return await_script_function("java_string", (s,))
+  return (s,)
+
+java_string = ScriptFunction("java_string", java_string)
 
 def java_double(d):
   """Creates Java Double. Returns handle to Java object."""
-  return await_script_function("java_double", (d,))
+  return (d,)
+
+java_double = ScriptFunction("java_double", java_double)
 
 def java_int(i):
   """Creates Java Integer. Returns handle to Java object."""
-  return await_script_function("java_int", (i,))
+  return (i,)
+
+java_int = ScriptFunction("java_int", java_int)
 
 def java_bool(b):
   """Creates Java Boolean. Returns handle to Java object."""
-  return await_script_function("java_bool", (b,))
+  return (b,)
+
+java_bool = ScriptFunction("java_bool", java_bool)
 
 def java_ctor(clss):
   """Returns handle to constructor for `clss`."""
-  return await_script_function("java_ctor", (clss,))
+  return (clss,)
+
+java_ctor = ScriptFunction("java_ctor", java_ctor)
 
 def java_new_instance(target, ctor, *args):
   """Creates new Java instance from constructor handle. Returns handle to Java object.
@@ -2068,15 +2088,21 @@ def java_new_instance(target, ctor, *args):
   Args:
     args: handles to Java objects to pass as constructor params
   """
-  return await_script_function("java_new_instance", (target, ctor, *args))
+  return (target, ctor, *args)
+
+java_new_instance = ScriptFunction("java_new_instance", java_new_instance)
 
 def java_member(clss, name: str):
   """Gets Java member(s) matching `name`. Returns handle to Java object."""
-  return await_script_function("java_member", (clss, name))
+  return (clss, name)
+
+java_member = ScriptFunction("java_member", java_member)
 
 def java_access_field(target, field):
   """Accesses `field` on `target`. Returns handle to Java object, or `None` if `null`."""
-  return await_script_function("java_access_field", (target, field))
+  return (target, field)
+
+java_access_field = ScriptFunction("java_access_field", java_access_field)
 
 def java_call_method(target, method, *args):
   """Invokes method on target. Returns handle to Java object, or `None` if `null`.
@@ -2084,21 +2110,31 @@ def java_call_method(target, method, *args):
   Args:
     args: handles to Java objects to pass as constructor params
   """
-  return await_script_function("java_call_method", (target, method, *args))
+  return (target, method, *args)
+
+java_call_method = ScriptFunction("java_call_method", java_call_method)
 
 def java_array_length(array):
   """Returns length of array handle as `int`."""
-  return await_script_function("java_array_length", (array,))
+  return (array,)
+
+java_array_length = ScriptFunction("java_array_length", java_array_length)
 
 def java_array_index(array, i):
   """Gets element `i` of array handle. Returns handle to Java object, or `None` if `null`."""
-  return await_script_function("java_array_index", (array, i))
+  return (array, i)
+
+java_array_index = ScriptFunction("java_array_index", java_array_index)
 
 def java_to_string(target):
   """Returns `str` from calling `target.toString()` in Java."""
-  return await_script_function("java_to_string", (target,))
+  return (target,)
+
+java_to_string = ScriptFunction("java_to_string", java_to_string)
 
 def java_release(target):
   """Releases the Java reference to `target`."""
-  minescript_runtime.call_noreturn_function("java_release", (target,))
+  return (target,)
+
+java_release = ScriptFunction("java_release", java_release)
 

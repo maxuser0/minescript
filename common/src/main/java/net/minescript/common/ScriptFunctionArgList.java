@@ -32,6 +32,10 @@ public class ScriptFunctionArgList {
     return args.size();
   }
 
+  public List<?> args() {
+    return args;
+  }
+
   public Object get(int argPos) {
     return args.get(argPos);
   }

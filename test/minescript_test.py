@@ -19,7 +19,6 @@ chat. Otherwise, a red error message reports the first failure
 among the tests.
 """
 
-import asyncio
 import minescript
 import os
 import queue
@@ -31,7 +30,9 @@ import traceback
 all_tests = []
 
 current_test_ = ""
-chat_listener_ = minescript.ChatEventListener()
+
+event_queue = minescript.EventQueue()
+event_queue.register_chat_listener()
 
 class TestFailure(Exception):
   pass
@@ -76,7 +77,7 @@ def expect_message(message):
   #minescript.flush()
   while time.time() < timeout:
     try:
-      event = chat_listener_.get(timeout=0.01)
+      event = event_queue.get(timeout=0.01)
     except queue.Empty:
       continue
     msg = event.message
@@ -89,7 +90,7 @@ def expect_message(message):
 def drain_message_queue():
   try:
     while True:
-      chat_listener_.get(block=False)
+      event_queue.get(block=False)
   except queue.Empty:
     pass
 
@@ -178,8 +179,12 @@ def await_loaded_region_test():
   minescript.execute(f"/tp @p {x + xoffset} {y} {z + zoffset}")
   minescript.echo(f"Running await_loaded_region(...) with 5 second timeout")
   start_time = time.time()
-  loaded = minescript.await_loaded_region(
-      x + xoffset, z + zoffset, x + xoffset + 1, z + zoffset + 1, timeout=5)
+  try:
+    loaded = minescript.await_loaded_region.as_async(
+        x + xoffset, z + zoffset, x + xoffset + 1, z + zoffset + 1).wait(timeout=5)
+  except TimeoutError:
+    pass
+
   try:
     t = time.time() - start_time
     minescript.echo(f"await_loaded_region(...) completed in {t} seconds.")
@@ -188,7 +193,11 @@ def await_loaded_region_test():
     minescript.execute(f"/tp @p {x} {y} {z}")
     minescript.flush()
 
-  loaded = minescript.await_loaded_region(999990, 999990, 999999, 999999, timeout=0.01)
+  try:
+    minescript.await_loaded_region.as_async(999990, 999990, 999999, 999999).wait(timeout=0.01)
+    loaded = True
+  except TimeoutError:
+    loaded = False
   expect_false(loaded)
 
 
@@ -210,53 +219,20 @@ def player_inventory_test():
 
 @test
 def player_test():
-  name = minescript.player_name()
-  expect_true(name)
+  # run_tasks(...) guarantees that all tasks are executed on the same game tick.
+  name, (x, y, z), (yaw, pitch), players, entities = minescript.run_tasks(
+      minescript.player_name.as_task(),
+      minescript.player_position.as_task(),
+      minescript.player_orientation.as_task(),
+      minescript.players.as_task(nbt=True),
+      minescript.entities.as_task(nbt=True),
+  )
 
-  x, y, z = minescript.player_position()
-  yaw, pitch = minescript.player_orientation()
-
-  try:
-    minescript.options.legacy_dict_return_values = True
-    players = minescript.players(nbt=True)
-    for p in players:
-      expect_contains(p, "name")
-      expect_contains(p, "type")
-      expect_contains(p, "health")
-      expect_contains(p, "position")
-      expect_contains(p, "yaw")
-      expect_contains(p, "pitch")
-      expect_contains(p, "velocity")
-      expect_contains(p, "nbt")
-    players_with_my_name = [
-        (p["name"], p["position"], p["yaw"], p["pitch"])
-            for p in filter(lambda p: p["name"] == name,
-        players)]
-    expect_equal(players_with_my_name, [(name, [x, y, z], yaw, pitch)])
-
-    entities = minescript.entities(nbt=True)
-    for e in entities:
-      expect_contains(e, "name")
-      expect_contains(e, "type")
-      expect_contains(e, "position")
-      expect_contains(e, "yaw")
-      expect_contains(e, "pitch")
-      expect_contains(e, "velocity")
-      expect_contains(e, "nbt")
-    entities_with_my_name = [
-        (e["name"], e["position"], e["yaw"], e["pitch"])
-        for e in filter(lambda e: e["name"] == name, entities)]
-    expect_equal(entities_with_my_name, [(name, [x, y, z], yaw, pitch)])
-  finally:
-    minescript.options.legacy_dict_return_values = False
-
-  players = minescript.players(nbt=True)
   players_with_my_name = [
       (p.name, p.position, p.yaw, p.pitch) for p in filter(lambda p: p.name == name,
       players)]
   expect_equal(players_with_my_name, [(name, [x, y, z], yaw, pitch)])
 
-  entities = minescript.entities(nbt=True)
   entities_with_my_name = [
       (e.name, e.position, e.yaw, e.pitch)
       for e in filter(lambda e: e.name == name, entities)]
@@ -331,21 +307,21 @@ def player_targeted_block_test():
   expect_equal(result[2], "up") # We're looking at the "up" side since we're looking down.
   expect_equal(type(result[3]), str)
 
-async def do_async_functions() -> str:
-  player_pos, hand_items, inventory = await asyncio.gather(
-      minescript.async_player_position(),
-      minescript.async_player_hand_items(),
-      minescript.async_player_inventory())
+def do_async_functions() -> str:
+  player_pos, hand_items, inventory = [x.wait() for x in [
+      minescript.player_position.as_async(),
+      minescript.player_hand_items.as_async(),
+      minescript.player_inventory.as_async()]]
 
   x, y, z = player_pos
-  block, blocks, set_pos = await asyncio.gather(
-      minescript.async_getblock(x, y - 1, z),
-      minescript.async_getblocklist([
+  block, blocks, set_pos = [x.wait() for x in [
+      minescript.getblock.as_async(x, y - 1, z),
+      minescript.getblocklist.as_async([
           [x - 1, y - 1, z - 1],
           [x - 1, y - 1, z + 1],
           [x + 1, y - 1, z - 1],
           [x + 1, y - 1, z + 1]]),
-      minescript.async_player_set_position(x, y + 1, z))
+      minescript.player_set_position.as_async(x, y + 1, z)]]
 
   return f"hand_items={hand_items}, inventory={inventory}"
 
@@ -368,7 +344,7 @@ def do_blocking_functions() -> str:
 @test
 def async_function_test():
   start_time = time.time()
-  async_result = asyncio.run(do_async_functions())
+  async_result = do_async_functions()
   async_time = time.time() - start_time
 
   start_time = time.time()
@@ -410,18 +386,9 @@ def screen_name_test():
 
 
 @test
-def world_properties_test():
-  props = minescript.world_properties()
-  expect_equal(len(props), 9)
-  expect_contains(props, "game_ticks")
-  expect_contains(props, "day_ticks")
-  expect_contains(props, "raining")
-  expect_contains(props, "thundering")
-  expect_contains(props, "spawn")
-  expect_contains(props, "hardcore")
-  expect_contains(props, "difficulty")
-  expect_contains(props, "name")
-  expect_contains(props, "address")
+def world_info_test():
+  info = minescript.world_info()
+  expect_equal(len(info.__dict__), 9)
 
 
 @test

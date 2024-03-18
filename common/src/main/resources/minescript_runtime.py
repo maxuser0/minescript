@@ -15,8 +15,6 @@ calls into the Minescript mod. Most users should import
 minescript.py instead for an API that is more user friendly.
 """
 
-import asyncio
-import concurrent.futures
 import json
 import os
 import re
@@ -24,7 +22,6 @@ import sys
 import time
 import threading
 import traceback
-import _thread
 
 from dataclasses import dataclass
 from typing import Any, List, Set, Dict, Tuple, Optional, Callable, Awaitable
@@ -36,7 +33,6 @@ ExceptionHandler = Callable[[Exception], None]
 _script_function_calls: Dict[int, Tuple[str, AnyConsumer, ExceptionHandler]] = dict()
 _script_function_calls_lock = threading.Lock()
 _next_fcallid = 1000
-_thread_pool = concurrent.futures.ThreadPoolExecutor()  # ThreadPool for coroutines
 
 # Special prefix for emitting function calls, e.g. "?mnsc:123 my_func [4, 5, 6]"
 _FUNCTION_PREFIX = "?mnsc:"
@@ -88,6 +84,12 @@ render_loop = _FunctionExecutor("R")
 script_loop = _FunctionExecutor("S")
 
 
+def get_next_fcallid():
+  global _next_fcallid
+  with _script_function_calls_lock:
+    _next_fcallid += 1
+    return _next_fcallid
+
 def call_noreturn_function(command: str, args):
   """Calls a function which does not return.
 
@@ -123,10 +125,52 @@ def send_script_function_request(func_name: str, args: Tuple[Any, ...],
   return func_call_id
 
 
-async def call_async_script_function(
+_identity_fn = lambda x: x
+
+class FutureValue:
+  def __init__(self, result_transform: Callable[[Any], Any] = _identity_fn, timeout_handler=None,
+      cancel_handler=None):
+    self.value_holder = []
+    self.exception_holder = []
+    self.result_transform = result_transform
+    self.timeout_handler = timeout_handler
+    self.cancel_handler = cancel_handler
+    self.lock = threading.Lock()
+    self.lock.acquire()
+
+  def _set_value(self, value):
+    self.value_holder.append(value)
+    self.lock.release()
+
+  def _raise_exception(self, e):
+    self.exception_holder.append(e)
+    self.lock.release()
+
+  def cancel(self):
+    if self.cancel_handler:
+      self.cancel_handler()
+
+  def wait(self, timeout=None):
+    if not self.lock.acquire(timeout=(-1 if timeout is None else timeout)):
+      if self.timeout_handler:
+        self.timeout_handler()
+      else:
+        raise TimeoutError(f'Timeout after {timeout} seconds')
+
+    self.lock.release()
+    if self.exception_holder:
+      raise self.exception_holder[0]
+    elif self.value_holder:
+      result = self.value_holder[0]
+      return self.result_transform(result)
+    else:
+      raise ValueError("FutureValue has neither a value nor an exception")
+
+
+def call_async_script_function(
     func_name: str,
     args: Tuple[Any, ...],
-    result_transform: Callable[[Any], Any] = None) -> Awaitable[Any]:
+    result_transform: Callable[[Any], Any] = _identity_fn) -> FutureValue:
   """Calls a script function and awaits the function's return value.
 
   Args:
@@ -136,29 +180,18 @@ async def call_async_script_function(
   Returns:
     script function's return value: number, string, list, or dict
   """
-  retval_holder: List[Any] = []
-  exception_holder: List[Exception] = []
-  lock = threading.Lock()
-  lock.acquire()
+  future_value = FutureValue(result_transform=result_transform)
 
-  def HandleReturnValue(retval: Any) -> None:
-    retval_holder.append(retval)
-    lock.release()
+  func_call_id = send_script_function_request(
+      func_name, args, future_value._set_value, future_value._raise_exception)
 
-  def HandleException(exception: Exception) -> None:
-    exception_holder.append(exception)
-    lock.release()
+  def cancel_handler():
+    # Special pseudo-function for cancelling the function call.
+    cancel_args = (func_call_id, func_name)
+    call_noreturn_function("cancelfn!", cancel_args)
 
-  send_script_function_request(func_name, args, HandleReturnValue, HandleException)
-
-  loop = asyncio.get_event_loop()
-  await loop.run_in_executor(_thread_pool, lock.acquire)
-
-  if exception_holder:
-    raise exception_holder[0]
-  if retval_holder:
-    result = retval_holder[0]
-    return result if result_transform is None else result_transform(result)
+  future_value.cancel_handler = cancel_handler
+  return future_value
 
 
 def await_script_function(func_name: str, args: Tuple[Any, ...], timeout: float = None) -> Any:
@@ -171,31 +204,54 @@ def await_script_function(func_name: str, args: Tuple[Any, ...], timeout: float 
   Returns:
     script function's return value: number, string, list, or dict
   """
-  retval_holder: List[Any] = []
-  exception_holder: List[Exception] = []
-  lock = threading.Lock()
-  lock.acquire()
+  future_value = FutureValue()
 
-  def HandleReturnValue(retval: Any) -> None:
-    retval_holder.append(retval)
-    lock.release()
+  func_call_id = send_script_function_request(
+      func_name, args, future_value._set_value, future_value._raise_exception)
 
-  def HandleException(exception: Exception) -> None:
-    exception_holder.append(exception)
-    lock.release()
-
-  func_call_id = send_script_function_request(func_name, args, HandleReturnValue, HandleException)
-  locked = lock.acquire(timeout=(-1 if timeout is None else timeout))
-  if not locked:
+  def cancel_handler():
     # Special pseudo-function for cancelling the function call.
     cancel_args = (func_call_id, func_name)
     call_noreturn_function("cancelfn!", cancel_args)
+
+  def timeout_handler():
+    # Need to cancel on timeout because unlike call_async_script_function, caller doesn't get a
+    # FutureValue to cancel.
+    cancel_handler()
     raise TimeoutError(f'Timeout after {timeout} seconds')
 
-  if exception_holder:
-    raise exception_holder[0]
-  if retval_holder:
-    return retval_holder[0]
+  future_value.timeout_handler = timeout_handler
+  future_value.cancel_handler = cancel_handler
+  return future_value.wait(timeout)
+
+
+@dataclass
+class Task:
+  fcallid: int
+  func_name: str
+  immediate_args: Tuple[Any, ...]
+  deferred_args: Tuple[Any, ...]
+  result_transform: Callable[[Any], Any] = _identity_fn
+
+def _get_immediate_args(args):
+  return [None if type(arg) is Task else arg for arg in args]
+
+def _get_deferred_args(args):
+  return [arg if type(arg) is Task else None for arg in args]
+
+# TODO(maxuser): Add support for timeout passed to await_script_function().
+def run_tasks(*tasks: List[Task]):
+  for i, arg in enumerate(tasks):
+    if type(arg) is not Task:
+      raise ValueError(
+          f"All args to `run_tasks` must be tasks, but arg {i} is {arg} (type `{type(arg)}`)")
+
+  serialized_tasks = [
+    (task.fcallid, task.func_name, task.immediate_args, task.deferred_args) for task in tasks
+  ]
+
+  results = await_script_function("run_tasks", serialized_tasks)
+  return [tasks[i].result_transform(result) for i, result in enumerate(results)]
 
 
 @dataclass
