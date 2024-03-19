@@ -76,9 +76,9 @@ public class Job implements JobControl {
     this.config = config;
     this.systemMessageQueue = systemMessageQueue;
     this.doneCallback = doneCallback;
-    objects = new ResourceTracker<>(Object.class, jobId);
-    blockpacks = new ResourceTracker<>(BlockPack.class, jobId);
-    blockpackers = new ResourceTracker<>(BlockPacker.class, jobId);
+    objects = new ResourceTracker<>(Object.class, jobId, config);
+    blockpacks = new ResourceTracker<>(BlockPack.class, jobId, config);
+    blockpackers = new ResourceTracker<>(BlockPacker.class, jobId, config);
   }
 
   public ScriptConfig.BoundCommand boundCommand() {

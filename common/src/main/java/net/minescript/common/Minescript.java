@@ -2185,7 +2185,8 @@ public class Minescript {
       }
       if (config.debugOutput()) {
         LOGGER.info(
-            "(debug) Script function `{}`: {} / {}  ->  {}",
+            "(debug) Script function {} `{}`: {} / {}  ->  {}",
+            funcCallId,
             functionName,
             quoteString(argsString),
             parsedArgs,
@@ -3642,6 +3643,7 @@ public class Minescript {
         && iterations < config.maxCommandsPerCycle()
         && System.nanoTime() / 1000 - loopStartTimeUsecs < config.commandCycleDeadlineUsecs());
 
+    /*
     if (config.debugOutput()) {
       long elapsedUsecs = System.nanoTime() / 1000 - loopStartTimeUsecs;
       if (elapsedUsecs >= config.commandCycleDeadlineUsecs()) {
@@ -3654,5 +3656,6 @@ public class Minescript {
         LOGGER.info("Tick loop processed {} iterations in {} usecs", iterations, elapsedUsecs);
       }
     }
+    */
   }
 }

@@ -1268,11 +1268,15 @@ class EventQueue:
         event["type"] = event_type
         self.queue.put(event)
       except Exception as e:
-        print(f"Exception in event handler for `{event_type}`: {e}")
+        exception_message = f"Exception in event handler for `{event_type}`: {e}"
+        minescript_runtime.debug_log(exception_message)
+        print(exception_message, file=sys.stderr)
 
     handler_id = registration_func(put_typed_event, self.queue.put)
     if type(handler_id) is not int:
-      raise ValueError(f"Expected registration function to return int but got `{self.handler_id}`")
+      error_message = f"Expected registration function to return int but got `{self.handler_id}`"
+      minescript_runtime.debug_log(error_message)
+      raise ValueError(error_message)
     self.event_handler_ids.append(handler_id)
 
   def unregister_all(self):
@@ -1297,9 +1301,12 @@ class EventQueue:
     """
     value = self.queue.get(block, timeout)
     if isinstance(value, Exception):
+      minescript_runtime.debug_log("Throwing exception from EventQueue.get:", value)
       raise value
     if type(value) is not dict or not "type" in value:
-      raise ValueError(f"Expected event dict with key `type` but got: {value}")
+      error_message = f"Expected event dict with key `type` but got: {value}"
+      minescript_runtime.debug_log(error_message)
+      raise ValueError(error_message)
     return _EVENT_CONSTRUCTORS[value["type"]](**value)
 
   def __enter__(self):

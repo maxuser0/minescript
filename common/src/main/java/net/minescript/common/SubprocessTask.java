@@ -123,6 +123,11 @@ public class SubprocessTask implements Task {
   @Override
   public boolean sendResponse(long functionCallId, JsonElement returnValue, boolean finalReply) {
     if (!canRespond()) {
+      LOGGER.warn(
+          "Subprocess unresponsive to response from funcCallId {} for job {}: {}",
+          functionCallId,
+          jobControl,
+          returnValue);
       return false;
     }
     try {
@@ -132,12 +137,16 @@ public class SubprocessTask implements Task {
       if (finalReply) {
         response.addProperty("conn", "close");
       }
-      stdinWriter.write(GSON.toJson(response));
-      stdinWriter.newLine();
-      stdinWriter.flush();
+      String responseString = GSON.toJson(response);
+      synchronized (this) {
+        stdinWriter.write(responseString);
+        stdinWriter.newLine();
+        stdinWriter.flush();
+      }
       return true;
     } catch (IOException e) {
-      LOGGER.error("IOException in SubprocessTask sendResponse: {}", e.getMessage());
+      LOGGER.error(
+          "IOException in SubprocessTask sendResponse for job {}: {}", jobControl, e.getMessage());
       return false;
     }
   }
@@ -145,6 +154,11 @@ public class SubprocessTask implements Task {
   @Override
   public boolean sendException(long functionCallId, ExceptionInfo exception) {
     if (!canRespond()) {
+      LOGGER.warn(
+          "Subprocess unresponsive to exception from funcCallId {} for job {}: {}",
+          functionCallId,
+          jobControl,
+          exception);
       return false;
     }
     try {
@@ -155,12 +169,16 @@ public class SubprocessTask implements Task {
       LOGGER.warn("Translating Java exception as JSON: {}", json);
       response.add("except", json);
 
-      stdinWriter.write(GSON.toJson(response));
-      stdinWriter.newLine();
-      stdinWriter.flush();
+      String responseString = GSON.toJson(response);
+      synchronized (this) {
+        stdinWriter.write(responseString);
+        stdinWriter.newLine();
+        stdinWriter.flush();
+      }
       return true;
     } catch (IOException e) {
-      LOGGER.error("IOException in SubprocessTask sendException: {}", e.getMessage());
+      LOGGER.error(
+          "IOException in SubprocessTask sendException for job {}: {}", jobControl, e.getMessage());
       return false;
     }
   }

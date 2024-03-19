@@ -29,6 +29,35 @@ from typing import Any, List, Set, Dict, Tuple, Optional, Callable, Awaitable
 AnyConsumer = Callable[[str], None]
 ExceptionHandler = Callable[[Exception], None]
 
+stdin_readline = sys.stdin.readline
+
+def debug_log(*args):
+  pass
+
+_is_debug = os.environ.get("MINESCRIPT_DEBUG", False) not in (False, "0", "")
+if _is_debug:
+  import builtins
+
+  _debug_log = open(os.path.join("minescript", "system", "minescript_debug.log"), "w")
+
+  def debug_log(*args, **kwargs):
+    builtins.print(*args, **kwargs, file=_debug_log)
+    _debug_log.flush()
+
+  def print(*args, **kwargs):
+    if "file" not in kwargs:
+      builtins.print("<", *args, **kwargs, file=_debug_log)
+      _debug_log.flush()
+    builtins.print(*args, **kwargs)
+
+  def stdin_readline():
+    builtins.print("Reading line from stdin...", file=_debug_log)
+    _debug_log.flush()
+    s = sys.stdin.readline()
+    builtins.print(">", s, file=_debug_log)
+    _debug_log.flush()
+    return s
+
 # Dict values: (function_name: str, on_value_handler: AnyConsumer)
 _script_function_calls: Dict[int, Tuple[str, AnyConsumer, ExceptionHandler]] = dict()
 _script_function_calls_lock = threading.Lock()
@@ -96,8 +125,9 @@ def call_noreturn_function(command: str, args):
   Make a fire-and-forget function call with a call id of 0 and no return value.
   """
   func_executor = _executor_stack.peek()
+  json_args = json.dumps(args)  # Do this outside the lock in case json.dumps has internal locking.
   with _script_function_calls_lock:
-    print(f"{_FUNCTION_PREFIX}0 {func_executor} {command} {json.dumps(args)}")
+    print(f"{_FUNCTION_PREFIX}0 {func_executor} {command} {json_args}")
 
 
 def send_script_function_request(func_name: str, args: Tuple[Any, ...],
@@ -117,11 +147,12 @@ def send_script_function_request(func_name: str, args: Tuple[Any, ...],
   """
   global _next_fcallid
   func_executor = _executor_stack.peek()
+  json_args = json.dumps(args)  # Do this outside the lock in case json.dumps has internal locking.
   with _script_function_calls_lock:
     _next_fcallid += 1
     func_call_id = _next_fcallid
     _script_function_calls[func_call_id] = (func_name, retval_handler, exception_handler)
-    print(f"{_FUNCTION_PREFIX}{func_call_id} {func_executor} {func_name} {json.dumps(args)}")
+    print(f"{_FUNCTION_PREFIX}{func_call_id} {func_executor} {func_name} {json_args}")
   return func_call_id
 
 
@@ -272,58 +303,84 @@ class JavaException(Exception):
 
 
 def _ScriptServiceLoop():
-  while True:
-    try:
-      json_input = input()
-      reply = json.loads(json_input)
-    except json.decoder.JSONDecodeError as e:
-      traceback.print_exc(file=sys.stderr)
-      print(f"JSON error in: {json_input}", file=sys.stderr)
-      continue
+  try:
+    while True:
+      try:
+        json_input = stdin_readline()
+        if not json_input:
+          debug_log("minescript_runtime.py: stdin reached EOF, exiting script service loop")
+          break
+        reply = json.loads(json_input)
+        if _is_debug:
+          debug_log("Parsed json reply:", reply)
+      except json.decoder.JSONDecodeError as e:
+        traceback.print_exc(file=sys.stderr)
+        exception_message = f"JSON error in: {json_input}"
+        debug_log(exception_message)
+        print(exception_message, file=sys.stderr)
+        continue
 
-    if "fcid" not in reply:
-      print(
-          "minescript_runtime.py: 'fcid' field missing in script function response",
-          file=sys.stderr)
-      continue
-    func_call_id = reply["fcid"]
-
-    # fcid zero is reserved for system management like exiting the program.
-    if func_call_id == 0:
-      if "retval" in reply:
-        retval = reply["retval"]
-        if retval == "exit!":
-          break  # Break out of the service loop so that the process can exit.
-      continue
-
-    with _script_function_calls_lock:
-      if func_call_id not in _script_function_calls:
+      if "fcid" not in reply:
         print(
-            f"minescript_runtime.py: fcid={func_call_id} not found in _script_function_calls",
+            "minescript_runtime.py: 'fcid' field missing in script function response",
             file=sys.stderr)
         continue
-      func_name, retval_handler, exception_handler = _script_function_calls[func_call_id]
+      func_call_id = reply["fcid"]
 
-      if "conn" in reply and reply["conn"] == "close":
-        del _script_function_calls[func_call_id]
+      # fcid zero is reserved for system management like exiting the program.
+      if func_call_id == 0:
+        if "retval" in reply:
+          retval = reply["retval"]
+          if retval == "exit!":
+            break  # Break out of the service loop so that the process can exit.
+        continue
 
-    if "except" in reply:
-      e = reply["except"]
-      exception = JavaException(
-          e["type"], e["message"], e["desc"],
-          [StackElement(s["file"], s["method"], s["line"]) for s in e["stack"]])
-      if exception_handler is None:
-        print(f"JavaException raised in `{func_name}`: {exception}", file=sys.stderr)
-      else:
-        exception_handler(exception)
-    elif "retval" in reply:
-      retval = reply["retval"]
-      retval_handler(retval)
+      with _script_function_calls_lock:
+        if func_call_id not in _script_function_calls:
+          print(
+              f"minescript_runtime.py: fcid={func_call_id} not found in _script_function_calls",
+              file=sys.stderr)
+          continue
+        func_name, retval_handler, exception_handler = _script_function_calls[func_call_id]
 
-    if "conn" not in reply and "retval" not in reply and "except" not in reply:
-      print(
-          f"minescript_runtime.py: script function response missing 'conn', 'retval', and 'except': {reply}",
-          file=sys.stderr)
+        if "conn" in reply and reply["conn"] == "close":
+          debug_log("minescript_runtime.py: Closing connection to fcall", func_call_id)
+          del _script_function_calls[func_call_id]
+
+      if "except" in reply:
+        e = reply["except"]
+        exception = JavaException(
+            e["type"], e["message"], e["desc"],
+            [StackElement(s["file"], s["method"], s["line"]) for s in e["stack"]])
+        if exception_handler is None:
+          exception_message = f"JavaException raised in `{func_name}`: {exception}"
+          debug_log("minescript_runtime.py:", exception_message)
+          print(exception_message, file=sys.stderr)
+        else:
+          if _is_debug:
+            debug_log(
+                f"minescript_runtime.py: Passing exception to handler for fcallid {func_call_id}:",
+                exception)
+          exception_handler(exception)
+      elif "retval" in reply:
+        retval = reply["retval"]
+        if _is_debug: debug_log(f"Sending retval: {retval}")
+        retval_handler(retval)
+
+      if "conn" not in reply and "retval" not in reply and "except" not in reply:
+        error_message = "minescript_runtime.py: " \
+            f"Script function response missing 'conn', 'retval', and 'except': {reply}"
+        debug_log(error_message)
+        print(error_message, file=sys.stderr)
+  except Exception as e:
+    exception_message = f"minescript_runtime.py: Script service loop caught exception: {e}"
+    debug_log(exception_message)
+    print(exception_message, file=sys.stderr)
+  finally:
+    exit_message = "minescript_runtime.py: Script service loop exiting."
+    debug_log(exit_message)
+    print(exit_message, file=sys.stderr)
+    call_noreturn_function("exit!", ())
 
 
 def _WatchdogLoop():
