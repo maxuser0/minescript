@@ -172,18 +172,29 @@ def screenshot(filename=None):
 screenshot = ScriptFunction("screenshot", screenshot)
 
 
-def job_info():
+@dataclass
+class JobInfo:
+  job_id: int
+  command: List[str]
+  source: str
+  status: str
+  self: bool = False
+
+def job_info() -> List[JobInfo]:
   """Return info about active Minescript jobs.
 
   Returns:
-    Dict structured as: `[{"job_id": ..., "command": [...], "source": ..., "status": ...}, ...]`
-    The enclosing job additionally has an entry `"self": true`.
+    `JobInfo`.  For the  enclosing job, `JobInfo.self` is `True`.
 
   Since: v4.0
   """
   return ()
 
-job_info = ScriptFunction("job_info", job_info)
+def _job_info_result_transform(jobs):
+  """(__internal__)"""
+  return [JobInfo(**job) for job in jobs]
+
+job_info = ScriptFunction("job_info", job_info, _job_info_result_transform)
 
 
 def flush():
