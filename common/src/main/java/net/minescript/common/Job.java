@@ -146,6 +146,9 @@ public class Job implements JobControl {
         && returnValue instanceof JsonPrimitive primitive
         && primitive.isString()
         && primitive.getAsString().equals("exit!")) {
+      if (config.debugOutput()) {
+        LOGGER.info("Job {} got `exit!`, setting state to DONE", jobId);
+      }
       state = JobState.DONE;
     }
     return result;
@@ -360,6 +363,8 @@ public class Job implements JobControl {
       final long startTimeMillis = System.currentTimeMillis();
       final long longRunningJobThreshold = 3000L;
       int exitCode = task.run(command, this);
+      LOGGER.info(
+          "Job `{}` exited with code {}, draining message queues...", jobSummary(), exitCode);
 
       final int millisToSleep = 1000;
       while (state != JobState.KILLED
