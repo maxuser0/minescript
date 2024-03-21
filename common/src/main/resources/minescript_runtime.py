@@ -70,10 +70,9 @@ _FUNCTION_PREFIX = "?mnsc:"
 class _ExecutorStack:
   """Stack of identifiers for function executors.
 
-  The last/top ID determines which executor to use for processing a script function.
+  The last/top ID determines which executor to use for servicing a script function.
 
   The executor IDs are:
-    "X" -> defer to the default for each function
     "T" -> execute on the tick loop
     "R" -> execute on the render loop
     "S" -> execute on the script loop
@@ -82,8 +81,8 @@ class _ExecutorStack:
     self.thread_local = threading.local()
 
   def stack(self):
-    # "X" is the sentinel value signaling default behavior.
-    return self.thread_local.__dict__.setdefault("stack", ["X"])
+    # `None` is the sentinel value signaling an empty stack and default behavior.
+    return self.thread_local.__dict__.setdefault("stack", [None])
 
   def push(self, executor_id: str):
     self.stack().append(executor_id)
@@ -97,7 +96,7 @@ class _ExecutorStack:
 _executor_stack = _ExecutorStack()
 
 
-class _FunctionExecutor:
+class FunctionExecutor:
   def __init__(self, executor_id: str):
     self.executor_id = executor_id
 
@@ -109,9 +108,14 @@ class _FunctionExecutor:
     _executor_stack.pop()
 
 # See common/src/main/java/net/minescript/common/FunctionExecutor.java
-tick_loop = _FunctionExecutor("T")
-render_loop = _FunctionExecutor("R")
-script_loop = _FunctionExecutor("S")
+tick_loop = FunctionExecutor("T")
+render_loop = FunctionExecutor("R")
+script_loop = FunctionExecutor("S")
+
+_default_executor = render_loop
+
+def set_default_executor(executor: FunctionExecutor):
+  _default_executor = executor
 
 
 def get_next_fcallid():
@@ -120,7 +124,9 @@ def get_next_fcallid():
     _next_fcallid += 1
     return _next_fcallid
 
-def call_noreturn_function(command: str, args):
+def call_noreturn_function(
+    command: str, args,
+    required_executor: FunctionExecutor = None, func_default_executor: FunctionExecutor = None):
   """Calls a function which does not return.
 
   Make a fire-and-forget function call with a call id of 0 and no return value.
@@ -128,15 +134,23 @@ def call_noreturn_function(command: str, args):
   if _exiting:
     debug_log("minescript_runtime.py: Ignoring script function while exiting:", command, args)
     return
-  func_executor = _executor_stack.peek()
+
+  executor_id = (
+      (required_executor and required_executor.executor_id) or
+      _executor_stack.peek() or
+      (func_default_executor and func_default_executor.executor_id) or
+      _default_executor.executor_id)
+
   json_args = json.dumps(args)  # Do this outside the lock in case json.dumps has internal locking.
   with _script_function_calls_lock:
-    print(f"{_FUNCTION_PREFIX}0 {func_executor} {command} {json_args}")
+    print(f"{_FUNCTION_PREFIX}0 {executor_id} {command} {json_args}")
 
 
 def send_script_function_request(func_name: str, args: Tuple[Any, ...],
                                  retval_handler: AnyConsumer,
-                                 exception_handler: ExceptionHandler = None) -> int:
+                                 exception_handler: ExceptionHandler = None,
+                                 required_executor: FunctionExecutor = None,
+                                 func_default_executor: FunctionExecutor = None) -> int:
   """Sends a request for a script function, asynchronously streaming return value(s) or exception.
 
   If `exception_handler` is invoked, `retval_handler` will no longer be called.
@@ -155,17 +169,24 @@ def send_script_function_request(func_name: str, args: Tuple[Any, ...],
     debug_log("minescript_runtime.py: Ignoring script function while exiting:", func_name, args)
     return 0
 
-  func_executor = _executor_stack.peek()
+  executor_id = (
+      (required_executor and required_executor.executor_id) or
+      _executor_stack.peek() or
+      (func_default_executor and func_default_executor.executor_id) or
+      _default_executor.executor_id)
+
   json_args = json.dumps(args)  # Do this outside the lock in case json.dumps has internal locking.
   with _script_function_calls_lock:
     _next_fcallid += 1
     func_call_id = _next_fcallid
     _script_function_calls[func_call_id] = (func_name, retval_handler, exception_handler)
-    print(f"{_FUNCTION_PREFIX}{func_call_id} {func_executor} {func_name} {json_args}")
+    print(f"{_FUNCTION_PREFIX}{func_call_id} {executor_id} {func_name} {json_args}")
   return func_call_id
 
 
 _identity_fn = lambda x: x
+
+_always_none_fn = lambda x: None
 
 class FutureValue:
   def __init__(self, result_transform: Callable[[Any], Any] = _identity_fn, timeout_handler=None,
@@ -214,6 +235,7 @@ class FutureValue:
 def call_async_script_function(
     func_name: str,
     args: Tuple[Any, ...],
+    required_executor: FunctionExecutor = None, func_default_executor: FunctionExecutor = None,
     result_transform: Callable[[Any], Any] = _identity_fn) -> FutureValue:
   """Calls a script function and awaits the function's return value.
 
@@ -227,7 +249,9 @@ def call_async_script_function(
   future_value = FutureValue(result_transform=result_transform)
 
   func_call_id = send_script_function_request(
-      func_name, args, future_value._set_value, future_value._raise_exception)
+      func_name, args,
+      future_value._set_value, future_value._raise_exception,
+      required_executor, func_default_executor)
 
   def cancel_handler():
     # Special pseudo-function for cancelling the function call.
@@ -238,35 +262,25 @@ def call_async_script_function(
   return future_value
 
 
-def await_script_function(func_name: str, args: Tuple[Any, ...], timeout: float = None) -> Any:
+def await_script_function(
+    func_name: str, args: Tuple[Any, ...],
+    required_executor: FunctionExecutor = None, func_default_executor: FunctionExecutor = None):
   """Calls a script function and returns the function's return value.
 
   Args:
     func_name: name of Minescript function to call
-    timeout: if specified, timeout in seconds to wait for the script function to complete
 
   Returns:
-    script function's return value: number, string, list, or dict
+    script function's return value: number, string, list, dict, or None
   """
   future_value = FutureValue()
 
   func_call_id = send_script_function_request(
-      func_name, args, future_value._set_value, future_value._raise_exception)
+      func_name, args,
+      future_value._set_value, future_value._raise_exception,
+      required_executor, func_default_executor)
 
-  def cancel_handler():
-    # Special pseudo-function for cancelling the function call.
-    cancel_args = (func_call_id, func_name)
-    call_noreturn_function("cancelfn!", cancel_args)
-
-  def timeout_handler():
-    # Need to cancel on timeout because unlike call_async_script_function, caller doesn't get a
-    # FutureValue to cancel.
-    cancel_handler()
-    raise TimeoutError(f'Timeout after {timeout} seconds')
-
-  future_value.timeout_handler = timeout_handler
-  future_value.cancel_handler = cancel_handler
-  return future_value.wait(timeout)
+  return future_value.wait()
 
 
 @dataclass
@@ -296,6 +310,55 @@ def run_tasks(*tasks: List[Task]):
 
   results = await_script_function("run_tasks", serialized_tasks)
   return [tasks[i].result_transform(result) for i, result in enumerate(results)]
+
+
+class BasicScriptFunction:
+  def __init__(self, name, args_func):
+    self.name = name
+    self.args_func = args_func
+    self.required_executor = None
+    self.default_executor = None
+    self.result_transform = _always_none_fn
+
+  def as_task(self, *args, **kwargs):
+    fcallid = get_next_fcallid()
+    args_list = self.args_func(*args, **kwargs)
+    immediate_args = _get_immediate_args(args_list)
+    deferred_args = _get_deferred_args(args_list)
+    return Task(
+        fcallid, self.name, immediate_args, deferred_args, self.result_transform)
+
+  def set_default_executor(self, executor: FunctionExecutor):
+    self.default_executor = executor
+
+  def set_required_executor(self, executor: FunctionExecutor):
+    self.required_executor = executor
+
+
+class ScriptFunction(BasicScriptFunction):
+  def __init__(self, name, args_func, result_transform=_identity_fn):
+    super().__init__(name, args_func)
+    self.result_transform = result_transform
+
+  def __call__(self, *args, **kwargs):
+    result = await_script_function(
+        self.name, self.args_func(*args, **kwargs), self.required_executor, self.default_executor)
+    return self.result_transform(result)
+
+  def as_async(self, *args, **kwargs):
+    return call_async_script_function(
+        self.name, self.args_func(*args, **kwargs),
+        self.required_executor, self.default_executor,
+        self.result_transform)
+
+
+class NoReturnScriptFunction(BasicScriptFunction):
+  def __init__(self, name, args_func):
+    super().__init__(name, args_func)
+
+  def __call__(self, *args, **kwargs):
+    call_noreturn_function(
+        self.name, self.args_func(*args, **kwargs), self.required_executor, self.default_executor)
 
 
 @dataclass

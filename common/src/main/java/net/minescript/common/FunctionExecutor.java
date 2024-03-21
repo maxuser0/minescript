@@ -4,7 +4,6 @@
 package net.minescript.common;
 
 public enum FunctionExecutor {
-  DEFAULT("X"), // Use the default executor based on config.txt.
   TICK_LOOP("T"), // Process script functions 20 times per second with game ticks.
   RENDER_LOOP("R"), // Process script functions at the rendering frame rate, about 30-100 fps.
   SCRIPT_LOOP("S"); // Process script functions on the subprocess IO thread, >1000x per second.
@@ -21,8 +20,6 @@ public enum FunctionExecutor {
 
   public static FunctionExecutor fromValue(String value) {
     switch (value) {
-      case "X":
-        return DEFAULT;
       case "T":
         return TICK_LOOP;
       case "R":

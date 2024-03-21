@@ -29,7 +29,12 @@ from minescript_runtime import (
     await_script_function,
     call_async_script_function,
     send_script_function_request,
+    tick_loop,
+    render_loop,
+    script_loop,
     run_tasks,
+    ScriptFunction,
+    NoReturnScriptFunction,
     ExceptionHandler)
 from typing import Any, List, Set, Dict, Tuple, Optional, Callable
 
@@ -48,29 +53,6 @@ class MinescriptRuntimeOptions:
 options = MinescriptRuntimeOptions()
 
 
-class ScriptFunction:
-  def __init__(self, name, args_func, result_transform=minescript_runtime._identity_fn):
-    self.name = name
-    self.args_func = args_func
-    self.result_transform = result_transform
-
-  def __call__(self, *args, **kwargs):
-    result = await_script_function(self.name, self.args_func(*args, **kwargs))
-    return self.result_transform(result)
-
-  def as_async(self, *args, **kwargs):
-    return call_async_script_function(
-        self.name, self.args_func(*args, **kwargs), self.result_transform)
-
-  def as_task(self, *args, **kwargs):
-    fcallid = minescript_runtime.get_next_fcallid()
-    args_list = self.args_func(*args, **kwargs)
-    immediate_args = minescript_runtime._get_immediate_args(args_list)
-    deferred_args = minescript_runtime._get_deferred_args(args_list)
-    return minescript_runtime.Task(
-        fcallid, self.name, immediate_args, deferred_args, self.result_transform)
-
-
 def execute(command: str):
   """Executes the given command.
 
@@ -84,37 +66,44 @@ def execute(command: str):
   """
   if not isinstance(command, str):
     raise TypeError("Argument must be a string.")
-  minescript_runtime.call_noreturn_function("execute", (command,))
+  return (command,)
+
+execute = NoReturnScriptFunction("execute", execute)
 
 
 def echo(*messages):
-  """Echoes messages to the chat.
+  """Echoes plain-text messages to the chat.
 
   Echoed messages are visible only to the local player.
 
-  If `len(messages)` is 1 and `messages[0]` is a dict or list, interpret as
-  JSON-formatted text; otherwise, join messages with a space separating them.
-
-  To echo a single arg that's a dict or list, but not interpret it as
-  JSON-formatted text, pass an empty string as an additional arg, e.g.
-  `echo(my_list, "")`
+  If multiple args are given, join messages with a space separating them.
 
   Update in v4.0:
-    Interpret single-arg dict or list as a JSON-formatted message.
     Support multiple plain-text messages.
 
   Since: v2.0
   """
-  if not messages:
-    return
+  return (" ".join([str(m) for m in messages]),)
 
-  if len(messages) == 1 and type(messages[0]) in (dict, list):
-    # Interpret as JSON-formatted text.
-    minescript_runtime.call_noreturn_function(
-        "echo_json_text", (json.dumps(messages[0]),))
-  else:
-    minescript_runtime.call_noreturn_function(
-        "echo_plain_text", (" ".join([str(m) for m in messages]),))
+echo = NoReturnScriptFunction("echo", echo)
+
+
+def echo_json(json_text):
+  """Echoes JSON-formatted text to the chat.
+
+  Echoed text is visible only to the local player.
+
+  `json_text` may be a string representing JSON text, or a list or dict. If it's a list or dict,
+  convert it to a JSON string using the standard `json` module.
+
+  Since: v4.0
+  """
+  if type(json_text) in (dict, list):
+    json_text = json.dumps(json_text)
+
+  return (json_text,)
+
+echo_json = NoReturnScriptFunction("echo_json", echo_json)
 
 
 def chat(*messages):
@@ -130,32 +119,22 @@ def chat(*messages):
 
   Since: v2.0
   """
-  if not messages:
-    return
+  return (" ".join([str(m) for m in messages]),)
 
-  if type(messages[0]) is str:
-    # If the first message starts with a slash or backslash, prepend a space so
-    # that the first message is printed and not executed as a command.
-    if messages[0] in ("/", "\\"):
-      messages[0] = " " + messages[0]
-
-  minescript_runtime.call_noreturn_function("chat", (" ".join([str(m) for m in messages]),))
+chat = NoReturnScriptFunction("chat", chat)
 
 
-def log(*messages) -> bool:
+def log(*messages):
   """Sends messages to latest.log.
 
-  Returns:
-    `True` if messages were logged successfully.
-
   Update in v4.0:
-    Support multiple messages of any type. Auto-convert messages to str.
+    Support multiple messages of any type. Auto-convert messages to `str`.
 
   Since: v3.0
   """
-  if not messages:
-    return False
-  minescript_runtime.call_noreturn_function("log", (" ".join([str(m) for m in messages]),))
+  return (" ".join([str(m) for m in messages]),)
+
+log = NoReturnScriptFunction("log", log)
 
 
 def screenshot(filename=None):
@@ -1400,7 +1379,9 @@ def append_chat_history(message: str):
 
   Since: v4.0
   """
-  await_script_function("append_chat_history", (message,))
+  return (message,)
+
+append_chat_history = ScriptFunction("append_chat_history", append_chat_history)
 
 
 def chat_input():
@@ -1411,7 +1392,9 @@ def chat_input():
 
   Since: v4.0
   """
-  return await_script_function("chat_input", ())
+  return ()
+
+chat_input = ScriptFunction("chat_input", chat_input)
 
 
 def set_chat_input(text: str = None, position: int = None, color: int = None):
@@ -1424,7 +1407,9 @@ def set_chat_input(text: str = None, position: int = None, color: int = None):
 
   Since: v4.0
   """
-  await_script_function("set_chat_input", (text, position, color))
+  return (text, position, color)
+
+set_chat_input = ScriptFunction("set_chat_input", set_chat_input)
 
 
 def container_get_items() -> List[ItemStack]:

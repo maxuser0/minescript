@@ -41,7 +41,7 @@ def escape_double_quotes(string):
   return string.replace('"', r'\"')
 
 def print_success(message):
-  minescript.echo(
+  minescript.echo_json(
       { "text": f"[{current_test_}] {escape_double_quotes(message)}", "color": "green" })
 
 def print_failure(message):
@@ -411,7 +411,7 @@ def command_parse_test():
 
 if "--list" in sys.argv[1:]:
   for test in all_tests:
-    minescript.echo({ "text": test.__name__, "color": "green" })
+    minescript.echo_json({ "text": test.__name__, "color": "green" })
   sys.exit(0)
 
 explicit_tests = set()

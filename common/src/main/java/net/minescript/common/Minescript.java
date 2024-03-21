@@ -2797,34 +2797,70 @@ public class Minescript {
           return Optional.empty();
         }
 
-      case "echo_json_text":
+      case "echo_json":
         {
-          args.expectArgs("message");
+          args.expectArgs("json_text");
           var message = args.getString(0);
           processJsonFormattedText(message);
           return Optional.empty();
         }
 
-      case "echo_plain_text":
+      case "echo":
         {
-          args.expectArgs("message");
-          var message = args.getString(0);
+          args.expectSize(1);
+
+          // Try to parse as a single string arg, and if that fails, fall back to string list.
+          String message;
+          try {
+            message = args.getString(0);
+          } catch (IllegalArgumentException e) {
+            var strings = args.getConvertibleStringList(0);
+            message = String.join(" ", strings.toArray(new String[0]));
+          }
+
           processPlainText(message);
           return Optional.empty();
         }
 
       case "chat":
         {
-          args.expectArgs("message");
-          String message = args.getString(0);
+          args.expectSize(1);
+
+          // Try to parse as a single string arg, and if that fails, fall back to string list.
+          String message;
+          try {
+            message = args.getString(0);
+          } catch (IllegalArgumentException e) {
+            var strings = args.getConvertibleStringList(0);
+            message = String.join(" ", strings.toArray(new String[0]));
+          }
+
+          // If the message starts with a slash or backslash, prepend a space so that it's printed
+          // and not executed as a command.
+          if (message.length() > 0) {
+            char firstLetter = message.charAt(0);
+            if (firstLetter == '\\' || firstLetter == '/') {
+              message = " " + message;
+            }
+          }
+
           processChatMessage(message);
           return Optional.empty();
         }
 
       case "log":
         {
-          args.expectArgs("message");
-          String message = args.getString(0);
+          args.expectSize(1);
+
+          // Try to parse as a single string arg, and if that fails, fall back to string list.
+          String message;
+          try {
+            message = args.getString(0);
+          } catch (IllegalArgumentException e) {
+            var strings = args.getConvertibleStringList(0);
+            message = String.join(" ", strings.toArray(new String[0]));
+          }
+
           LOGGER.info(message);
           return Optional.empty();
         }
@@ -3528,7 +3564,8 @@ public class Minescript {
     // List<?> deferredArgs = (List<?>) args.get(3);
 
     var embeddedArgs = new ScriptFunctionArgList(funcName, immediateArgs, argsString);
-    return runScriptFunction(job, funcCallId, funcName, embeddedArgs, argsString).get();
+    var result = runScriptFunction(job, funcCallId, funcName, embeddedArgs, argsString);
+    return result.orElse(JsonNull.INSTANCE);
   }
 
   private record ConstructorSet(

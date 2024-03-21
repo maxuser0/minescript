@@ -224,16 +224,12 @@ public class Job implements JobControl {
       return;
     }
 
-    if (executor == FunctionExecutor.SCRIPT_LOOP
-        || (executor == FunctionExecutor.DEFAULT
-            && config.scriptLoopFunctions().contains(functionName))) {
+    if (executor == FunctionExecutor.SCRIPT_LOOP) {
       Minescript.processScriptFunction(this, functionName, funcCallId, argsString, args);
       return;
     }
 
-    if (executor == FunctionExecutor.RENDER_LOOP
-        || (executor == FunctionExecutor.DEFAULT
-            && config.renderLoopFunctions().contains(functionName))) {
+    if (executor == FunctionExecutor.RENDER_LOOP) {
       jobRenderQueue.add(
           Message.createFunctionCall(funcCallId, executor, functionName, argsString, args));
       return;
