@@ -240,7 +240,7 @@ public class ScriptConfig {
 
     return new ExecutableCommand(
         fileTypeConfig.commandBuilder.buildExecutableCommand(boundCommand),
-        env.toArray(STRING_ARRAY));
+        env.toArray(String[]::new));
   }
 
   /**
@@ -299,7 +299,7 @@ public class ScriptConfig {
           commandIndex >= 0, "{args} not found in pattern: %s", commandPattern);
 
       return new CommandBuilder(
-          commandPattern.toArray(STRING_ARRAY),
+          commandPattern.toArray(String[]::new),
           commandIndex,
           argsIndex,
           escapeCommandDoubleQuotesSupplier);
@@ -324,10 +324,7 @@ public class ScriptConfig {
           executableCommand.add(pattern[i]);
         }
       }
-      return executableCommand.toArray(STRING_ARRAY);
+      return executableCommand.toArray(String[]::new);
     }
   }
-
-  // Empty string array for use with List<String>.toArray(...).
-  private static final String[] STRING_ARRAY = new String[0];
 }

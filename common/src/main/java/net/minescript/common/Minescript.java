@@ -2107,7 +2107,7 @@ public class Minescript {
       throw new IllegalArgumentException(
           String.format(
               "No key mapping with name `%s`; assigned values are: %s",
-              keyMappingName, String.join(", ", keyBinds.keySet().toArray(new String[0]))));
+              keyMappingName, String.join(", ", keyBinds.keySet().toArray(String[]::new))));
     }
     if (pressed) {
       KeyMapping.set(key, true);
@@ -2815,7 +2815,7 @@ public class Minescript {
             message = args.getString(0);
           } catch (IllegalArgumentException e) {
             var strings = args.getConvertibleStringList(0);
-            message = String.join(" ", strings.toArray(new String[0]));
+            message = String.join(" ", strings.toArray(String[]::new));
           }
 
           processPlainText(message);
@@ -2832,7 +2832,7 @@ public class Minescript {
             message = args.getString(0);
           } catch (IllegalArgumentException e) {
             var strings = args.getConvertibleStringList(0);
-            message = String.join(" ", strings.toArray(new String[0]));
+            message = String.join(" ", strings.toArray(String[]::new));
           }
 
           // If the message starts with a slash or backslash, prepend a space so that it's printed
@@ -2858,7 +2858,7 @@ public class Minescript {
             message = args.getString(0);
           } catch (IllegalArgumentException e) {
             var strings = args.getConvertibleStringList(0);
-            message = String.join(" ", strings.toArray(new String[0]));
+            message = String.join(" ", strings.toArray(String[]::new));
           }
 
           LOGGER.info(message);
@@ -3486,7 +3486,7 @@ public class Minescript {
             signatures.add(method.toString());
           }
           throw new IllegalArgumentException(
-              "No matching methods:\n" + String.join("\n", signatures.toArray(new String[0])));
+              "No matching methods:\n" + String.join("\n", signatures.toArray(String[]::new)));
         }
 
       case "java_access_field":
