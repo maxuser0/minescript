@@ -53,7 +53,7 @@ class MinescriptRuntimeOptions:
 options = MinescriptRuntimeOptions()
 
 
-def execute(command: str):
+def execute(command: str, _as_task=False):
   """Executes the given command.
 
   If `command` is prefixed by a backslash, it's treated as Minescript command,
@@ -64,14 +64,14 @@ def execute(command: str):
 
   Since: v2.1
   """
-  if not isinstance(command, str):
+  if not _as_task and not isinstance(command, str):
     raise TypeError("Argument must be a string.")
   return (command,)
 
-execute = NoReturnScriptFunction("execute", execute)
+execute = NoReturnScriptFunction("execute", execute, conditional_task_arg=True)
 
 
-def echo(*messages):
+def echo(*messages, _as_task=False):
   """Echoes plain-text messages to the chat.
 
   Echoed messages are visible only to the local player.
@@ -83,9 +83,12 @@ def echo(*messages):
 
   Since: v2.0
   """
-  return (" ".join([str(m) for m in messages]),)
+  if _as_task:
+    return messages
+  else:
+    return (" ".join([str(m) for m in messages]),)
 
-echo = NoReturnScriptFunction("echo", echo)
+echo = NoReturnScriptFunction("echo", echo, conditional_task_arg=True)
 
 
 def echo_json(json_text):
@@ -106,7 +109,7 @@ def echo_json(json_text):
 echo_json = NoReturnScriptFunction("echo_json", echo_json)
 
 
-def chat(*messages):
+def chat(*messages, _as_task=False):
   """Sends messages to the chat.
 
   If `messages[0]` is a str starting with a slash or backslash, automatically
@@ -119,12 +122,15 @@ def chat(*messages):
 
   Since: v2.0
   """
-  return (" ".join([str(m) for m in messages]),)
+  if _as_task:
+    return messages
+  else:
+    return (" ".join([str(m) for m in messages]),)
 
-chat = NoReturnScriptFunction("chat", chat)
+chat = NoReturnScriptFunction("chat", chat, conditional_task_arg=True)
 
 
-def log(*messages):
+def log(*messages, _as_task=False):
   """Sends messages to latest.log.
 
   Update in v4.0:
@@ -132,9 +138,12 @@ def log(*messages):
 
   Since: v3.0
   """
-  return (" ".join([str(m) for m in messages]),)
+  if _as_task:
+    return messages
+  else:
+    return (" ".join([str(m) for m in messages]),)
 
-log = NoReturnScriptFunction("log", log)
+log = NoReturnScriptFunction("log", log, conditional_task_arg=True)
 
 
 def screenshot(filename=None):

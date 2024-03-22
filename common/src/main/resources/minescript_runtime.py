@@ -175,7 +175,9 @@ def send_script_function_request(func_name: str, args: Tuple[Any, ...],
       (func_default_executor and func_default_executor.executor_id) or
       _default_executor.executor_id)
 
-  json_args = json.dumps(args)  # Do this outside the lock in case json.dumps has internal locking.
+  # Serialize JSON outside the lock in case json.dumps has internal locking that could deadlock.
+  json_args = json.dumps(args)
+
   with _script_function_calls_lock:
     _next_fcallid += 1
     func_call_id = _next_fcallid
@@ -295,10 +297,9 @@ def _get_immediate_args(args):
   return [None if type(arg) is Task else arg for arg in args]
 
 def _get_deferred_args(args):
-  return [arg if type(arg) is Task else None for arg in args]
+  return [arg.fcallid if type(arg) is Task else None for arg in args]
 
-# TODO(maxuser): Add support for timeout passed to await_script_function().
-def run_tasks(*tasks: List[Task]):
+def run_tasks(tasks: List[Task]):
   for i, arg in enumerate(tasks):
     if type(arg) is not Task:
       raise ValueError(
@@ -313,15 +314,18 @@ def run_tasks(*tasks: List[Task]):
 
 
 class BasicScriptFunction:
-  def __init__(self, name, args_func):
+  def __init__(self, name, args_func, conditional_task_arg=False):
     self.name = name
     self.args_func = args_func
     self.required_executor = None
     self.default_executor = None
+    self.conditional_task_arg = conditional_task_arg
     self.result_transform = _always_none_fn
 
   def as_task(self, *args, **kwargs):
     fcallid = get_next_fcallid()
+    if self.conditional_task_arg:
+      kwargs["_as_task"] = True
     args_list = self.args_func(*args, **kwargs)
     immediate_args = _get_immediate_args(args_list)
     deferred_args = _get_deferred_args(args_list)
@@ -353,8 +357,8 @@ class ScriptFunction(BasicScriptFunction):
 
 
 class NoReturnScriptFunction(BasicScriptFunction):
-  def __init__(self, name, args_func):
-    super().__init__(name, args_func)
+  def __init__(self, name, args_func, conditional_task_arg=False):
+    super().__init__(name, args_func, conditional_task_arg=conditional_task_arg)
 
   def __call__(self, *args, **kwargs):
     call_noreturn_function(

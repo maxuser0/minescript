@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 /** Accessors and precondition enforcement for an argument list to a script function. */
 public class ScriptFunctionArgList {
@@ -60,8 +61,7 @@ public class ScriptFunctionArgList {
       throw new IllegalArgumentException(
           expectedArgsNames == null
               ? String.format(
-                  "`%s` expected arg %d to be bool but got: %s",
-                  functionName, argPos + 1, object)
+                  "`%s` expected arg %d to be bool but got: %s", functionName, argPos + 1, object)
               : String.format(
                   "`%s` expected %s to be bool but got: %s",
                   functionName, expectedArgsNames[argPos], object));
@@ -76,8 +76,7 @@ public class ScriptFunctionArgList {
       throw new IllegalArgumentException(
           expectedArgsNames == null
               ? String.format(
-                  "`%s` expected arg %d to be int but got: %s",
-                  functionName, argPos + 1, object)
+                  "`%s` expected arg %d to be int but got: %s", functionName, argPos + 1, object)
               : String.format(
                   "`%s` expected %s to be int but got: %s",
                   functionName, expectedArgsNames[argPos], object));
@@ -112,8 +111,7 @@ public class ScriptFunctionArgList {
       throw new IllegalArgumentException(
           expectedArgsNames == null
               ? String.format(
-                  "`%s` expected arg %d to be float but got: %s",
-                  functionName, argPos + 1, object)
+                  "`%s` expected arg %d to be float but got: %s", functionName, argPos + 1, object)
               : String.format(
                   "`%s` expected %s to be float but got: %s",
                   functionName, expectedArgsNames[argPos], object));
@@ -131,8 +129,7 @@ public class ScriptFunctionArgList {
       throw new IllegalArgumentException(
           expectedArgsNames == null
               ? String.format(
-                  "`%s` expected arg %d to be string but got: %s",
-                  functionName, argPos + 1, object)
+                  "`%s` expected arg %d to be string but got: %s", functionName, argPos + 1, object)
               : String.format(
                   "`%s` expected %s to be string but got: %s",
                   functionName, expectedArgsNames[argPos], object));
@@ -277,7 +274,7 @@ public class ScriptFunctionArgList {
   }
 
   /** Returns int if object is a Number representing an int without truncation or rounding. */
-  private static OptionalInt getStrictIntValue(Object object) {
+  public static OptionalInt getStrictIntValue(Object object) {
     if (!(object instanceof Number)) {
       return OptionalInt.empty();
     }
@@ -300,5 +297,25 @@ public class ScriptFunctionArgList {
       }
     }
     return OptionalInt.empty();
+  }
+
+  /** Returns long if object is a Number representing a long without truncation or rounding. */
+  public static OptionalLong getStrictLongValue(Object object) {
+    if (!(object instanceof Number number)) {
+      return OptionalLong.empty();
+    }
+    if (number instanceof Integer) {
+      return OptionalLong.of(number.intValue());
+    }
+    if (number instanceof Long) {
+      return OptionalLong.of(number.longValue());
+    }
+    if (number instanceof Double) {
+      double dbl = number.doubleValue();
+      if (!Double.isInfinite(dbl) && dbl == Math.floor(dbl)) {
+        return OptionalLong.of(number.longValue());
+      }
+    }
+    return OptionalLong.empty();
   }
 }

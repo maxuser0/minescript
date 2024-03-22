@@ -220,13 +220,13 @@ def player_inventory_test():
 @test
 def player_test():
   # run_tasks(...) guarantees that all tasks are executed on the same game tick.
-  name, (x, y, z), (yaw, pitch), players, entities = minescript.run_tasks(
+  name, (x, y, z), (yaw, pitch), players, entities = minescript.run_tasks([
       minescript.player_name.as_task(),
       minescript.player_position.as_task(),
       minescript.player_orientation.as_task(),
       minescript.players.as_task(nbt=True),
       minescript.entities.as_task(nbt=True),
-  )
+  ])
 
   players_with_my_name = [
       (p.name, p.position, p.yaw, p.pitch) for p in filter(lambda p: p.name == name,

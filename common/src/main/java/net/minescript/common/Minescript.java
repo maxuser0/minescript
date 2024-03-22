@@ -8,6 +8,7 @@ import static net.minescript.common.CommandSyntax.parseCommand;
 import static net.minescript.common.CommandSyntax.quoteCommand;
 import static net.minescript.common.CommandSyntax.quoteString;
 
+import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.gson.Gson;
@@ -37,6 +38,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +53,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import net.minecraft.SharedConstants;
@@ -2807,15 +2810,19 @@ public class Minescript {
 
       case "echo":
         {
-          args.expectSize(1);
-
           // Try to parse as a single string arg, and if that fails, fall back to string list.
           String message;
           try {
+            args.expectSize(1);
             message = args.getString(0);
           } catch (IllegalArgumentException e) {
-            var strings = args.getConvertibleStringList(0);
-            message = String.join(" ", strings.toArray(String[]::new));
+            message =
+                String.join(
+                    " ",
+                    args.args().stream()
+                        .map(Object::toString)
+                        .collect(Collectors.toList())
+                        .toArray(String[]::new));
           }
 
           processPlainText(message);
@@ -2824,15 +2831,19 @@ public class Minescript {
 
       case "chat":
         {
-          args.expectSize(1);
-
           // Try to parse as a single string arg, and if that fails, fall back to string list.
           String message;
           try {
+            args.expectSize(1);
             message = args.getString(0);
           } catch (IllegalArgumentException e) {
-            var strings = args.getConvertibleStringList(0);
-            message = String.join(" ", strings.toArray(String[]::new));
+            message =
+                String.join(
+                    " ",
+                    args.args().stream()
+                        .map(Object::toString)
+                        .collect(Collectors.toList())
+                        .toArray(String[]::new));
           }
 
           // If the message starts with a slash or backslash, prepend a space so that it's printed
@@ -2850,15 +2861,19 @@ public class Minescript {
 
       case "log":
         {
-          args.expectSize(1);
-
           // Try to parse as a single string arg, and if that fails, fall back to string list.
           String message;
           try {
+            args.expectSize(1);
             message = args.getString(0);
           } catch (IllegalArgumentException e) {
-            var strings = args.getConvertibleStringList(0);
-            message = String.join(" ", strings.toArray(String[]::new));
+            message =
+                String.join(
+                    " ",
+                    args.args().stream()
+                        .map(Object::toString)
+                        .collect(Collectors.toList())
+                        .toArray(String[]::new));
           }
 
           LOGGER.info(message);
@@ -3544,26 +3559,52 @@ public class Minescript {
   }
 
   private static JsonElement runTasks(Job job, List<?> tasks) throws Exception {
-    // TODO(maxuser): Make results from earlier tasks available for substitution into deferred
-    // args of later tasks.
+    var taskValues = new HashMap<Long, Supplier<Object>>();
     var jsonArray = new JsonArray();
     for (var task : tasks) {
-      jsonArray.add(runTask(job, (List<?>) task));
+      var args = (List<?>) task;
+      var result = runTask(job, args, taskValues);
+      taskValues.put(
+          ScriptFunctionArgList.getStrictLongValue(args.get(0)).getAsLong(),
+          Suppliers.memoize(
+              () -> {
+                // Gson doesn't appear to offer a way to parse JsonElement directly to a POJO. The
+                // workaround used here is to put the JsonElement into a JsonArray, then parse that
+                // as generic ArrayList and pull out the first element as Object.
+                var array = new JsonArray();
+                array.add(result);
+                return GSON.fromJson(array, ArrayList.class).get(0);
+              }));
+      jsonArray.add(result);
     }
     return jsonArray;
   }
 
-  private static JsonElement runTask(Job job, List<?> argList) throws Exception {
+  private static JsonElement runTask(
+      Job job, List<?> argList, Map<Long, Supplier<Object>> taskValues) throws Exception {
     var args = new ScriptFunctionArgList("runTask", argList, argList.toString());
     long funcCallId = args.getStrictInt(0);
     String funcName = args.getString(1);
-    List<?> immediateArgs = (List<?>) args.get(2);
-    String argsString = immediateArgs.toString();
 
-    // TODO(maxuser): Support substitution of previously evaluated task results from deferred args.
-    // List<?> deferredArgs = (List<?>) args.get(3);
+    List resolvedArgs = (List) args.get(2);
+    List<?> deferredArgs = (List<?>) args.get(3);
 
-    var embeddedArgs = new ScriptFunctionArgList(funcName, immediateArgs, argsString);
+    for (int i = 0; i < deferredArgs.size(); ++i) {
+      Object arg = deferredArgs.get(i);
+      if (arg != null) {
+        long taskId = ScriptFunctionArgList.getStrictLongValue(arg).getAsLong();
+        if (!taskValues.containsKey(taskId)) {
+          throw new IllegalArgumentException(
+              String.format(
+                  "Task `%s` accessed uninitialized result of Task ID %d", funcName, taskId));
+        }
+        resolvedArgs.set(i, taskValues.get(taskId).get());
+      }
+    }
+
+    String argsString = resolvedArgs.toString();
+
+    var embeddedArgs = new ScriptFunctionArgList(funcName, resolvedArgs, argsString);
     var result = runScriptFunction(job, funcCallId, funcName, embeddedArgs, argsString);
     return result.orElse(JsonNull.INSTANCE);
   }
