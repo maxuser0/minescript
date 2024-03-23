@@ -28,7 +28,7 @@ from dataclasses import dataclass, asdict
 from minescript_runtime import (
     await_script_function, call_async_script_function, send_script_function_request,
     tick_loop, render_loop, script_loop,
-    Task, run_tasks,
+    Task, run_tasks, schedule_tick_tasks, schedule_render_tasks,
     ScriptFunction, NoReturnScriptFunction,
     ExceptionHandler)
 from typing import Any, List, Set, Dict, Tuple, Optional, Callable
@@ -1072,6 +1072,17 @@ def unregister_event_handler(handler_id: int):
   Since: v4.0
   """
   await_script_function("unregister_event_handler", (handler_id,))
+
+
+def cancel_scheduled_tasks(task_list_id: int):
+  """Cancels a scheduled task list, if any, for the currently running job. (__internal__)
+
+  Args:
+    task_list_id: ID of task list returned from `schedule_tick_tasks()` or `schedule_render_tasks`.
+
+  Since: v4.0
+  """
+  await_script_function("cancel_scheduled_tasks", (task_list_id,))
 
 
 @dataclass

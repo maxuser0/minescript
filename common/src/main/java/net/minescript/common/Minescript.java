@@ -665,9 +665,7 @@ public class Minescript {
 
     @Override
     public synchronized void cancel() {
-      if (config.debugOutput()) {
-        LOGGER.info("Cancelling EventHandler for job {} func {}", jobId(), funcCallId);
-      }
+      LOGGER.info("Cancelling EventHandler for job {} func {}", jobId(), funcCallId);
       state = State.CANCELLED;
       funcCallId = OptionalLong.empty();
       doneCallback.run();
@@ -679,6 +677,62 @@ public class Minescript {
       } else {
         return false;
       }
+    }
+  }
+
+  static class ScheduledTaskList implements Job.Operation {
+    private final Job job;
+    private final String name;
+    private final List<?> tasks;
+    private final Runnable doneCallback;
+    private long lastReportedErrorTime; // Throttle error reporting so as to not spam logs or chat.
+    private boolean suspended = false;
+
+    public ScheduledTaskList(Job job, String name, List<?> tasks, Runnable doneCallback) {
+      this.job = job;
+      this.name = name;
+      this.tasks = tasks;
+      this.doneCallback = doneCallback;
+      this.lastReportedErrorTime = System.currentTimeMillis();
+    }
+
+    public void run() {
+      if (suspended) {
+        return;
+      }
+
+      try {
+        runTasks(job, tasks);
+      } catch (Exception e) {
+        long time = System.currentTimeMillis();
+        if (lastReportedErrorTime - time > 5000) {
+          lastReportedErrorTime = time;
+          systemMessageQueue.logUserError(
+              "Error from scheduled tasks `{}`: {}", name, e.getMessage());
+        }
+      }
+    }
+
+    @Override
+    public String name() {
+      return name;
+    }
+
+    @Override
+    public void suspend() {
+      suspended = true;
+    }
+
+    @Override
+    public boolean resumeAndCheckDone() {
+      suspended = false;
+      return false; // Never done until cancelled.
+    }
+
+    @Override
+    public void cancel() {
+      LOGGER.info("Cancelling ScheduledTaskList: `{}`", name);
+      doneCallback.run();
     }
   }
 
@@ -1476,6 +1530,10 @@ public class Minescript {
   }
 
   public static void onRenderWorld() {
+    for (var taskList : renderTaskLists.values()) {
+      taskList.run();
+    }
+
     if (++worldRenderEventCounter % config.ticksPerCycle() == 0) {
       var minecraft = Minecraft.getInstance();
       var player = minecraft.player;
@@ -1897,6 +1955,9 @@ public class Minescript {
   private static Map<JobOperationId, ChunkLoadEventListener> chunkLoadEventListeners =
       new ConcurrentHashMap<JobOperationId, ChunkLoadEventListener>();
 
+  private static Map<JobOperationId, ScheduledTaskList> tickTaskLists = new ConcurrentHashMap<>();
+  private static Map<JobOperationId, ScheduledTaskList> renderTaskLists = new ConcurrentHashMap<>();
+
   public static void onAddEntityEvent(Entity entity) {
     JsonObject json = null;
     for (var handler : addEntityEventListeners.values()) {
@@ -2230,7 +2291,7 @@ public class Minescript {
   }
 
   private static Optional<JsonElement> startEventHandler(
-      Job job, long funcCallId, Map<JobOperationId, EventHandler> handlerMap, int handlerId) {
+      Job job, long funcCallId, Map<JobOperationId, EventHandler> handlerMap, long handlerId) {
     var jobOpId = new JobOperationId(job.jobId(), handlerId);
     var handler = handlerMap.get(jobOpId);
     if (handler == null) {
@@ -2341,7 +2402,7 @@ public class Minescript {
 
       case "start_key_listener":
         args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, keyEventListeners, args.getStrictInt(0));
+        return startEventHandler(job, funcCallId, keyEventListeners, args.getStrictLong(0));
 
       case "register_mouse_listener":
         args.expectSize(0);
@@ -2350,7 +2411,7 @@ public class Minescript {
 
       case "start_mouse_listener":
         args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, mouseEventListeners, args.getStrictInt(0));
+        return startEventHandler(job, funcCallId, mouseEventListeners, args.getStrictLong(0));
 
       case "register_chat_message_listener":
         args.expectSize(0);
@@ -2359,7 +2420,7 @@ public class Minescript {
 
       case "start_chat_message_listener":
         args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, chatEventListeners, args.getStrictInt(0));
+        return startEventHandler(job, funcCallId, chatEventListeners, args.getStrictLong(0));
 
       case "register_chat_message_interceptor":
         {
@@ -2383,7 +2444,7 @@ public class Minescript {
 
       case "start_chat_message_interceptor":
         args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, chatInterceptors, args.getStrictInt(0));
+        return startEventHandler(job, funcCallId, chatInterceptors, args.getStrictLong(0));
 
       case "register_add_entity_listener":
         args.expectSize(0);
@@ -2392,7 +2453,7 @@ public class Minescript {
 
       case "start_add_entity_listener":
         args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, addEntityEventListeners, args.getStrictInt(0));
+        return startEventHandler(job, funcCallId, addEntityEventListeners, args.getStrictLong(0));
 
       case "register_block_update_listener":
         args.expectSize(0);
@@ -2401,7 +2462,7 @@ public class Minescript {
 
       case "start_block_update_listener":
         args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, blockUpdateEventListeners, args.getStrictInt(0));
+        return startEventHandler(job, funcCallId, blockUpdateEventListeners, args.getStrictLong(0));
 
       case "register_take_item_listener":
         args.expectSize(0);
@@ -2410,7 +2471,7 @@ public class Minescript {
 
       case "start_take_item_listener":
         args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, takeItemEventListeners, args.getStrictInt(0));
+        return startEventHandler(job, funcCallId, takeItemEventListeners, args.getStrictLong(0));
 
       case "register_damage_listener":
         args.expectSize(0);
@@ -2419,7 +2480,7 @@ public class Minescript {
 
       case "start_damage_listener":
         args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, damageEventListeners, args.getStrictInt(0));
+        return startEventHandler(job, funcCallId, damageEventListeners, args.getStrictLong(0));
 
       case "register_explosion_listener":
         args.expectSize(0);
@@ -2428,7 +2489,7 @@ public class Minescript {
 
       case "start_explosion_listener":
         args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, explosionEventListeners, args.getStrictInt(0));
+        return startEventHandler(job, funcCallId, explosionEventListeners, args.getStrictLong(0));
 
       case "register_chunk_listener":
         args.expectSize(0);
@@ -2437,12 +2498,12 @@ public class Minescript {
 
       case "start_chunk_listener":
         args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, chunkEventListeners, args.getStrictInt(0));
+        return startEventHandler(job, funcCallId, chunkEventListeners, args.getStrictLong(0));
 
       case "unregister_event_handler":
         {
           args.expectSize(1);
-          int listenerId = args.getStrictInt(0);
+          long listenerId = args.getStrictLong(0);
           var jobOpId = new JobOperationId(job.jobId(), listenerId);
           job.cancelOperation(listenerId);
           return OPTIONAL_JSON_TRUE;
@@ -3551,11 +3612,46 @@ public class Minescript {
       case "run_tasks":
         return Optional.of(runTasks(job, args.args()));
 
+      case "schedule_tick_tasks":
+        return Optional.of(scheduleTasks(job, funcCallId, tickTaskLists, args.args()));
+
+      case "schedule_render_tasks":
+        return Optional.of(scheduleTasks(job, funcCallId, renderTaskLists, args.args()));
+
+      case "cancel_scheduled_tasks":
+        args.expectArgs("task_list_id");
+        long opId = args.getStrictLong(0);
+        var jobOpId = new JobOperationId(job.jobId(), opId);
+        job.cancelOperation(opId);
+        return OPTIONAL_JSON_NULL;
+
       default:
         throw new IllegalArgumentException(
             String.format(
                 "Unknown function `%s` called from job: %s", functionName, job.jobSummary()));
     }
+  }
+
+  private static JsonElement scheduleTasks(
+      Job job, long funcCallId, Map<JobOperationId, ScheduledTaskList> taskLists, List<?> tasks)
+      throws Exception {
+    var jobOpId = new JobOperationId(job.jobId(), funcCallId);
+    if (taskLists.containsKey(jobOpId)) {
+      throw new IllegalStateException(
+          String.format("Task ID %d already scheduled for job %d", funcCallId, job.jobId()));
+    }
+
+    var scheduledTaskList =
+        new ScheduledTaskList(
+            job,
+            String.format(
+                "TaskList command=%s job=%d id=%d len=%d",
+                job.boundCommand().command()[0], job.jobId(), funcCallId, tasks.size()),
+            tasks,
+            () -> taskLists.remove(jobOpId));
+    taskLists.put(jobOpId, scheduledTaskList);
+    job.addOperation(funcCallId, scheduledTaskList);
+    return new JsonPrimitive(funcCallId);
   }
 
   private static JsonElement runTasks(Job job, List<?> tasks) throws Exception {
@@ -3706,6 +3802,10 @@ public class Minescript {
   }
 
   public static void onClientWorldTick() {
+    for (var taskList : tickTaskLists.values()) {
+      taskList.run();
+    }
+
     lastTickStartTime = System.currentTimeMillis();
     if (++clientTickEventCounter % config.ticksPerCycle() == 0) {
       var minecraft = Minecraft.getInstance();

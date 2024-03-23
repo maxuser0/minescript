@@ -339,6 +339,33 @@ def run_tasks(tasks: List[Task]):
   else:
     return None
 
+def schedule_tick_tasks(tasks: List[Task]):
+  for i, arg in enumerate(tasks):
+    if type(arg) is not Task:
+      raise ValueError(
+          "All args to `schedule_tick_tasks` must be tasks, "
+          f"but arg {i} is {arg} (type `{type(arg)}`)")
+
+  serialized_tasks = [
+    (task.fcallid, task.func_name, task.immediate_args, task.deferred_args) for task in tasks
+  ]
+
+  return await_script_function("schedule_tick_tasks", serialized_tasks)
+
+
+def schedule_render_tasks(tasks: List[Task]):
+  for i, arg in enumerate(tasks):
+    if type(arg) is not Task:
+      raise ValueError(
+          "All args to `schedule_render_tasks` must be tasks, "
+          f"but arg {i} is {arg} (type `{type(arg)}`)")
+
+  serialized_tasks = [
+    (task.fcallid, task.func_name, task.immediate_args, task.deferred_args) for task in tasks
+  ]
+
+  return await_script_function("schedule_render_tasks", serialized_tasks)
+
 
 class BasicScriptFunction:
   def __init__(self, name, args_func, conditional_task_arg=False):

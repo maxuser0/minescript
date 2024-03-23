@@ -104,6 +104,21 @@ public class ScriptFunctionArgList {
     return number.intValue();
   }
 
+  public long getStrictLong(int argPos) {
+    var object = args.get(argPos);
+    var value = getStrictLongValue(object);
+    if (value.isEmpty()) {
+      throw new IllegalArgumentException(
+          expectedArgsNames == null
+              ? String.format(
+                  "`%s` expected arg %d to be long but got: %s", functionName, argPos + 1, object)
+              : String.format(
+                  "`%s` expected %s to be long but got: %s",
+                  functionName, expectedArgsNames[argPos], object));
+    }
+    return value.getAsLong();
+  }
+
   public double getDouble(int argPos) {
     var object = args.get(argPos);
     OptionalDouble optional = getDoubleValue(object);
