@@ -254,7 +254,7 @@ public class ScriptFunctionArgList {
     return stringMap;
   }
 
-  private static OptionalDouble getDoubleValue(Object object) {
+  public static OptionalDouble getDoubleValue(Object object) {
     if (object instanceof Number) {
       Number number = (Number) object;
       if (number instanceof Double) {

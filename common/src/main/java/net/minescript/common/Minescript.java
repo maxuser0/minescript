@@ -3560,7 +3560,7 @@ public class Minescript {
 
   private static JsonElement runTasks(Job job, List<?> tasks) throws Exception {
     var taskValues = new HashMap<Long, Supplier<Object>>();
-    var jsonArray = new JsonArray();
+    JsonElement tasksResult = JsonNull.INSTANCE;
     for (var task : tasks) {
       var args = (List<?>) task;
       var result = runTask(job, args, taskValues);
@@ -3575,9 +3575,10 @@ public class Minescript {
                 array.add(result);
                 return GSON.fromJson(array, ArrayList.class).get(0);
               }));
-      jsonArray.add(result);
+      tasksResult = result;
     }
-    return jsonArray;
+    // Return the result of the last executed task.
+    return tasksResult;
   }
 
   private static JsonElement runTask(
@@ -3604,9 +3605,61 @@ public class Minescript {
 
     String argsString = resolvedArgs.toString();
 
-    var embeddedArgs = new ScriptFunctionArgList(funcName, resolvedArgs, argsString);
-    var result = runScriptFunction(job, funcCallId, funcName, embeddedArgs, argsString);
-    return result.orElse(JsonNull.INSTANCE);
+    switch (funcName) {
+      case "as_list":
+        return GSON.toJsonTree(resolvedArgs);
+
+      case "get_attr":
+        {
+          var map = (Map) resolvedArgs.get(0);
+          var attr = resolvedArgs.get(1);
+          return GSON.toJsonTree(map.get(attr));
+        }
+
+      case "get_index":
+        {
+          var list = (List) resolvedArgs.get(0);
+          var index = ScriptFunctionArgList.getStrictIntValue(resolvedArgs.get(1));
+          if (index.isEmpty()) {
+            throw new IllegalArgumentException(
+                "Expected second arg to `get_index` to be int but got: " + resolvedArgs.get(1));
+          }
+          return GSON.toJsonTree(list.get(index.getAsInt()));
+        }
+
+      case "as_int":
+        {
+          var arg = resolvedArgs.get(0);
+          if (arg instanceof List list) {
+            var ints = new JsonArray();
+            for (int i = 0; i < list.size(); ++i) {
+              var item = list.get(i);
+              OptionalDouble number = ScriptFunctionArgList.getDoubleValue(item);
+              if (number.isEmpty()) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        "Expected arg to `as_int` to be a number or list of numbers but got `%s` at"
+                            + " index `%d`",
+                        item, i));
+              }
+              ints.add((int) number.getAsDouble());
+            }
+            return ints;
+          } else {
+            OptionalDouble number = ScriptFunctionArgList.getDoubleValue(arg);
+            if (number.isEmpty()) {
+              throw new IllegalArgumentException(
+                  "Expected arg to `as_int` to be a number or list of numbers but got: " + arg);
+            }
+            return new JsonPrimitive((int) number.getAsDouble());
+          }
+        }
+
+      default:
+        var embeddedArgs = new ScriptFunctionArgList(funcName, resolvedArgs, argsString);
+        return runScriptFunction(job, funcCallId, funcName, embeddedArgs, argsString)
+            .orElse(JsonNull.INSTANCE);
+    }
   }
 
   private record ConstructorSet(

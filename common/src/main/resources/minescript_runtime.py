@@ -299,6 +299,30 @@ def _get_immediate_args(args):
 def _get_deferred_args(args):
   return [arg.fcallid if type(arg) is Task else None for arg in args]
 
+def _as_list_task(*values):
+  return Task(
+      get_next_fcallid(), "as_list",
+      _get_immediate_args(values), _get_deferred_args(values))
+Task.as_list = _as_list_task
+
+def _get_index_task(array, index):
+  return Task(
+      get_next_fcallid(), "get_index",
+      _get_immediate_args((array, index)), _get_deferred_args((array, index)))
+Task.get_index = _get_index_task
+
+def _get_attr_task(obj, attr):
+  return Task(
+      get_next_fcallid(), "get_attr",
+      _get_immediate_args((obj, attr)), _get_deferred_args((obj, attr)))
+Task.get_attr = _get_attr_task
+
+def _as_int_task(*numbers):
+  return Task(
+      get_next_fcallid(), "as_int",
+      _get_immediate_args(numbers), _get_deferred_args(numbers))
+Task.as_int = _as_int_task
+
 def run_tasks(tasks: List[Task]):
   for i, arg in enumerate(tasks):
     if type(arg) is not Task:
@@ -309,8 +333,11 @@ def run_tasks(tasks: List[Task]):
     (task.fcallid, task.func_name, task.immediate_args, task.deferred_args) for task in tasks
   ]
 
-  results = await_script_function("run_tasks", serialized_tasks)
-  return [tasks[i].result_transform(result) for i, result in enumerate(results)]
+  if tasks:
+    result = await_script_function("run_tasks", serialized_tasks)
+    return tasks[-1].result_transform(result)
+  else:
+    return None
 
 
 class BasicScriptFunction:

@@ -26,15 +26,10 @@ import minescript_runtime
 from array import array
 from dataclasses import dataclass, asdict
 from minescript_runtime import (
-    await_script_function,
-    call_async_script_function,
-    send_script_function_request,
-    tick_loop,
-    render_loop,
-    script_loop,
-    run_tasks,
-    ScriptFunction,
-    NoReturnScriptFunction,
+    await_script_function, call_async_script_function, send_script_function_request,
+    tick_loop, render_loop, script_loop,
+    Task, run_tasks,
+    ScriptFunction, NoReturnScriptFunction,
     ExceptionHandler)
 from typing import Any, List, Set, Dict, Tuple, Optional, Callable
 
