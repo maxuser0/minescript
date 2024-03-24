@@ -214,24 +214,6 @@ def player_position() -> List[float]:
 player_position = ScriptFunction("player_position", player_position)
 
 
-def player_set_position(
-    x: float, y: float, z: float, yaw: float = None, pitch: float = None) -> bool:
-  """Sets the player's position, and optionally orientation.
-
-  Note that in survival mode the server may reject the new coordinates if they're too far
-  or require moving through walls.
-
-  Args:
-    x, y, z: position to try to move player to
-    yaw, pitch: if not None, player's new orientation
-
-  Since: v3.1
-  """
-  return (x, y, z, yaw, pitch)
-
-player_set_position = ScriptFunction("player_set_position", player_set_position)
-
-
 @dataclass
 class ItemStack:
   item: str

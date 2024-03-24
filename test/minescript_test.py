@@ -321,14 +321,15 @@ def do_async_functions() -> str:
       minescript.player_inventory.as_async()]]
 
   x, y, z = player_pos
-  block, blocks, set_pos = [x.wait() for x in [
+  block, blocks = [x.wait() for x in [
       minescript.getblock.as_async(x, y - 1, z),
       minescript.getblocklist.as_async([
           [x - 1, y - 1, z - 1],
           [x - 1, y - 1, z + 1],
           [x + 1, y - 1, z - 1],
-          [x + 1, y - 1, z + 1]]),
-      minescript.player_set_position.as_async(x, y + 1, z)]]
+          [x + 1, y - 1, z + 1]])
+      ]
+  ]
 
   return f"hand_items={hand_items}, inventory={inventory}"
 
@@ -344,7 +345,6 @@ def do_blocking_functions() -> str:
       [x - 1, y - 1, z + 1],
       [x + 1, y - 1, z - 1],
       [x + 1, y - 1, z + 1]])
-  minescript.player_set_position(x, y + 1, z)
 
   return f"hand_items={hand_items}, inventory={inventory}"
 

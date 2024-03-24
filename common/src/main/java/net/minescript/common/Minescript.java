@@ -2323,24 +2323,6 @@ public class Minescript {
           return Optional.of(result);
         }
 
-      case "player_set_position":
-        {
-          args.expectSize(5);
-          double x = args.getDouble(0);
-          double y = args.getDouble(1);
-          double z = args.getDouble(2);
-          float yaw = player.getYRot();
-          float pitch = player.getXRot();
-          if (args.get(3) != null) {
-            yaw = (float) args.getDouble(3);
-          }
-          if (args.get(4) != null) {
-            pitch = (float) args.getDouble(4);
-          }
-          player.moveTo(x, y, z, yaw, pitch);
-          return OPTIONAL_JSON_TRUE;
-        }
-
       case "player_name":
         args.expectSize(0);
         return Optional.of(new JsonPrimitive(player.getName().getString()));
