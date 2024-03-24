@@ -3443,6 +3443,10 @@ public class Minescript {
         args.expectSize(1);
         return Optional.of(new JsonPrimitive(job.objects.retain(args.getString(0))));
 
+      case "java_float":
+        args.expectSize(1);
+        return Optional.of(new JsonPrimitive(job.objects.retain(new Float(args.getDouble(0)))));
+
       case "java_double":
         args.expectSize(1);
         return Optional.of(new JsonPrimitive(job.objects.retain(args.getDouble(0))));

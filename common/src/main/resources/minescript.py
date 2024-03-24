@@ -2082,6 +2082,12 @@ def java_double(d):
 
 java_double = ScriptFunction("java_double", java_double)
 
+def java_float(f):
+  """Creates Java Float. Returns handle to Java object."""
+  return (f,)
+
+java_float = ScriptFunction("java_float", java_float)
+
 def java_int(i):
   """Creates Java Integer. Returns handle to Java object."""
   return (i,)
