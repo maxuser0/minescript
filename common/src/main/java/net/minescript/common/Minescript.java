@@ -3265,35 +3265,6 @@ public class Minescript {
           }
         }
 
-      case "container_click_slot": // Click on slot in container
-        {
-          args.expectSize(1);
-          Screen screen = minecraft.screen;
-          int slotId = args.getStrictInt(0);
-          if (screen == null || !(screen instanceof AbstractContainerScreen<?> handledScreen)) {
-            return OPTIONAL_JSON_FALSE;
-          }
-          AbstractContainerMenu screenHandler = handledScreen.getMenu();
-          if (slotId < 0 || slotId >= screenHandler.slots.size()) {
-            throw new IndexOutOfBoundsException(
-                String.format(
-                    "Slot %d outside expected range: [0, %d]",
-                    slotId, (screenHandler.slots.size() - 1)));
-          }
-          var slot = screenHandler.getSlot(slotId);
-          FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
-          buf.writeByte(screenHandler.containerId);
-          buf.writeShort(slotId);
-          buf.writeByte(0); // Button (0 for left click)
-          buf.writeShort(0); // Action type (0 for click)
-          buf.writeShort(0); // Mode (0 for normal)
-          buf.writeItem(slot.getItem()); // Item stack
-          var connection = minecraft.getConnection();
-          connection.send(new ServerboundContainerClickPacket(buf));
-          screenHandler.broadcastChanges();
-          return OPTIONAL_JSON_TRUE;
-        }
-
       case "player_look_at": // Look at x, y, z
         {
           args.expectSize(3);

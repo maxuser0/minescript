@@ -1428,22 +1428,6 @@ container_get_items = ScriptFunction(
     "container_get_items", container_get_items, _container_get_items_result_transform)
 
 
-def container_click_slot(slot: int) -> bool:
-  """Simulates a left click on a slot in an open container, if any.
-
-  Args:
-    slot: slot number to click
-
-  Returns:
-    `True` upon success
-
-  Since: v4.0
-  """
-  return (slot,)
-
-container_click_slot = ScriptFunction("container_click_slot", container_click_slot)
-
-
 def player_look_at(x: float, y: float, z: float):
   """Rotates the camera to look at a position.
 
