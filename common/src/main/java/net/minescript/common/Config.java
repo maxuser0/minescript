@@ -41,7 +41,7 @@ public class Config {
           "python",
           "command",
           "escape_command_double_quotes",
-          "path",
+          "command_path",
           "max_commands_per_cycle",
           "command_cycle_deadline_usecs",
           "ticks_per_cycle",
@@ -235,7 +235,7 @@ public class Config {
     consumer.accept("python", getValue("python"));
     consumer.accept("command", getValue("command"));
     consumer.accept("escape_command_double_quotes", getValue("escape_command_double_quotes"));
-    consumer.accept("path", getValue("path"));
+    consumer.accept("command_path", getValue("command_path"));
     consumer.accept("max_commands_per_cycle", getValue("max_commands_per_cycle"));
     consumer.accept("command_cycle_deadline_usecs", getValue("command_cycle_deadline_usecs"));
     consumer.accept("ticks_per_cycle", getValue("ticks_per_cycle"));
@@ -266,7 +266,7 @@ public class Config {
       case "escape_command_double_quotes":
         return String.valueOf(scriptConfig.escapeCommandDoubleQuotes());
 
-      case "path":
+      case "command_path":
         return String.join(
             File.pathSeparator,
             scriptConfig.commandPath().stream().map(Path::toString).collect(Collectors.toList()));
@@ -379,13 +379,13 @@ public class Config {
         reportInfo(out, "Setting escape_command_double_quotes to {}", isEnabled);
         break;
 
-      case "path":
+      case "command_path":
         var commandPath =
             Arrays.stream(value.split(Pattern.quote(File.pathSeparator), -1))
                 .map(Paths::get)
                 .collect(Collectors.toList());
         scriptConfig.setCommandPath(commandPath);
-        reportInfo(out, "Setting path to {}", commandPath);
+        reportInfo(out, "Setting command_path to {}", commandPath);
         break;
 
       case "max_commands_per_cycle":
