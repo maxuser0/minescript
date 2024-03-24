@@ -3841,7 +3841,7 @@ public class Minescript {
         }
       }
       for (var job : jobs.getMap().values()) {
-        if (job.state() == JobState.RUNNING) {
+        if (job.state() == JobState.RUNNING || job.state() == JobState.DONE) {
           try {
             Message message = jobMessageQueue.apply(job);
             if (message != null) {

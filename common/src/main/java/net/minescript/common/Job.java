@@ -363,10 +363,7 @@ public class Job implements JobControl {
           "Job `{}` exited with code {}, draining message queues...", jobSummary(), exitCode);
 
       final int millisToSleep = 1000;
-      while (state != JobState.KILLED
-          && state != JobState.DONE
-          && !jobTickQueue.isEmpty()
-          && !jobRenderQueue.isEmpty()) {
+      while (!(state == JobState.KILLED || (jobTickQueue.isEmpty() && jobRenderQueue.isEmpty()))) {
         try {
           Thread.sleep(millisToSleep);
         } catch (InterruptedException e) {
