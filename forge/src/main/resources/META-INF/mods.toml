@@ -30,13 +30,7 @@ credits="Special thanks to Spiderfffun and Coolbou0427 for testing." #optional
 authors="maxuser@minescript.net" #optional
 # The description text for the mod (multi line!) (#mandatory)
 description='''
-Minescript is a platform for controlling and interacting with Minecraft using scripts written in the Python programming language. Just follow these steps:
-
-1. Download and install Python 3 if you don't already have it: https://www.python.org/downloads/
-
-2. Write Python scripts in the minescript folder which will be created within your minecraft folder. (The minescript folder will be created automatically the first time you run Minecraft with the Minescript mod installed.)
-
-For example, a script named hello.py within the minescript folder will be accessible within Minecraft by pressing backslash ("\\") and entering the name of the script within the chat (without the ".py" on the end), e.g. \\hello. You can pass parameters to the hello command in Minecraft which are accessible within Python as sys.argv, and output from hello.py, e.g. via "print(...)", is interpreted just like a command entered within the Minecraft chat. E.g. "print('/time set day')" in your Python script will run "/time set day" as if it were entered by hand in the Minecraft chat.
+Minescript is a platform for controlling and interacting with Minecraft using scripts written in the Python programming language, with support for additional languages. Visit https://minescript.net/ for documentation, examples, and downloadable scripts.
 '''
 # A dependency - use the . to indicate dependency for a specific modid. Dependencies are optional.
 [[dependencies.minescript]] #optional
