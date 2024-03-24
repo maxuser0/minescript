@@ -16,22 +16,16 @@ public record Message(Message.Type type, String value, Record data) {
   }
 
   public record FunctionCallData(
-      long funcCallId, FunctionExecutor functionExecutor, String argsString, List<?> args) {}
+      long funcCallId, FunctionExecutor functionExecutor, List<?> args) {}
 
   public Message(Message.Type type, String value) {
     this(type, value, null);
   }
 
   public static Message createFunctionCall(
-      long funcCallId,
-      FunctionExecutor functionExecutor,
-      String functionName,
-      String argsString,
-      List<?> args) {
+      long funcCallId, FunctionExecutor functionExecutor, String functionName, List<?> args) {
     return new Message(
-        Type.FUNCTION_CALL,
-        functionName,
-        new FunctionCallData(funcCallId, functionExecutor, argsString, args));
+        Type.FUNCTION_CALL, functionName, new FunctionCallData(funcCallId, functionExecutor, args));
   }
 
   public static Message createMinecraftCommand(String value) {

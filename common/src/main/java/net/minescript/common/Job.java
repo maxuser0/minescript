@@ -38,6 +38,7 @@ public class Job implements JobControl {
   private final Task task;
   private final Config config;
   private final SystemMessageQueue systemMessageQueue;
+  private final ScriptFunctionRunner scriptFunctionRunner;
   private Thread thread;
   private volatile JobState state = JobState.NOT_STARTED;
   private Consumer<Integer> doneCallback;
@@ -69,12 +70,14 @@ public class Job implements JobControl {
       Task task,
       Config config,
       SystemMessageQueue systemMessageQueue,
+      ScriptFunctionRunner scriptFunctionRunner,
       Consumer<Integer> doneCallback) {
     this.jobId = jobId;
     this.command = command;
     this.task = task;
     this.config = config;
     this.systemMessageQueue = systemMessageQueue;
+    this.scriptFunctionRunner = scriptFunctionRunner;
     this.doneCallback = doneCallback;
     objects = new ResourceTracker<>(Object.class, jobId, config);
     blockpacks = new ResourceTracker<>(BlockPack.class, jobId, config);
@@ -191,9 +194,9 @@ public class Job implements JobControl {
 
   private void processFunctionCall(String functionCallLine) {
     // Function call messages have values formatted as:
-    // "{funcCallId} {functionName} {argsString}"
+    // "{funcCallId} {functionName} {args}"
     //
-    // argsString may have spaces, e.g. "123 my_func [4, 5, 6]"
+    // args may have spaces, e.g. "123 my_func [4, 5, 6]"
 
     String[] functionCall = functionCallLine.split("\\s+", 4);
     long funcCallId = Long.valueOf(functionCall[0]);
@@ -225,18 +228,16 @@ public class Job implements JobControl {
     }
 
     if (executor == FunctionExecutor.SCRIPT_LOOP) {
-      Minescript.processScriptFunction(this, functionName, funcCallId, argsString, args);
+      scriptFunctionRunner.run(this, functionName, funcCallId, args);
       return;
     }
 
     if (executor == FunctionExecutor.RENDER_LOOP) {
-      jobRenderQueue.add(
-          Message.createFunctionCall(funcCallId, executor, functionName, argsString, args));
+      jobRenderQueue.add(Message.createFunctionCall(funcCallId, executor, functionName, args));
       return;
     }
 
-    jobTickQueue.add(
-        Message.createFunctionCall(funcCallId, executor, functionName, argsString, args));
+    jobTickQueue.add(Message.createFunctionCall(funcCallId, executor, functionName, args));
   }
 
   @Override

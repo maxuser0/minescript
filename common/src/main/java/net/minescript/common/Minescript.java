@@ -19,7 +19,6 @@ import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import com.mojang.blaze3d.platform.InputConstants;
-import io.netty.buffer.Unpooled;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -70,9 +69,7 @@ import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.client.renderer.debug.DebugRenderer;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.network.protocol.game.ServerboundPickItemPacket;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -768,6 +765,7 @@ public class Minescript {
               new SubprocessTask(config),
               config,
               systemMessageQueue,
+              Minescript::processScriptFunction,
               i -> finishJob(i, nextCommand));
       var undo = new UndoableActionBlockPack(job.jobId(), command.command());
       jobUndoMap.put(job.jobId(), undo);
@@ -808,6 +806,7 @@ public class Minescript {
               new UndoTask(undo),
               config,
               systemMessageQueue,
+              Minescript::processScriptFunction,
               i -> finishJob(i, Collections.emptyList()));
       jobMap.put(undoJob.jobId(), undoJob);
       undoJob.start();
@@ -2182,7 +2181,7 @@ public class Minescript {
   }
 
   private static Optional<JsonElement> doPlayerAction(
-      String functionName, KeyMapping keyMapping, ScriptFunctionArgList args, String argsString) {
+      String functionName, KeyMapping keyMapping, ScriptFunctionArgList args) {
     args.expectSize(1);
     boolean pressed = args.getBoolean(0);
     pressKeyBind(keyMapping.getName(), pressed);
@@ -2239,20 +2238,18 @@ public class Minescript {
       int job_id, String[] command, String source, String status, Boolean self) {}
 
   public static void processScriptFunction(
-      Job job, String functionName, long funcCallId, String argsString, List<?> parsedArgs) {
-    var args = new ScriptFunctionArgList(functionName, parsedArgs, argsString);
+      Job job, String functionName, long funcCallId, List<?> parsedArgs) {
+    var args = new ScriptFunctionArgList(functionName, parsedArgs);
     try {
-      Optional<JsonElement> response =
-          runScriptFunction(job, funcCallId, functionName, args, argsString);
+      Optional<JsonElement> response = runScriptFunction(job, funcCallId, functionName, args);
       if (response.isPresent()) {
         job.respond(funcCallId, response.get(), true);
       }
       if (config.debugOutput()) {
         LOGGER.info(
-            "(debug) Script function {} `{}`: {} / {}  ->  {}",
+            "(debug) Script function {} `{}`: {}  ->  {}",
             funcCallId,
             functionName,
-            quoteString(argsString),
             parsedArgs,
             response.map(JsonElement::toString).orElse("<no response>"));
       }
@@ -2265,7 +2262,7 @@ public class Minescript {
             new RuntimeException(
                 String.format(
                     "Exception while calling script function `%s` with args %s: %s",
-                    functionName, argsString, e.toString())));
+                    functionName, parsedArgs, e.toString())));
       } else {
         job.raiseException(funcCallId, ExceptionInfo.fromException(e));
       }
@@ -2305,8 +2302,7 @@ public class Minescript {
 
   /** Returns a JSON response if a script function is called. */
   private static Optional<JsonElement> runScriptFunction(
-      Job job, long funcCallId, String functionName, ScriptFunctionArgList args, String argsString)
-      throws Exception {
+      Job job, long funcCallId, String functionName, ScriptFunctionArgList args) throws Exception {
     var minecraft = Minecraft.getInstance();
     var world = minecraft.level;
     var player = minecraft.player;
@@ -2346,7 +2342,7 @@ public class Minescript {
                 throw new IllegalArgumentException(
                     String.format(
                         "`%s` expected a list of (x, y, z) positions but got: %s",
-                        functionName, argsString));
+                        functionName, args));
               };
 
           args.expectSize(1);
@@ -2592,40 +2588,40 @@ public class Minescript {
         return OPTIONAL_JSON_TRUE;
 
       case "player_press_forward":
-        return doPlayerAction(functionName, options.keyUp, args, argsString);
+        return doPlayerAction(functionName, options.keyUp, args);
 
       case "player_press_backward":
-        return doPlayerAction(functionName, options.keyDown, args, argsString);
+        return doPlayerAction(functionName, options.keyDown, args);
 
       case "player_press_left":
-        return doPlayerAction(functionName, options.keyLeft, args, argsString);
+        return doPlayerAction(functionName, options.keyLeft, args);
 
       case "player_press_right":
-        return doPlayerAction(functionName, options.keyRight, args, argsString);
+        return doPlayerAction(functionName, options.keyRight, args);
 
       case "player_press_jump":
-        return doPlayerAction(functionName, options.keyJump, args, argsString);
+        return doPlayerAction(functionName, options.keyJump, args);
 
       case "player_press_sprint":
-        return doPlayerAction(functionName, options.keySprint, args, argsString);
+        return doPlayerAction(functionName, options.keySprint, args);
 
       case "player_press_sneak":
-        return doPlayerAction(functionName, options.keyShift, args, argsString);
+        return doPlayerAction(functionName, options.keyShift, args);
 
       case "player_press_pick_item":
-        return doPlayerAction(functionName, options.keyPickItem, args, argsString);
+        return doPlayerAction(functionName, options.keyPickItem, args);
 
       case "player_press_use":
-        return doPlayerAction(functionName, options.keyUse, args, argsString);
+        return doPlayerAction(functionName, options.keyUse, args);
 
       case "player_press_attack":
-        return doPlayerAction(functionName, options.keyAttack, args, argsString);
+        return doPlayerAction(functionName, options.keyAttack, args);
 
       case "player_press_swap_hands":
-        return doPlayerAction(functionName, options.keySwapOffhand, args, argsString);
+        return doPlayerAction(functionName, options.keySwapOffhand, args);
 
       case "player_press_drop":
-        return doPlayerAction(functionName, options.keyDrop, args, argsString);
+        return doPlayerAction(functionName, options.keyDrop, args);
 
       case "player_orientation":
         {
@@ -3238,14 +3234,14 @@ public class Minescript {
 
       case "screen_name":
         if (!args.isEmpty()) {
-          throw new IllegalArgumentException("Expected no params but got: " + argsString);
+          throw new IllegalArgumentException("Expected no params but got: " + args.toString());
         }
         return Optional.of(jsonPrimitiveOrNull(getScreenName()));
 
       case "container_get_items": // List of Items in Chest
         {
           if (!args.isEmpty()) {
-            throw new IllegalArgumentException("Expected no params but got: " + argsString);
+            throw new IllegalArgumentException("Expected no params but got: " + args.toString());
           }
           Screen screen = minecraft.screen;
           if (screen instanceof AbstractContainerScreen<?> handledScreen) {
@@ -3341,7 +3337,7 @@ public class Minescript {
             || !(args.get(1) instanceof String)) {
           LOGGER.error(
               "Internal error while cancelling function: expected [int, str] but got {} in job: {}",
-              argsString,
+              args,
               job.jobSummary());
           return cancelfnRetval;
         }
@@ -3636,7 +3632,7 @@ public class Minescript {
 
   private static JsonElement runTask(
       Job job, List<?> argList, Map<Long, Supplier<Object>> taskValues) throws Exception {
-    var args = new ScriptFunctionArgList("runTask", argList, argList.toString());
+    var args = new ScriptFunctionArgList("runTask", argList);
     long funcCallId = args.getStrictInt(0);
     String funcName = args.getString(1);
 
@@ -3655,8 +3651,6 @@ public class Minescript {
         resolvedArgs.set(i, taskValues.get(taskId).get());
       }
     }
-
-    String argsString = resolvedArgs.toString();
 
     switch (funcName) {
       case "as_list":
@@ -3709,9 +3703,8 @@ public class Minescript {
         }
 
       default:
-        var embeddedArgs = new ScriptFunctionArgList(funcName, resolvedArgs, argsString);
-        return runScriptFunction(job, funcCallId, funcName, embeddedArgs, argsString)
-            .orElse(JsonNull.INSTANCE);
+        var embeddedArgs = new ScriptFunctionArgList(funcName, resolvedArgs);
+        return runScriptFunction(job, funcCallId, funcName, embeddedArgs).orElse(JsonNull.INSTANCE);
     }
   }
 
@@ -3807,11 +3800,7 @@ public class Minescript {
                 String functionName = message.value();
                 var funcCallData = (Message.FunctionCallData) message.data();
                 processScriptFunction(
-                    job,
-                    functionName,
-                    funcCallData.funcCallId(),
-                    funcCallData.argsString(),
-                    funcCallData.args());
+                    job, functionName, funcCallData.funcCallId(), funcCallData.args());
 
               } else {
                 // TODO(maxuser): Stash level in UndoableAction as a WeakReference<Level> so

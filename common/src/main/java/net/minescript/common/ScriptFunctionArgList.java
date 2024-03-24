@@ -16,13 +16,11 @@ import java.util.OptionalLong;
 public class ScriptFunctionArgList {
   private String functionName;
   private List<?> args;
-  private String argsString;
   private String[] expectedArgsNames = null;
 
-  public ScriptFunctionArgList(String functionName, List<?> args, String argsString) {
+  public ScriptFunctionArgList(String functionName, List<?> args) {
     this.functionName = functionName;
     this.args = args;
-    this.argsString = argsString;
   }
 
   public boolean isEmpty() {
@@ -37,6 +35,11 @@ public class ScriptFunctionArgList {
     return args;
   }
 
+  @Override
+  public String toString() {
+    return args.toString();
+  }
+
   public Object get(int argPos) {
     return args.get(argPos);
   }
@@ -46,7 +49,7 @@ public class ScriptFunctionArgList {
       throw new IllegalArgumentException(
           String.format(
               "`%s` expected %d arg%s but got: %s",
-              functionName, expectedArgs, expectedArgs == 1 ? "" : "s", argsString));
+              functionName, expectedArgs, expectedArgs == 1 ? "" : "s", args));
     }
   }
 
