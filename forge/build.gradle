@@ -1,222 +1,111 @@
-buildscript {
-  dependencies {
-    classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '5.1.+', changing: true
-    classpath 'org.spongepowered:mixingradle:0.7+'
-  }
-}
+// Based on MultiLoader-Template:
+// https://github.com/jaredlll08/MultiLoader-Template/blob/1.20.2/forge/build.gradle
 
 plugins {
-  id 'eclipse'
+  id 'idea'
   id 'maven-publish'
-  id 'net.minecraftforge.gradle' version '[6.0.14,6.2)'
+  id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+  id 'org.spongepowered.mixin' version '0.7-SNAPSHOT'
+}
+base {
+  archivesName = "${mod_id}-mc${minecraft_version}-forge-mod"
+}
+mixin {
+  add(sourceSets.main, "${mod_id}.refmap.json")
+
+  config("${mod_id}.mixins.json")
 }
 
-group = 'net.minescript.minescriptmod' // http://maven.apache.org/guides/mini/guide-naming-conventions.html
-archivesBaseName = "minescript-mc${project.mc_version}-forge-mod"
-version = project.mod_version
-
-// Mojang ships Java 17 to end users in 1.18+, so your mod should target Java 17.
-java.toolchain.languageVersion = JavaLanguageVersion.of(17)
-
-println "Java: ${System.getProperty 'java.version'}, JVM: ${System.getProperty 'java.vm.version'} (${System.getProperty 'java.vendor'}), Arch: ${System.getProperty 'os.arch'}"
 minecraft {
-  // The mappings can be changed at any time and must be in the following format.
-  // Channel:   Version:
-  // official   MCVersion       Official field/method names from Mojang mapping files
-  // parchment  YYYY.MM.DD-MCVersion  Open community-sourced parameter names and javadocs layered on top of official
-  //
-  // You must be aware of the Mojang license when using the 'official' or 'parchment' mappings.
-  // See more information here: https://github.com/MinecraftForge/MCPConfig/blob/master/Mojang.md
-  //
-  // Parchment is an unofficial project maintained by ParchmentMC, separate from MinecraftForge
-  // Additional setup is needed to use their mappings: https://github.com/ParchmentMC/Parchment/wiki/Getting-Started
-  //
-  // Use non-default mappings at your own risk. They may not always work.
-  // Simply re-run your setup task after changing the mappings to update your workspace.
-  mappings channel: 'official', version: project.mc_version
+  mappings channel: 'official', version: minecraft_version
 
-  // accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg') // Currently, this location cannot be changed from the default.
+  copyIdeResources = true //Calls processResources when in dev
 
-  // Default run configurations.
-  // These can be tweaked, removed, or duplicated as needed.
+  // Automatically enable forge AccessTransformers if the file exists
+  // This location is hardcoded in Forge and can not be changed.
+  // https://github.com/MinecraftForge/MinecraftForge/blob/be1698bb1554f9c8fa2f58e32b9ab70bc4385e60/fmlloader/src/main/java/net/minecraftforge/fml/loading/moddiscovery/ModFile.java#L123
+  if (file('src/main/resources/META-INF/accesstransformer.cfg').exists()) {
+    accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
+  }
+
   runs {
     client {
       workingDirectory project.file('run')
-
-      // Recommended logging data for a userdev environment
-      // The markers can be added/remove as needed separated by commas.
-      // "SCAN": For mods scan.
-      // "REGISTRIES": For firing of registry events.
-      // "REGISTRYDUMP": For getting the contents of all registries.
-      property 'forge.logging.markers', 'REGISTRIES'
-
-      // Recommended logging level for the console
-      // You can set various levels here.
-      // Please read: https://stackoverflow.com/questions/2031163/when-to-use-the-different-log-levels
-      property 'forge.logging.console.level', 'debug'
-
-      // Comma-separated list of namespaces to load gametests from. Empty = all namespaces.
-      property 'forge.enabledGameTestNamespaces', 'minescript'
-
+      ideaModule "${rootProject.name}.${project.name}.main"
+      taskName 'runClient'
+      property 'mixin.env.remapRefMap', 'true'
+      property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
       mods {
-        minescript {
+        modClientRun {
           source sourceSets.main
-        }
-      }
-    }
-
-    server {
-      workingDirectory project.file('run')
-
-      property 'forge.logging.markers', 'REGISTRIES'
-
-      property 'forge.logging.console.level', 'debug'
-
-      // Comma-separated list of namespaces to load gametests from. Empty = all namespaces.
-      property 'forge.enabledGameTestNamespaces', 'minescript'
-
-      mods {
-        minescript {
-          source sourceSets.main
-        }
-      }
-    }
-
-    // This run config launches GameTestServer and runs all registered gametests, then exits.
-    // By default, the server will crash when no gametests are provided.
-    // The gametest system is also enabled by default for other run configs under the /test command.
-    gameTestServer {
-      workingDirectory project.file('run')
-
-      // Recommended logging data for a userdev environment
-      // The markers can be added/remove as needed separated by commas.
-      // "SCAN": For mods scan.
-      // "REGISTRIES": For firing of registry events.
-      // "REGISTRYDUMP": For getting the contents of all registries.
-      property 'forge.logging.markers', 'REGISTRIES'
-
-      // Recommended logging level for the console
-      // You can set various levels here.
-      // Please read: https://stackoverflow.com/questions/2031163/when-to-use-the-different-log-levels
-      property 'forge.logging.console.level', 'debug'
-
-      // Comma-separated list of namespaces to load gametests from. Empty = all namespaces.
-      property 'forge.enabledGameTestNamespaces', 'minescript'
-
-      mods {
-        minescript {
-          source sourceSets.main
+          source project(":common").sourceSets.main
         }
       }
     }
 
     data {
       workingDirectory project.file('run')
-
-      property 'forge.logging.markers', 'REGISTRIES'
-
-      property 'forge.logging.console.level', 'debug'
-
-      // Specify the modid for data generation, where to output the resulting resource, and where to look for existing resources.
-      args '--mod', 'minescript', '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
-
+      ideaModule "${rootProject.name}.${project.name}.main"
+      args '--mod', mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+      taskName 'Data'
+      property 'mixin.env.remapRefMap', 'true'
+      property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
       mods {
-        minescript {
+        modDataRun {
           source sourceSets.main
+          source project(":common").sourceSets.main
         }
       }
     }
   }
 }
 
-// Include resources generated by data generators.
-sourceSets.main.resources { srcDir 'src/generated/resources' }
+sourceSets.main.resources.srcDir 'src/generated/resources'
 
-repositories {
-  // Put repositories for dependencies here
-  // ForgeGradle automatically adds the Forge maven and Maven Central for you
-
-  // If you have mod jar dependencies in ./libs, you can declare them as a repository like so:
-  // flatDir {
-  //   dir 'libs'
-  // }
+sourceSets.each {
+  def dir = layout.buildDirectory.dir("sourcesSets/$it.name")
+  it.output.resourcesDir = dir
+  it.java.destinationDirectory = dir
 }
 
 dependencies {
-  // Specify the version of Minecraft to use. If this is any group other than 'net.minecraft', it is assumed
-  // that the dep is a ForgeGradle 'patcher' dependency, and its patches will be applied.
-  // The userdev artifact is a special name and will get all sorts of transformations applied to it.
-  minecraft "net.minecraftforge:forge:${project.mc_version}-${project.forge_version}"
-  annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+  minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+  compileOnly project(":common")
+  annotationProcessor("org.spongepowered:mixin:0.8.5-SNAPSHOT:processor")
+}
 
-  // Real mod deobf dependency examples - these get remapped to your current mappings
-  // compileOnly fg.deobf("mezz.jei:jei-${mc_version}:${jei_version}:api") // Adds JEI API as a compile dependency
-  // runtimeOnly fg.deobf("mezz.jei:jei-${mc_version}:${jei_version}") // Adds the full JEI mod as a runtime dependency
-  // implementation fg.deobf("com.tterrag.registrate:Registrate:MC${mc_version}-${registrate_version}") // Adds registrate as a dependency
+tasks.withType(JavaCompile).configureEach {
+  source(project(":common").sourceSets.main.allSource)
+}
+tasks.withType(Javadoc).configureEach {
+  source(project(":common").sourceSets.main.allJava)
+}
+tasks.named("sourcesJar", Jar) {
+  from(project(":common").sourceSets.main.allSource)
+}
 
-  // Examples using mod jars from ./libs
-  // implementation fg.deobf("blank:coolmod-${mc_version}:${coolmod_version}")
-
-  // For more info...
-  // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
-  // http://www.gradle.org/docs/current/userguide/dependency_management.html
+processResources {
+  from project(":common").sourceSets.main.resources
 }
 
 jar {
   // Exclude vim swap files:
   processResources.exclude('**/.*.swp')
-
-  manifest {
-    attributes([
-        "Specification-Title"   : "minescript",
-        "Specification-Vendor"  : "Minescript",
-        "Specification-Version"   : project.mod_version,
-        "Implementation-Title"  : project.name,
-        "Implementation-Version"  : project.jar.archiveVersion,
-        "Implementation-Vendor"   : "Minescript",
-        "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
-    ])
-  }
 }
 
-// Example configuration to allow publishing using the maven-publish plugin
-// This is the preferred method to reobfuscate your jar file
 jar.finalizedBy('reobfJar')
-// However if you are in a multi-project build, dev time needs unobfed jar files, so you can delay the obfuscation until publishing by doing
-// publish.dependsOn('reobfJar')
 
 publishing {
   publications {
     mavenJava(MavenPublication) {
-      artifact jar
+      artifactId base.archivesName.get()
+      from components.java
+      fg.component(it)
     }
   }
   repositories {
     maven {
-      url "file://${project.projectDir}/mcmodsrepo"
+      url "file://" + System.getenv("local_maven")
     }
   }
-}
-
-processResources {
-  inputs.property "version", project.version
-
-  filesMatching("version.txt") {
-    expand "version": project.version
-  }
-
-  // It's dangerous to apply filesMatching() to Python sources because the
-  // template expansion does not faithfully preserve backslashes and escape
-  // sequences.
-}
-
-tasks.withType(JavaCompile).configureEach {
-  options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
-}
-
-apply plugin: 'net.minecraftforge.gradle'
-apply plugin: 'org.spongepowered.mixin'
-mixin {
-  add sourceSets.main, "minescript.refmap.json"
-  config "minescript.mixins.json"
 }

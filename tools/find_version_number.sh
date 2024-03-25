@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# SPDX-FileCopyrightText: © 2022-2023 Greg Christiana <maxuser@minescript.net>
+# SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: MIT
 
 if [ "$1" = "-l" ]; then
@@ -13,7 +13,7 @@ if [ "$2" = "-l" ]; then
   shift
 fi
 
-find . -type f |
+find common -type f |
     grep -v /.gradle/ |
     grep -v /.git/ |
     grep -v /build/ |

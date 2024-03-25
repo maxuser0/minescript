@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# SPDX-FileCopyrightText: © 2022-2023 Greg Christiana <maxuser@minescript.net>
+# SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: MIT
 
 # Updates the Minescript version number across configs and sources. If
@@ -101,13 +101,11 @@ else
 fi
 
 if [ $fork_docs_only = 0 ]; then
-  for x in {fabric,forge}/gradle.properties; do
-      if [ $dry_run = 0 ]; then
-        sed -i '' -e "s/mod_version=${old_version_re}$/mod_version=${new_version}/" $x
-      else
-        grep -H "$old_version_re" $x
-      fi
-  done
+    if [ $dry_run = 0 ]; then
+      sed -i '' -e "s/^version=${old_version_re}$/version=${new_version}/" gradle.properties
+    else
+      grep -H "$old_version_re" gradle.properties
+    fi
 
   for x in $(tools/find_version_number.sh $old_version -l |grep '\.py$'); do
       if [ $dry_run = 0 ]; then
