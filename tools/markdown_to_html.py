@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-# SPDX-FileCopyrightText: © 2022-2023 Greg Christiana <maxuser@minescript.net>
+# SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: MIT
 
 "Tool for converting Markdown to HTML."
@@ -25,6 +25,14 @@ for line in html_output.splitlines():
     anchor_html = f'<p><a name="{anchor}"></a></p>'
     if anchor_html != prev_line:
       print(anchor_html)
+
+  # Add a line linking to the latest docs on GitHub above the table of contents.
+  if "<p>Table of contents:</p>" in line:
+    print(
+        '<p><i>View docs for all versions of Minescript on '
+        '<a href="https://github.com/maxuser0/minescript/blob/main/docs/README.md">GitHub</a>'
+        '.</i></p>')
+
   line = line.replace("\\", "&#92;")
   print(line)
   prev_line = line

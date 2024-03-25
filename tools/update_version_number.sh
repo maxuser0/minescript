@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# SPDX-FileCopyrightText: © 2022-2023 Greg Christiana <maxuser@minescript.net>
+# SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: MIT
 
 # Updates the Minescript version number across configs and sources. If
@@ -86,19 +86,8 @@ if [ $fork_docs = 1 ]; then
 
     old_version_readme=$old_version_docs/README.md
     cp -p docs/README.md "$old_version_readme"
-
-    sed -i '' -e \
-        "s#^Previous version: \[v.*\](v.*/README.md)#Previous version: [v${old_version}](v${old_version}/README.md)#" docs/README.md
-
-    # Insert a blank line and "Latest version: ..." after "Previous version: ...".
-    sed -i '' -e '/^Previous version:/a \
-Latest version: [latest](../README.md)' "$old_version_readme"
-    sed -i '' -e '/^Previous version:/a \
-' "$old_version_readme"
-
   else
     echo mkdir "$old_version_docs" || (echo "$old_version_docs already exists." >&2; exit 7)
-    grep '^Previous version: \[v.*\](v.*/README.md)' docs/README.md
   fi
 fi
 
@@ -112,13 +101,11 @@ else
 fi
 
 if [ $fork_docs_only = 0 ]; then
-  for x in {fabric,forge}/gradle.properties; do
-      if [ $dry_run = 0 ]; then
-        sed -i '' -e "s/mod_version=${old_version_re}$/mod_version=${new_version}/" $x
-      else
-        grep -H "$old_version_re" $x
-      fi
-  done
+    if [ $dry_run = 0 ]; then
+      sed -i '' -e "s/^version=${old_version_re}$/version=${new_version}/" gradle.properties
+    else
+      grep -H "$old_version_re" gradle.properties
+    fi
 
   for x in $(tools/find_version_number.sh $old_version -l |grep '\.py$'); do
       if [ $dry_run = 0 ]; then

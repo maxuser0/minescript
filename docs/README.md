@@ -1,4 +1,4 @@
-## Minescript v3.2 docs
+## Minescript v4.0 docs
 
 Table of contents:
 
@@ -11,8 +11,6 @@ Table of contents:
     - [Script input](#script-input)
     - [Script output](#script-output)
     - [minescript module](#minescript-module)
-
-Previous version: [v3.1](v3.1/README.md)
 
 ## In-game commands
 
