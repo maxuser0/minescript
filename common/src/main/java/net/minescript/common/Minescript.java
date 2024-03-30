@@ -3554,6 +3554,15 @@ public class Minescript {
         args.expectSize(1);
         return Optional.of(new JsonPrimitive(job.objects.getById(args.getStrictInt(0)).toString()));
 
+      case "java_assign":
+        {
+          args.expectArgs("dest", "source");
+          int dest = args.getStrictInt(0);
+          int source = args.getStrictInt(1);
+          job.objects.reassignId(dest, job.objects.getById(source));
+          return OPTIONAL_JSON_NULL;
+        }
+
       case "java_release":
         args.expectSize(1);
         var object = job.objects.releaseById(args.getStrictInt(0));

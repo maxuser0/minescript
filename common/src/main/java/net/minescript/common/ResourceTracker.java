@@ -34,6 +34,14 @@ public class ResourceTracker<T> {
     return id;
   }
 
+  public int reassignId(int id, T resource) {
+    resources.put(id, resource);
+    if (config.debugOutput()) {
+      LOGGER.info("Remapped Job[{}] {}[{}]: {}", jobId, resourceTypeName, id, resource);
+    }
+    return id;
+  }
+
   public T getById(int id) {
     return resources.get(id);
   }

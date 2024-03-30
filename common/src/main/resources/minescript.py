@@ -2122,6 +2122,12 @@ def java_to_string(target):
 
 java_to_string = ScriptFunction("java_to_string", java_to_string)
 
+def java_assign(dest, source):
+  """Reassigns `dest` handle to reference the object referenced by `source` handle."""
+  return (dest, source)
+
+java_assign = ScriptFunction("java_assign", java_assign)
+
 def java_release(target):
   """Releases the Java reference to `target`."""
   return (target,)
