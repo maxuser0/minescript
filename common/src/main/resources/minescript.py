@@ -15,7 +15,6 @@ Minescript mod.  This module should be imported by other
 scripts and not run directly.
 """
 
-import asyncio
 import base64
 import json
 import os
