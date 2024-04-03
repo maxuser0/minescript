@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -702,7 +703,7 @@ public class Minescript {
         runTasks(job, tasks);
       } catch (Exception e) {
         long time = System.currentTimeMillis();
-        if (lastReportedErrorTime - time > 5000) {
+        if (time - lastReportedErrorTime > 5000) {
           lastReportedErrorTime = time;
           systemMessageQueue.logUserError(
               "Error from scheduled tasks `{}`: {}", name, e.getMessage());
@@ -3505,6 +3506,12 @@ public class Minescript {
                     ? OPTIONAL_JSON_NULL
                     : Optional.of(new JsonPrimitive(job.objects.retain(result)));
               } catch (IllegalArgumentException e) {
+              } catch (InvocationTargetException e) {
+                throw new InvocationTargetException(
+                    e,
+                    String.format(
+                        "Error invoking `%s` on `%s` from `java_call_method`: %s",
+                        method.getName(), target, e.getCause()));
               }
             }
           }
