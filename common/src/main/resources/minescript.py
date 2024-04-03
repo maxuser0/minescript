@@ -526,6 +526,26 @@ def player_set_orientation(yaw: float, pitch: float):
 player_set_orientation = ScriptFunction("player_set_orientation", player_set_orientation)
 
 
+@dataclass
+class TargetedBlock:
+  position: BlockPos
+  distance: float
+  side: str
+  type: str
+
+  # __getitem__ provided for backward compatibility with the list returned in prior versions.
+  def __getitem__(self, i):
+    if i == 0:
+      return self.position
+    elif i == 1:
+      return self.distance
+    elif i == 2:
+      return self.side
+    elif i == 3:
+      return self.type
+    else:
+      raise ValueError("Expected integer from 0 to 3 but got " + repr(i))
+
 def player_get_targeted_block(max_distance: float = 20):
   """Gets info about the nearest block, if any, in the local player's crosshairs.
 
@@ -533,17 +553,21 @@ def player_get_targeted_block(max_distance: float = 20):
     max_distance: max distance from local player to look for blocks
 
   Returns:
-    [[x, y, z], distance, side, block_description] if the local player has a
-    block in their crosshairs within `max_distance`, `None` otherwise.
-    `distance` (float) is calculated from the player to the targeted block;
-    `side` (str) is the direction that the targeted side of the block is facing
-    (e.g. `"east"`); `block_description` (str) describes the targeted block.
+    `TargetedBlock` for the block targeted by the player, or `None` if no block is targeted.
+
+  Update in v4.0:
+    Return value changed from `list` to `TargetedBlock`.
 
   Since: v3.0
   """
   return (max_distance,)
 
-player_get_targeted_block = ScriptFunction("player_get_targeted_block", player_get_targeted_block)
+def _player_get_targeted_block_result_transform(targeted_block):
+  return None if targeted_block is None else TargetedBlock(*targeted_block)
+
+player_get_targeted_block = ScriptFunction(
+    "player_get_targeted_block", player_get_targeted_block,
+    _player_get_targeted_block_result_transform)
 
 
 @dataclass
@@ -571,7 +595,7 @@ def player_get_targeted_entity(max_distance: float = 20, nbt: bool = False) -> E
     nbt: if `True`, populate an `"nbt"` attribute for the player
 
   Returns:
-    `EntityData` for the entity targeted by the player, or None if no entity is targeted.
+    `EntityData` for the entity targeted by the player, or `None` if no entity is targeted.
     (Legacy-style returned dict can be restored with `options.legacy_dict_return_values = True`)
 
   Since: v4.0
