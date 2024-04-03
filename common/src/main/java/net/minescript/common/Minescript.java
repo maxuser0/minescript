@@ -3395,7 +3395,8 @@ public class Minescript {
 
       case "java_float":
         args.expectSize(1);
-        return Optional.of(new JsonPrimitive(job.objects.retain(new Float(args.getDouble(0)))));
+        return Optional.of(
+            new JsonPrimitive(job.objects.retain(Float.valueOf((float) args.getDouble(0)))));
 
       case "java_double":
         args.expectSize(1);
