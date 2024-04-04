@@ -3522,12 +3522,21 @@ public class Minescript {
           }
           // Fell through without successfully invoking a matching method. Throw an exception that
           // reports the signatures of all methods in the overload set.
+          var paramTypes = new ArrayList<String>();
+          for (int i = 0; i < params.length; ++i) {
+            var param = params[i];
+            paramTypes.add(param == null ? "null" : param.getClass().getName());
+          }
           var signatures = new ArrayList<String>();
           for (Method method : memberSet.methods()) {
             signatures.add(method.toString());
           }
           throw new IllegalArgumentException(
-              "No matching methods:\n" + String.join("\n", signatures.toArray(String[]::new)));
+              String.format(
+                  "No matching methods for %s(%s):\n%s",
+                  memberSet.name(),
+                  String.join(", ", paramTypes.toArray(String[]::new)),
+                  String.join("\n", signatures.toArray(String[]::new))));
         }
 
       case "java_access_field":
