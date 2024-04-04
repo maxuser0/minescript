@@ -2231,6 +2231,9 @@ public class Minescript {
   private static final Optional<JsonElement> OPTIONAL_JSON_FALSE =
       Optional.of(new JsonPrimitive(false));
 
+  private static final Optional<JsonElement> OPTIONAL_JSON_ZERO =
+      Optional.of(new JsonPrimitive(0L));
+
   private static JsonElement jsonPrimitiveOrNull(Optional<String> s) {
     return s.map(str -> (JsonElement) new JsonPrimitive(str)).orElse(JsonNull.INSTANCE);
   }
@@ -2980,7 +2983,7 @@ public class Minescript {
               new BlockPack.TransformedBlockConsumer(rotation, offset, blockpacker));
           blockpacker.comments().putAll(comments);
           var blockpack = blockpacker.pack();
-          int key = job.blockpacks.retain(blockpack);
+          long key = job.blockpacks.retain(blockpack);
           return Optional.of(new JsonPrimitive(key));
         }
 
@@ -2991,7 +2994,7 @@ public class Minescript {
           args.expectSize(1);
           String blockpackFilename = args.getString(0);
           var blockpack = BlockPack.readZipFile(blockpackFilename);
-          int key = job.blockpacks.retain(blockpack);
+          long key = job.blockpacks.retain(blockpack);
           return Optional.of(new JsonPrimitive(key));
         }
 
@@ -3002,7 +3005,7 @@ public class Minescript {
           args.expectSize(1);
           String base64Data = args.getString(0);
           var blockpack = BlockPack.fromBase64EncodedString(base64Data);
-          int key = job.blockpacks.retain(blockpack);
+          long key = job.blockpacks.retain(blockpack);
           return Optional.of(new JsonPrimitive(key));
         }
 
@@ -3011,7 +3014,7 @@ public class Minescript {
           // Python function signature:
           //    (blockpack_id) -> Tuple[Tuple[int, int, int], Tuple[int, int, int]]
           args.expectSize(1);
-          int blockpackId = args.getStrictInt(0);
+          long blockpackId = args.getStrictLong(0);
           var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
             throw new IllegalStateException(
@@ -3041,7 +3044,7 @@ public class Minescript {
           // Python function signature:
           //    (blockpack_id) -> Dict[str, str]
           args.expectSize(1);
-          int blockpackId = args.getStrictInt(0);
+          long blockpackId = args.getStrictLong(0);
           var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
             throw new IllegalStateException(
@@ -3056,7 +3059,7 @@ public class Minescript {
           //    (blockpack_id: int, rotation: Rotation = None, offset: BlockPos = None) -> bool
           args.expectSize(3);
 
-          int blockpackId = args.getStrictInt(0);
+          long blockpackId = args.getStrictLong(0);
 
           int[] rotation = null;
           if (args.get(1) != null) {
@@ -3086,7 +3089,7 @@ public class Minescript {
           // Python function signature:
           //    (blockpack_id: int, filename: str) -> bool
           args.expectSize(2);
-          int blockpackId = args.getStrictInt(0);
+          long blockpackId = args.getStrictLong(0);
           String blockpackFilename = args.getString(1);
 
           var blockpack = job.blockpacks.getById(blockpackId);
@@ -3106,7 +3109,7 @@ public class Minescript {
           // Python function signature:
           //    (blockpack_id: int) -> str
           args.expectSize(1);
-          int blockpackId = args.getStrictInt(0);
+          long blockpackId = args.getStrictLong(0);
           var blockpack = job.blockpacks.getById(blockpackId);
           if (blockpack == null) {
             throw new IllegalStateException(
@@ -3122,7 +3125,7 @@ public class Minescript {
           // Python function signature:
           //    (blockpack_id: int) -> bool
           args.expectSize(1);
-          int blockpackId = args.getStrictInt(0);
+          long blockpackId = args.getStrictLong(0);
           var blockpack = job.blockpacks.releaseById(blockpackId);
           if (blockpack == null) {
             throw new IllegalStateException(
@@ -3143,7 +3146,7 @@ public class Minescript {
           //    (blockpacker_id: int, base_pos: BlockPos,
           //     base64_setblocks: str, base64_fills: str, blocks: List[str]) -> bool
           args.expectSize(5);
-          int blockpackerId = args.getStrictInt(0);
+          long blockpackerId = args.getStrictLong(0);
           List<Integer> basePos = args.getIntListWithSize(1, 3);
           String setblocksBase64 = args.getString(2);
           String fillsBase64 = args.getString(3);
@@ -3167,8 +3170,8 @@ public class Minescript {
           //     rotation: Rotation = None, offset: BlockPos = None) -> bool
           args.expectSize(4);
 
-          int blockpackerId = args.getStrictInt(0);
-          int blockpackId = args.getStrictInt(1);
+          long blockpackerId = args.getStrictLong(0);
+          long blockpackId = args.getStrictLong(1);
 
           int[] rotation = null;
           if (args.get(2) != null) {
@@ -3203,7 +3206,7 @@ public class Minescript {
           // Python function signature:
           //    (blockpacker_id: int, comments: Dict[str, str]) -> int
           args.expectSize(2);
-          int blockpackerId = args.getStrictInt(0);
+          long blockpackerId = args.getStrictLong(0);
           var comments = args.getConvertibleStringMap(1);
 
           var blockpacker = job.blockpackers.getById(blockpackerId);
@@ -3221,7 +3224,7 @@ public class Minescript {
           // Python function signature:
           //    (blockpacker_id: int) -> bool
           args.expectSize(1);
-          int blockpackerId = args.getStrictInt(0);
+          long blockpackerId = args.getStrictLong(0);
 
           var blockpacker = job.blockpackers.releaseById(blockpackerId);
           if (blockpacker == null) {
@@ -3400,6 +3403,10 @@ public class Minescript {
         args.expectSize(1);
         return Optional.of(new JsonPrimitive(job.objects.retain(args.getDouble(0))));
 
+      case "java_long":
+        args.expectSize(1);
+        return Optional.of(new JsonPrimitive(job.objects.retain(args.getStrictLong(0))));
+
       case "java_int":
         args.expectSize(1);
         return Optional.of(new JsonPrimitive(job.objects.retain(args.getStrictInt(0))));
@@ -3418,7 +3425,7 @@ public class Minescript {
       case "java_ctor":
         {
           args.expectSize(1);
-          var target = (Class) job.objects.getById(args.getStrictInt(0));
+          var target = (Class) job.objects.getById(args.getStrictLong(0));
           var ctors = new ImmutableList.Builder<Constructor>();
           var argCounts = new ImmutableSet.Builder<Integer>();
           for (var ctor : target.getConstructors()) {
@@ -3431,10 +3438,10 @@ public class Minescript {
 
       case "java_new_instance":
         {
-          var ctorSet = (ConstructorSet) job.objects.getById(args.getStrictInt(0));
+          var ctorSet = (ConstructorSet) job.objects.getById(args.getStrictLong(0));
           Object[] params = new Object[args.size() - 1];
           for (int i = 0; i < params.length; ++i) {
-            params[i] = job.objects.getById(args.getStrictInt(i + 1));
+            params[i] = job.objects.getById(args.getStrictLong(i + 1));
           }
           if (!ctorSet.argCounts().contains(params.length)) {
             throw new IllegalArgumentException(
@@ -3450,7 +3457,7 @@ public class Minescript {
               try {
                 var result = ctor.newInstance(params);
                 return result == null
-                    ? OPTIONAL_JSON_NULL
+                    ? OPTIONAL_JSON_ZERO
                     : Optional.of(new JsonPrimitive(job.objects.retain(result)));
               } catch (IllegalArgumentException e) {
                 exception = e;
@@ -3464,7 +3471,7 @@ public class Minescript {
         {
           args.expectSize(2);
           String memberName = args.getString(1);
-          var target = (Class) job.objects.getById(args.getStrictInt(0));
+          var target = (Class) job.objects.getById(args.getStrictLong(0));
           Optional<Field> field;
           try {
             field = Optional.of(target.getField(memberName));
@@ -3488,11 +3495,11 @@ public class Minescript {
 
       case "java_call_method":
         {
-          var target = (Object) job.objects.getById(args.getStrictInt(0));
-          var memberSet = (MemberSet) job.objects.getById(args.getStrictInt(1));
+          var target = (Object) job.objects.getById(args.getStrictLong(0));
+          var memberSet = (MemberSet) job.objects.getById(args.getStrictLong(1));
           Object[] params = new Object[args.size() - 2];
           for (int i = 0; i < params.length; ++i) {
-            params[i] = job.objects.getById(args.getStrictInt(i + 2));
+            params[i] = job.objects.getById(args.getStrictLong(i + 2));
           }
           // Catch IllegalArgumentException until all the methods in the set with the right number
           // of args have been exhausted.
@@ -3501,7 +3508,7 @@ public class Minescript {
               try {
                 var result = method.invoke(target, params);
                 return result == null
-                    ? OPTIONAL_JSON_NULL
+                    ? OPTIONAL_JSON_ZERO
                     : Optional.of(new JsonPrimitive(job.objects.retain(result)));
               } catch (IllegalArgumentException e) {
               } catch (InvocationTargetException e) {
@@ -3525,56 +3532,66 @@ public class Minescript {
 
       case "java_access_field":
         {
-          var target = (Object) job.objects.getById(args.getStrictInt(0));
-          var memberSet = (MemberSet) job.objects.getById(args.getStrictInt(1));
+          var target = (Object) job.objects.getById(args.getStrictLong(0));
+          var memberSet = (MemberSet) job.objects.getById(args.getStrictLong(1));
           var field = memberSet.field();
           if (field.isEmpty()) {
             throw new NoSuchFieldException(String.format("No field named `%s`", memberSet.name()));
           }
           var result = field.get().get(target);
           return result == null
-              ? OPTIONAL_JSON_NULL
+              ? OPTIONAL_JSON_ZERO
               : Optional.of(new JsonPrimitive(job.objects.retain(result)));
         }
 
       case "java_array_length":
         {
           args.expectSize(1);
-          var array = (Object[]) job.objects.getById(args.getStrictInt(0));
+          var array = (Object[]) job.objects.getById(args.getStrictLong(0));
           return Optional.of(new JsonPrimitive(array.length));
         }
 
       case "java_array_index":
         {
           args.expectSize(2);
-          var array = (Object[]) job.objects.getById(args.getStrictInt(0));
+          var array = (Object[]) job.objects.getById(args.getStrictLong(0));
           int index = args.getStrictInt(1);
           var result = array[index];
           return result == null
-              ? OPTIONAL_JSON_NULL
+              ? OPTIONAL_JSON_ZERO
               : Optional.of(new JsonPrimitive(job.objects.retain(result)));
         }
 
       case "java_to_string":
         args.expectSize(1);
-        return Optional.of(new JsonPrimitive(job.objects.getById(args.getStrictInt(0)).toString()));
+        return Optional.of(
+            new JsonPrimitive(job.objects.getById(args.getStrictLong(0)).toString()));
 
       case "java_assign":
         {
           args.expectArgs("dest", "source");
-          int dest = args.getStrictInt(0);
-          int source = args.getStrictInt(1);
+          long dest = args.getStrictLong(0);
+          long source = args.getStrictLong(1);
           job.objects.reassignId(dest, job.objects.getById(source));
           return OPTIONAL_JSON_NULL;
         }
 
       case "java_release":
-        args.expectSize(1);
-        var object = job.objects.releaseById(args.getStrictInt(0));
-        if (config.debugOutput()) {
-          LOGGER.info("Released Java object[{}]: `{}`", args.getStrictInt(0), object.toString());
+        for (var arg : args.args()) {
+          // For convenience, don't complain if a script requests release of ID 0 which represents
+          // null. This allows scripts to call Java methods and access Java fields with a null value
+          // without requiring scripts to handle 0/null conditionally.
+          long id = ScriptFunctionArgList.getStrictLongValue(arg).getAsLong();
+          if (id != 0L) {
+            var object = job.objects.releaseById(id);
+            if (object == null) {
+              systemMessageQueue.logUserError("Unable to release Java object with ID {}", id);
+            } else if (config.debugOutput()) {
+              LOGGER.info("Released Java object[{}]: `{}`", id, object);
+            }
+          }
         }
-        return OPTIONAL_JSON_NULL;
+        return Optional.empty();
 
       case "run_tasks":
         return Optional.of(runTasks(job, args.args()));
@@ -3647,7 +3664,7 @@ public class Minescript {
   private static JsonElement runTask(
       Job job, List<?> argList, Map<Long, Supplier<Object>> taskValues) throws Exception {
     var args = new ScriptFunctionArgList("runTask", argList);
-    long funcCallId = args.getStrictInt(0);
+    long funcCallId = args.getStrictLong(0);
     String funcName = args.getString(1);
 
     List resolvedArgs = (List) args.get(2);

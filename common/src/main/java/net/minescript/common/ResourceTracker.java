@@ -5,7 +5,7 @@ package net.minescript.common;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -16,8 +16,8 @@ public class ResourceTracker<T> {
   private final String resourceTypeName;
   private final int jobId;
   private final Config config;
-  private final AtomicInteger idAllocator = new AtomicInteger(0);
-  private final Map<Integer, T> resources = new ConcurrentHashMap<>();
+  private final AtomicLong idAllocator = new AtomicLong(0);
+  private final Map<Long, T> resources = new ConcurrentHashMap<>();
 
   public ResourceTracker(Class<T> resourceType, int jobId, Config config) {
     resourceTypeName = resourceType.getSimpleName();
@@ -25,8 +25,8 @@ public class ResourceTracker<T> {
     this.config = config;
   }
 
-  public int retain(T resource) {
-    int id = idAllocator.incrementAndGet();
+  public long retain(T resource) {
+    long id = idAllocator.incrementAndGet();
     resources.put(id, resource);
     if (config.debugOutput()) {
       LOGGER.info("Mapped Job[{}] {}[{}]: {}", jobId, resourceTypeName, id, resource);
@@ -34,7 +34,7 @@ public class ResourceTracker<T> {
     return id;
   }
 
-  public int reassignId(int id, T resource) {
+  public long reassignId(long id, T resource) {
     resources.put(id, resource);
     if (config.debugOutput()) {
       LOGGER.info("Remapped Job[{}] {}[{}]: {}", jobId, resourceTypeName, id, resource);
@@ -42,11 +42,11 @@ public class ResourceTracker<T> {
     return id;
   }
 
-  public T getById(int id) {
+  public T getById(long id) {
     return resources.get(id);
   }
 
-  public T releaseById(int id) {
+  public T releaseById(long id) {
     var resource = resources.remove(id);
     if (resource != null && config.debugOutput()) {
       LOGGER.info("Unmapped Job[{}] {}[{}]: {}", jobId, resourceTypeName, id, resource);
@@ -55,8 +55,13 @@ public class ResourceTracker<T> {
   }
 
   public void releaseAll() {
-    for (int id : resources.keySet()) {
-      releaseById(id);
+    if (config.debugOutput()) {
+      for (var entry : resources.entrySet()) {
+        long id = entry.getKey();
+        T resource = entry.getValue();
+        LOGGER.info("Unmapped Job[{}] {}[{}]: {}", jobId, resourceTypeName, id, resource);
+      }
     }
+    resources.clear();
   }
 }

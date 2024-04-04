@@ -2083,6 +2083,12 @@ def java_float(f):
 
 java_float = ScriptFunction("java_float", java_float)
 
+def java_long(l):
+  """Creates Java Long. Returns handle to Java object."""
+  return (l,)
+
+java_long = ScriptFunction("java_long", java_long)
+
 def java_int(i):
   """Creates Java Integer. Returns handle to Java object."""
   return (i,)
@@ -2158,9 +2164,9 @@ def java_assign(dest, source):
 
 java_assign = ScriptFunction("java_assign", java_assign)
 
-def java_release(target):
-  """Releases the Java reference to `target`."""
-  return (target,)
+def java_release(*targets):
+  """Releases the Java reference(s) associated with `targets`."""
+  return targets
 
-java_release = ScriptFunction("java_release", java_release)
+java_release = NoReturnScriptFunction("java_release", java_release)
 
