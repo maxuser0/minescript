@@ -1074,9 +1074,12 @@ def unregister_event_handler(handler_id: int):
   Args:
     handler_id: ID of an event handler returned from a `register_...()` function.
 
+  Returns:
+    `True` if `handler_id` was successfully cancelled, `False` otherwise.
+
   Since: v4.0
   """
-  await_script_function("unregister_event_handler", (handler_id,))
+  return await_script_function("unregister_event_handler", (handler_id,))
 
 
 def cancel_scheduled_tasks(task_list_id: int):
@@ -1085,9 +1088,12 @@ def cancel_scheduled_tasks(task_list_id: int):
   Args:
     task_list_id: ID of task list returned from `schedule_tick_tasks()` or `schedule_render_tasks`.
 
+  Returns:
+    `True` if `task_list_id` was successfully cancelled, `False` otherwise.
+
   Since: v4.0
   """
-  await_script_function("cancel_scheduled_tasks", (task_list_id,))
+  return await_script_function("cancel_scheduled_tasks", (task_list_id,))
 
 
 @dataclass

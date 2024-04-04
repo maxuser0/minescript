@@ -2481,11 +2481,9 @@ public class Minescript {
 
       case "unregister_event_handler":
         {
-          args.expectSize(1);
-          long listenerId = args.getStrictLong(0);
-          var jobOpId = new JobOperationId(job.jobId(), listenerId);
-          job.cancelOperation(listenerId);
-          return OPTIONAL_JSON_TRUE;
+          args.expectArgs("handler_id");
+          long handlerId = args.getStrictLong(0);
+          return Optional.of(new JsonPrimitive(job.cancelOperation(handlerId)));
         }
 
       case "await_loaded_region":
@@ -3588,11 +3586,11 @@ public class Minescript {
         return Optional.of(scheduleTasks(job, funcCallId, renderTaskLists, args.args()));
 
       case "cancel_scheduled_tasks":
-        args.expectArgs("task_list_id");
-        long opId = args.getStrictLong(0);
-        var jobOpId = new JobOperationId(job.jobId(), opId);
-        job.cancelOperation(opId);
-        return OPTIONAL_JSON_NULL;
+        {
+          args.expectArgs("task_list_id");
+          long opId = args.getStrictLong(0);
+          return Optional.of(new JsonPrimitive(job.cancelOperation(opId)));
+        }
 
       default:
         throw new IllegalArgumentException(
