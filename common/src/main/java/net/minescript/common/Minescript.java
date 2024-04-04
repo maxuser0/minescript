@@ -3427,23 +3427,22 @@ public class Minescript {
             ctors.add(ctor);
             argCounts.add(ctor.getParameterCount());
           }
-          var ctorSet = new ConstructorSet(ctors.build(), argCounts.build());
+          var ctorSet = new ConstructorSet(target.getName(), ctors.build(), argCounts.build());
           return Optional.of(new JsonPrimitive(job.objects.retain(ctorSet)));
         }
 
       case "java_new_instance":
         {
-          var target = (Class) job.objects.getById(args.getStrictInt(0));
-          var ctorSet = (ConstructorSet) job.objects.getById(args.getStrictInt(1));
-          Object[] params = new Object[args.size() - 2];
+          var ctorSet = (ConstructorSet) job.objects.getById(args.getStrictInt(0));
+          Object[] params = new Object[args.size() - 1];
           for (int i = 0; i < params.length; ++i) {
-            params[i] = job.objects.getById(args.getStrictInt(i + 2));
+            params[i] = job.objects.getById(args.getStrictInt(i + 1));
           }
           if (!ctorSet.argCounts().contains(params.length)) {
             throw new IllegalArgumentException(
                 String.format(
                     "Constructor for `%s` got %d args but expected %s",
-                    target.getClass().getSimpleName(), params.length, ctorSet.argCounts()));
+                    ctorSet.name(), params.length, ctorSet.argCounts()));
           }
           // Catch IllegalArgumentException until all the ctors in the set with the right number
           // of args have been exhausted.
@@ -3726,7 +3725,7 @@ public class Minescript {
   }
 
   private record ConstructorSet(
-      ImmutableList<Constructor> ctors, ImmutableSet<Integer> argCounts) {}
+      String name, ImmutableList<Constructor> ctors, ImmutableSet<Integer> argCounts) {}
 
   private record MemberSet(
       String name,

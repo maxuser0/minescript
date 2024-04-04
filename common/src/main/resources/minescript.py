@@ -2095,13 +2095,14 @@ def java_ctor(clss):
 
 java_ctor = ScriptFunction("java_ctor", java_ctor)
 
-def java_new_instance(target, ctor, *args):
-  """Creates new Java instance from constructor handle. Returns handle to Java object.
+def java_new_instance(ctor, *args):
+  """Creates new Java instance. Returns handle to newly created Java object.
 
   Args:
+    ctor: constructor set returned from `java_ctor`
     args: handles to Java objects to pass as constructor params
   """
-  return (target, ctor, *args)
+  return (ctor, *args)
 
 java_new_instance = ScriptFunction("java_new_instance", java_new_instance)
 
