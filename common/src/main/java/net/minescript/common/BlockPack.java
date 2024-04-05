@@ -158,6 +158,14 @@ public class BlockPack {
       this.symbolMap.put(entry.getKey(), new BlockType(entry.getValue()));
     }
 
+    if (tiles.isEmpty()) {
+      minTileX = minTileY = minTileZ = 0;
+      maxTileX = maxTileY = maxTileZ = 0;
+      minBlockX = minBlockY = minBlockZ = 0;
+      maxBlockX = maxBlockY = maxBlockZ = 0;
+      return;
+    }
+
     // First iterate all tiles to find the min/max tile along each dimension.
     int minTileX = X_BUILD_MAX;
     int minTileY = Y_BUILD_MAX;
@@ -977,8 +985,7 @@ public class BlockPack {
           }
         } else {
           commandConsumer.accept(
-              String.format(
-                  "fill %d %d %d %d %d %d %s", x1, y1, z1, x2, y2, z2, blockType.symbol));
+              String.format("fill %d %d %d %d %d %d %s", x1, y1, z1, x2, y2, z2, blockType.symbol));
         }
       }
       for (int i = 0; i < setblocks.length; i += 2) {
