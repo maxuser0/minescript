@@ -2168,5 +2168,5 @@ def java_release(*targets):
   """Releases the Java reference(s) associated with `targets`."""
   return targets
 
-java_release = NoReturnScriptFunction("java_release", java_release)
+java_release = ScriptFunction("java_release", java_release)
 

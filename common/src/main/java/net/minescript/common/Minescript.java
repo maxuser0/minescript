@@ -705,8 +705,8 @@ public class Minescript {
         long time = System.currentTimeMillis();
         if (time - lastReportedErrorTime > 5000) {
           lastReportedErrorTime = time;
-          systemMessageQueue.logUserError(
-              "Error from scheduled tasks `{}`: {}", name, e.getMessage());
+          systemMessageQueue.logException(
+              e, String.format("Error from scheduled %s: %s", name, e.toString()));
         }
       }
     }
@@ -3456,9 +3456,7 @@ public class Minescript {
             if (ctor.getParameterCount() == params.length) {
               try {
                 var result = ctor.newInstance(params);
-                return result == null
-                    ? OPTIONAL_JSON_ZERO
-                    : Optional.of(new JsonPrimitive(job.objects.retain(result)));
+                return Optional.of(new JsonPrimitive(job.objects.retain(result)));
               } catch (IllegalArgumentException e) {
                 exception = e;
               }
@@ -3507,9 +3505,7 @@ public class Minescript {
             if (method.getParameterCount() == params.length) {
               try {
                 var result = method.invoke(target, params);
-                return result == null
-                    ? OPTIONAL_JSON_ZERO
-                    : Optional.of(new JsonPrimitive(job.objects.retain(result)));
+                return Optional.of(new JsonPrimitive(job.objects.retain(result)));
               } catch (IllegalArgumentException e) {
               } catch (InvocationTargetException e) {
                 throw new InvocationTargetException(
@@ -3548,9 +3544,7 @@ public class Minescript {
             throw new NoSuchFieldException(String.format("No field named `%s`", memberSet.name()));
           }
           var result = field.get().get(target);
-          return result == null
-              ? OPTIONAL_JSON_ZERO
-              : Optional.of(new JsonPrimitive(job.objects.retain(result)));
+          return Optional.of(new JsonPrimitive(job.objects.retain(result)));
         }
 
       case "java_array_length":
@@ -3566,15 +3560,15 @@ public class Minescript {
           var array = (Object[]) job.objects.getById(args.getStrictLong(0));
           int index = args.getStrictInt(1);
           var result = array[index];
-          return result == null
-              ? OPTIONAL_JSON_ZERO
-              : Optional.of(new JsonPrimitive(job.objects.retain(result)));
+          return Optional.of(new JsonPrimitive(job.objects.retain(result)));
         }
 
       case "java_to_string":
-        args.expectSize(1);
-        return Optional.of(
-            new JsonPrimitive(job.objects.getById(args.getStrictLong(0)).toString()));
+        {
+          args.expectSize(1);
+          var object = job.objects.getById(args.getStrictLong(0));
+          return Optional.of(new JsonPrimitive(object == null ? "null" : object.toString()));
+        }
 
       case "java_assign":
         {
@@ -3591,16 +3585,9 @@ public class Minescript {
           // null. This allows scripts to call Java methods and access Java fields with a null value
           // without requiring scripts to handle 0/null conditionally.
           long id = ScriptFunctionArgList.getStrictLongValue(arg).getAsLong();
-          if (id != 0L) {
-            var object = job.objects.releaseById(id);
-            if (object == null) {
-              systemMessageQueue.logUserError("Unable to release Java object with ID {}", id);
-            } else if (config.debugOutput()) {
-              LOGGER.info("Released Java object[{}]: `{}`", id, object);
-            }
-          }
+          job.objects.releaseById(id);
         }
-        return Optional.empty();
+        return OPTIONAL_JSON_NULL;
 
       case "run_tasks":
         return Optional.of(runTasks(job, args.args()));
