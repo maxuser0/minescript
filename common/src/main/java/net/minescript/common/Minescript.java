@@ -3581,11 +3581,13 @@ public class Minescript {
 
       case "java_release":
         for (var arg : args.args()) {
-          // For convenience, don't complain if a script requests release of ID 0 which represents
+          // For convenience, don't complain if a script attempts to release ID 0 which represents
           // null. This allows scripts to call Java methods and access Java fields with a null value
           // without requiring scripts to handle 0/null conditionally.
           long id = ScriptFunctionArgList.getStrictLongValue(arg).getAsLong();
-          job.objects.releaseById(id);
+          if (id != 0) {
+            job.objects.releaseById(id);
+          }
         }
         return OPTIONAL_JSON_NULL;
 
