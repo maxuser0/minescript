@@ -45,13 +45,19 @@ public class SystemMessageQueue {
   }
 
   public void logException(Exception e) {
+    logException(
+        e,
+        String.format(
+            "Minescript internal error: %s (see logs/latest.log for details; to browse or report"
+                + " issues see https://minescript.net/issues)",
+            e.toString()));
+  }
+
+  public void logException(Exception e, String chatMessage) {
     var sw = new StringWriter();
     var pw = new PrintWriter(sw);
     e.printStackTrace(pw);
-    logUserError(
-        "Minescript internal error: {} (see logs/latest.log for details; to browse or report issues"
-            + " see https://minescript.net/issues)",
-        e.toString());
+    logUserError(chatMessage);
     LOGGER.error(sw.toString());
   }
 }

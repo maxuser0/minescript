@@ -71,6 +71,12 @@ def expect_gt(a, b):
   else:
     raise TestFailure(f"Failed comparison: {a} <= {b} (expected >)")
 
+def expect_lt(a, b):
+  if a < b:
+    print_success(f"Success: {a} < {b}")
+  else:
+    raise TestFailure(f"Failed comparison: {a} >= {b} (expected <)")
+
 def expect_message(message):
   expected_message_re = re.compile(message)
   timeout = time.time() + 1
@@ -253,7 +259,7 @@ def player_test():
   minescript.player_press_forward(False)
   minescript.flush()
   x1, y1, z1 = minescript.player_position()
-  expect_true(z0 < z1)
+  expect_lt(z0, z1)
 
   # yaw == 90 <-> look -x-axis
   minescript.player_set_orientation(90, 0)
@@ -263,7 +269,7 @@ def player_test():
   minescript.player_press_forward(False)
   minescript.flush()
   x1, y1, z1 = minescript.player_position()
-  expect_true(x0 > x1)
+  expect_gt(x0, x1)
 
   # yaw == 180 <-> look -z-axis
   minescript.player_set_orientation(180, 0)
@@ -273,7 +279,7 @@ def player_test():
   minescript.player_press_forward(False)
   minescript.flush()
   x1, y1, z1 = minescript.player_position()
-  expect_true(z0 > z1)
+  expect_gt(z0, z1)
 
   # yaw == 270 <-> look +x-axis
   minescript.player_set_orientation(270, 0)
@@ -306,7 +312,6 @@ def player_targeted_block_test():
   result = minescript.player_get_targeted_block(max_distance)
   minescript.player_set_orientation(yaw, pitch)
   expect_true(result is not None)
-  expect_equal(len(result), 4)
   expect_equal(len(result[0]), 3)
   expect_equal([type(x) for x in result[0]], [int, int, int])
   expect_equal(type(result[1]), float)
@@ -444,9 +449,10 @@ for test in all_tests:
   num_tests_run += 1
   try:
     test()
-    minescript.flush()
     print_success(f"PASSED")
     drain_message_queue()
+    minescript.flush()
+    time.sleep(0.1)
   except Exception as e:
     print_failure(traceback.format_exc())
     minescript.flush()

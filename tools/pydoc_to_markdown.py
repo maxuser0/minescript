@@ -17,7 +17,7 @@ METHOD_RE = re.compile(r"^  def ([a-zA-Z_0-9]+)(.*)")
 METHOD_DECORATION_RE = re.compile(r"^  (@(static|class)method)$")
 GLOBAL_ASSIGNMENT_RE = re.compile(r"^([a-zA-Z_0-9]+)(: ([a-zA-Z_0-9.]+))? = ")
 CLASS_ASSIGNMENT_RE = re.compile(r"^  ([a-zA-Z_0-9]+)(: ([a-zA-Z_0-9.]+))? = ")
-BEGIN_TRIPLE_QUOTE = re.compile(r'^ *"""([^ ].*)')
+BEGIN_TRIPLE_QUOTE = re.compile(r'^ *r?"""([^ ].*)')
 END_TRIPLE_QUOTE = re.compile(r'(.*)"""$')
 
 
