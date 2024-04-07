@@ -15,7 +15,6 @@ Minescript mod.  This module should be imported by other
 scripts and not run directly.
 """
 
-import asyncio
 import base64
 import json
 import os
@@ -527,6 +526,26 @@ def player_set_orientation(yaw: float, pitch: float):
 player_set_orientation = ScriptFunction("player_set_orientation", player_set_orientation)
 
 
+@dataclass
+class TargetedBlock:
+  position: BlockPos
+  distance: float
+  side: str
+  type: str
+
+  # __getitem__ provided for backward compatibility with the list returned in prior versions.
+  def __getitem__(self, i):
+    if i == 0:
+      return self.position
+    elif i == 1:
+      return self.distance
+    elif i == 2:
+      return self.side
+    elif i == 3:
+      return self.type
+    else:
+      raise ValueError("Expected integer from 0 to 3 but got " + repr(i))
+
 def player_get_targeted_block(max_distance: float = 20):
   """Gets info about the nearest block, if any, in the local player's crosshairs.
 
@@ -534,17 +553,21 @@ def player_get_targeted_block(max_distance: float = 20):
     max_distance: max distance from local player to look for blocks
 
   Returns:
-    [[x, y, z], distance, side, block_description] if the local player has a
-    block in their crosshairs within `max_distance`, `None` otherwise.
-    `distance` (float) is calculated from the player to the targeted block;
-    `side` (str) is the direction that the targeted side of the block is facing
-    (e.g. `"east"`); `block_description` (str) describes the targeted block.
+    `TargetedBlock` for the block targeted by the player, or `None` if no block is targeted.
+
+  Update in v4.0:
+    Return value changed from `list` to `TargetedBlock`.
 
   Since: v3.0
   """
   return (max_distance,)
 
-player_get_targeted_block = ScriptFunction("player_get_targeted_block", player_get_targeted_block)
+def _player_get_targeted_block_result_transform(targeted_block):
+  return None if targeted_block is None else TargetedBlock(*targeted_block)
+
+player_get_targeted_block = ScriptFunction(
+    "player_get_targeted_block", player_get_targeted_block,
+    _player_get_targeted_block_result_transform)
 
 
 @dataclass
@@ -572,7 +595,7 @@ def player_get_targeted_entity(max_distance: float = 20, nbt: bool = False) -> E
     nbt: if `True`, populate an `"nbt"` attribute for the player
 
   Returns:
-    `EntityData` for the entity targeted by the player, or None if no entity is targeted.
+    `EntityData` for the entity targeted by the player, or `None` if no entity is targeted.
     (Legacy-style returned dict can be restored with `options.legacy_dict_return_values = True`)
 
   Since: v4.0
@@ -1051,9 +1074,12 @@ def unregister_event_handler(handler_id: int):
   Args:
     handler_id: ID of an event handler returned from a `register_...()` function.
 
+  Returns:
+    `True` if `handler_id` was successfully cancelled, `False` otherwise.
+
   Since: v4.0
   """
-  await_script_function("unregister_event_handler", (handler_id,))
+  return await_script_function("unregister_event_handler", (handler_id,))
 
 
 def cancel_scheduled_tasks(task_list_id: int):
@@ -1062,9 +1088,12 @@ def cancel_scheduled_tasks(task_list_id: int):
   Args:
     task_list_id: ID of task list returned from `schedule_tick_tasks()` or `schedule_render_tasks`.
 
+  Returns:
+    `True` if `task_list_id` was successfully cancelled, `False` otherwise.
+
   Since: v4.0
   """
-  await_script_function("cancel_scheduled_tasks", (task_list_id,))
+  return await_script_function("cancel_scheduled_tasks", (task_list_id,))
 
 
 @dataclass
@@ -2054,6 +2083,12 @@ def java_float(f):
 
 java_float = ScriptFunction("java_float", java_float)
 
+def java_long(l):
+  """Creates Java Long. Returns handle to Java object."""
+  return (l,)
+
+java_long = ScriptFunction("java_long", java_long)
+
 def java_int(i):
   """Creates Java Integer. Returns handle to Java object."""
   return (i,)
@@ -2072,13 +2107,14 @@ def java_ctor(clss):
 
 java_ctor = ScriptFunction("java_ctor", java_ctor)
 
-def java_new_instance(target, ctor, *args):
-  """Creates new Java instance from constructor handle. Returns handle to Java object.
+def java_new_instance(ctor, *args):
+  """Creates new Java instance. Returns handle to newly created Java object.
 
   Args:
+    ctor: constructor set returned from `java_ctor`
     args: handles to Java objects to pass as constructor params
   """
-  return (target, ctor, *args)
+  return (ctor, *args)
 
 java_new_instance = ScriptFunction("java_new_instance", java_new_instance)
 
@@ -2122,9 +2158,15 @@ def java_to_string(target):
 
 java_to_string = ScriptFunction("java_to_string", java_to_string)
 
-def java_release(target):
-  """Releases the Java reference to `target`."""
-  return (target,)
+def java_assign(dest, source):
+  """Reassigns `dest` handle to reference the object referenced by `source` handle."""
+  return (dest, source)
+
+java_assign = ScriptFunction("java_assign", java_assign)
+
+def java_release(*targets):
+  """Releases the Java reference(s) associated with `targets`."""
+  return targets
 
 java_release = ScriptFunction("java_release", java_release)
 
