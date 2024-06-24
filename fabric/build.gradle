@@ -1,8 +1,8 @@
 // Based on MultiLoader-Template:
-// https://github.com/jaredlll08/MultiLoader-Template/blob/1.20.6/fabric/build.gradle
+// https://github.com/jaredlll08/MultiLoader-Template/blob/1.21/fabric/build.gradle
 plugins {
     id 'multiloader-loader'
-    id 'fabric-loom' version '1.6-SNAPSHOT'
+    id 'fabric-loom' version '1.7-SNAPSHOT'
 }
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"

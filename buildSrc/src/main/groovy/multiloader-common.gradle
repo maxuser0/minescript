@@ -1,5 +1,5 @@
 // Based on MultiLoader-Template:
-// https://github.com/jaredlll08/MultiLoader-Template/blob/1.20.6/buildSrc/src/main/groovy/multiloader-common.gradle
+// https://github.com/jaredlll08/MultiLoader-Template/blob/1.21/buildSrc/src/main/groovy/multiloader-common.gradle
 plugins {
     id 'java-library'
     id 'maven-publish'

@@ -1,8 +1,8 @@
 // Based on MultiLoader-Template:
-// https://github.com/jaredlll08/MultiLoader-Template/blob/1.20.6/neoforge/build.gradle
+// https://github.com/jaredlll08/MultiLoader-Template/blob/1.21/neoforge/build.gradle
 plugins {
     id 'multiloader-loader'
-    id 'net.neoforged.gradle.userdev' version '7.0.133'
+    id 'net.neoforged.gradle.userdev' version '7.0.145'
 }
 
 // Automatically enable neoforge AccessTransformers if the file exists
