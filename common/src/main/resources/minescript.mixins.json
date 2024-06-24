@@ -1,8 +1,9 @@
 {
   "required": true,
+  "minVersion": "0.8",
   "package": "net.minescript.common.mixin",
-  "compatibilityLevel": "JAVA_17",
-  "refmap": "minescript.refmap.json",
+  "refmap": "${mod_id}.refmap.json",
+  "compatibilityLevel": "JAVA_21",
   "mixins": [
     "ChatComponentMixin",
     "ChatScreenMixin",
@@ -13,5 +14,7 @@
   ],
   "client": [
   ],
-  "minVersion": "0.8"
+  "injectors": {
+    "defaultRequire": 1
+  }
 }

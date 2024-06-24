@@ -1,42 +1,35 @@
 // Based on MultiLoader-Template:
-// https://github.com/jaredlll08/MultiLoader-Template/blob/1.20.2/common/build.gradle
-
+// https://github.com/jaredlll08/MultiLoader-Template/blob/1.20.6/common/build.gradle
 plugins {
-  id 'idea'
-  id 'java'
-  id 'maven-publish'
-  id 'org.spongepowered.gradle.vanilla' version '0.2.1-SNAPSHOT'
+    id 'multiloader-common'
+    id 'org.spongepowered.gradle.vanilla' version '0.2.1-SNAPSHOT'
 }
-base {
-  archivesName = "${mod_id}-mc${minecraft_version}-common"
-}
+
 minecraft {
-  version(minecraft_version)
-  if(file("src/main/resources/${mod_id}.accesswidener").exists()){
-    accessWideners(file("src/main/resources/${mod_id}.accesswidener"))
-  }
+    version(minecraft_version)
+    def aw = file("src/main/resources/${mod_id}.accesswidener")
+    if(aw.exists()){
+        accessWideners(aw)
+    }
 }
 
 dependencies {
-   compileOnly group:'org.spongepowered', name:'mixin', version:'0.8.5'
-   implementation group: 'com.google.code.findbugs', name: 'jsr305', version: '3.0.1'
+    compileOnly group:'org.spongepowered', name:'mixin', version:'0.8.5'
 }
 
-jar {
-  // Exclude vim swap files:
-  processResources.exclude('**/.*.swp')
+configurations {
+    commonJava {
+        canBeResolved = false
+        canBeConsumed = true
+    }
+    commonResources {
+        canBeResolved = false
+        canBeConsumed = true
+    }
 }
 
-publishing {
-  publications {
-    mavenJava(MavenPublication) {
-      artifactId base.archivesName.get()
-      from components.java
-    }
-  }
-  repositories {
-    maven {
-      url "file://" + System.getenv("local_maven")
-    }
-  }
+artifacts {
+    commonJava sourceSets.main.java.sourceDirectories.singleFile
+    commonResources sourceSets.main.resources.sourceDirectories.singleFile
 }
+

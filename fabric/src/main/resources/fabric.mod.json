@@ -36,8 +36,8 @@
     "fabricloader": ">=${fabric_loader_version}",
     "fabric": "*",
     "fabric-screen-api-v1": "*",
-    "minecraft": "~${minecraft_version}",
-    "java": ">=17"
+    "minecraft": "${minecraft_version}",
+    "java": ">=${java_version}"
   },
   "suggests": {
     "another-mod": "*"

@@ -2101,7 +2101,7 @@ public class Minescript {
   private static void processJsonFormattedText(String text) {
     var minecraft = Minecraft.getInstance();
     var chat = minecraft.gui.getChat();
-    chat.addMessage(Component.Serializer.fromJson(text));
+    chat.addMessage(Component.Serializer.fromJson(text, minecraft.level.registryAccess()));
   }
 
   private static void processMessage(Message message) {
@@ -2140,7 +2140,8 @@ public class Minescript {
     if (itemStack.getCount() == 0) {
       return JsonNull.INSTANCE;
     } else {
-      var nbt = itemStack.getTag();
+      var minecraft = Minecraft.getInstance();
+      var nbt = itemStack.save(minecraft.level.registryAccess());
       var out = new JsonObject();
       out.addProperty("item", itemStack.getItem().toString());
       out.addProperty("count", itemStack.getCount());
@@ -2812,9 +2813,10 @@ public class Minescript {
           var serverAddress = serverData == null ? "localhost" : serverData.ip;
 
           var spawn = new JsonArray();
-          spawn.add(levelProperties.getXSpawn());
-          spawn.add(levelProperties.getYSpawn());
-          spawn.add(levelProperties.getZSpawn());
+          var spawnPos = levelProperties.getSpawnPos();
+          spawn.add(spawnPos.getX());
+          spawn.add(spawnPos.getY());
+          spawn.add(spawnPos.getZ());
 
           var result = new JsonObject();
           result.addProperty("game_ticks", levelProperties.getGameTime());

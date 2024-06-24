@@ -1,70 +1,34 @@
 // Based on MultiLoader-Template:
-// https://github.com/jaredlll08/MultiLoader-Template/blob/1.20.2/fabric/build.gradle
-
+// https://github.com/jaredlll08/MultiLoader-Template/blob/1.20.6/fabric/build.gradle
 plugins {
-  id 'java'
-  id 'idea'
-  id 'maven-publish'
-  id 'fabric-loom' version '1.2-SNAPSHOT'
-}
-base {
-  archivesName = "${mod_id}-mc${minecraft_version}-fabric-mod"
+    id 'multiloader-loader'
+    id 'fabric-loom' version '1.6-SNAPSHOT'
 }
 dependencies {
-  minecraft "com.mojang:minecraft:${minecraft_version}"
-  mappings loom.officialMojangMappings()
-  modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
-  modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
-  implementation group: 'com.google.code.findbugs', name: 'jsr305', version: '3.0.1'
-  implementation project(":common")
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
 }
 
 loom {
-  if (project(":common").file("src/main/resources/${mod_id}.accesswidener").exists()) {
-    accessWidenerPath.set(project(":common").file("src/main/resources/${mod_id}.accesswidener"))
-  }
-  mixin {
-    defaultRefmapName.set("${mod_id}.refmap.json")
-  }
-  runs {
-    client {
-      client()
-      setConfigName("Fabric Client")
-      ideConfigGenerated(true)
-      runDir("run")
+    def aw = project(":common").file("src/main/resources/${mod_id}.accesswidener")
+    if (aw.exists()) {
+        accessWidenerPath.set(aw)
     }
-  }
-}
-
-tasks.withType(JavaCompile).configureEach {
-  source(project(":common").sourceSets.main.allSource)
-}
-tasks.withType(Javadoc).configureEach {
-  source(project(":common").sourceSets.main.allJava)
-}
-tasks.named("sourcesJar", Jar) {
-  from(project(":common").sourceSets.main.allSource)
-}
-
-processResources {
-  from project(":common").sourceSets.main.resources
-}
-
-jar {
-  // Exclude vim swap files:
-  processResources.exclude('**/.*.swp')
-}
-
-publishing {
-  publications {
-    mavenJava(MavenPublication) {
-      artifactId base.archivesName.get()
-      from components.java
+    mixin {
+        defaultRefmapName.set("${mod_id}.refmap.json")
     }
-  }
-  repositories {
-    maven {
-      url "file://" + System.getenv("local_maven")
+    runs {
+        client {
+            client()
+            setConfigName("Fabric Client")
+            ideConfigGenerated(true)
+            runDir("runs/client")
+        }
     }
-  }
+}
+
+javadoc {
+    exclude '**/*.swp'
 }

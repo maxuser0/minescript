@@ -1,0 +1,5 @@
+// Based on MultiLoader-Template:
+// https://github.com/jaredlll08/MultiLoader-Template/blob/1.20.6/buildSrc/build.gradle
+plugins {
+    id 'groovy-gradle-plugin'
+}
