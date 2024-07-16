@@ -3763,7 +3763,7 @@ public class Minescript {
 
     var worldCommands = config.getAutorunCommands(worldName);
     if (worldCommands != null) {
-      LOGGER.info("Matched {} command(s) with autorun[{}]", wildcardCommands.size(), worldName);
+      LOGGER.info("Matched {} command(s) with autorun[{}]", worldCommands.size(), worldName);
       commands.addAll(worldCommands);
     }
 
