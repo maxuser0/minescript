@@ -1,6 +1,8 @@
 // Based on MultiLoader-Template:
 // https://github.com/jaredlll08/MultiLoader-Template/blob/1.21/build.gradle
 plugins {
-    // Required for NeoGradle
-    id "org.jetbrains.gradle.plugin.idea-ext" version "1.1.7"
+    // see https://fabricmc.net/develop/ for new versions
+    id 'fabric-loom' version '1.7-SNAPSHOT' apply false
+    // see https://projects.neoforged.net/neoforged/moddevgradle for new versions
+    id 'net.neoforged.moddev' version '0.1.110' apply false
 }

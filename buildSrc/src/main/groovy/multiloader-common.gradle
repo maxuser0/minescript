@@ -25,7 +25,16 @@ repositories {
                 url = 'https://repo.spongepowered.org/repository/maven-public'
             }
         }
-        filter { includeGroupAndSubgroups("org.spongepowered") }
+        filter { includeGroupAndSubgroups('org.spongepowered') }
+    }
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'ParchmentMC'
+                url = 'https://maven.parchmentmc.org/'
+            }
+        }
+        filter { includeGroup('org.parchmentmc.data') }
     }
     maven {
         name = 'BlameJared'
@@ -47,13 +56,13 @@ repositories {
 }
 
 sourcesJar {
-    from(rootProject.file("LICENSE")) {
+    from(rootProject.file('LICENSE')) {
         rename { "${it}_${mod_name}" }
     }
 }
 
 jar {
-    from(rootProject.file("LICENSE")) {
+    from(rootProject.file('LICENSE')) {
         rename { "${it}_${mod_name}" }
     }
 
@@ -72,21 +81,21 @@ jar {
 
 processResources {
     def expandProps = [
-            "version": version,
-            "group": project.group, //Else we target the task's group.
-            "minecraft_version": minecraft_version,
-            "minecraft_version_range": minecraft_version_range,
-            "fabric_version": fabric_version,
-            "fabric_loader_version": fabric_loader_version,
-            "mod_name": mod_name,
-            "mod_author": mod_author,
-            "mod_id": mod_id,
-            "license": license,
-            "description": project.description,
-            "neoforge_version": neoforge_version,
-            "neoforge_loader_version_range": neoforge_loader_version_range,
-            "credits": credits,
-            "java_version": java_version
+            'version': version,
+            'group': project.group, //Else we target the task's group.
+            'minecraft_version': minecraft_version,
+            'minecraft_version_range': minecraft_version_range,
+            'fabric_version': fabric_version,
+            'fabric_loader_version': fabric_loader_version,
+            'mod_name': mod_name,
+            'mod_author': mod_author,
+            'mod_id': mod_id,
+            'license': license,
+            'description': project.description,
+            'neoforge_version': neoforge_version,
+            'neoforge_loader_version_range': neoforge_loader_version_range,
+            'credits': credits,
+            'java_version': java_version
     ]
 
     filesMatching(['version.txt', 'pack.mcmeta', 'fabric.mod.json', 'META-INF/mods.toml', 'META-INF/neoforge.mods.toml', '*.mixins.json']) {
@@ -104,7 +113,7 @@ publishing {
     }
     repositories {
         maven {
-            url System.getenv("local_maven_url")
+            url System.getenv('local_maven_url')
         }
     }
 }
