@@ -1,5 +1,5 @@
 // Based on MultiLoader-Template:
-// https://github.com/jaredlll08/MultiLoader-Template/blob/1.20.6/buildSrc/src/main/groovy/multiloader-loader.gradle
+// https://github.com/jaredlll08/MultiLoader-Template/blob/1.21/buildSrc/src/main/groovy/multiloader-loader.gradle
 plugins {
     id 'multiloader-common'
 }
@@ -38,7 +38,7 @@ tasks.named('javadoc', Javadoc).configure {
     source(configurations.commonJava)
 }
 
-tasks.named("sourcesJar", Jar) {
+tasks.named('sourcesJar', Jar) {
     dependsOn(configurations.commonJava)
     from(configurations.commonJava)
     dependsOn(configurations.commonResources)
