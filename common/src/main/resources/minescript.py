@@ -752,9 +752,13 @@ class VersionInfo:
   launcher: str
   os_name: str
   os_version: str
+  minecraft_class_name: str
 
 def version_info() -> VersionInfo:
   """Gets version info for Minecraft, Minescript, mod loader, launcher, and OS.
+
+  `minecraft_class_name` is the runtime class name of the main Minecraft class which may be
+  obfuscated.
 
   Returns:
     `VersionInfo`
