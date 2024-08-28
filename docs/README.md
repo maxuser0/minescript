@@ -212,6 +212,9 @@ Config variable names:
 - `minescript_commands_per_cycle` (see [minescript_commands_per_cycle](#minescript_commands_per_cycle) command)
 - `minescript_ticks_per_cycle` (see [minescript_ticks_per_cycle](#minescript_ticks_per_cycle) command)
 - `minescript_incremental_command_suggestions` (see [minescript_incremental_command_suggestions](#minescript_incremental_command_suggestions) command; since v2.0)
+- `report_job_success_threshold_millis` - report on-screen that a script job has exited successfully
+  if it has run for more than this duration in milliseconds; default value is 3000 (3 seconds); 0
+  always reports; -1 never reports; exits of failed script jobs are always reported (since v4.0)
 - `autorun[WORLD NAME]` - command to run when entering a world named `WORLD NAME` (since v3.1)
 
     - The special name `*` indicates that the command should be run when entering
