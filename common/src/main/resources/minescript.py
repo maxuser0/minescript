@@ -2071,114 +2071,192 @@ class BlockPacker:
     """Frees this BlockPacker to be garbage collected."""
     blockpacker_delete(self._id)
 
+JavaHandle = int
 
-def java_class(name: str):
-  """Looks up Java class by fully qualified name. Returns handle to Java object."""
+def java_class(name: str) -> JavaHandle:
+  """Looks up Java class by fully qualified name. Returns handle to the Java class object.
+
+  Example: `java_class("net.minescript.common.Minescript")`
+
+  If running Minecraft with unobfuscated Java symbols:
+  `java_class("net.minecraft.client.Minecraft")`
+
+  If running Minecraft with obfuscated symbols, `name` must be the fully qualified and obfuscated
+  class name.
+
+  Since: v4.0
+  """
   return (name,)
 
 java_class = ScriptFunction("java_class", java_class)
 
-def java_string(s):
-  """Creates Java String. Returns handle to Java object."""
+def java_string(s: str) -> JavaHandle:
+  """Returns handle to a Java String.
+  Since: v4.0
+  """
   return (s,)
 
 java_string = ScriptFunction("java_string", java_string)
 
-def java_double(d):
-  """Creates Java Double. Returns handle to Java object."""
+def java_double(d: float) -> JavaHandle:
+  """Returns handle to a Java Double.
+  Since: v4.0
+  """
   return (d,)
 
 java_double = ScriptFunction("java_double", java_double)
 
-def java_float(f):
-  """Creates Java Float. Returns handle to Java object."""
+def java_float(f: float) -> JavaHandle:
+  """Returns handle to a Java Float.
+  Since: v4.0
+  """
   return (f,)
 
 java_float = ScriptFunction("java_float", java_float)
 
-def java_long(l):
-  """Creates Java Long. Returns handle to Java object."""
+def java_long(l: int) -> JavaHandle:
+  """Returns handle to a Java Long.
+  Since: v4.0
+  """
   return (l,)
 
 java_long = ScriptFunction("java_long", java_long)
 
-def java_int(i):
-  """Creates Java Integer. Returns handle to Java object."""
+def java_int(i: int) -> JavaHandle:
+  """Returns handle to a Java Integer
+  Since: v4.0
+  """
   return (i,)
 
 java_int = ScriptFunction("java_int", java_int)
 
-def java_bool(b):
-  """Creates Java Boolean. Returns handle to Java object."""
+def java_bool(b: bool) -> JavaHandle:
+  """Returns handle to a Java Boolean.
+  Since: v4.0
+  """
   return (b,)
 
 java_bool = ScriptFunction("java_bool", java_bool)
 
-def java_ctor(clss):
-  """Returns handle to constructor for `clss`."""
+def java_ctor(clss: JavaHandle):
+  """Returns handle to a constructor set for the given class handle.
+
+  Args:
+    clss: Java class handle returned from `java_class`
+
+  Since: v4.0
+  """
   return (clss,)
 
 java_ctor = ScriptFunction("java_ctor", java_ctor)
 
-def java_new_instance(ctor, *args):
-  """Creates new Java instance. Returns handle to newly created Java object.
+def java_new_instance(ctor: JavaHandle, *args: List[JavaHandle]) -> JavaHandle:
+  """Creates new Java instance.
 
   Args:
     ctor: constructor set returned from `java_ctor`
     args: handles to Java objects to pass as constructor params
+
+  Returns:
+    handle to newly created Java object.
+
+  Since: v4.0
   """
   return (ctor, *args)
 
 java_new_instance = ScriptFunction("java_new_instance", java_new_instance)
 
-def java_member(clss, name: str):
-  """Gets Java member(s) matching `name`. Returns handle to Java object."""
+def java_member(clss: JavaHandle, name: str) -> JavaHandle:
+  """Gets Java member(s) matching `name`.
+
+  Returns:
+    Java member object for use with `java_access_field` or `java_call_method`.
+
+  Since: v4.0
+  """
   return (clss, name)
 
 java_member = ScriptFunction("java_member", java_member)
 
-def java_access_field(target, field):
-  """Accesses `field` on `target`. Returns handle to Java object, or `None` if `null`."""
+def java_access_field(target: JavaHandle, field: JavaHandle) -> JavaHandle:
+  """Accesses a field on a target Java object.
+
+  Args:
+    target: Java object handle from which to access a field
+    field: handle returned from `java_member`
+
+  Returns:
+    Handle to Java object returned from field access, or `None` if `null`.
+
+  Since: v4.0
+  """
   return (target, field)
 
 java_access_field = ScriptFunction("java_access_field", java_access_field)
 
-def java_call_method(target, method, *args):
-  """Invokes method on target. Returns handle to Java object, or `None` if `null`.
+def java_call_method(target: JavaHandle, method: JavaHandle, *args: List[JavaHandle]) -> JavaHandle:
+  """Invokes a method on a target Java object.
 
   Args:
-    args: handles to Java objects to pass as constructor params
+    target: Java object handle on which to call a method
+    method: handle returned from `java_member`
+    args: handles to Java objects to pass as method params
+
+  Returns:
+    handle to Java object returned from method call, or `None` if `null`.
+
+  Since: v4.0
   """
   return (target, method, *args)
 
 java_call_method = ScriptFunction("java_call_method", java_call_method)
 
-def java_array_length(array):
-  """Returns length of array handle as `int`."""
+def java_array_length(array: JavaHandle) -> int:
+  """Returns length of Java array.
+  Since: v4.0
+  """
   return (array,)
 
 java_array_length = ScriptFunction("java_array_length", java_array_length)
 
-def java_array_index(array, i):
-  """Gets element `i` of array handle. Returns handle to Java object, or `None` if `null`."""
+def java_array_index(array: JavaHandle, i: int) -> JavaHandle:
+  """Gets indexed element of Java array handle.
+
+  Args:
+    array: handle to Java array object
+    i: index into array
+
+  Returns:
+    handle to object at `array[i]` in Java, or `None` if `null`.
+
+  Since: v4.0
+  """
   return (array, i)
 
 java_array_index = ScriptFunction("java_array_index", java_array_index)
 
-def java_to_string(target):
-  """Returns `str` from calling `target.toString()` in Java."""
+def java_to_string(target: JavaHandle):
+  """Returns handle to Java String from calling `target.toString()` in Java.
+  Since: v4.0
+  """
   return (target,)
 
 java_to_string = ScriptFunction("java_to_string", java_to_string)
 
-def java_assign(dest, source):
-  """Reassigns `dest` handle to reference the object referenced by `source` handle."""
+def java_assign(dest: JavaHandle, source: JavaHandle):
+  """Reassigns `dest` to reference the object referenced by `source`.
+
+  Upon success, both `dest` and `source` reference the same Java object that was initially
+  referenced by `source`.
+
+  Since: v4.0
+  """
   return (dest, source)
 
 java_assign = ScriptFunction("java_assign", java_assign)
 
-def java_release(*targets):
-  """Releases the Java reference(s) associated with `targets`."""
+def java_release(*targets: List[JavaHandle]):
+  """Releases Java reference(s) referred to by `targets`."""
   return targets
 
 java_release = ScriptFunction("java_release", java_release)
