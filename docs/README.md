@@ -158,40 +158,6 @@ times to undo the build changes from multiple recent Minescript commands.
 ***Note:*** *Some block state may be lost when undoing a Minescript command, such as
 commands specified within command blocks and items in chests.*
 
-### Advanced commands
-
-#### minescript_commands_per_cycle
-*Usage:* `\minescript_commands_per_cycle  NUMBER`
-
-Specifies the number of Minescript-generated Minecraft commands to run per
-Minescript processing cycle. The higher the number, the faster the script will
-run.
-
-***Note:*** *Setting this value too high will make Minecraft less responsive and
-possibly crash.*
-
-Default is 15.
-
-#### minescript_ticks_per_cycle
-*Usage:* `\minescript_ticks_per_cycle  NUMBER`
-
-Specifies the number of Minecraft game ticks to wait per Minecraft processing
-cycle. The lower the number, down to a minimum of 1, the faster the script will
-run.
-
-Default is 1 since v3.2. (Previously, default was 3.)
-
-#### minescript_incremental_command_suggestions 
-*Usage:* `\minescript_incremental_command_suggestions  BOOL`
-
-Enables or disables printing of incremental command suggestions to the in-game
-chat as the user types a Minescript command.
-
-Default is false.
-
-Since: v2.0 (in prior versions, incremental command suggestions were
-unconditionally enabled)
-
 ## Configuration
 
 The `minescript` directory contains a configuration file named `config.txt`.
@@ -206,30 +172,68 @@ Lines of text in `config.txt` can take the following forms:
 
 Config variable names:
 
-- `python` - file location of the Python interpreter (default for Windows is
-  `"%userprofile%\AppData\Local\Microsoft\WindowsApps\python3.exe"`, and
-  `"/usr/bin/python3"` for other operating systems)
-- `minescript_commands_per_cycle` (see [minescript_commands_per_cycle](#minescript_commands_per_cycle) command)
-- `minescript_ticks_per_cycle` (see [minescript_ticks_per_cycle](#minescript_ticks_per_cycle) command)
-- `minescript_incremental_command_suggestions` (see [minescript_incremental_command_suggestions](#minescript_incremental_command_suggestions) command; since v2.0)
-- `report_job_success_threshold_millis` - report on-screen that a script job has exited successfully
-  if it has run for more than this duration in milliseconds; default value is 3000 (3 seconds); 0
-  always reports; -1 never reports; exits of failed script jobs are always reported (since v4.0)
 - `autorun[WORLD NAME]` - command to run when entering a world named `WORLD NAME` (since v3.1)
 
     - The special name `*` indicates that the command should be run when entering
-      all worlds, e.g. `autorun[*]=print_motd` where `print_motd.py` is a script
-      that prints a "message of the day".
+      all worlds, e.g. `autorun[*]=eval 'echo(f"Hello, {world_info().name}!")'`
+      that welcomes you with message when connecting to a world.
     - Multiple `autorun[...]` config lines can be specified for the same world, or
       for `*`, in which case all matching commands are run concurrently.
     - A single `autorun[...]` config line can execute multiple commands in
       sequence by separating commands with a semicolon (`;`), e.g. the following would
-      first run the script `print_motd.py` followed by `summarize_entities.py` which takes
-      a single argument (`50`):
-
+      first print info about the world followed by the names of the 10 nearest entities:
       ```
-      autorun[*]=print_motd; summarize_entities 50
+      autorun[*]=eval "world_info()"; eval "[e.name for e in entities(sort='nearest', limit=10)]"
       ```
+- `python` - file location of the Python interpreter (default for Windows is
+  `"%userprofile%\AppData\Local\Microsoft\WindowsApps\python3.exe"`, and
+  `"/usr/bin/python3"` for other operating systems)
+- `command` - configuration for customizing invocations of scripts or executables from Minecraft
+  commands. `command` can be specified multiple times for different filename extensions. For
+  example, to execute `jar` files such as `foo.jar` from the Minescript command `\foo`:
+  ```
+  command = {
+    "extension": ".jar",
+    "command": [ "/usr/bin/java", "-jar", "{command}", "{args}" ],
+    "environment": [ "FIRST_ENV_VAR=1234", "SECOND_ENV_VAR=2468" ]
+  }
+  ```
+  `environment` is optional, allowing environment variables to be passed to scripts/executables.
+  When configuring execution of Python scripts, remember to set `PYTHON_PATH` in `environment`.
+- `command_path` - sets the command path for executing scripts/executables from Minescript commands.
+  Entries that aren't absolute paths are relative to the `minescript` directory. Paths on Windows
+  are separated by `;`, whereas paths on other operating systems are separated by `:`. The default
+  is equivalent to the `minescript` directory and `system/exec` within it.
+- `escape_command_double_quotes` - if true, escape double quotes that appear in `{args}` in the
+  `command` field of a `command` config entry. Defaults to true for Windows, false for other
+  operating systems.
+- `max_commands_per_cycle` - number of Minescript-generated Minecraft commands to run per Minescript
+  processing cycle. The higher the number, the faster the script will run.  Default is 15.
+  (***Note:*** *Setting this value too high will make Minecraft less responsive and possibly
+  crash.*)
+- `command_cycle_deadline_usecs` - threshold in microseconds beyond which Minescript stops executing
+  commands for the given execution cycle. Default is 10000 (10 milliseconds). A command that runs
+  over the threshold continues to run to completion, but no more commands will be executed in that
+  cycle.
+- `ticks_per_cycle` - number of Minecraft game ticks to wait per Minecraft processing cycle. The
+  lower the number, down to a minimum of 1, the faster the script will run.  Default is 1 since
+  v3.2. (Previously, default was 3.)
+- `incremental_command_suggestions` - enables or disables printing of incremental command
+  suggestions to the in-game chat as the user types a Minescript command.  Default is false.
+- `report_job_success_threshold_millis` - report on-screen that a script job has exited successfully
+  if it has run for more than this duration in milliseconds; default value is 3000 (3 seconds); 0
+  always reports; -1 never reports; exits of failed script jobs are always reported (since v4.0)
+- `debug_output` - if true, enable debug output to `logs/latest.log`. Default is false.
+- `minescript_on_chat_received_event` - if true, Minescript executes chat messages that start with
+  `"You whisper to ..."` that contain a message starting with a backslash (`\`), e.g. from a command
+  block executing `[execute as maxuser run tell maxuser \eval 1+2]`. Default is false.
+- `secondary_enter_key_code` - The `enter` key (key code 257, called `return` on Macs) is the
+  primary key for terminating commands in the chat. `secondary_enter_key_code` is a customizable
+  secondary key which can also terminate commands. Default is 335 (`KEY_KP_ENTER`). See [GLFW
+  Keyboard key tokens](https://www.glfw.org/docs/3.3/group__keys.html) for a list of key codes.
+- `stderr_chat_ignore_pattern` - regular expression for ignoring lines of output from stderr of
+  scripts. Default is the empty string: `"^$"`. This can be useful for Python installations that
+  have spammy stderr output when running from Minescript.
 
 ## Python API
 
