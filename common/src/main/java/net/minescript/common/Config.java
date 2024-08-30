@@ -278,18 +278,15 @@ public class Config {
             scriptConfig.commandPath().stream().map(Path::toString).collect(Collectors.toList()));
 
       case "max_commands_per_cycle":
-      case "minescript_commands_per_cycle": // legacy name
         return String.valueOf(maxCommandsPerCycle);
 
       case "command_cycle_deadline_usecs":
         return String.valueOf(commandCycleDeadlineUsecs);
 
       case "ticks_per_cycle":
-      case "minescript_ticks_per_cycle": // legacy name
         return String.valueOf(ticksPerCycle);
 
       case "incremental_command_suggestions":
-      case "minescript_incremental_command_suggestions": // legacy name
         return String.valueOf(incrementalCommandSuggestions);
 
       case "debug_output":
@@ -398,7 +395,6 @@ public class Config {
         break;
 
       case "max_commands_per_cycle":
-      case "minescript_commands_per_cycle": // legacy name
         try {
           int numCommands = Integer.valueOf(value);
           if (numCommands < 1) numCommands = 1;
@@ -421,7 +417,6 @@ public class Config {
         break;
 
       case "ticks_per_cycle":
-      case "minescript_ticks_per_cycle": // legacy name
         try {
           int ticks = Integer.valueOf(value);
           if (ticks < 1) ticks = 1;
@@ -433,7 +428,6 @@ public class Config {
         break;
 
       case "incremental_command_suggestions":
-      case "minescript_incremental_command_suggestions": // legacy name
         incrementalCommandSuggestions = Boolean.valueOf(value);
         reportInfo(
             out,
