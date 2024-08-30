@@ -2256,7 +2256,9 @@ def java_assign(dest: JavaHandle, source: JavaHandle):
 java_assign = ScriptFunction("java_assign", java_assign)
 
 def java_release(*targets: List[JavaHandle]):
-  """Releases Java reference(s) referred to by `targets`."""
+  """Releases Java reference(s) referred to by `targets`.
+  Since: v4.0
+  """
   return targets
 
 java_release = ScriptFunction("java_release", java_release)
