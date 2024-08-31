@@ -59,6 +59,10 @@ def expect_contains(container, element):
   if element not in container:
     raise TestFailure(f"Failed expectation: {element} not in {container}")
 
+def expect_startswith(string, prefix):
+  if not string.startswith(prefix):
+    raise TestFailure(f"Failed expectation: {repr(string)} does not start with {repr(prefix)}")
+
 def expect_equal(a, b):
   if a == b:
     print_success(f"Success: {a} == {b}")
@@ -405,17 +409,63 @@ def world_info_test():
 
 @test
 def command_parse_test():
+  def await_eval_script():
+    while True:
+      found = False
+      for job in minescript.job_info():
+        if len(job.command) > 1 and job.command[0] == "eval" and "print" in job.command[1]:
+          found = True
+          break # continue `while` loop
+      if not found:
+        return
+
   minescript.execute(r"""\eval 'print("this is " + "a test")' 2>null""")
+  await_eval_script()
   expect_message("this is a test")
 
   minescript.execute(r'''\eval "print('this is ' + 'another test')" 2>null''')
+  await_eval_script()
   expect_message("this is another test")
 
   minescript.execute(r"""\eval 'print(\'this is \' + \'an escaped test\')' 2>null""")
+  await_eval_script()
   expect_message("this is an escaped test")
 
   minescript.execute(r'''\eval "print(\"this is \" + \"a doubly escaped test\")" 2>null''')
+  await_eval_script()
   expect_message("this is a doubly escaped test")
+
+
+@test
+def java_test():
+  JavaHandle = minescript.JavaHandle
+  object_class = minescript.java_class("java.lang.Object")
+  class_class = minescript.java_class("java.lang.Class")
+  object_getClass = minescript.java_member(object_class, "getClass")
+  class_getName = minescript.java_member(class_class, "getName")
+  Numbers_class = minescript.java_class("net.minescript.common.Numbers")
+  Numbers_divide = minescript.java_member(Numbers_class, "divide")
+
+  def get_java_class_name(value: JavaHandle) -> str:
+    value_class = minescript.java_call_method(value, object_getClass)
+    class_name = minescript.java_call_method(value_class, class_getName)
+    return minescript.java_to_string(class_name)
+
+  def do_operator(op: JavaHandle, x: JavaHandle, y: JavaHandle) -> JavaHandle:
+    result = minescript.java_call_method(minescript.java_null, op, x, y)
+    return minescript.java_to_string(result), get_java_class_name(result)
+
+  value, type_ = do_operator(Numbers_divide, minescript.java_int(22), minescript.java_int(7))
+  expect_equal(value, "3")
+  expect_equal(type_, "java.lang.Integer")
+
+  value, type_ = do_operator(Numbers_divide, minescript.java_double(22), minescript.java_int(7))
+  expect_startswith(value, "3.14")
+  expect_equal(type_, "java.lang.Double")
+
+  value, type_ = do_operator(Numbers_divide, minescript.java_int(22), minescript.java_float(7))
+  expect_startswith(value, "3.14")
+  expect_equal(type_, "java.lang.Float")
 
 
 # END TESTS

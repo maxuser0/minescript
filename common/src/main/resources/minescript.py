@@ -2195,6 +2195,7 @@ class BlockPacker:
     blockpacker_delete(self._id)
 
 JavaHandle = int
+java_null = 0
 
 def java_class(name: str) -> JavaHandle:
   """Looks up Java class by fully qualified name. Returns handle to the Java class object.
@@ -2335,7 +2336,7 @@ def java_call_method(target: JavaHandle, method: JavaHandle, *args: List[JavaHan
 java_call_method = ScriptFunction("java_call_method", java_call_method)
 
 def java_array_length(array: JavaHandle) -> int:
-  """Returns length of Java array.
+  """Returns length of Java array as Python integer.
   Since: v4.0
   """
   return (array,)
@@ -2358,8 +2359,8 @@ def java_array_index(array: JavaHandle, i: int) -> JavaHandle:
 
 java_array_index = ScriptFunction("java_array_index", java_array_index)
 
-def java_to_string(target: JavaHandle):
-  """Returns handle to Java String from calling `target.toString()` in Java.
+def java_to_string(target: JavaHandle) -> str:
+  """Returns Python string from calling `target.toString()` in Java.
   Since: v4.0
   """
   return (target,)
