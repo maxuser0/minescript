@@ -1256,18 +1256,18 @@ class EventQueue:
 
     Example:
     ```
-    with EventQueue() as event_queue:
-      event_queue.register_key_listener()
-      while True:
-        event = event_queue.get()
-        if event.type == EventType.KEY:
-          if event.action == 0:
-            action = 'up'
-          elif event.action == 1:
-            action = 'down'
-          else:
-            action = 'repeat'
-          echo(f"Got key {action} with code {event.key}")
+      with EventQueue() as event_queue:
+        event_queue.register_key_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.KEY:
+            if event.action == 0:
+              action = 'up'
+            elif event.action == 1:
+              action = 'down'
+            else:
+              action = 'repeat'
+            echo(f"Got key {action} with code {event.key}")
     ```
     """
     self._register(EventType.KEY, register_key_listener)
@@ -1277,12 +1277,12 @@ class EventQueue:
 
     Example:
     ```
-    with EventQueue() as event_queue:
-      event_queue.register_mouse_listener()
-      while True:
-        event = event_queue.get()
-        if event.type == EventType.MOUSE:
-          echo(f"Got mouse {'up' if event.action == 0 else 'down'} of button {event.button}")
+      with EventQueue() as event_queue:
+        event_queue.register_mouse_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.MOUSE:
+            echo(f"Got mouse {'up' if event.action == 0 else 'down'} of button {event.button}")
     ```
     """
     self._register(EventType.MOUSE, register_mouse_listener)
@@ -1292,13 +1292,13 @@ class EventQueue:
 
     Example:
     ```
-    with EventQueue() as event_queue:
-      event_queue.register_chat_listener()
-      while True:
-        event = event_queue.get()
-        if event.type == EventType.CHAT:
-          if not event.message.startswith("> "):
-            echo(f"> Got chat message: {event.message}")
+      with EventQueue() as event_queue:
+        event_queue.register_chat_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.CHAT:
+            if not event.message.startswith("> "):
+              echo(f"> Got chat message: {event.message}")
     ```
     """
     self._register(EventType.CHAT, register_chat_message_listener)
@@ -1308,12 +1308,12 @@ class EventQueue:
 
     Example:
     ```
-    with EventQueue() as event_queue:
-      event_queue.register_outgoing_chat_interceptor()
-      while True:
-        event = event_queue.get()
-        if event.type == EventType.OUTGOING_CHAT_INTERCEPT:
-          echo(f"> Intercepted chat message: {event.message}")
+      with EventQueue() as event_queue:
+        event_queue.register_outgoing_chat_interceptor()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.OUTGOING_CHAT_INTERCEPT:
+            echo(f"> Intercepted chat message: {event.message}")
     ```
     """
     self._register(
@@ -1327,12 +1327,12 @@ class EventQueue:
 
     Example:
     ```
-    with EventQueue() as event_queue:
-      event_queue.register_add_entity_listener()
-      while True:
-        event = event_queue.get()
-        if event.type == EventType.ADD_ENTITY:
-          echo(f"Entity added: {event.entity.name}")
+      with EventQueue() as event_queue:
+        event_queue.register_add_entity_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.ADD_ENTITY:
+            echo(f"Entity added: {event.entity.name}")
     ```
     """
     self._register(EventType.ADD_ENTITY, register_add_entity_listener)
@@ -1342,12 +1342,12 @@ class EventQueue:
 
     Example:
     ```
-    with EventQueue() as event_queue:
-      event_queue.register_block_update_listener()
-      while True:
-        event = event_queue.get()
-        if event.type == EventType.BLOCK_UPDATE:
-          echo(f"Block updated at {event.position} to {event.new_state}")
+      with EventQueue() as event_queue:
+        event_queue.register_block_update_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.BLOCK_UPDATE:
+            echo(f"Block updated at {event.position} to {event.new_state}")
     ```
     """
     self._register(EventType.BLOCK_UPDATE, register_block_update_listener)
@@ -1357,12 +1357,12 @@ class EventQueue:
 
     Example:
     ```
-    with EventQueue() as event_queue:
-      event_queue.register_take_item_listener()
-      while True:
-        event = event_queue.get()
-        if event.type == EventType.TAKE_ITEM:
-          echo(f"Item taken: {event.item.type}")
+      with EventQueue() as event_queue:
+        event_queue.register_take_item_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.TAKE_ITEM:
+            echo(f"Item taken: {event.item.type}")
     ```
     """
     self._register(EventType.TAKE_ITEM, register_take_item_listener)
@@ -1372,12 +1372,12 @@ class EventQueue:
 
     Example:
     ```
-    with EventQueue() as event_queue:
-      event_queue.register_damage_listener()
-      while True:
-        event = event_queue.get()
-        if event.type == EventType.DAMAGE:
-          echo(f"Damage from {event.source}")
+      with EventQueue() as event_queue:
+        event_queue.register_damage_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.DAMAGE:
+            echo(f"Damage from {event.source}")
     ```
     """
     self._register(EventType.DAMAGE, register_damage_listener)
@@ -1387,12 +1387,12 @@ class EventQueue:
 
     Example:
     ```
-    with EventQueue() as event_queue:
-      event_queue.register_explosion_listener()
-      while True:
-        event = event_queue.get()
-        if event.type == EventType.EXPLOSION:
-          echo(f"Explosion at {event.position}")
+      with EventQueue() as event_queue:
+        event_queue.register_explosion_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.EXPLOSION:
+            echo(f"Explosion at {event.position}")
     ```
     """
     self._register(EventType.EXPLOSION, register_explosion_listener)
@@ -1402,14 +1402,14 @@ class EventQueue:
 
     Example:
     ```
-    with EventQueue() as event_queue:
-      event_queue.register_chunk_listener()
-      while True:
-        event = event_queue.get()
-        if event.type == EventType.CHUNK:
-          x = event.x_min
-          z = event.z_min
-          echo(f"Chunk {'loaded' if event.loaded else 'unloaded'} at {x}, {z}")
+      with EventQueue() as event_queue:
+        event_queue.register_chunk_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.CHUNK:
+            x = event.x_min
+            z = event.z_min
+            echo(f"Chunk {'loaded' if event.loaded else 'unloaded'} at {x}, {z}")
     ```
     """
     self._register(EventType.CHUNK, register_chunk_listener)

@@ -528,9 +528,18 @@ Since: v3.0
 
 Presses/unpresses a mapped key binding.
 
+Valid values of `key_mapping_name` include: "key.advancements", "key.attack", "key.back",
+"key.chat", "key.command", "key.drop", "key.forward", "key.fullscreen", "key.hotbar.1",
+"key.hotbar.2", "key.hotbar.3", "key.hotbar.4", "key.hotbar.5", "key.hotbar.6", "key.hotbar.7",
+"key.hotbar.8", "key.hotbar.9", "key.inventory", "key.jump", "key.left",
+"key.loadToolbarActivator", "key.pickItem", "key.playerlist", "key.right",
+"key.saveToolbarActivator", "key.screenshot", "key.smoothCamera", "key.sneak",
+"key.socialInteractions", "key.spectatorOutlines", "key.sprint", "key.swapOffhand",
+"key.togglePerspective", "key.use"
+
 *Args:*
 
-- `key_mapping_name`: name of key binding, e.g. "key.hotbar.1"
+- `key_mapping_name`: name of key binding
 - `pressed`: if `True`, press the bound key, otherwise unpress it
 
 Since: v4.0
@@ -847,6 +856,9 @@ Since: v2.1
 
 Gets version info for Minecraft, Minescript, mod loader, launcher, and OS.
 
+`minecraft_class_name` is the runtime class name of the main Minecraft class which may be
+obfuscated.
+
 *Returns:*
 
 - `VersionInfo`
@@ -943,17 +955,11 @@ to automatically unregister event listeners at the end of the block, e.g.
 
 ```
 with EventQueue() as event_queue:
-  echo("Capturing key events...")
-  event_queue.register_key_listener()
+  event_queue.register_chat_listener()
   while True:
     event = event_queue.get()
-    if event.type == EventType.KEY:
-      # Key code 93 is the `]` key.
-      if event.key == 93:
-        break
-      echo(f"Captured key with code {event.key}.")
-
-echo("No longer capturing key events.")
+    if event.type == EventType.CHAT and "knock knock" in event.message.lower():
+      echo("Who's there?")
 ```
 
 Since: v4.0
@@ -963,6 +969,185 @@ Since: v4.0
 *Usage:* <code>EventQueue()</code>
 
 Creates an event registration handler.
+
+#### EventQueue.register_key_listener
+*Usage:* <code>EventQueue.register_key_listener()</code>
+
+Registers listener for `EventType.KEY` events as [`KeyEvent`](#keyevent).
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_key_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.KEY:
+      if event.action == 0:
+        action = 'up'
+      elif event.action == 1:
+        action = 'down'
+      else:
+        action = 'repeat'
+      echo(f"Got key {action} with code {event.key}")
+```
+
+
+#### EventQueue.register_mouse_listener
+*Usage:* <code>EventQueue.register_mouse_listener()</code>
+
+Registers listener for `EventType.MOUSE` events as [`MouseEvent`](#mouseevent).
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_mouse_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.MOUSE:
+      echo(f"Got mouse {'up' if event.action == 0 else 'down'} of button {event.button}")
+```
+
+
+#### EventQueue.register_chat_listener
+*Usage:* <code>EventQueue.register_chat_listener()</code>
+
+Registers listener for `EventType.CHAT` events as `ChatEvent`.
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_chat_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.CHAT:
+      if not event.message.startswith("> "):
+        echo(f"> Got chat message: {event.message}")
+```
+
+
+#### EventQueue.register_outgoing_chat_interceptor
+*Usage:* <code>EventQueue.register_outgoing_chat_interceptor(\*, prefix: str = None, pattern: str = None)</code>
+
+Registers listener for `EventType.OUTGOING_CHAT_INTERCEPT` events as `ChatEvent`.
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_outgoing_chat_interceptor()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.OUTGOING_CHAT_INTERCEPT:
+      echo(f"> Intercepted chat message: {event.message}")
+```
+
+
+#### EventQueue.register_add_entity_listener
+*Usage:* <code>EventQueue.register_add_entity_listener()</code>
+
+Registers listener for `EventType.ADD_ENTITY` events as `AddEntityEvent`.
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_add_entity_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.ADD_ENTITY:
+      echo(f"Entity added: {event.entity.name}")
+```
+
+
+#### EventQueue.register_block_update_listener
+*Usage:* <code>EventQueue.register_block_update_listener()</code>
+
+Registers listener for `EventType.BLOCK_UPDATE` events as `BlockUpdateEvent`.
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_block_update_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.BLOCK_UPDATE:
+      echo(f"Block updated at {event.position} to {event.new_state}")
+```
+
+
+#### EventQueue.register_take_item_listener
+*Usage:* <code>EventQueue.register_take_item_listener()</code>
+
+Registers listener for `EventType.TAKE_ITEM` events as `TakeItemEvent`.
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_take_item_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.TAKE_ITEM:
+      echo(f"Item taken: {event.item.type}")
+```
+
+
+#### EventQueue.register_damage_listener
+*Usage:* <code>EventQueue.register_damage_listener()</code>
+
+Registers listener for `EventType.DAMAGE` events as `DamageEvent`.
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_damage_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.DAMAGE:
+      echo(f"Damage from {event.source}")
+```
+
+
+#### EventQueue.register_explosion_listener
+*Usage:* <code>EventQueue.register_explosion_listener()</code>
+
+Registers listener for `EventType.EXPLOSION` events as `ExplosionEvent`.
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_explosion_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.EXPLOSION:
+      echo(f"Explosion at {event.position}")
+```
+
+
+#### EventQueue.register_chunk_listener
+*Usage:* <code>EventQueue.register_chunk_listener()</code>
+
+Registers listener for `EventType.CHUNK` events as `ChunkEvent`.
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_chunk_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.CHUNK:
+      x = event.x_min
+      z = event.z_min
+      echo(f"Chunk {'loaded' if event.loaded else 'unloaded'} at {x}, {z}")
+```
+
 
 #### EventQueue.get
 *Usage:* <code>EventQueue.get(block: bool = True, timeout: float = None) -> Any</code>
@@ -987,10 +1172,10 @@ Gets the next event in the queue.
 #### KeyEventListener
 *Usage:* <code>KeyEventListener()</code>
 
-Deprecated listener for keyboard events. Use `EventQueue.register_key_listener` instead.
+Deprecated listener for keyboard events. Use [`EventQueue.register_key_listener`](#eventqueueregister_key_listener) instead.
 
 Update in v4.0:
-  Deprecated in favor of `EventQueue.register_key_listener`.
+  Deprecated in favor of [`EventQueue.register_key_listener`](#eventqueueregister_key_listener).
 
 Since: v3.2
 
@@ -1344,98 +1529,186 @@ Packs blocks within this BlockPacker into a new BlockPack.
 Frees this BlockPacker to be garbage collected.
 
 #### java_class
-*Usage:* <code>java_class(name: str)</code>
+*Usage:* <code>java_class(name: str) -> JavaHandle</code>
 
-Looks up Java class by fully qualified name. Returns handle to Java object.
+Looks up Java class by fully qualified name. Returns handle to the Java class object.
+
+*Example:*
+ [`java_class("net.minescript.common.Minescript")`](#java_class)
+
+If running Minecraft with unobfuscated Java symbols:
+[`java_class("net.minecraft.client.Minecraft")`](#java_class)
+
+If running Minecraft with obfuscated symbols, `name` must be the fully qualified and obfuscated
+class name.
+
+Since: v4.0
+
 
 #### java_string
-*Usage:* <code>java_string(s)</code>
+*Usage:* <code>java_string(s: str) -> JavaHandle</code>
 
-Creates Java String. Returns handle to Java object.
+Returns handle to a Java String.
+Since: v4.0
+
 
 #### java_double
-*Usage:* <code>java_double(d)</code>
+*Usage:* <code>java_double(d: float) -> JavaHandle</code>
 
-Creates Java Double. Returns handle to Java object.
+Returns handle to a Java Double.
+Since: v4.0
+
 
 #### java_float
-*Usage:* <code>java_float(f)</code>
+*Usage:* <code>java_float(f: float) -> JavaHandle</code>
 
-Creates Java Float. Returns handle to Java object.
+Returns handle to a Java Float.
+Since: v4.0
+
 
 #### java_long
-*Usage:* <code>java_long(l)</code>
+*Usage:* <code>java_long(l: int) -> JavaHandle</code>
 
-Creates Java Long. Returns handle to Java object.
+Returns handle to a Java Long.
+Since: v4.0
+
 
 #### java_int
-*Usage:* <code>java_int(i)</code>
+*Usage:* <code>java_int(i: int) -> JavaHandle</code>
 
-Creates Java Integer. Returns handle to Java object.
+Returns handle to a Java Integer
+Since: v4.0
+
 
 #### java_bool
-*Usage:* <code>java_bool(b)</code>
+*Usage:* <code>java_bool(b: bool) -> JavaHandle</code>
 
-Creates Java Boolean. Returns handle to Java object.
+Returns handle to a Java Boolean.
+Since: v4.0
+
 
 #### java_ctor
-*Usage:* <code>java_ctor(clss)</code>
+*Usage:* <code>java_ctor(clss: JavaHandle)</code>
 
-Returns handle to constructor for `clss`.
+Returns handle to a constructor set for the given class handle.
+
+*Args:*
+
+- `clss`: Java class handle returned from [`java_class`](#java_class)
+
+Since: v4.0
+
 
 #### java_new_instance
-*Usage:* <code>java_new_instance(ctor, \*args)</code>
+*Usage:* <code>java_new_instance(ctor: JavaHandle, \*args: List[JavaHandle]) -> JavaHandle</code>
 
-Creates new Java instance. Returns handle to newly created Java object.
+Creates new Java instance.
 
 *Args:*
 
 - `ctor`: constructor set returned from [`java_ctor`](#java_ctor)
 - `args`: handles to Java objects to pass as constructor params
 
+*Returns:*
+
+- handle to newly created Java object.
+
+Since: v4.0
+
 
 #### java_member
-*Usage:* <code>java_member(clss, name: str)</code>
+*Usage:* <code>java_member(clss: JavaHandle, name: str) -> JavaHandle</code>
 
-Gets Java member(s) matching `name`. Returns handle to Java object.
+Gets Java member(s) matching `name`.
+
+*Returns:*
+
+- Java member object for use with [`java_access_field`](#java_access_field) or [`java_call_method`](#java_call_method).
+
+Since: v4.0
+
 
 #### java_access_field
-*Usage:* <code>java_access_field(target, field)</code>
+*Usage:* <code>java_access_field(target: JavaHandle, field: JavaHandle) -> JavaHandle</code>
 
-Accesses `field` on `target`. Returns handle to Java object, or `None` if `null`.
-
-#### java_call_method
-*Usage:* <code>java_call_method(target, method, \*args)</code>
-
-Invokes method on target. Returns handle to Java object, or `None` if `null`.
+Accesses a field on a target Java object.
 
 *Args:*
 
-- `args`: handles to Java objects to pass as constructor params
+- `target`: Java object handle from which to access a field
+- `field`: handle returned from [`java_member`](#java_member)
+
+*Returns:*
+
+- Handle to Java object returned from field access, or `None` if `null`.
+
+Since: v4.0
+
+
+#### java_call_method
+*Usage:* <code>java_call_method(target: JavaHandle, method: JavaHandle, \*args: List[JavaHandle]) -> JavaHandle</code>
+
+Invokes a method on a target Java object.
+
+*Args:*
+
+- `target`: Java object handle on which to call a method
+- `method`: handle returned from [`java_member`](#java_member)
+- `args`: handles to Java objects to pass as method params
+
+*Returns:*
+
+- handle to Java object returned from method call, or `None` if `null`.
+
+Since: v4.0
 
 
 #### java_array_length
-*Usage:* <code>java_array_length(array)</code>
+*Usage:* <code>java_array_length(array: JavaHandle) -> int</code>
 
-Returns length of array handle as `int`.
+Returns length of Java array as Python integer.
+Since: v4.0
+
 
 #### java_array_index
-*Usage:* <code>java_array_index(array, i)</code>
+*Usage:* <code>java_array_index(array: JavaHandle, i: int) -> JavaHandle</code>
 
-Gets element `i` of array handle. Returns handle to Java object, or `None` if `null`.
+Gets indexed element of Java array handle.
+
+*Args:*
+
+- `array`: handle to Java array object
+- `i`: index into array
+
+*Returns:*
+
+- handle to object at `array[i]` in Java, or `None` if `null`.
+
+Since: v4.0
+
 
 #### java_to_string
-*Usage:* <code>java_to_string(target)</code>
+*Usage:* <code>java_to_string(target: JavaHandle) -> str</code>
 
-Returns `str` from calling `target.toString()` in Java.
+Returns Python string from calling `target.toString()` in Java.
+Since: v4.0
+
 
 #### java_assign
-*Usage:* <code>java_assign(dest, source)</code>
+*Usage:* <code>java_assign(dest: JavaHandle, source: JavaHandle)</code>
 
-Reassigns `dest` handle to reference the object referenced by `source` handle.
+Reassigns `dest` to reference the object referenced by `source`.
+
+Upon success, both `dest` and `source` reference the same Java object that was initially
+referenced by `source`.
+
+Since: v4.0
+
 
 #### java_release
-*Usage:* <code>java_release(\*targets)</code>
+*Usage:* <code>java_release(\*targets: List[JavaHandle])</code>
 
-Releases the Java reference(s) associated with `targets`.
+Releases Java reference(s) referred to by `targets`.
+Since: v4.0
+
 
