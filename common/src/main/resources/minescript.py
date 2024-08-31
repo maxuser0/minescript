@@ -1236,17 +1236,11 @@ class EventQueue:
 
   ```
   with EventQueue() as event_queue:
-    echo("Capturing key events...")
-    event_queue.register_key_listener()
+    event_queue.register_chat_listener()
     while True:
       event = event_queue.get()
-      if event.type == EventType.KEY:
-        # Key code 93 is the `]` key.
-        if event.key == 93:
-          break
-        echo(f"Captured key with code {event.key}.")
-
-  echo("No longer capturing key events.")
+      if event.type == EventType.CHAT and "knock knock" in event.message.lower():
+        echo("Who's there?")
   ```
 
   Since: v4.0
@@ -1258,15 +1252,70 @@ class EventQueue:
     self.event_handler_ids = []
 
   def register_key_listener(self):
+    """Registers listener for `EventType.KEY` events as `KeyEvent`.
+
+    Example:
+    ```
+    with EventQueue() as event_queue:
+      event_queue.register_key_listener()
+      while True:
+        event = event_queue.get()
+        if event.type == EventType.KEY:
+          if event.action == 0:
+            action = 'up'
+          elif event.action == 1:
+            action = 'down'
+          else:
+            action = 'repeat'
+          echo(f"Got key {action} with code {event.key}")
+    ```
+    """
     self._register(EventType.KEY, register_key_listener)
 
   def register_mouse_listener(self):
+    """Registers listener for `EventType.MOUSE` events as `MouseEvent`.
+
+    Example:
+    ```
+    with EventQueue() as event_queue:
+      event_queue.register_mouse_listener()
+      while True:
+        event = event_queue.get()
+        if event.type == EventType.MOUSE:
+          echo(f"Got mouse {'up' if event.action == 0 else 'down'} of button {event.button}")
+    ```
+    """
     self._register(EventType.MOUSE, register_mouse_listener)
 
   def register_chat_listener(self):
+    """Registers listener for `EventType.CHAT` events as `ChatEvent`.
+
+    Example:
+    ```
+    with EventQueue() as event_queue:
+      event_queue.register_chat_listener()
+      while True:
+        event = event_queue.get()
+        if event.type == EventType.CHAT:
+          if not event.message.startswith("> "):
+            echo(f"> Got chat message: {event.message}")
+    ```
+    """
     self._register(EventType.CHAT, register_chat_message_listener)
 
   def register_outgoing_chat_interceptor(self, *, prefix: str = None, pattern: str = None):
+    """Registers listener for `EventType.OUTGOING_CHAT_INTERCEPT` events as `ChatEvent`.
+
+    Example:
+    ```
+    with EventQueue() as event_queue:
+      event_queue.register_outgoing_chat_interceptor()
+      while True:
+        event = event_queue.get()
+        if event.type == EventType.OUTGOING_CHAT_INTERCEPT:
+          echo(f"> Intercepted chat message: {event.message}")
+    ```
+    """
     self._register(
         EventType.OUTGOING_CHAT_INTERCEPT,
         lambda handler, exception_handler: \
@@ -1274,21 +1323,95 @@ class EventQueue:
                 handler, exception_handler, prefix=prefix, pattern=pattern))
 
   def register_add_entity_listener(self):
+    """Registers listener for `EventType.ADD_ENTITY` events as `AddEntityEvent`.
+
+    Example:
+    ```
+    with EventQueue() as event_queue:
+      event_queue.register_add_entity_listener()
+      while True:
+        event = event_queue.get()
+        if event.type == EventType.ADD_ENTITY:
+          echo(f"Entity added: {event.entity.name}")
+    ```
+    """
     self._register(EventType.ADD_ENTITY, register_add_entity_listener)
 
   def register_block_update_listener(self):
+    """Registers listener for `EventType.BLOCK_UPDATE` events as `BlockUpdateEvent`.
+
+    Example:
+    ```
+    with EventQueue() as event_queue:
+      event_queue.register_block_update_listener()
+      while True:
+        event = event_queue.get()
+        if event.type == EventType.BLOCK_UPDATE:
+          echo(f"Block updated at {event.position} to {event.new_state}")
+    ```
+    """
     self._register(EventType.BLOCK_UPDATE, register_block_update_listener)
 
   def register_take_item_listener(self):
+    """Registers listener for `EventType.TAKE_ITEM` events as `TakeItemEvent`.
+
+    Example:
+    ```
+    with EventQueue() as event_queue:
+      event_queue.register_take_item_listener()
+      while True:
+        event = event_queue.get()
+        if event.type == EventType.TAKE_ITEM:
+          echo(f"Item taken: {event.item.type}")
+    ```
+    """
     self._register(EventType.TAKE_ITEM, register_take_item_listener)
 
   def register_damage_listener(self):
+    """Registers listener for `EventType.DAMAGE` events as `DamageEvent`.
+
+    Example:
+    ```
+    with EventQueue() as event_queue:
+      event_queue.register_damage_listener()
+      while True:
+        event = event_queue.get()
+        if event.type == EventType.DAMAGE:
+          echo(f"Damage from {event.source}")
+    ```
+    """
     self._register(EventType.DAMAGE, register_damage_listener)
 
   def register_explosion_listener(self):
+    """Registers listener for `EventType.EXPLOSION` events as `ExplosionEvent`.
+
+    Example:
+    ```
+    with EventQueue() as event_queue:
+      event_queue.register_explosion_listener()
+      while True:
+        event = event_queue.get()
+        if event.type == EventType.EXPLOSION:
+          echo(f"Explosion at {event.position}")
+    ```
+    """
     self._register(EventType.EXPLOSION, register_explosion_listener)
 
   def register_chunk_listener(self):
+    """Registers listener for `EventType.CHUNK` events as `ChunkEvent`.
+
+    Example:
+    ```
+    with EventQueue() as event_queue:
+      event_queue.register_chunk_listener()
+      while True:
+        event = event_queue.get()
+        if event.type == EventType.CHUNK:
+          x = event.x_min
+          z = event.z_min
+          echo(f"Chunk {'loaded' if event.loaded else 'unloaded'} at {x}, {z}")
+    ```
+    """
     self._register(EventType.CHUNK, register_chunk_listener)
 
   def _register(self, event_type: str, registration_func):
