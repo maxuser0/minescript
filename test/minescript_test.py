@@ -56,11 +56,15 @@ def expect_false(expr):
     raise TestFailure(f"Failed expectation: not {expr}")
 
 def expect_contains(container, element):
-  if element not in container:
+  if element in container:
+    print_success(f"Success: {element} in {container}")
+  else:
     raise TestFailure(f"Failed expectation: {element} not in {container}")
 
 def expect_startswith(string, prefix):
-  if not string.startswith(prefix):
+  if string.startswith(prefix):
+    print_success(f"Success: {repr(string)} starts with {repr(prefix)}")
+  else:
     raise TestFailure(f"Failed expectation: {repr(string)} does not start with {repr(prefix)}")
 
 def expect_equal(a, b):
