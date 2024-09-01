@@ -1033,15 +1033,27 @@ with EventQueue() as event_queue:
 
 Registers listener for `EventType.OUTGOING_CHAT_INTERCEPT` events as `ChatEvent`.
 
+Intercepts outgoing chat messages from the local player. Interception can be restricted to
+messages matching `prefix` or `pattern`. Intercepted messages can be chatted with [`chat()`](#chat).
+
+`prefix` or `pattern` can be specified, but not both. If neither `prefix` nor
+`pattern` is specified, all outgoing chat messages are intercepted.
+
+*Args:*
+
+- `prefix`: if specified, intercept only the messages starting with this literal prefix
+- `pattern`: if specified, intercept only the messages matching this regular expression
+
 *Example:*
 
 ```
 with EventQueue() as event_queue:
-  event_queue.register_outgoing_chat_interceptor()
+  event_queue.register_outgoing_chat_interceptor(pattern=".*%p.*")
   while True:
     event = event_queue.get()
     if event.type == EventType.OUTGOING_CHAT_INTERCEPT:
-      echo(f"> Intercepted chat message: {event.message}")
+      # Replace "%p" in outgoing chats with your current position.
+      chat(event.message.replace("%p", str(player().position)))
 ```
 
 

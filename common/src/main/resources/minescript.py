@@ -939,14 +939,6 @@ def register_chat_message_interceptor(
 
   For a more user-friendly API, use `EventQueue` instead.  (__internal__)
 
-  The handler swallows outgoing chat messages, typically for use in
-  rewriting outgoing chat messages by calling minecraft.chat(str), e.g. to
-  decorate or post-process outgoing messages automatically before they're sent
-  to the server.
-
-  `prefix` or `pattern` can be specified, but not both. If neither `prefix` nor
-  `pattern` is specified, all outgoing chat messages are intercepted.
-
   Args:
     handler: callable that repeatedly accepts chat message events
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
@@ -1306,14 +1298,25 @@ class EventQueue:
   def register_outgoing_chat_interceptor(self, *, prefix: str = None, pattern: str = None):
     """Registers listener for `EventType.OUTGOING_CHAT_INTERCEPT` events as `ChatEvent`.
 
+    Intercepts outgoing chat messages from the local player. Interception can be restricted to
+    messages matching `prefix` or `pattern`. Intercepted messages can be chatted with `chat()`.
+
+    `prefix` or `pattern` can be specified, but not both. If neither `prefix` nor
+    `pattern` is specified, all outgoing chat messages are intercepted.
+
+    Args:
+      prefix: if specified, intercept only the messages starting with this literal prefix
+      pattern: if specified, intercept only the messages matching this regular expression
+
     Example:
     ```
       with EventQueue() as event_queue:
-        event_queue.register_outgoing_chat_interceptor()
+        event_queue.register_outgoing_chat_interceptor(pattern=".*%p.*")
         while True:
           event = event_queue.get()
           if event.type == EventType.OUTGOING_CHAT_INTERCEPT:
-            echo(f"> Intercepted chat message: {event.message}")
+            # Replace "%p" in outgoing chats with your current position.
+            chat(event.message.replace("%p", str(player().position)))
     ```
     """
     self._register(
