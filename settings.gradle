@@ -48,6 +48,15 @@ plugins {
 // This should match the folder name of the project, or else IDEA may complain (see https://youtrack.jetbrains.com/issue/IDEA-317606)
 rootProject.name = 'minescript'
 include('common')
-include('fabric')
-include('neoforge')
-include('forge')
+
+if (System.getenv("NO_MINESCRIPT_FABRIC_BUILD") != "1") {
+  include('fabric')
+}
+
+if (System.getenv("NO_MINESCRIPT_NEOFORGE_BUILD") != "1") {
+  include('neoforge')
+}
+
+if (System.getenv("NO_MINESCRIPT_FORGE_BUILD") != "1") {
+  include('forge')
+}
