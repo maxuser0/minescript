@@ -449,6 +449,7 @@ def java_test():
   class_getName = minescript.java_member(class_class, "getName")
   Numbers_class = minescript.java_class("net.minescript.common.Numbers")
   Numbers_divide = minescript.java_member(Numbers_class, "divide")
+  Numbers_lessThan = minescript.java_member(Numbers_class, "lessThan")
 
   def get_java_class_name(value: JavaHandle) -> str:
     value_class = minescript.java_call_method(value, object_getClass)
@@ -470,6 +471,14 @@ def java_test():
   value, type_ = do_operator(Numbers_divide, minescript.java_int(22), minescript.java_float(7))
   expect_startswith(value, "3.14")
   expect_equal(type_, "java.lang.Float")
+
+  value, type_ = do_operator(Numbers_lessThan, minescript.java_int(22), minescript.java_float(7))
+  expect_equal(value, "false")
+  expect_equal(type_, "java.lang.Boolean")
+
+  value, type_ = do_operator(Numbers_lessThan, minescript.java_int(7), minescript.java_float(22))
+  expect_equal(value, "true")
+  expect_equal(type_, "java.lang.Boolean")
 
 
 @test
