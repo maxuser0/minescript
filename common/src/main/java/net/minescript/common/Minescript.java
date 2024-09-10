@@ -3639,12 +3639,18 @@ public class Minescript {
     return new JsonPrimitive(funcCallId);
   }
 
+  enum TaskFlowControl {
+    NORMAL_FLOW, // Control flows sequentially from one task to the next in a list.
+    SKIP_TASKS // The remaining tasks in the list are skipped.
+  }
+
   private static JsonElement runTasks(Job job, List<?> tasks) throws Exception {
     var taskValues = new HashMap<Long, Supplier<Object>>();
     JsonElement tasksResult = JsonNull.INSTANCE;
+    TaskFlowControl[] flowControl = {TaskFlowControl.NORMAL_FLOW};
     for (var task : tasks) {
       var args = (List<?>) task;
-      var result = runTask(job, args, taskValues);
+      var result = runTask(job, args, taskValues, flowControl);
       taskValues.put(
           ScriptFunctionArgList.getStrictLongValue(args.get(0)).getAsLong(),
           Suppliers.memoize(
@@ -3657,13 +3663,21 @@ public class Minescript {
                 return GSON.fromJson(array, ArrayList.class).get(0);
               }));
       tasksResult = result;
+      if (flowControl[0] == TaskFlowControl.SKIP_TASKS) {
+        break;
+      }
     }
     // Return the result of the last executed task.
     return tasksResult;
   }
 
+  // flowControl is an array of length 1 to allow an output value without altering the return type.
   private static JsonElement runTask(
-      Job job, List<?> argList, Map<Long, Supplier<Object>> taskValues) throws Exception {
+      Job job,
+      List<?> argList,
+      Map<Long, Supplier<Object>> taskValues,
+      TaskFlowControl[] flowControl)
+      throws Exception {
     var args = new ScriptFunctionArgList("runTask", argList);
     long funcCallId = args.getStrictLong(0);
     String funcName = args.getString(1);
@@ -3731,6 +3745,37 @@ public class Minescript {
                   "Expected arg to `as_int` to be a number or list of numbers but got: " + arg);
             }
             return new JsonPrimitive((int) number.getAsDouble());
+          }
+        }
+
+      case "negate":
+        {
+          var arg = resolvedArgs.get(0);
+          if (arg instanceof Boolean condition) {
+            return new JsonPrimitive(!condition);
+          } else {
+            throw new IllegalArgumentException(
+                "Expected arg to `negate` to be a boolean but got: " + arg);
+          }
+        }
+
+      case "is_null":
+        {
+          var arg = resolvedArgs.get(0);
+          return new JsonPrimitive(arg == null);
+        }
+
+      case "skip_if":
+        {
+          var arg = resolvedArgs.get(0);
+          if (arg instanceof Boolean condition) {
+            if (condition) {
+              flowControl[0] = TaskFlowControl.SKIP_TASKS;
+            }
+            return new JsonPrimitive(condition);
+          } else {
+            throw new IllegalArgumentException(
+                "Expected arg to `negate` to be a boolean but got: " + arg);
           }
         }
 

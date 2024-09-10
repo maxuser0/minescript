@@ -472,6 +472,44 @@ def java_test():
   expect_equal(type_, "java.lang.Float")
 
 
+@test
+def task_test():
+  tasks = []
+
+  player = minescript.player.as_task()
+  tasks.append(player)
+
+  position = minescript.Task.get_attr(player, "position")
+  tasks.append(position)
+
+  x = minescript.Task.get_index(position, 0)
+  tasks.append(x)
+
+  x = minescript.Task.as_int(x)
+  tasks.append(x)
+
+  y = minescript.Task.get_index(position, 1)
+  tasks.append(y)
+
+  y = minescript.Task.as_int(y)
+  tasks.append(y)
+
+  z = minescript.Task.get_index(position, 2)
+  tasks.append(z)
+
+  z = minescript.Task.as_int(z)
+  tasks.append(z)
+
+  echo = minescript.echo.as_task("Player position:", x, y, z)
+  tasks.append(echo)
+
+  position_as_list = minescript.Task.as_list(x, y, z)
+  tasks.append(position_as_list)
+
+  result = minescript.run_tasks(tasks)
+  expect_message(f"Player position: {result[0]} {result[1]} {result[2]}")
+
+
 # END TESTS
 
 
