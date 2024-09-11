@@ -322,7 +322,7 @@ Tuple representing `(x: int, y: int, z: int)` position in block space.
 Tuple representing `(x: float, y: float, z: float)` position or offset in 3D space.
 
 #### execute
-*Usage:* <code>execute(command: str, _as_task=False)</code>
+*Usage:* <code>execute(command: str)</code>
 
 Executes the given command.
 
@@ -336,7 +336,7 @@ Since: v2.1
 
 
 #### echo
-*Usage:* <code>echo(\*messages, _as_task=False)</code>
+*Usage:* <code>echo(\*messages)</code>
 
 Echoes plain-text messages to the chat.
 
@@ -364,7 +364,7 @@ Since: v4.0
 
 
 #### chat
-*Usage:* <code>chat(\*messages, _as_task=False)</code>
+*Usage:* <code>chat(\*messages)</code>
 
 Sends messages to the chat.
 
@@ -380,7 +380,7 @@ Since: v2.0
 
 
 #### log
-*Usage:* <code>log(\*messages, _as_task=False)</code>
+*Usage:* <code>log(\*messages)</code>
 
 Sends messages to latest.log.
 
@@ -932,6 +932,94 @@ Waits for chunks to load in the region from (x1, z1) to (x2, z2).
 
 Update in v4.0:
   Removed `done_callback` arg. Call now always blocks until region is loaded.
+
+
+#### Task
+Executable task that allows multiple operations to execute on the same executor cycle.
+
+#### Task.as_list
+*Usage:* <code>@staticmethod Task.as_list(\*values)</code>
+
+Creates a task that returns the given values as a list.
+
+#### Task.get_index
+*Usage:* <code>@staticmethod Task.get_index(array, index)</code>
+
+Creates a task that looks up an array by index.
+
+#### Task.get_attr
+*Usage:* <code>@staticmethod Task.get_attr(obj, attr)</code>
+
+Creates a task that looks up a map/dict by key.
+
+#### Task.contains
+*Usage:* <code>@staticmethod Task.contains(container, element)</code>
+
+Creates a task that checks if a container (map, list, or string) contains an element.
+
+#### Task.as_int
+*Usage:* <code>@staticmethod Task.as_int(\*numbers)</code>
+
+Creates a task that converts a floating-point number to int.
+
+#### Task.negate
+*Usage:* <code>@staticmethod Task.negate(condition)</code>
+
+Creates a task that negates a boolean value.
+
+#### Task.is_null
+*Usage:* <code>@staticmethod Task.is_null(value)</code>
+
+Creates a task that checks a value against null or `None`.
+
+#### Task.skip_if
+*Usage:* <code>@staticmethod Task.skip_if(condition)</code>
+
+Creates a task that skips the remainder of the task list if `condition` is true.
+
+#### run_tasks
+*Usage:* <code>run_tasks(tasks: List[Task])</code>
+
+Runs tasks so that multiple tasks can be run on the same executor cycle.
+
+#### schedule_tick_tasks
+*Usage:* <code>schedule_tick_tasks(tasks: List[Task]) -> int</code>
+
+Schedules a list of tasks to run every cycle of the tick loop.
+
+*Returns:*
+
+- ID of scheduled task list which can be passed to [`cancel_scheduled_tasks(task_list_id)`](#cancel_scheduled_tasks).
+
+Since: v4.0
+
+
+#### schedule_render_tasks
+*Usage:* <code>schedule_render_tasks(tasks: List[Task]) -> int</code>
+
+Schedules a list of tasks to run every cycle of the render loop.
+
+*Returns:*
+
+- ID of scheduled task list which can be passed to [`cancel_scheduled_tasks(task_list_id)`](#cancel_scheduled_tasks).
+
+Since: v4.0
+
+
+#### cancel_scheduled_tasks
+*Usage:* <code>cancel_scheduled_tasks(task_list_id: int)</code>
+
+Cancels a scheduled task list for the currently running job.
+
+*Args:*
+
+- `task_list_id`: ID of task list returned from [`schedule_tick_tasks()`](#schedule_tick_tasks) or [`schedule_render_tasks`](#schedule_render_tasks).
+
+*Returns:*
+
+- `True` if `task_list_id` was successfully cancelled, `False` otherwise.
+
+Since: v4.0
 
 
 #### KeyEvent
