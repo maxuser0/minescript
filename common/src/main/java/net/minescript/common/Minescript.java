@@ -3720,6 +3720,26 @@ public class Minescript {
           return GSON.toJsonTree(list.get(index.getAsInt()));
         }
 
+      case "contains":
+        {
+          var container = resolvedArgs.get(0);
+          var element = resolvedArgs.get(1);
+          final boolean found;
+          if (container instanceof List list) {
+            found = list.contains(element);
+          } else if (container instanceof Map map) {
+            found = map.containsKey(element);
+          } else if (container instanceof String string) {
+            found = string.contains(element.toString());
+          } else {
+            throw new IllegalArgumentException(
+                String.format(
+                    "Expected first arg (container) to be List, Map, or String but got: %s (%s)",
+                    container, container.getClass().getName()));
+          }
+          return new JsonPrimitive(found);
+        }
+
       case "as_int":
         {
           var arg = resolvedArgs.get(0);

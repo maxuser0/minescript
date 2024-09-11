@@ -1112,6 +1112,14 @@ class Task(minescript_runtime.BasicTask):
         Task._get_immediate_args((obj, attr)), Task._get_deferred_args((obj, attr)))
 
   @staticmethod
+  def contains(container, element):
+    """Creates a task that checks if a container (map, list, or string) contains an element."""
+    return Task(
+        Task._get_next_fcallid(), "contains",
+        Task._get_immediate_args((container, element)),
+        Task._get_deferred_args((container, element)))
+
+  @staticmethod
   def as_int(*numbers):
     """Creates a task that converts a floating-point number to int."""
     return Task(

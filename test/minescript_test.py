@@ -372,7 +372,7 @@ def async_function_test():
   blocking_time = time.time() - start_time
 
   expect_equal(async_result, blocking_result)
-  expect_true(async_time < blocking_time)
+  expect_lt(async_time, blocking_time)
   print_success(f"async_time ({async_time:.4f} sec) < blocking_time ({blocking_time:.4f} sec)")
 
 
@@ -482,7 +482,7 @@ def java_test():
 
 
 @test
-def task_test():
+def player_task_test():
   tasks = []
 
   player = minescript.player.as_task()
@@ -512,11 +512,44 @@ def task_test():
   echo = minescript.echo.as_task("Player position:", x, y, z)
   tasks.append(echo)
 
-  position_as_list = minescript.Task.as_list(x, y, z)
-  tasks.append(position_as_list)
+  tasks.append(minescript.Task.as_list(x, y, z))
 
   result = minescript.run_tasks(tasks)
   expect_message(f"Player position: {result[0]} {result[1]} {result[2]}")
+
+
+@test
+def container_task_test():
+  tasks = []
+
+  item_in_list = minescript.Task.contains([1, 2, 3], 2)
+  tasks.append(item_in_list)
+
+  no_item_in_list = minescript.Task.contains([1, 2, 3], 4)
+  tasks.append(no_item_in_list)
+
+  item_in_dict = minescript.Task.contains({"x":1, "y":2}, "x")
+  tasks.append(item_in_dict)
+
+  no_item_in_dict = minescript.Task.contains({"x":1, "y":2}, "z")
+  tasks.append(no_item_in_dict)
+
+  has_substring = minescript.Task.contains("123", "2")
+  tasks.append(has_substring)
+
+  no_substring = minescript.Task.contains("123", "4")
+  tasks.append(no_substring)
+
+  tasks.append(minescript.Task.as_list(
+      item_in_list, no_item_in_list, item_in_dict, no_item_in_dict, has_substring, no_substring))
+
+  result = minescript.run_tasks(tasks)
+  expect_true(result[0])
+  expect_false(result[1])
+  expect_true(result[2])
+  expect_false(result[3])
+  expect_true(result[4])
+  expect_false(result[5])
 
 
 # END TESTS
