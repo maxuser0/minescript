@@ -485,34 +485,20 @@ def java_test():
 def player_task_test():
   tasks = []
 
-  player = minescript.player.as_task()
-  tasks.append(player)
+  def append(task):
+    tasks.append(task)
+    return task
 
-  position = minescript.Task.get_attr(player, "position")
-  tasks.append(position)
-
-  x = minescript.Task.get_index(position, 0)
-  tasks.append(x)
-
-  x = minescript.Task.as_int(x)
-  tasks.append(x)
-
-  y = minescript.Task.get_index(position, 1)
-  tasks.append(y)
-
-  y = minescript.Task.as_int(y)
-  tasks.append(y)
-
-  z = minescript.Task.get_index(position, 2)
-  tasks.append(z)
-
-  z = minescript.Task.as_int(z)
-  tasks.append(z)
-
-  echo = minescript.echo.as_task("Player position:", x, y, z)
-  tasks.append(echo)
-
-  tasks.append(minescript.Task.as_list(x, y, z))
+  player = append(minescript.player.as_task())
+  position = append(minescript.Task.get_attr(player, "position"))
+  x = append(minescript.Task.get_index(position, 0))
+  x = append(minescript.Task.as_int(x))
+  y = append(minescript.Task.get_index(position, 1))
+  y = append(minescript.Task.as_int(y))
+  z = append(minescript.Task.get_index(position, 2))
+  z = append(minescript.Task.as_int(z))
+  echo = append(minescript.echo.as_task("Player position:", x, y, z))
+  append(minescript.Task.as_list(x, y, z))
 
   result = minescript.run_tasks(tasks)
   expect_message(f"Player position: {result[0]} {result[1]} {result[2]}")
@@ -522,26 +508,17 @@ def player_task_test():
 def container_task_test():
   tasks = []
 
-  item_in_list = minescript.Task.contains([1, 2, 3], 2)
-  tasks.append(item_in_list)
+  def append(task):
+    tasks.append(task)
+    return task
 
-  no_item_in_list = minescript.Task.contains([1, 2, 3], 4)
-  tasks.append(no_item_in_list)
-
-  item_in_dict = minescript.Task.contains({"x":1, "y":2}, "x")
-  tasks.append(item_in_dict)
-
-  no_item_in_dict = minescript.Task.contains({"x":1, "y":2}, "z")
-  tasks.append(no_item_in_dict)
-
-  has_substring = minescript.Task.contains("123", "2")
-  tasks.append(has_substring)
-
-  no_substring = minescript.Task.contains("123", "4")
-  tasks.append(no_substring)
-
-  tasks.append(minescript.Task.as_list(
-      item_in_list, no_item_in_list, item_in_dict, no_item_in_dict, has_substring, no_substring))
+  append(minescript.Task.as_list(
+      append(minescript.Task.contains([1, 2, 3], 2)),
+      append(minescript.Task.contains([1, 2, 3], 4)),
+      append(minescript.Task.contains({"x":1, "y":2}, "x")),
+      append(minescript.Task.contains({"x":1, "y":2}, "z")),
+      append(minescript.Task.contains("123", "2")),
+      append(minescript.Task.contains("123", "4"))))
 
   result = minescript.run_tasks(tasks)
   expect_true(result[0])
