@@ -2211,7 +2211,7 @@ public class Minescript {
       if (screen instanceof CreativeModeInventoryScreen) {
         name = "Creative Inventory";
       } else if (screen instanceof LevelLoadingScreen) {
-        name = "L" + "evel Loading"; // Split literal to prevent symbol renaming.
+        name = "Level Loading";
       } else if (screen instanceof ReceivingLevelScreen) {
         name = "Progress";
       } else {
