@@ -24,7 +24,7 @@ import threading
 import traceback
 
 from dataclasses import dataclass
-from typing import Any, List, Set, Dict, Tuple, Optional, Callable, Awaitable
+from typing import Any, List, Set, Dict, Tuple, Optional, Callable
 
 AnyConsumer = Callable[[str], None]
 ExceptionHandler = Callable[[Exception], None]
@@ -113,9 +113,6 @@ render_loop = FunctionExecutor("R")
 script_loop = FunctionExecutor("S")
 
 _default_executor = render_loop
-
-def set_default_executor(executor: FunctionExecutor):
-  _default_executor = executor
 
 
 def get_next_fcallid():

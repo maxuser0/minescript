@@ -10,6 +10,9 @@ Table of contents:
 - [Python API](#python-api)
     - [Script input](#script-input)
     - [Script output](#script-output)
+    - [Script functions](#script-functions)
+    - [Script tasks](#script-tasks)
+    - [Async script functions](#async-script-functions)
     - [minescript module](#minescript-module)
 
 ## In-game commands
@@ -306,6 +309,157 @@ print("Note to self...", file=sys.stderr)
 
 # Since Minescript v2.0 this can be written as:
 minescript.echo("Note to self...")
+```
+
+### Script functions
+
+Script functions imported from  [`minescript.py`](#minescript-module) can be called as functions, as
+[tasks](#script-tasks), or [asynchronously](#async-script-functions).
+
+When called directly, e.g. `minescript.screenshot("my_screenshot.png")`, script functions are
+implemented in Java and typically return after the function has finished executing in Java. (A
+handful of script functions return immediately while Java processing continues in the background:
+[`execute`](#execute), [`echo`](#echo), [`echo_json`](#echo_json), [`chat`](#chat), and
+[`log`](#log).)
+
+There are 3 Java executors on which script functions can run:
+
+1. `minescript.tick_loop`: the game tick loop which runs once even game tick (20 times per second,
+which is a cycle time of 50 milliseconds)
+1. `minescript.render_loop`: executed when a frame is rendered (typically around 60 frames per
+second, which is a cycle time of 15-20 milliseconds, but can vary significantly based on game
+performance)
+1. `minescript.script_loop`: executor that processes script functions as quickly as possible, but
+not on the rendering thread, so may lead to instability or even crash the game due to lack of
+thread-safety in Minecraft Java code (cycle time is typically less than 1 millisecond)
+
+The Java executor can be selected for a specific script function or within a specific script
+context.  The selection of executor for a script function is determined by the following priority,
+from highest to lowest:
+
+1. Required executor for this function, if there is one. This is set with the function's
+`set_required_executor` method, e.g.
+`minescript.player.set_required_executor(minescript.script_loop)`. No required executor is set by
+default.
+1. Executor set by the script context using a `with` block, e.g.
+   ```
+   with minescript.script_loop:
+     position = minescript.player().position  # processed by the high-speed script loop
+     ...
+   ```
+1. Default executor for this function, if there is one. This is set with the function's
+`set_default_executor` method, e.g.
+`minescript.player.set_default_executor(minescript.script_loop)`. No default executor is set for
+individual script functions by default.
+1. Default executor for the current script job. This is set with the global function
+[`set_default_executor`](#set_default_executor), e.g.
+`minescript.set_default_executor(minescript.render_loop)`. Default value is `render_loop`.
+
+Setting an executor for a script function affects only the calls of that function within that script
+job. Concurrently running script jobs can set different executors for the same script function.
+
+### Script tasks
+
+A task list allows a sequence of script functions to be called efficiently on a Java executor by
+batching script function calls to avoid successive roundtrips between Python and Java. A task is
+created by calling `.as_task(...)` on a script function, e.g. `minescript.echo.as_task("Hello!")`.
+
+Creating a task does not actually call the script function, but instead creates a *description* of a
+script function to be called, possibly with specific args, at some later point.
+
+A *task list* is created by adding tasks to a Python list. Return values from tasks earlier in the
+list (which are not actual return values from script functions, but descriptions of return values of
+future invocations) can be passed as args to tasks later in the list, e.g:
+
+```
+import minescript
+
+tasks = []
+def add_task(task):
+  tasks.append(task)
+  return task
+
+player = add_task(minescript.player.as_task())
+player_name = add_task(minescript.Task.get_attr(player, "name"))
+add_task(minescript.echo.as_task("Player name is:"))
+add_task(minescript.echo.as_task(player_name))
+
+# Runs the task list in a single cycle of the default executor (by default this is the render loop):
+minescript.run_tasks(tasks)
+
+# Runs the task list on the tick loop:
+with minescript.tick_loop:
+  minescript.run_tasks(tasks)
+```
+
+Tasks can be run immediately with [`run_tasks`](#run_tasks) or scheduled to run repeatedly on every
+cycle of an executor with [`schedule_tick_tasks`](#schedule_tick_tasks) or
+[`schedule_render_tasks`](#schedule_render_tasks). Scheduled tasks can be cancelled with
+[`cancel_scheduled_tasks`](#cancel_scheduled_tasks). (There is no script function for scheduling
+tasks on the `script_loop`. While the same effect can be achieved by calling
+[`run_tasks`](#run_tasks) in a tight `while` loop within `with script_loop: ...` in your script,
+given the high frequency of the `script_loop` executor which can run thousands of times per second,
+you probably don't want to do this.)
+
+See [Task](#task) for documentation of task-related script functions.
+
+### Async script functions
+
+Async script functions allow scripts to run functions in the background and wait on them to
+complete. This is useful for script functions that can take a long time to complete, e.g. several
+seconds.
+
+In this example, [`await_loaded_region`](#await_loaded_region) is used to block script execution
+until a range of chunks has finished loading. This example uses a directly called script function
+that executes synchronously (i.e. it doesn't return until the operation is complete):
+
+```
+import minescript
+
+x, y, z = [int(p) for p in minescript.player().position]
+
+# Waits until all chunks from (x ± 50, z ± 50) are loaded:
+minescript.await_loaded_region(x - 50, z - 50, x + 50, z + 50)
+
+minescript.echo("Chunks around player finished loading.")
+```
+
+This is an alternate version of the previous example, modified to use an async script function by
+calling `.as_async(...)` instead of a direct call of the script function:
+
+```
+import minescript
+
+x, y, z = [int(p) for p in minescript.player().position]
+
+# .as_async(...) causes the script function to return a "future" value:
+future = minescript.await_loaded_region.as_async(x - 50, z - 50, x + 50, z + 50)
+
+# Do other work while the chunks are loading in the background...
+minescript.echo("Waiting for chunks around player to finish loading...")
+
+# Wait for future to complete, i.e. wait for chunks to finish loading:
+future.wait()
+minescript.echo("Chunks around player finished loading.")
+```
+
+A future value returned from an async script function can be waited on with a timeout which raises
+`TimeoutError` if the timeout expires before the operation is able to complete. In this example,
+the message `"Still waiting for chunks around player to finish loading..."` is repeatedly echoed
+to the player's chat every 10 seconds until the chunks in the given range have finished loading:
+
+```
+import minescript
+
+x, y, z = [int(p) for p in minescript.player().position]
+while True:
+  try:
+    # Wait with a 1 second timeout:
+    minescript.await_loaded_region.as_async(x - 50, z - 50, x + 50, z + 50).wait(timeout=10)
+    minescript.echo("Chunks around player finished loading.")
+    break
+  except TimeoutError:
+    minescript.echo("Still waiting for chunks around player to finish loading...")
 ```
 
 ### minescript module
@@ -932,6 +1086,20 @@ Waits for chunks to load in the region from (x1, z1) to (x2, z2).
 
 Update in v4.0:
   Removed `done_callback` arg. Call now always blocks until region is loaded.
+
+
+#### set_default_executor
+*Usage:* <code>set_default_executor(executor: minescript_runtime.FunctionExecutor)</code>
+
+Sets the default executor for script functions executed in the current script job.
+
+Default value is `minescript.render_loop`.
+
+*Args:*
+
+- `executor`: one of `minescript.tick_loop`, `minescript.render_loop`, or `minescript.script_loop`
+
+Since: v4.0
 
 
 #### Task

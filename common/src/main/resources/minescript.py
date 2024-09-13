@@ -1086,6 +1086,19 @@ def unregister_event_handler(handler_id: int):
   return await_script_function("unregister_event_handler", (handler_id,))
 
 
+def set_default_executor(executor: minescript_runtime.FunctionExecutor):
+  """Sets the default executor for script functions executed in the current script job.
+
+  Default value is `minescript.render_loop`.
+
+  Args:
+    executor: one of `minescript.tick_loop`, `minescript.render_loop`, or `minescript.script_loop`
+
+  Since: v4.0
+  """
+  minescript_runtime._default_executor = executor
+
+
 @dataclass
 class Task(minescript_runtime.BasicTask):
   """Executable task that allows multiple operations to execute on the same executor cycle."""
