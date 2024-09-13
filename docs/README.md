@@ -454,7 +454,7 @@ import minescript
 x, y, z = [int(p) for p in minescript.player().position]
 while True:
   try:
-    # Wait with a 1 second timeout:
+    # Wait with a 10-second timeout:
     minescript.await_loaded_region.as_async(x - 50, z - 50, x + 50, z + 50).wait(timeout=10)
     minescript.echo("Chunks around player finished loading.")
     break
