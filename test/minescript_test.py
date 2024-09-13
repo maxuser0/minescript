@@ -101,6 +101,16 @@ def expect_message(message):
   raise TestFailure(f'Message not found: {repr(message)}')
   return False
 
+def await_script(script_name):
+  while True:
+    found = False
+    for job in minescript.job_info():
+      if len(job.command) > 1 and job.command[0] == script_name:
+        found = True
+        break # continue `while` loop
+    if not found:
+      return
+
 def drain_message_queue():
   try:
     while True:
@@ -144,31 +154,38 @@ def copy_paste_test():
   filename = os.path.join("minescript", "blockpacks", "test.zip")
   try:
     minescript.execute(r"\copy ~ ~-1 ~ ~5 ~5 ~5 test")
-    time.sleep(1) # give copy command some time to complete
+    await_script("copy")
     expect_true(os.path.isfile(filename))
     expect_message(
         r"Copied volume .* to minescript.blockpacks.test.zip \(.* bytes\)\.")
 
     minescript.execute(r"\paste ~10 ~-1 ~ this_label_does_not_exist")
+    await_script("paste")
     expect_message(r"Error: blockpack file for `this_label_does_not_exist` not found.*")
 
     minescript.execute(r"\copy 0 0 0 1000 100 1000")
+    await_script("copy")
     expect_message("`blockpack_read_world` exceeded soft limit of 1600 chunks")
 
     minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 no_limit")
+    await_script("copy")
     expect_message("Not all chunks are loaded within the requested `copy` volume")
 
     minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 test no_limit")
+    await_script("copy")
     expect_message("Not all chunks are loaded within the requested `copy` volume")
 
     minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 test no_limit test")
+    await_script("copy")
     expect_message(
         r"Error: copy command requires 6 params of type integer \(plus optional params.*")
 
     minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 no_limit no_limit")
+    await_script("copy")
     expect_message("Not all chunks are loaded within the requested `copy` volume")
 
     minescript.execute(r"\copy ~10000 ~-1 ~ ~10005 ~5 ~5")
+    await_script("copy")
     expect_message("Not all chunks are loaded within the requested `copy` volume")
   finally:
     if os.path.isfile(filename):
@@ -413,30 +430,20 @@ def world_info_test():
 
 @test
 def command_parse_test():
-  def await_eval_script():
-    while True:
-      found = False
-      for job in minescript.job_info():
-        if len(job.command) > 1 and job.command[0] == "eval" and "print" in job.command[1]:
-          found = True
-          break # continue `while` loop
-      if not found:
-        return
-
   minescript.execute(r"""\eval 'print("this is " + "a test")' 2>null""")
-  await_eval_script()
+  await_script("eval")
   expect_message("this is a test")
 
   minescript.execute(r'''\eval "print('this is ' + 'another test')" 2>null''')
-  await_eval_script()
+  await_script("eval")
   expect_message("this is another test")
 
   minescript.execute(r"""\eval 'print(\'this is \' + \'an escaped test\')' 2>null""")
-  await_eval_script()
+  await_script("eval")
   expect_message("this is an escaped test")
 
   minescript.execute(r'''\eval "print(\"this is \" + \"a doubly escaped test\")" 2>null''')
-  await_eval_script()
+  await_script("eval")
   expect_message("this is a doubly escaped test")
 
 
