@@ -1931,6 +1931,23 @@ Invokes a method on a target Java object.
 Since: v4.0
 
 
+#### java_call_script_function
+*Usage:* <code>java_call_script_function(func_name: Union[str, JavaHandle], \*args: List[JavaHandle]) -> JavaHandle</code>
+
+Calls the requested script function with Java params.
+
+*Args:*
+
+- `func_name`: name of the script function, as a Python str or a handle to a Java String
+- `args`: handles to Java objects to pass as args to the script function
+
+*Returns:*
+
+- handle to Java object (`Optional<JsonElement>`) returned from the script function.
+
+Since: v4.0
+
+
 #### java_array_length
 *Usage:* <code>java_array_length(array: JavaHandle) -> int</code>
 

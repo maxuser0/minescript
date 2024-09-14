@@ -29,7 +29,7 @@ from minescript_runtime import (
     tick_loop, render_loop, script_loop,
     ScriptFunction, NoReturnScriptFunction,
     ExceptionHandler)
-from typing import Any, List, Set, Dict, Tuple, Optional, Callable
+from typing import Any, List, Set, Dict, Tuple, Optional, Callable, Union
 
 
 BlockPos = Tuple[int, int, int]
@@ -2471,6 +2471,23 @@ def java_call_method(target: JavaHandle, method: JavaHandle, *args: List[JavaHan
   return (target, method, *args)
 
 java_call_method = ScriptFunction("java_call_method", java_call_method)
+
+def java_call_script_function(
+    func_name: Union[str, JavaHandle], *args: List[JavaHandle]) -> JavaHandle:
+  """Calls the requested script function with Java params.
+
+  Args:
+    func_name: name of the script function, as a Python str or a handle to a Java String
+    args: handles to Java objects to pass as args to the script function
+
+  Returns:
+    handle to Java object (`Optional<JsonElement>`) returned from the script function.
+
+  Since: v4.0
+  """
+  return (func_name, *args)
+
+java_call_script_function = ScriptFunction("java_call_script_function", java_call_script_function)
 
 def java_array_length(array: JavaHandle) -> int:
   """Returns length of Java array as Python integer.

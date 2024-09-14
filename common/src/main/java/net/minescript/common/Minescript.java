@@ -3329,39 +3329,42 @@ public class Minescript {
         return OPTIONAL_JSON_TRUE;
 
       case "cancelfn!":
-        var cancelfnRetval = Optional.of((JsonElement) new JsonPrimitive("cancelfn!"));
-        if (funcCallId != 0) {
-          LOGGER.error(
-              "Internal error while cancelling function: funcCallId = 0 but got {} in job: {}",
-              funcCallId,
-              job.jobSummary());
+        {
+          var cancelfnRetval = Optional.of((JsonElement) new JsonPrimitive("cancelfn!"));
+          if (funcCallId != 0) {
+            LOGGER.error(
+                "Internal error while cancelling function: funcCallId = 0 but got {} in job: {}",
+                funcCallId,
+                job.jobSummary());
+            return cancelfnRetval;
+          }
+          if (args.size() != 2
+              || !(args.get(0) instanceof Number)
+              || !(args.get(1) instanceof String)) {
+            LOGGER.error(
+                "Internal error while cancelling function: expected [int, str] but got {} in job:"
+                    + " {}",
+                args,
+                job.jobSummary());
+            return cancelfnRetval;
+          }
+          long funcIdToCancel = ((Number) args.get(0)).longValue();
+          String funcName = (String) args.get(1);
+          if (job.cancelOperation(funcIdToCancel)) {
+            LOGGER.info(
+                "Cancelled function call {} for \"{}\" in job: {}",
+                funcIdToCancel,
+                funcName,
+                job.jobSummary());
+          } else {
+            LOGGER.warn(
+                "Failed to find operation to cancel: funcCallId {} for \"{}\" in job: {}",
+                funcIdToCancel,
+                funcName,
+                job.jobSummary());
+          }
           return cancelfnRetval;
         }
-        if (args.size() != 2
-            || !(args.get(0) instanceof Number)
-            || !(args.get(1) instanceof String)) {
-          LOGGER.error(
-              "Internal error while cancelling function: expected [int, str] but got {} in job: {}",
-              args,
-              job.jobSummary());
-          return cancelfnRetval;
-        }
-        long funcIdToCancel = ((Number) args.get(0)).longValue();
-        String funcName = (String) args.get(1);
-        if (job.cancelOperation(funcIdToCancel)) {
-          LOGGER.info(
-              "Cancelled function call {} for \"{}\" in job: {}",
-              funcIdToCancel,
-              funcName,
-              job.jobSummary());
-        } else {
-          LOGGER.warn(
-              "Failed to find operation to cancel: funcCallId {} for \"{}\" in job: {}",
-              funcIdToCancel,
-              funcName,
-              job.jobSummary());
-        }
-        return cancelfnRetval;
 
       case "exit!":
         if (funcCallId == 0) {
@@ -3536,6 +3539,40 @@ public class Minescript {
                   memberSet.name(),
                   String.join(", ", paramTypes.toArray(String[]::new)),
                   String.join("\n", signatures.toArray(String[]::new))));
+        }
+
+      case "java_call_script_function":
+        {
+          // Try to parse first arg as either a long (and interpret it as a Java object handle
+          // referencing a String) or directly as a JSON string.
+          OptionalLong funcNameObjectHandle = ScriptFunctionArgList.getStrictLongValue(args.get(0));
+          final String funcName;
+          if (funcNameObjectHandle.isPresent()) {
+            var functionNameObject = (Object) job.objects.getById(funcNameObjectHandle.getAsLong());
+            if (functionNameObject instanceof String string) {
+              funcName = string;
+            } else {
+              throw new IllegalArgumentException(
+                  String.format(
+                      "Expected first arg to java_call_script_function to be a handle to a Java"
+                          + " String but got `%s` instead: %s",
+                      functionNameObject.getClass().getName(), functionNameObject));
+            }
+          } else {
+            funcName = args.getString(0);
+          }
+          List<Object> params = new ArrayList<>();
+          for (int i = 1; i < args.size(); ++i) {
+            params.add(job.objects.getById(args.getStrictLong(i)));
+          }
+          return Optional.of(
+              new JsonPrimitive(
+                  job.objects.retain(
+                      runScriptFunction(
+                          job,
+                          funcCallId,
+                          funcName,
+                          new ScriptFunctionArgList(funcName, params)))));
         }
 
       case "java_access_field":
