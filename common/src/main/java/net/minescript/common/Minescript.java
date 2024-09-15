@@ -2381,34 +2381,41 @@ public class Minescript {
         }
 
       case "register_key_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, keyEventListeners, Optional.empty());
 
       case "start_key_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, keyEventListeners, args.getStrictLong(0));
 
       case "register_mouse_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, mouseEventListeners, Optional.empty());
 
       case "start_mouse_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, mouseEventListeners, args.getStrictLong(0));
 
       case "register_chat_message_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, chatEventListeners, Optional.empty());
 
       case "start_chat_message_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, chatEventListeners, args.getStrictLong(0));
 
       case "register_chat_message_interceptor":
         {
+          functionCall.expectNotRunningAsTask();
           args.expectArgs("prefix", "pattern");
           Optional<String> prefixArg = args.getOptionalString(0);
           Optional<String> patternArg = args.getOptionalString(1);
@@ -2428,60 +2435,73 @@ public class Minescript {
         }
 
       case "start_chat_message_interceptor":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, chatInterceptors, args.getStrictLong(0));
 
       case "register_add_entity_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, addEntityEventListeners, Optional.empty());
 
       case "start_add_entity_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, addEntityEventListeners, args.getStrictLong(0));
 
       case "register_block_update_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, blockUpdateEventListeners, Optional.empty());
 
       case "start_block_update_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, blockUpdateEventListeners, args.getStrictLong(0));
 
       case "register_take_item_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, takeItemEventListeners, Optional.empty());
 
       case "start_take_item_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, takeItemEventListeners, args.getStrictLong(0));
 
       case "register_damage_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, damageEventListeners, Optional.empty());
 
       case "start_damage_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, damageEventListeners, args.getStrictLong(0));
 
       case "register_explosion_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, explosionEventListeners, Optional.empty());
 
       case "start_explosion_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, explosionEventListeners, args.getStrictLong(0));
 
       case "register_chunk_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, chunkEventListeners, Optional.empty());
 
       case "start_chunk_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, chunkEventListeners, args.getStrictLong(0));
 
@@ -2494,6 +2514,7 @@ public class Minescript {
 
       case "await_loaded_region":
         {
+          functionCall.expectNotRunningAsTask();
           args.expectSize(4);
           int arg0 = args.getStrictInt(0);
           int arg1 = args.getStrictInt(1);
@@ -3847,8 +3868,9 @@ public class Minescript {
         }
 
       default:
-        var embeddedArgs = new ScriptFunctionCall(funcName, resolvedArgs);
-        return runScriptFunction(job, funcCallId, embeddedArgs).orElse(JsonNull.INSTANCE);
+        var embeddedFuncCall = new ScriptFunctionCall(funcName, resolvedArgs);
+        embeddedFuncCall.setRunningAsTask();
+        return runScriptFunction(job, funcCallId, embeddedFuncCall).orElse(JsonNull.INSTANCE);
     }
   }
 

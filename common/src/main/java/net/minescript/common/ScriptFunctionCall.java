@@ -18,6 +18,7 @@ public class ScriptFunctionCall {
   private final String name;
   private final ArgList args;
   private CallingConvention callingConvention = CallingConvention.PYTHON;
+  private boolean runningAsTask = false;
 
   public enum CallingConvention {
     PYTHON,
@@ -31,6 +32,21 @@ public class ScriptFunctionCall {
 
   public void setCallingConvention(CallingConvention convention) {
     this.callingConvention = convention;
+  }
+
+  public void setRunningAsTask() {
+    this.runningAsTask = true;
+  }
+
+  public boolean runningAsTask() {
+    return runningAsTask;
+  }
+
+  public void expectNotRunningAsTask() {
+    if (runningAsTask) {
+      throw new IllegalStateException(
+          String.format("Script function `%s` cannot run asynchronously as a task", name));
+    }
   }
 
   public String name() {
