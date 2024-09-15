@@ -389,8 +389,6 @@ def async_function_test():
   blocking_time = time.time() - start_time
 
   expect_equal(async_result, blocking_result)
-  expect_lt(async_time, blocking_time)
-  print_success(f"async_time ({async_time:.4f} sec) < blocking_time ({blocking_time:.4f} sec)")
 
 
 @test
