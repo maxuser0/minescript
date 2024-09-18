@@ -252,7 +252,7 @@ def parse_code_entities() -> List[Tuple[CodeEntity, str]]:
       class_member = None
       global_entity = GlobalEntity(name=m.group(1), kind=GlobalEntityType.FUNCTION)
       func = global_entity
-      func.func_decl = m.group(1) + m.group(2)
+      func.func_decl = m.group(1) + m.group(2).replace(", _as_task=False", "")
       continue
 
     m = CLASS_RE.match(line)

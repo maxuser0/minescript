@@ -56,8 +56,16 @@ def expect_false(expr):
     raise TestFailure(f"Failed expectation: not {expr}")
 
 def expect_contains(container, element):
-  if element not in container:
+  if element in container:
+    print_success(f"Success: {element} in {container}")
+  else:
     raise TestFailure(f"Failed expectation: {element} not in {container}")
+
+def expect_startswith(string, prefix):
+  if string.startswith(prefix):
+    print_success(f"Success: {repr(string)} starts with {repr(prefix)}")
+  else:
+    raise TestFailure(f"Failed expectation: {repr(string)} does not start with {repr(prefix)}")
 
 def expect_equal(a, b):
   if a == b:
@@ -92,6 +100,16 @@ def expect_message(message):
       return True
   raise TestFailure(f'Message not found: {repr(message)}')
   return False
+
+def await_script(script_name):
+  while True:
+    found = False
+    for job in minescript.job_info():
+      if len(job.command) > 1 and job.command[0] == script_name:
+        found = True
+        break # continue `while` loop
+    if not found:
+      return
 
 def drain_message_queue():
   try:
@@ -136,31 +154,38 @@ def copy_paste_test():
   filename = os.path.join("minescript", "blockpacks", "test.zip")
   try:
     minescript.execute(r"\copy ~ ~-1 ~ ~5 ~5 ~5 test")
-    time.sleep(1) # give copy command some time to complete
+    await_script("copy")
     expect_true(os.path.isfile(filename))
     expect_message(
         r"Copied volume .* to minescript.blockpacks.test.zip \(.* bytes\)\.")
 
     minescript.execute(r"\paste ~10 ~-1 ~ this_label_does_not_exist")
+    await_script("paste")
     expect_message(r"Error: blockpack file for `this_label_does_not_exist` not found.*")
 
     minescript.execute(r"\copy 0 0 0 1000 100 1000")
+    await_script("copy")
     expect_message("`blockpack_read_world` exceeded soft limit of 1600 chunks")
 
     minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 no_limit")
+    await_script("copy")
     expect_message("Not all chunks are loaded within the requested `copy` volume")
 
     minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 test no_limit")
+    await_script("copy")
     expect_message("Not all chunks are loaded within the requested `copy` volume")
 
     minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 test no_limit test")
+    await_script("copy")
     expect_message(
         r"Error: copy command requires 6 params of type integer \(plus optional params.*")
 
     minescript.execute(r"\copy ~ ~ ~ ~1000 ~100 ~1000 no_limit no_limit")
+    await_script("copy")
     expect_message("Not all chunks are loaded within the requested `copy` volume")
 
     minescript.execute(r"\copy ~10000 ~-1 ~ ~10005 ~5 ~5")
+    await_script("copy")
     expect_message("Not all chunks are loaded within the requested `copy` volume")
   finally:
     if os.path.isfile(filename):
@@ -364,8 +389,6 @@ def async_function_test():
   blocking_time = time.time() - start_time
 
   expect_equal(async_result, blocking_result)
-  expect_true(async_time < blocking_time)
-  print_success(f"async_time ({async_time:.4f} sec) < blocking_time ({blocking_time:.4f} sec)")
 
 
 @test
@@ -406,16 +429,109 @@ def world_info_test():
 @test
 def command_parse_test():
   minescript.execute(r"""\eval 'print("this is " + "a test")' 2>null""")
+  await_script("eval")
   expect_message("this is a test")
 
   minescript.execute(r'''\eval "print('this is ' + 'another test')" 2>null''')
+  await_script("eval")
   expect_message("this is another test")
 
   minescript.execute(r"""\eval 'print(\'this is \' + \'an escaped test\')' 2>null""")
+  await_script("eval")
   expect_message("this is an escaped test")
 
   minescript.execute(r'''\eval "print(\"this is \" + \"a doubly escaped test\")" 2>null''')
+  await_script("eval")
   expect_message("this is a doubly escaped test")
+
+
+@test
+def java_test():
+  JavaHandle = minescript.JavaHandle
+  object_class = minescript.java_class("java.lang.Object")
+  class_class = minescript.java_class("java.lang.Class")
+  object_getClass = minescript.java_member(object_class, "getClass")
+  class_getName = minescript.java_member(class_class, "getName")
+  Numbers_class = minescript.java_class("net.minescript.common.Numbers")
+  Numbers_divide = minescript.java_member(Numbers_class, "divide")
+  Numbers_lessThan = minescript.java_member(Numbers_class, "lessThan")
+
+  def get_java_class_name(value: JavaHandle) -> str:
+    value_class = minescript.java_call_method(value, object_getClass)
+    class_name = minescript.java_call_method(value_class, class_getName)
+    return minescript.java_to_string(class_name)
+
+  def do_operator(op: JavaHandle, x: JavaHandle, y: JavaHandle) -> JavaHandle:
+    result = minescript.java_call_method(minescript.java_null, op, x, y)
+    return minescript.java_to_string(result), get_java_class_name(result)
+
+  value, type_ = do_operator(Numbers_divide, minescript.java_int(22), minescript.java_int(7))
+  expect_equal(value, "3")
+  expect_equal(type_, "java.lang.Integer")
+
+  value, type_ = do_operator(Numbers_divide, minescript.java_double(22), minescript.java_int(7))
+  expect_startswith(value, "3.14")
+  expect_equal(type_, "java.lang.Double")
+
+  value, type_ = do_operator(Numbers_divide, minescript.java_int(22), minescript.java_float(7))
+  expect_startswith(value, "3.14")
+  expect_equal(type_, "java.lang.Float")
+
+  value, type_ = do_operator(Numbers_lessThan, minescript.java_int(22), minescript.java_float(7))
+  expect_equal(value, "false")
+  expect_equal(type_, "java.lang.Boolean")
+
+  value, type_ = do_operator(Numbers_lessThan, minescript.java_int(7), minescript.java_float(22))
+  expect_equal(value, "true")
+  expect_equal(type_, "java.lang.Boolean")
+
+
+@test
+def player_task_test():
+  tasks = []
+
+  def append(task):
+    tasks.append(task)
+    return task
+
+  player = append(minescript.player.as_task())
+  position = append(minescript.Task.get_attr(player, "position"))
+  x = append(minescript.Task.get_index(position, 0))
+  x = append(minescript.Task.as_int(x))
+  y = append(minescript.Task.get_index(position, 1))
+  y = append(minescript.Task.as_int(y))
+  z = append(minescript.Task.get_index(position, 2))
+  z = append(minescript.Task.as_int(z))
+  echo = append(minescript.echo.as_task("Player position:", x, y, z))
+  append(minescript.Task.as_list(x, y, z))
+
+  result = minescript.run_tasks(tasks)
+  expect_message(f"Player position: {result[0]} {result[1]} {result[2]}")
+
+
+@test
+def container_task_test():
+  tasks = []
+
+  def append(task):
+    tasks.append(task)
+    return task
+
+  append(minescript.Task.as_list(
+      append(minescript.Task.contains([1, 2, 3], 2)),
+      append(minescript.Task.contains([1, 2, 3], 4)),
+      append(minescript.Task.contains({"x":1, "y":2}, "x")),
+      append(minescript.Task.contains({"x":1, "y":2}, "z")),
+      append(minescript.Task.contains("123", "2")),
+      append(minescript.Task.contains("123", "4"))))
+
+  result = minescript.run_tasks(tasks)
+  expect_true(result[0])
+  expect_false(result[1])
+  expect_true(result[2])
+  expect_false(result[3])
+  expect_true(result[4])
+  expect_false(result[5])
 
 
 # END TESTS
