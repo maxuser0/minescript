@@ -27,7 +27,10 @@ public interface JobControl {
   void processStderr(String text);
 
   default void log(String messagePattern, Object... arguments) {
-    String logMessage = ParameterizedMessage.format(messagePattern, arguments);
+    String logMessage =
+        (arguments.length == 0)
+            ? messagePattern
+            : ParameterizedMessage.format(messagePattern, arguments);
     processStderr(logMessage);
   }
 

@@ -2183,7 +2183,7 @@ public class Minescript {
   }
 
   private static Optional<JsonElement> doPlayerAction(
-      String functionName, KeyMapping keyMapping, ScriptFunctionArgList args) {
+      String functionName, KeyMapping keyMapping, ScriptFunctionCall.ArgList args) {
     args.expectSize(1);
     boolean pressed = args.getBoolean(0);
     pressKeyBind(keyMapping.getName(), pressed);
@@ -2211,7 +2211,7 @@ public class Minescript {
       if (screen instanceof CreativeModeInventoryScreen) {
         name = "Creative Inventory";
       } else if (screen instanceof LevelLoadingScreen) {
-        name = "L" + "evel Loading"; // Split literal to prevent symbol renaming.
+        name = "Level Loading";
       } else if (screen instanceof ReceivingLevelScreen) {
         name = "Progress";
       } else {
@@ -2244,9 +2244,9 @@ public class Minescript {
 
   public static void processScriptFunction(
       Job job, String functionName, long funcCallId, List<?> parsedArgs) {
-    var args = new ScriptFunctionArgList(functionName, parsedArgs);
+    var funcCall = new ScriptFunctionCall(functionName, parsedArgs);
     try {
-      Optional<JsonElement> response = runScriptFunction(job, funcCallId, functionName, args);
+      Optional<JsonElement> response = runScriptFunction(job, funcCallId, funcCall);
       if (response.isPresent()) {
         job.respond(funcCallId, response.get(), true);
       }
@@ -2267,7 +2267,7 @@ public class Minescript {
             new RuntimeException(
                 String.format(
                     "Exception while calling script function `%s` with args %s: %s",
-                    functionName, parsedArgs, e.toString())));
+                    functionName, funcCall.args(), e.toString())));
       } else {
         job.raiseException(funcCallId, ExceptionInfo.fromException(e));
       }
@@ -2307,11 +2307,13 @@ public class Minescript {
 
   /** Returns a JSON response if a script function is called. */
   private static Optional<JsonElement> runScriptFunction(
-      Job job, long funcCallId, String functionName, ScriptFunctionArgList args) throws Exception {
+      Job job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
     var minecraft = Minecraft.getInstance();
     var world = minecraft.level;
     var player = minecraft.player;
     var options = minecraft.options;
+    final String functionName = functionCall.name();
+    final ScriptFunctionCall.ArgList args = functionCall.args();
 
     switch (functionName) {
       case "player_position":
@@ -2379,34 +2381,41 @@ public class Minescript {
         }
 
       case "register_key_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, keyEventListeners, Optional.empty());
 
       case "start_key_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, keyEventListeners, args.getStrictLong(0));
 
       case "register_mouse_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, mouseEventListeners, Optional.empty());
 
       case "start_mouse_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, mouseEventListeners, args.getStrictLong(0));
 
       case "register_chat_message_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, chatEventListeners, Optional.empty());
 
       case "start_chat_message_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, chatEventListeners, args.getStrictLong(0));
 
       case "register_chat_message_interceptor":
         {
+          functionCall.expectNotRunningAsTask();
           args.expectArgs("prefix", "pattern");
           Optional<String> prefixArg = args.getOptionalString(0);
           Optional<String> patternArg = args.getOptionalString(1);
@@ -2426,60 +2435,73 @@ public class Minescript {
         }
 
       case "start_chat_message_interceptor":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, chatInterceptors, args.getStrictLong(0));
 
       case "register_add_entity_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, addEntityEventListeners, Optional.empty());
 
       case "start_add_entity_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, addEntityEventListeners, args.getStrictLong(0));
 
       case "register_block_update_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, blockUpdateEventListeners, Optional.empty());
 
       case "start_block_update_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, blockUpdateEventListeners, args.getStrictLong(0));
 
       case "register_take_item_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, takeItemEventListeners, Optional.empty());
 
       case "start_take_item_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, takeItemEventListeners, args.getStrictLong(0));
 
       case "register_damage_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, damageEventListeners, Optional.empty());
 
       case "start_damage_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, damageEventListeners, args.getStrictLong(0));
 
       case "register_explosion_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, explosionEventListeners, Optional.empty());
 
       case "start_explosion_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, explosionEventListeners, args.getStrictLong(0));
 
       case "register_chunk_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, chunkEventListeners, Optional.empty());
 
       case "start_chunk_listener":
+        functionCall.expectNotRunningAsTask();
         args.expectArgs("handler_id");
         return startEventHandler(job, funcCallId, chunkEventListeners, args.getStrictLong(0));
 
@@ -2492,6 +2514,7 @@ public class Minescript {
 
       case "await_loaded_region":
         {
+          functionCall.expectNotRunningAsTask();
           args.expectSize(4);
           int arg0 = args.getStrictInt(0);
           int arg1 = args.getStrictInt(1);
@@ -2505,7 +2528,16 @@ public class Minescript {
                   arg2,
                   arg3,
                   (boolean success, boolean removeFromListeners) -> {
-                    job.respond(funcCallId, new JsonPrimitive(success), true);
+                    // TODO(maxuser): The calling convention should be respected within Job::respond
+                    // so that it's applied universally for all async script functions, not just for
+                    // this one.
+                    job.respond(
+                        funcCallId,
+                        functionCall.callingConvention()
+                                == ScriptFunctionCall.CallingConvention.JAVA
+                            ? new JsonPrimitive(job.objects.retain(success))
+                            : new JsonPrimitive(success),
+                        true);
                     job.removeOperation(funcCallId);
                     if (removeFromListeners) {
                       chunkLoadEventListeners.remove(jobOpId);
@@ -2801,6 +2833,7 @@ public class Minescript {
           result.addProperty("launcher", minecraft.getLaunchedVersion());
           result.addProperty("os_name", System.getProperty("os.name"));
           result.addProperty("os_version", System.getProperty("os.version"));
+          result.addProperty("minecraft_class_name", Minecraft.class.getName());
           return Optional.of(result);
         }
 
@@ -2862,7 +2895,7 @@ public class Minescript {
             message =
                 String.join(
                     " ",
-                    args.args().stream()
+                    args.rawArgs().stream()
                         .map(Object::toString)
                         .collect(Collectors.toList())
                         .toArray(String[]::new));
@@ -2883,7 +2916,7 @@ public class Minescript {
             message =
                 String.join(
                     " ",
-                    args.args().stream()
+                    args.rawArgs().stream()
                         .map(Object::toString)
                         .collect(Collectors.toList())
                         .toArray(String[]::new));
@@ -2913,7 +2946,7 @@ public class Minescript {
             message =
                 String.join(
                     " ",
-                    args.args().stream()
+                    args.rawArgs().stream()
                         .map(Object::toString)
                         .collect(Collectors.toList())
                         .toArray(String[]::new));
@@ -3328,39 +3361,42 @@ public class Minescript {
         return OPTIONAL_JSON_TRUE;
 
       case "cancelfn!":
-        var cancelfnRetval = Optional.of((JsonElement) new JsonPrimitive("cancelfn!"));
-        if (funcCallId != 0) {
-          LOGGER.error(
-              "Internal error while cancelling function: funcCallId = 0 but got {} in job: {}",
-              funcCallId,
-              job.jobSummary());
+        {
+          var cancelfnRetval = Optional.of((JsonElement) new JsonPrimitive("cancelfn!"));
+          if (funcCallId != 0) {
+            LOGGER.error(
+                "Internal error while cancelling function: funcCallId = 0 but got {} in job: {}",
+                funcCallId,
+                job.jobSummary());
+            return cancelfnRetval;
+          }
+          if (args.size() != 2
+              || !(args.get(0) instanceof Number)
+              || !(args.get(1) instanceof String)) {
+            LOGGER.error(
+                "Internal error while cancelling function: expected [int, str] but got {} in job:"
+                    + " {}",
+                args,
+                job.jobSummary());
+            return cancelfnRetval;
+          }
+          long funcIdToCancel = ((Number) args.get(0)).longValue();
+          String funcName = (String) args.get(1);
+          if (job.cancelOperation(funcIdToCancel)) {
+            LOGGER.info(
+                "Cancelled function call {} for \"{}\" in job: {}",
+                funcIdToCancel,
+                funcName,
+                job.jobSummary());
+          } else {
+            LOGGER.warn(
+                "Failed to find operation to cancel: funcCallId {} for \"{}\" in job: {}",
+                funcIdToCancel,
+                funcName,
+                job.jobSummary());
+          }
           return cancelfnRetval;
         }
-        if (args.size() != 2
-            || !(args.get(0) instanceof Number)
-            || !(args.get(1) instanceof String)) {
-          LOGGER.error(
-              "Internal error while cancelling function: expected [int, str] but got {} in job: {}",
-              args,
-              job.jobSummary());
-          return cancelfnRetval;
-        }
-        long funcIdToCancel = ((Number) args.get(0)).longValue();
-        String funcName = (String) args.get(1);
-        if (job.cancelOperation(funcIdToCancel)) {
-          LOGGER.info(
-              "Cancelled function call {} for \"{}\" in job: {}",
-              funcIdToCancel,
-              funcName,
-              job.jobSummary());
-        } else {
-          LOGGER.warn(
-              "Failed to find operation to cancel: funcCallId {} for \"{}\" in job: {}",
-              funcIdToCancel,
-              funcName,
-              job.jobSummary());
-        }
-        return cancelfnRetval;
 
       case "exit!":
         if (funcCallId == 0) {
@@ -3537,6 +3573,39 @@ public class Minescript {
                   String.join("\n", signatures.toArray(String[]::new))));
         }
 
+      case "java_call_script_function":
+        {
+          // Try to parse first arg as either a long (and interpret it as a Java object handle
+          // referencing a String) or directly as a JSON string.
+          OptionalLong funcNameObjectHandle =
+              ScriptFunctionCall.ArgList.getStrictLongValue(args.get(0));
+          final String funcName;
+          if (funcNameObjectHandle.isPresent()) {
+            var functionNameObject = (Object) job.objects.getById(funcNameObjectHandle.getAsLong());
+            if (functionNameObject instanceof String string) {
+              funcName = string;
+            } else {
+              throw new IllegalArgumentException(
+                  String.format(
+                      "Expected first arg to java_call_script_function to be a handle to a Java"
+                          + " String but got `%s` instead: %s",
+                      functionNameObject.getClass().getName(), functionNameObject));
+            }
+          } else {
+            funcName = args.getString(0);
+          }
+          List<Object> params = new ArrayList<>();
+          for (int i = 1; i < args.size(); ++i) {
+            params.add(job.objects.getById(args.getStrictLong(i)));
+          }
+          var funcCall = new ScriptFunctionCall(funcName, params);
+          funcCall.setCallingConvention(ScriptFunctionCall.CallingConvention.JAVA);
+          Optional<JsonElement> result = runScriptFunction(job, funcCallId, funcCall);
+          return result.isEmpty()
+              ? result
+              : Optional.of(new JsonPrimitive(job.objects.retain(result)));
+        }
+
       case "java_access_field":
         {
           var target = (Object) job.objects.getById(args.getStrictLong(0));
@@ -3582,11 +3651,11 @@ public class Minescript {
         }
 
       case "java_release":
-        for (var arg : args.args()) {
+        for (var arg : args.rawArgs()) {
           // For convenience, don't complain if a script attempts to release ID 0 which represents
           // null. This allows scripts to call Java methods and access Java fields with a null value
           // without requiring scripts to handle 0/null conditionally.
-          long id = ScriptFunctionArgList.getStrictLongValue(arg).getAsLong();
+          long id = ScriptFunctionCall.ArgList.getStrictLongValue(arg).getAsLong();
           if (id != 0) {
             job.objects.releaseById(id);
           }
@@ -3594,13 +3663,13 @@ public class Minescript {
         return OPTIONAL_JSON_NULL;
 
       case "run_tasks":
-        return Optional.of(runTasks(job, args.args()));
+        return Optional.of(runTasks(job, args.rawArgs()));
 
       case "schedule_tick_tasks":
-        return Optional.of(scheduleTasks(job, funcCallId, tickTaskLists, args.args()));
+        return Optional.of(scheduleTasks(job, funcCallId, tickTaskLists, args.rawArgs()));
 
       case "schedule_render_tasks":
-        return Optional.of(scheduleTasks(job, funcCallId, renderTaskLists, args.args()));
+        return Optional.of(scheduleTasks(job, funcCallId, renderTaskLists, args.rawArgs()));
 
       case "cancel_scheduled_tasks":
         {
@@ -3638,14 +3707,20 @@ public class Minescript {
     return new JsonPrimitive(funcCallId);
   }
 
+  enum TaskFlowControl {
+    NORMAL_FLOW, // Control flows sequentially from one task to the next in a list.
+    SKIP_TASKS // The remaining tasks in the list are skipped.
+  }
+
   private static JsonElement runTasks(Job job, List<?> tasks) throws Exception {
     var taskValues = new HashMap<Long, Supplier<Object>>();
     JsonElement tasksResult = JsonNull.INSTANCE;
+    TaskFlowControl[] flowControl = {TaskFlowControl.NORMAL_FLOW};
     for (var task : tasks) {
       var args = (List<?>) task;
-      var result = runTask(job, args, taskValues);
+      var result = runTask(job, args, taskValues, flowControl);
       taskValues.put(
-          ScriptFunctionArgList.getStrictLongValue(args.get(0)).getAsLong(),
+          ScriptFunctionCall.ArgList.getStrictLongValue(args.get(0)).getAsLong(),
           Suppliers.memoize(
               () -> {
                 // Gson doesn't appear to offer a way to parse JsonElement directly to a POJO. The
@@ -3656,14 +3731,22 @@ public class Minescript {
                 return GSON.fromJson(array, ArrayList.class).get(0);
               }));
       tasksResult = result;
+      if (flowControl[0] == TaskFlowControl.SKIP_TASKS) {
+        break;
+      }
     }
     // Return the result of the last executed task.
     return tasksResult;
   }
 
+  // flowControl is an array of length 1 to allow an output value without altering the return type.
   private static JsonElement runTask(
-      Job job, List<?> argList, Map<Long, Supplier<Object>> taskValues) throws Exception {
-    var args = new ScriptFunctionArgList("runTask", argList);
+      Job job,
+      List<?> argList,
+      Map<Long, Supplier<Object>> taskValues,
+      TaskFlowControl[] flowControl)
+      throws Exception {
+    var args = new ScriptFunctionCall.ArgList("runTask", argList);
     long funcCallId = args.getStrictLong(0);
     String funcName = args.getString(1);
 
@@ -3673,7 +3756,7 @@ public class Minescript {
     for (int i = 0; i < deferredArgs.size(); ++i) {
       Object arg = deferredArgs.get(i);
       if (arg != null) {
-        long taskId = ScriptFunctionArgList.getStrictLongValue(arg).getAsLong();
+        long taskId = ScriptFunctionCall.ArgList.getStrictLongValue(arg).getAsLong();
         if (!taskValues.containsKey(taskId)) {
           throw new IllegalArgumentException(
               String.format(
@@ -3697,12 +3780,32 @@ public class Minescript {
       case "get_index":
         {
           var list = (List) resolvedArgs.get(0);
-          var index = ScriptFunctionArgList.getStrictIntValue(resolvedArgs.get(1));
+          var index = ScriptFunctionCall.ArgList.getStrictIntValue(resolvedArgs.get(1));
           if (index.isEmpty()) {
             throw new IllegalArgumentException(
                 "Expected second arg to `get_index` to be int but got: " + resolvedArgs.get(1));
           }
           return GSON.toJsonTree(list.get(index.getAsInt()));
+        }
+
+      case "contains":
+        {
+          var container = resolvedArgs.get(0);
+          var element = resolvedArgs.get(1);
+          final boolean found;
+          if (container instanceof List list) {
+            found = list.contains(element);
+          } else if (container instanceof Map map) {
+            found = map.containsKey(element);
+          } else if (container instanceof String string) {
+            found = string.contains(element.toString());
+          } else {
+            throw new IllegalArgumentException(
+                String.format(
+                    "Expected first arg (container) to be List, Map, or String but got: %s (%s)",
+                    container, container.getClass().getName()));
+          }
+          return new JsonPrimitive(found);
         }
 
       case "as_int":
@@ -3712,7 +3815,7 @@ public class Minescript {
             var ints = new JsonArray();
             for (int i = 0; i < list.size(); ++i) {
               var item = list.get(i);
-              OptionalDouble number = ScriptFunctionArgList.getDoubleValue(item);
+              OptionalDouble number = ScriptFunctionCall.ArgList.getDoubleValue(item);
               if (number.isEmpty()) {
                 throw new IllegalArgumentException(
                     String.format(
@@ -3724,7 +3827,7 @@ public class Minescript {
             }
             return ints;
           } else {
-            OptionalDouble number = ScriptFunctionArgList.getDoubleValue(arg);
+            OptionalDouble number = ScriptFunctionCall.ArgList.getDoubleValue(arg);
             if (number.isEmpty()) {
               throw new IllegalArgumentException(
                   "Expected arg to `as_int` to be a number or list of numbers but got: " + arg);
@@ -3733,9 +3836,41 @@ public class Minescript {
           }
         }
 
+      case "negate":
+        {
+          var arg = resolvedArgs.get(0);
+          if (arg instanceof Boolean condition) {
+            return new JsonPrimitive(!condition);
+          } else {
+            throw new IllegalArgumentException(
+                "Expected arg to `negate` to be a boolean but got: " + arg);
+          }
+        }
+
+      case "is_null":
+        {
+          var arg = resolvedArgs.get(0);
+          return new JsonPrimitive(arg == null);
+        }
+
+      case "skip_if":
+        {
+          var arg = resolvedArgs.get(0);
+          if (arg instanceof Boolean condition) {
+            if (condition) {
+              flowControl[0] = TaskFlowControl.SKIP_TASKS;
+            }
+            return new JsonPrimitive(condition);
+          } else {
+            throw new IllegalArgumentException(
+                "Expected arg to `negate` to be a boolean but got: " + arg);
+          }
+        }
+
       default:
-        var embeddedArgs = new ScriptFunctionArgList(funcName, resolvedArgs);
-        return runScriptFunction(job, funcCallId, funcName, embeddedArgs).orElse(JsonNull.INSTANCE);
+        var embeddedFuncCall = new ScriptFunctionCall(funcName, resolvedArgs);
+        embeddedFuncCall.setRunningAsTask();
+        return runScriptFunction(job, funcCallId, embeddedFuncCall).orElse(JsonNull.INSTANCE);
     }
   }
 

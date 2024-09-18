@@ -296,7 +296,7 @@ public class ScriptConfig {
 
       int argsIndex = commandPattern.indexOf("{args}");
       Preconditions.checkArgument(
-          commandIndex >= 0, "{args} not found in pattern: %s", commandPattern);
+          argsIndex >= 0, "{args} not found in pattern: %s", commandPattern);
 
       return new CommandBuilder(
           commandPattern.toArray(String[]::new),

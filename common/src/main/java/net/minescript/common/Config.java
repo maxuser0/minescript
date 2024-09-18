@@ -15,10 +15,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -50,6 +48,7 @@ public class Config {
           "stderr_chat_ignore_pattern",
           "minescript_on_chat_received_event",
           "secondary_enter_key_code",
+          "report_job_success_threshold_millis",
           "autorun[");
 
   private static final ImmutableList<String> CONFIG_VARIABLE_LIST =
@@ -83,6 +82,7 @@ public class Config {
   private int ticksPerCycle = 1;
   private int maxCommandsPerCycle = 15;
   private int commandCycleDeadlineUsecs = 10_000; // 10 milliseconds
+  private int reportJobSuccessThresholdMillis = 3000;
 
   public Config(
       String minescriptDirName,
@@ -199,6 +199,10 @@ public class Config {
     return secondaryEnterKeyCode;
   }
 
+  public int reportJobSuccessThresholdMillis() {
+    return reportJobSuccessThresholdMillis;
+  }
+
   public void setDebugOutptut(boolean enable) {
     debugOutput = enable;
   }
@@ -245,6 +249,8 @@ public class Config {
     consumer.accept(
         "minescript_on_chat_received_event", getValue("minescript_on_chat_received_event"));
     consumer.accept("secondary_enter_key_code", getValue("secondary_enter_key_code"));
+    consumer.accept(
+        "report_job_success_threshold_millis", getValue("report_job_success_threshold_millis"));
 
     for (var entry : autorunCommands.entrySet()) {
       var worldName = entry.getKey();
@@ -272,18 +278,15 @@ public class Config {
             scriptConfig.commandPath().stream().map(Path::toString).collect(Collectors.toList()));
 
       case "max_commands_per_cycle":
-      case "minescript_commands_per_cycle": // legacy name
         return String.valueOf(maxCommandsPerCycle);
 
       case "command_cycle_deadline_usecs":
         return String.valueOf(commandCycleDeadlineUsecs);
 
       case "ticks_per_cycle":
-      case "minescript_ticks_per_cycle": // legacy name
         return String.valueOf(ticksPerCycle);
 
       case "incremental_command_suggestions":
-      case "minescript_incremental_command_suggestions": // legacy name
         return String.valueOf(incrementalCommandSuggestions);
 
       case "debug_output":
@@ -297,6 +300,9 @@ public class Config {
 
       case "secondary_enter_key_code":
         return String.valueOf(secondaryEnterKeyCode);
+
+      case "report_job_success_threshold_millis":
+        return String.valueOf(reportJobSuccessThresholdMillis);
 
       default:
         {
@@ -389,7 +395,6 @@ public class Config {
         break;
 
       case "max_commands_per_cycle":
-      case "minescript_commands_per_cycle": // legacy name
         try {
           int numCommands = Integer.valueOf(value);
           if (numCommands < 1) numCommands = 1;
@@ -412,7 +417,6 @@ public class Config {
         break;
 
       case "ticks_per_cycle":
-      case "minescript_ticks_per_cycle": // legacy name
         try {
           int ticks = Integer.valueOf(value);
           if (ticks < 1) ticks = 1;
@@ -424,7 +428,6 @@ public class Config {
         break;
 
       case "incremental_command_suggestions":
-      case "minescript_incremental_command_suggestions": // legacy name
         incrementalCommandSuggestions = Boolean.valueOf(value);
         reportInfo(
             out,
@@ -464,6 +467,19 @@ public class Config {
           reportInfo(out, "Setting secondary_enter_key_code to {}", secondaryEnterKeyCode);
         } catch (NumberFormatException e) {
           reportError(out, "Unable to parse secondary_enter_key_code as integer: {}", value);
+        }
+        break;
+
+      case "report_job_success_threshold_millis":
+        try {
+          reportJobSuccessThresholdMillis = Integer.valueOf(value);
+          reportInfo(
+              out,
+              "Setting report_job_success_threshold_millis to {}",
+              reportJobSuccessThresholdMillis);
+        } catch (NumberFormatException e) {
+          reportError(
+              out, "Unable to parse report_job_success_threshold_millis as integer: {}", value);
         }
         break;
 
