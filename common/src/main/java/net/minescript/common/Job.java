@@ -358,7 +358,6 @@ public class Job implements JobControl {
     }
     try {
       final long startTimeMillis = System.currentTimeMillis();
-      final long longRunningJobThreshold = 3000L;
       int exitCode = task.run(command, this);
       LOGGER.info(
           "Job `{}` exited with code {}, draining message queues...", jobSummary(), exitCode);
@@ -372,9 +371,11 @@ public class Job implements JobControl {
         }
       }
       final long endTimeMillis = System.currentTimeMillis();
+      final long reportJobSuccessThresholdMillis = config.reportJobSuccessThresholdMillis();
       if (exitCode != 0) {
         systemMessageQueue.logUserError(jobSummaryWithStatus("Exited with error code " + exitCode));
-      } else if (endTimeMillis - startTimeMillis > longRunningJobThreshold) {
+      } else if (reportJobSuccessThresholdMillis >= 0
+          && endTimeMillis - startTimeMillis > reportJobSuccessThresholdMillis) {
         if (state != JobState.KILLED) {
           state = JobState.DONE;
         }
