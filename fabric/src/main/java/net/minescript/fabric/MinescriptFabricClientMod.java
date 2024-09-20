@@ -31,7 +31,7 @@ public final class MinescriptFabricClientMod implements ClientModInitializer {
     Minescript.init(new FabricPlatform());
     ClientTickEvents.START_WORLD_TICK.register(world -> Minescript.onClientWorldTick());
     ScreenEvents.AFTER_INIT.register(this::afterInitScreen);
-    WorldRenderEvents.LAST.register(this::onRender);
+    WorldRenderEvents.END.register(this::onRender);
   }
 
   private void afterInitScreen(Minecraft client, Screen screen, int windowWidth, int windowHeight) {

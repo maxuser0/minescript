@@ -10,6 +10,9 @@ Table of contents:
 - [Python API](#python-api)
     - [Script input](#script-input)
     - [Script output](#script-output)
+    - [Script functions](#script-functions)
+    - [Script tasks](#script-tasks)
+    - [Async script functions](#async-script-functions)
     - [minescript module](#minescript-module)
 
 ## In-game commands
@@ -158,40 +161,6 @@ times to undo the build changes from multiple recent Minescript commands.
 ***Note:*** *Some block state may be lost when undoing a Minescript command, such as
 commands specified within command blocks and items in chests.*
 
-### Advanced commands
-
-#### minescript_commands_per_cycle
-*Usage:* `\minescript_commands_per_cycle  NUMBER`
-
-Specifies the number of Minescript-generated Minecraft commands to run per
-Minescript processing cycle. The higher the number, the faster the script will
-run.
-
-***Note:*** *Setting this value too high will make Minecraft less responsive and
-possibly crash.*
-
-Default is 15.
-
-#### minescript_ticks_per_cycle
-*Usage:* `\minescript_ticks_per_cycle  NUMBER`
-
-Specifies the number of Minecraft game ticks to wait per Minecraft processing
-cycle. The lower the number, down to a minimum of 1, the faster the script will
-run.
-
-Default is 1 since v3.2. (Previously, default was 3.)
-
-#### minescript_incremental_command_suggestions 
-*Usage:* `\minescript_incremental_command_suggestions  BOOL`
-
-Enables or disables printing of incremental command suggestions to the in-game
-chat as the user types a Minescript command.
-
-Default is false.
-
-Since: v2.0 (in prior versions, incremental command suggestions were
-unconditionally enabled)
-
 ## Configuration
 
 The `minescript` directory contains a configuration file named `config.txt`.
@@ -206,27 +175,68 @@ Lines of text in `config.txt` can take the following forms:
 
 Config variable names:
 
-- `python` - file location of the Python interpreter (default for Windows is
-  `"%userprofile%\AppData\Local\Microsoft\WindowsApps\python3.exe"`, and
-  `"/usr/bin/python3"` for other operating systems)
-- `minescript_commands_per_cycle` (see [minescript_commands_per_cycle](#minescript_commands_per_cycle) command)
-- `minescript_ticks_per_cycle` (see [minescript_ticks_per_cycle](#minescript_ticks_per_cycle) command)
-- `minescript_incremental_command_suggestions` (see [minescript_incremental_command_suggestions](#minescript_incremental_command_suggestions) command; since v2.0)
 - `autorun[WORLD NAME]` - command to run when entering a world named `WORLD NAME` (since v3.1)
 
     - The special name `*` indicates that the command should be run when entering
-      all worlds, e.g. `autorun[*]=print_motd` where `print_motd.py` is a script
-      that prints a "message of the day".
+      all worlds, e.g. `autorun[*]=eval 'echo(f"Hello, {world_info().name}!")'`
+      that welcomes you with message when connecting to a world.
     - Multiple `autorun[...]` config lines can be specified for the same world, or
       for `*`, in which case all matching commands are run concurrently.
     - A single `autorun[...]` config line can execute multiple commands in
       sequence by separating commands with a semicolon (`;`), e.g. the following would
-      first run the script `print_motd.py` followed by `summarize_entities.py` which takes
-      a single argument (`50`):
-
+      first print info about the world followed by the names of the 10 nearest entities:
       ```
-      autorun[*]=print_motd; summarize_entities 50
+      autorun[*]=eval "world_info()"; eval "[e.name for e in entities(sort='nearest', limit=10)]"
       ```
+- `python` - file location of the Python interpreter (default for Windows is
+  `"%userprofile%\AppData\Local\Microsoft\WindowsApps\python3.exe"`, and
+  `"/usr/bin/python3"` for other operating systems)
+- `command` - configuration for customizing invocations of scripts or executables from Minecraft
+  commands. `command` can be specified multiple times for different filename extensions. For
+  example, to execute `jar` files such as `foo.jar` from the Minescript command `\foo`:
+  ```
+  command = {
+    "extension": ".jar",
+    "command": [ "/usr/bin/java", "-jar", "{command}", "{args}" ],
+    "environment": [ "FIRST_ENV_VAR=1234", "SECOND_ENV_VAR=2468" ]
+  }
+  ```
+  `environment` is optional, allowing environment variables to be passed to scripts/executables.
+  When configuring execution of Python scripts, remember to set `PYTHON_PATH` in `environment`.
+- `command_path` - sets the command path for executing scripts/executables from Minescript commands.
+  Entries that aren't absolute paths are relative to the `minescript` directory. Paths on Windows
+  are separated by `;`, whereas paths on other operating systems are separated by `:`. The default
+  is equivalent to the `minescript` directory and `system/exec` within it.
+- `escape_command_double_quotes` - if true, escape double quotes that appear in `{args}` in the
+  `command` field of a `command` config entry. Defaults to true for Windows, false for other
+  operating systems.
+- `max_commands_per_cycle` - number of Minescript-generated Minecraft commands to run per Minescript
+  processing cycle. The higher the number, the faster the script will run.  Default is 15.
+  (***Note:*** *Setting this value too high will make Minecraft less responsive and possibly
+  crash.*)
+- `command_cycle_deadline_usecs` - threshold in microseconds beyond which Minescript stops executing
+  commands for the given execution cycle. Default is 10000 (10 milliseconds). A command that runs
+  over the threshold continues to run to completion, but no more commands will be executed in that
+  cycle.
+- `ticks_per_cycle` - number of Minecraft game ticks to wait per Minecraft processing cycle. The
+  lower the number, down to a minimum of 1, the faster the script will run.  Default is 1 since
+  v3.2. (Previously, default was 3.)
+- `incremental_command_suggestions` - enables or disables printing of incremental command
+  suggestions to the in-game chat as the user types a Minescript command.  Default is false.
+- `report_job_success_threshold_millis` - report on-screen that a script job has exited successfully
+  if it has run for more than this duration in milliseconds; default value is 3000 (3 seconds); 0
+  always reports; -1 never reports; exits of failed script jobs are always reported (since v4.0)
+- `debug_output` - if true, enable debug output to `logs/latest.log`. Default is false.
+- `minescript_on_chat_received_event` - if true, Minescript executes chat messages that start with
+  `"You whisper to ..."` that contain a message starting with a backslash (`\`), e.g. from a command
+  block executing `[execute as maxuser run tell maxuser \eval 1+2]`. Default is false.
+- `secondary_enter_key_code` - The `enter` key (key code 257, called `return` on Macs) is the
+  primary key for terminating commands in the chat. `secondary_enter_key_code` is a customizable
+  secondary key which can also terminate commands. Default is 335 (`KEY_KP_ENTER`). See [GLFW
+  Keyboard key tokens](https://www.glfw.org/docs/3.3/group__keys.html) for a list of key codes.
+- `stderr_chat_ignore_pattern` - regular expression for ignoring lines of output from stderr of
+  scripts. Default is the empty string: `"^$"`. This can be useful for Python installations that
+  have spammy stderr output when running from Minescript.
 
 ## Python API
 
@@ -301,6 +311,157 @@ print("Note to self...", file=sys.stderr)
 minescript.echo("Note to self...")
 ```
 
+### Script functions
+
+Script functions imported from  [`minescript.py`](#minescript-module) can be called as functions, as
+[tasks](#script-tasks), or [asynchronously](#async-script-functions).
+
+When called directly, e.g. `minescript.screenshot("my_screenshot.png")`, script functions are
+implemented in Java and typically return after the function has finished executing in Java. (A
+handful of script functions return immediately while Java processing continues in the background:
+[`execute`](#execute), [`echo`](#echo), [`echo_json`](#echo_json), [`chat`](#chat), and
+[`log`](#log).)
+
+There are 3 Java executors on which script functions can run:
+
+1. `minescript.tick_loop`: the game tick loop which runs once even game tick (20 times per second,
+which is a cycle time of 50 milliseconds)
+1. `minescript.render_loop`: executed when a frame is rendered (typically around 60 frames per
+second, which is a cycle time of 15-20 milliseconds, but can vary significantly based on game
+performance)
+1. `minescript.script_loop`: executor that processes script functions as quickly as possible, but
+not on the rendering thread, so may lead to instability or even crash the game due to lack of
+thread-safety in Minecraft Java code (cycle time is typically less than 1 millisecond)
+
+The Java executor can be selected for a specific script function or within a specific script
+context.  The selection of executor for a script function is determined by the following priority,
+from highest to lowest:
+
+1. Required executor for this function, if there is one. This is set with the function's
+`set_required_executor` method, e.g.
+`minescript.player.set_required_executor(minescript.script_loop)`. No required executor is set by
+default.
+1. Executor set by the script context using a `with` block, e.g.
+   ```
+   with minescript.script_loop:
+     position = minescript.player().position  # processed by the high-speed script loop
+     ...
+   ```
+1. Default executor for this function, if there is one. This is set with the function's
+`set_default_executor` method, e.g.
+`minescript.player.set_default_executor(minescript.script_loop)`. No default executor is set for
+individual script functions by default.
+1. Default executor for the current script job. This is set with the global function
+[`set_default_executor`](#set_default_executor), e.g.
+`minescript.set_default_executor(minescript.render_loop)`. Default value is `render_loop`.
+
+Setting an executor for a script function affects only the calls of that function within that script
+job. Concurrently running script jobs can set different executors for the same script function.
+
+### Script tasks
+
+A task list allows a sequence of script functions to be called efficiently on a Java executor by
+batching script function calls to avoid successive roundtrips between Python and Java. A task is
+created by calling `.as_task(...)` on a script function, e.g. `minescript.echo.as_task("Hello!")`.
+
+Creating a task does not actually call the script function, but instead creates a *description* of a
+script function to be called, possibly with specific args, at some later point.
+
+A *task list* is created by adding tasks to a Python list. Return values from tasks earlier in the
+list (which are not actual return values from script functions, but descriptions of return values of
+future invocations) can be passed as args to tasks later in the list, e.g:
+
+```
+import minescript
+
+tasks = []
+def add_task(task):
+  tasks.append(task)
+  return task
+
+player = add_task(minescript.player.as_task())
+player_name = add_task(minescript.Task.get_attr(player, "name"))
+add_task(minescript.echo.as_task("Player name is:"))
+add_task(minescript.echo.as_task(player_name))
+
+# Runs the task list in a single cycle of the default executor (by default this is the render loop):
+minescript.run_tasks(tasks)
+
+# Runs the task list on the tick loop:
+with minescript.tick_loop:
+  minescript.run_tasks(tasks)
+```
+
+Tasks can be run immediately with [`run_tasks`](#run_tasks) or scheduled to run repeatedly on every
+cycle of an executor with [`schedule_tick_tasks`](#schedule_tick_tasks) or
+[`schedule_render_tasks`](#schedule_render_tasks). Scheduled tasks can be cancelled with
+[`cancel_scheduled_tasks`](#cancel_scheduled_tasks). (There is no script function for scheduling
+tasks on the `script_loop`. While the same effect can be achieved by calling
+[`run_tasks`](#run_tasks) in a tight `while` loop within `with script_loop: ...` in your script,
+given the high frequency of the `script_loop` executor which can run thousands of times per second,
+you probably don't want to do this.)
+
+See [Task](#task) for documentation of task-related script functions.
+
+### Async script functions
+
+Async script functions allow scripts to run functions in the background and wait on them to
+complete. This is useful for script functions that can take a long time to complete, e.g. several
+seconds.
+
+In this example, [`await_loaded_region`](#await_loaded_region) is used to block script execution
+until a range of chunks has finished loading. This example uses a directly called script function
+that executes synchronously (i.e. it doesn't return until the operation is complete):
+
+```
+import minescript
+
+x, y, z = [int(p) for p in minescript.player().position]
+
+# Waits until all chunks from (x ± 50, z ± 50) are loaded:
+minescript.await_loaded_region(x - 50, z - 50, x + 50, z + 50)
+
+minescript.echo("Chunks around player finished loading.")
+```
+
+This is an alternate version of the previous example, modified to use an async script function by
+calling `.as_async(...)` instead of a direct call of the script function:
+
+```
+import minescript
+
+x, y, z = [int(p) for p in minescript.player().position]
+
+# .as_async(...) causes the script function to return a "future" value:
+future = minescript.await_loaded_region.as_async(x - 50, z - 50, x + 50, z + 50)
+
+# Do other work while the chunks are loading in the background...
+minescript.echo("Waiting for chunks around player to finish loading...")
+
+# Wait for future to complete, i.e. wait for chunks to finish loading:
+future.wait()
+minescript.echo("Chunks around player finished loading.")
+```
+
+A future value returned from an async script function can be waited on with a timeout which raises
+`TimeoutError` if the timeout expires before the operation is able to complete. In this example,
+the message `"Still waiting for chunks around player to finish loading..."` is repeatedly echoed
+to the player's chat every 10 seconds until the chunks in the given range have finished loading:
+
+```
+import minescript
+
+x, y, z = [int(p) for p in minescript.player().position]
+while True:
+  try:
+    # Wait with a 10-second timeout:
+    minescript.await_loaded_region.as_async(x - 50, z - 50, x + 50, z + 50).wait(timeout=10)
+    minescript.echo("Chunks around player finished loading.")
+    break
+  except TimeoutError:
+    minescript.echo("Still waiting for chunks around player to finish loading...")
+```
+
 ### minescript module
 *Usage:* `import minescript  # from Python script`
 
@@ -308,14 +469,19 @@ User-friendly API for scripts to make function calls into the
 Minescript mod.  This module should be imported by other
 scripts and not run directly.
 
+#### BlockPos
+Tuple representing `(x: int, y: int, z: int)` position in block space.
+
+#### Vector3f
+Tuple representing `(x: float, y: float, z: float)` position or offset in 3D space.
+
 #### execute
 *Usage:* <code>execute(command: str)</code>
 
 Executes the given command.
 
-If `command` doesn't already start with a slash or backslash, automatically
-prepends a slash. Ignores leading and trailing whitespace, and ignores empty
-commands.
+If `command` is prefixed by a backslash, it's treated as Minescript command,
+otherwise it's treated as a Minecraft command (the slash prefix is optional).
 
 *Note: This was named `exec` in Minescript 2.0. The old name is no longer
 available in v3.0.*
@@ -324,45 +490,62 @@ Since: v2.1
 
 
 #### echo
-*Usage:* <code>echo(message: Any)</code>
+*Usage:* <code>echo(\*messages)</code>
 
-Echoes message to the chat.
+Echoes plain-text messages to the chat.
 
-The echoed message is visible only to the local player.
+Echoed messages are visible only to the local player.
+
+If multiple args are given, join messages with a space separating them.
+
+Update in v4.0:
+  Support multiple plain-text messages.
 
 Since: v2.0
 
 
+#### echo_json
+*Usage:* <code>echo_json(json_text)</code>
+
+Echoes JSON-formatted text to the chat.
+
+Echoed text is visible only to the local player.
+
+`json_text` may be a string representing JSON text, or a list or dict. If it's a list or dict,
+convert it to a JSON string using the standard `json` module.
+
+Since: v4.0
+
+
 #### chat
-*Usage:* <code>chat(message: str)</code>
+*Usage:* <code>chat(\*messages)</code>
 
-Sends the given message to the chat.
+Sends messages to the chat.
 
-If `message` starts with a slash or backslash, automatically prepends a space
-so that the message is sent as a chat and not executed as a command.  Ignores
-empty messages.
+If `messages[0]` is a str starting with a slash or backslash, automatically
+prepends a space so that the messages are sent as a chat and not executed as
+a command. If `len(messages)` is greater than 1, join messages with a space
+separating them.  Ignores empty `messages`.
+
+Update in v4.0:
+  Support multiple messages.
 
 Since: v2.0
 
 
 #### log
-*Usage:* <code>log(message: str) -> bool</code>
+*Usage:* <code>log(\*messages)</code>
 
-Sends the given message to latest.log.
+Sends messages to latest.log.
 
-*Args:*
-
-- `message`: string to send to the log
-
-*Returns:*
-
-- `True` if `message` was logged successfully.
+Update in v4.0:
+  Support multiple messages of any type. Auto-convert messages to `str`.
 
 Since: v3.0
 
 
 #### screenshot
-*Usage:* <code>screenshot(filename=None) -> bool</code>
+*Usage:* <code>screenshot(filename=None)</code>
 
 Takes a screenshot, similar to pressing the F2 key.
 
@@ -371,11 +554,19 @@ Takes a screenshot, similar to pressing the F2 key.
 - `filename`: if specified, screenshot filename relative to the screenshots directory; ".png"
     extension is added to the screenshot file if it doesn't already have a png extension.
 
+Since: v2.1
+
+
+#### job_info
+*Usage:* <code>job_info() -> List[JobInfo]</code>
+
+Return info about active Minescript jobs.
+
 *Returns:*
 
-- `True` is successful
+- `JobInfo`.  For the  enclosing job, `JobInfo.self` is `True`.
 
-Since: v2.1
+Since: v4.0
 
 
 #### flush
@@ -395,72 +586,48 @@ Since: v2.1
 
 
 #### player_position
-*Usage:* <code>player_position(done_callback=None) -> List[float]</code>
+*Usage:* <code>player_position() -> List[float]</code>
 
 Gets the local player's position.
 
-*Args:*
-
-- `done_callback`: if given, return immediately and call `done_callback(return_value)`
-      asynchronously when `return_value` is ready
-
 *Returns:*
 
-- if `done_callback` is `None`, returns player's position as [x: float, y: float, z: float]
+- player's position as [x: float, y: float, z: float]
 
-
-#### player_set_position
-*Usage:* <code>player_set_position(x: float, y: float, z: float, yaw: float = None, pitch: float = None) -> bool</code>
-
-Sets the player's position, and optionally orientation.
-
-Note that in survival mode the server may reject the new coordinates if they're too far
-or require moving through walls.
-
-*Args:*
-
-- `x, y, z`: position to try to move player to
-- `yaw, pitch`: if not None, player's new orientation
-
-Since: v3.1
+Update in v4.0:
+  Removed `done_callback` arg. Use `async_player_position()` for async execution.
 
 
 #### player_hand_items
-*Usage:* <code>player_hand_items(done_callback=None) -> List[Dict[str, Any]]</code>
+*Usage:* <code>player_hand_items() -> HandItems</code>
 
 Gets the items in the local player's hands.
 
-*Args:*
-
-- `done_callback`: if given, return immediately and call `done_callback(return_value)`
-      asynchronously when `return_value` is ready
-
 *Returns:*
 
-- If `done_callback` is `None`, returns items in player's hands as a list of
-- `items where each item is a dict`: `{"item": str, "count": int}`, plus
-  `"nbt": str` if the item has NBT data; main-hand item is at list index 0,
-  off-hand item at index 1.
+- Items in player's hands.
+  (Legacy-style return value can be restored with `options.legacy_dict_return_values = True`)
+
+Update in v4.0:
+  Return `HandItems` instead of `List[Dict[str, Any]]` by default.
+  Removed `done_callback` arg. Use `async_player_hand_items()` for async execution.
 
 Since: v2.0
 
 
 #### player_inventory
-*Usage:* <code>player_inventory(done_callback=None) -> List[Dict[str, Any]]</code>
+*Usage:* <code>player_inventory() -> List[ItemStack]</code>
 
 Gets the items in the local player's inventory.
 
-*Args:*
-
-- `done_callback`: if given, return immediately and call `done_callback(return_value)`
-      asynchronously when `return_value` is ready
-
 *Returns:*
 
-- If `done_callback` is `None`, returns items in player's inventory as list
-- `of items where each item is a dict`: `{"item": str, "count": int, "slot":
-  int}`, plus `"nbt": str` if an item has NBT data and `"selected": True` for
-  the item selected in the player's main hand.
+- Items in player's inventory.
+  (Legacy-style return value can be restored with `options.legacy_dict_return_values = True`)
+
+Update in v4.0:
+  Return `List[ItemStack]` instead of `List[Dict[str, Any]]` by default.
+  Removed `done_callback` arg. Use `async_player_inventory()` for async execution.
 
 Update in v3.0:
   Introduced `"slot"` and `"selected"` attributes in the returned
@@ -472,40 +639,64 @@ Since: v2.0
 
 
 #### player_inventory_slot_to_hotbar
-*Usage:* <code>player_inventory_slot_to_hotbar(slot: int, done_callback=None) -> int</code>
+*Usage:* <code>player_inventory_slot_to_hotbar(slot: int) -> int</code>
 
 Swaps an inventory item into the hotbar.
 
 *Args:*
 
 - `slot`: inventory slot (9 or higher) to swap into the hotbar
-- `done_callback`: if given, return immediately and call `done_callback(return_value)`
-      asynchronously when `return_value` is ready
 
 *Returns:*
 
-- If `done_callback` is `None`, returns the hotbar slot (0-8) that the inventory
-  item was swapped into
+- hotbar slot (0-8) into which the inventory item was swapped
+
+Update in v4.0:
+  Removed `done_callback` arg. Use `async_player_inventory_slot_to_hotbar(...)
+  for async execution.
 
 Since: v3.0
 
 
 #### player_inventory_select_slot
-*Usage:* <code>player_inventory_select_slot(slot: int, done_callback=None) -> int</code>
+*Usage:* <code>player_inventory_select_slot(slot: int) -> int</code>
 
 Selects the given slot within the player's hotbar.
 
 *Args:*
 
 - `slot`: hotbar slot (0-8) to select in the player's hand
-- `done_callback`: if given, return immediately and call `done_callback(return_value)`
-      asynchronously when `return_value` is ready
 
 *Returns:*
 
-- If `done_callback` is `None`, returns the previously selected hotbar slot
+- previously selected hotbar slot
+
+Update in v4.0:
+  Removed `done_callback` arg. Use `async_player_inventory_select_slot(...)` for async execution.
 
 Since: v3.0
+
+
+#### press_key_bind
+*Usage:* <code>press_key_bind(key_mapping_name: str, pressed: bool)</code>
+
+Presses/unpresses a mapped key binding.
+
+Valid values of `key_mapping_name` include: "key.advancements", "key.attack", "key.back",
+"key.chat", "key.command", "key.drop", "key.forward", "key.fullscreen", "key.hotbar.1",
+"key.hotbar.2", "key.hotbar.3", "key.hotbar.4", "key.hotbar.5", "key.hotbar.6", "key.hotbar.7",
+"key.hotbar.8", "key.hotbar.9", "key.inventory", "key.jump", "key.left",
+"key.loadToolbarActivator", "key.pickItem", "key.playerlist", "key.right",
+"key.saveToolbarActivator", "key.screenshot", "key.smoothCamera", "key.sneak",
+"key.socialInteractions", "key.spectatorOutlines", "key.sprint", "key.swapOffhand",
+"key.togglePerspective", "key.use"
+
+*Args:*
+
+- `key_mapping_name`: name of key binding
+- `pressed`: if `True`, press the bound key, otherwise unpress it
+
+Since: v4.0
 
 
 #### player_press_forward
@@ -692,13 +883,30 @@ Gets info about the nearest block, if any, in the local player's crosshairs.
 
 *Returns:*
 
-- [[x, y, z], distance, side, block_description] if the local player has a
-  block in their crosshairs within `max_distance`, `None` otherwise.
-  `distance` (float) is calculated from the player to the targeted block;
-  `side` (str) is the direction that the targeted side of the block is facing
-  (e.g. `"east"`); `block_description` (str) describes the targeted block.
+- `TargetedBlock` for the block targeted by the player, or `None` if no block is targeted.
+
+Update in v4.0:
+  Return value changed from `list` to `TargetedBlock`.
 
 Since: v3.0
+
+
+#### player_get_targeted_entity
+*Usage:* <code>player_get_targeted_entity(max_distance: float = 20, nbt: bool = False) -> EntityData</code>
+
+Gets the entity targeted in the local player's crosshairs, if any.
+
+*Args:*
+
+- `max_distance`: maximum distance to check for targeted entities
+- `nbt`: if `True`, populate an `"nbt"` attribute for the player
+
+*Returns:*
+
+- `EntityData` for the entity targeted by the player, or `None` if no entity is targeted.
+  (Legacy-style returned dict can be restored with `options.legacy_dict_return_values = True`)
+
+Since: v4.0
 
 
 #### player_health
@@ -709,22 +917,50 @@ Gets the local player's health.
 Since: v3.1
 
 
+#### player
+*Usage:* <code>player(\*, nbt: bool = False)</code>
+
+Gets attributes for the local player.
+
+*Args:*
+
+- `nbt`: if `True`, populate the `nbt` field for the player
+
+*Returns:*
+
+- `EntityData` representing a snapshot of values for the local player.
+  (Legacy-style returned dict can be restored with `options.legacy_dict_return_values = True`)
+
+Since: v4.0
+
+
 #### players
-*Usage:* <code>players(\*, nbt: bool = False)</code>
+*Usage:* <code>players(\*, nbt: bool = False, uuid: str = None, name: str = None, position: [Vector3f](#vector3f) = None, offset: [Vector3f](#vector3f) = None, min_distance: float = None, max_distance: float = None, sort: str = None, limit: int = None)</code>
 
 Gets a list of nearby players and their attributes.
 
 *Args:*
 
 - `nbt`: if `True`, populate an `"nbt"` attribute for each returned player
+- `uuid`: regular expression for matching entities' UUIDs (optional)
+- `name`: regular expression for matching entities' names (optional)
+- `position`: position used with `offset`, `min_distance`, or `max_distance` to define a
+      volume for filtering entities; default is the local player's position (optional)
+- `offset`: offset relative to `position` for selecting entities (optional)
+- `min_distance`: min distance relative to `position` for selecting entities (optional)
+- `max_distance`: max distance relative to `position` for selecting entities (optional)
+- `sort`: one of "nearest", "furthest", "random", or "arbitrary" (optional)
+- `limit`: maximum number of entities to return (optional)
 
 *Returns:*
 
-- List of players where each player is represented as a dict containing:
-  `"name": str, "health": float, "type": str,
-  "position": [float, float, float], "yaw": float, "pitch": float,
-  "velocity": [float, float, float]`. The local player has the attribute
-  `"local": True`. The`"nbt"` attribute is present if `nbt` arg is `True`.
+- `List[EntityData]` representing a snapshot of values for the selected players.
+  (Legacy returned dicts can be restored with `options.legacy_dict_return_values = True`)
+
+Update in v4.0:
+  Added args: uuid, name, type, position, offset, min_distance, max_distance, sort, limit.
+  Return `List[EntityData]` instead of `List[Dict[str, Any]]` by default.
+  Added `uuid` and `id` to returned players.
 
 Update in v3.1:
   Added `"health"` and `"local"` attributes, and `nbt` arg to output `"nbt"`
@@ -734,22 +970,33 @@ Since: v2.1
 
 
 #### entities
-*Usage:* <code>entities(\*, nbt: bool = False)</code>
+*Usage:* <code>entities(\*, nbt: bool = False, uuid: str = None, name: str = None, type: str = None, position: [Vector3f](#vector3f) = None, offset: [Vector3f](#vector3f) = None, min_distance: float = None, max_distance: float = None, sort: str = None, limit: int = None)</code>
 
 Gets a list of nearby entities and their attributes.
 
 *Args:*
 
-- `nbt`: if `True`, populate an `"nbt"` attribute for each returned entity
+- `nbt`: if `True`, populate an `"nbt"` attribute for each returned entity (optional)
+- `uuid`: regular expression for matching entities' UUIDs (optional)
+- `name`: regular expression for matching entities' names (optional)
+- `type`: regular expression for matching entities' types (optional)
+- `position`: position used with `offset`, `min_distance`, or `max_distance` to define a
+      volume for filtering entities; default is the local player's position (optional)
+- `offset`: offset relative to `position` for selecting entities (optional)
+- `min_distance`: min distance relative to `position` for selecting entities (optional)
+- `max_distance`: max distance relative to `position` for selecting entities (optional)
+- `sort`: one of "nearest", "furthest", "random", or "arbitrary" (optional)
+- `limit`: maximum number of entities to return (optional)
 
 *Returns:*
 
-- List of entities where each entity is represented as a dict containing:
-  `"name": str, "health": float (living entities only), "type": str,
-  "position": [float, float, float], "yaw": float, "pitch": float,
-  "velocity": [float, float, float]`. Living entities have
-  `"health": float` and the local player has `"local": True`. The`"nbt"`
-  attribute is present if `nbt` arg is `True`.
+- `List[EntityData]` representing a snapshot of values for the selected entities.
+  (Legacy returned dicts can be restored with `options.legacy_dict_return_values = True`)
+
+Update in v4.0:
+  Added args: uuid, name, type, position, offset, min_distance, max_distance, sort, limit.
+  Return `List[EntityData]` instead of `List[Dict[str, Any]]` by default.
+  Added `uuid`, `id`, and `passengers` (only for entities with passengers) to returned entities.
 
 Update in v3.1:
   Added `"health"` and `"local"` attributes, and `nbt` arg to output `"nbt"`
@@ -758,8 +1005,23 @@ Update in v3.1:
 Since: v2.1
 
 
-#### world_properties
-*Usage:* <code>world_properties() -> Dict[str, Any]</code>
+#### version_info
+*Usage:* <code>version_info() -> VersionInfo</code>
+
+Gets version info for Minecraft, Minescript, mod loader, launcher, and OS.
+
+`minecraft_class_name` is the runtime class name of the main Minecraft class which may be
+obfuscated.
+
+*Returns:*
+
+- `VersionInfo`
+
+Since: v4.0
+
+
+#### world_info
+*Usage:* <code>world_info() -> WorldInfo</code>
 
 Gets world properties.
 
@@ -768,254 +1030,439 @@ the returned `name` and `address` attributes are the values as they appear in
 the server list; otherwise `name` is the name of the locally saved world and
 `address` is `localhost`.
 
-`"day_ticks"` are the ticks associated with the day-night cycle.
+`day_ticks` are the ticks associated with the day-night cycle.
+
+Renamed from `world_properties()` from v3.1.
 
 *Returns:*
 
-- Dict containing: `"game_ticks": int, "day_ticks": int, "raining": bool,
-  "thundering": bool, "spawn": BlockPos, "hardcore": bool,
-  "difficulty": str, "name": str, "address": str`
+- `WorldInfo`
 
-Since: v3.1
+Since: v4.0
 
 
 #### getblock
-*Usage:* <code>getblock(x: int, y: int, z: int, done_callback=None)</code>
+*Usage:* <code>getblock(x: int, y: int, z: int) -> str</code>
 
 Gets the type of block at position (x, y, z).
 
 *Args:*
 
-- `done_callback`: if given, return immediately and call `done_callback(return_value)`
-      asynchronously when `return_value` is ready
+- `x, y, z`: position of block to get
 
 *Returns:*
 
-- if `done_callback` is `None`, returns the block type at (x, y, z) as a string
+- block type at (x, y, z) as a string
 
 
 #### getblocklist
-*Usage:* <code>getblocklist(positions: List[List[int]], done_callback=None)</code>
+*Usage:* <code>getblocklist(positions: List[List[int]]) -> List[str]</code>
 
 Gets the types of block at the specified [x, y, z] positions.
 
 *Args:*
 
-- `done_callback`: if given, return immediately and call `done_callback(return_value)`
-      asynchronously when `return_value` is ready
+  list of positions as lists of x, y, z int coordinates, e.g. [[0, 0, 0], [0, 0, 1]]
 
 *Returns:*
 
-- if `done_callback` is `None`, returns the block types at given positions as list of strings
+- block types at given positions as list of strings
+
+Update in v4.0:
+  Removed `done_callback` arg. Use `async_getblocklist(...)` for async execution.
 
 Since: v2.1
 
 
 #### await_loaded_region
-*Usage:* <code>await_loaded_region(x1: int, z1: int, x2: int, z2: int, done_callback=None)</code>
+*Usage:* <code>await_loaded_region(x1: int, z1: int, x2: int, z2: int)</code>
 
-Notifies the caller when the region from (x1, z1) to (x2, z2) is loaded.
+Waits for chunks to load in the region from (x1, z1) to (x2, z2).
 
 *Args:*
 
-- `done_callback`: if given, return immediately and call `done_callback(return_value)`
-      asynchronously when `return_value` is ready
+- `x1, z1, x2, z2`: bounds of the region for awaiting loaded chunks
+- `timeout`: if specified, timeout in seconds to wait for the region to load
+
+Update in v4.0:
+  Removed `done_callback` arg. Call now always blocks until region is loaded.
+
+
+#### set_default_executor
+*Usage:* <code>set_default_executor(executor: minescript_runtime.FunctionExecutor)</code>
+
+Sets the default executor for script functions executed in the current script job.
+
+Default value is `minescript.render_loop`.
+
+*Args:*
+
+- `executor`: one of `minescript.tick_loop`, `minescript.render_loop`, or `minescript.script_loop`
+
+Since: v4.0
+
+
+#### Task
+Executable task that allows multiple operations to execute on the same executor cycle.
+
+#### Task.as_list
+*Usage:* <code>@staticmethod Task.as_list(\*values)</code>
+
+Creates a task that returns the given values as a list.
+
+#### Task.get_index
+*Usage:* <code>@staticmethod Task.get_index(array, index)</code>
+
+Creates a task that looks up an array by index.
+
+#### Task.get_attr
+*Usage:* <code>@staticmethod Task.get_attr(obj, attr)</code>
+
+Creates a task that looks up a map/dict by key.
+
+#### Task.contains
+*Usage:* <code>@staticmethod Task.contains(container, element)</code>
+
+Creates a task that checks if a container (map, list, or string) contains an element.
+
+#### Task.as_int
+*Usage:* <code>@staticmethod Task.as_int(\*numbers)</code>
+
+Creates a task that converts a floating-point number to int.
+
+#### Task.negate
+*Usage:* <code>@staticmethod Task.negate(condition)</code>
+
+Creates a task that negates a boolean value.
+
+#### Task.is_null
+*Usage:* <code>@staticmethod Task.is_null(value)</code>
+
+Creates a task that checks a value against null or `None`.
+
+#### Task.skip_if
+*Usage:* <code>@staticmethod Task.skip_if(condition)</code>
+
+Creates a task that skips the remainder of the task list if `condition` is true.
+
+#### run_tasks
+*Usage:* <code>run_tasks(tasks: List[Task])</code>
+
+Runs tasks so that multiple tasks can be run on the same executor cycle.
+
+#### schedule_tick_tasks
+*Usage:* <code>schedule_tick_tasks(tasks: List[Task]) -> int</code>
+
+Schedules a list of tasks to run every cycle of the tick loop.
 
 *Returns:*
 
-- if `done_callback` is `None`, returns `True` when the requested region is fully loaded.
+- ID of scheduled task list which can be passed to [`cancel_scheduled_tasks(task_list_id)`](#cancel_scheduled_tasks).
 
-*Examples:*
+Since: v4.0
 
-[1] Don't do any work until the region is done loading (synchronous / blocking
-call):
+
+#### schedule_render_tasks
+*Usage:* <code>schedule_render_tasks(tasks: List[Task]) -> int</code>
+
+Schedules a list of tasks to run every cycle of the render loop.
+
+*Returns:*
+
+- ID of scheduled task list which can be passed to [`cancel_scheduled_tasks(task_list_id)`](#cancel_scheduled_tasks).
+
+Since: v4.0
+
+
+#### cancel_scheduled_tasks
+*Usage:* <code>cancel_scheduled_tasks(task_list_id: int)</code>
+
+Cancels a scheduled task list for the currently running job.
+
+*Args:*
+
+- `task_list_id`: ID of task list returned from [`schedule_tick_tasks()`](#schedule_tick_tasks) or [`schedule_render_tasks`](#schedule_render_tasks).
+
+*Returns:*
+
+- `True` if `task_list_id` was successfully cancelled, `False` otherwise.
+
+Since: v4.0
+
+
+#### KeyEvent
+Key event data.
+
+For a list of key codes, see: https://www.glfw.org/docs/3.4/group__keys.html
+`action` is 0 for key up, 1 for key down, and 2 for key repeat.
+
+
+#### MouseEvent
+Mouse event data.
+
+`action` is 0 for mouse up and 1 for mouse down.
+
+
+#### EventQueue
+Queue for managing events.
+
+Implements context management so that it can be used with a `with` expression
+to automatically unregister event listeners at the end of the block, e.g.
 
 ```
-minescript.echo("About to wait for region to load...")
-
-# Load all chunks within (x, z) bounds (0, 0) and (320, 160):
-minescript.await_loaded_region(0, 0, 320, 160)
-
-minescript.echo("Region finished loading.")
+with EventQueue() as event_queue:
+  event_queue.register_chat_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.CHAT and "knock knock" in event.message.lower():
+      echo("Who's there?")
 ```
 
-[2] Continue doing work on the main thread while the region loads in the
-background (asynchronous / non-blocking call):
+Since: v4.0
+
+
+#### EventQueue.\_\_init\_\_
+*Usage:* <code>EventQueue()</code>
+
+Creates an event registration handler.
+
+#### EventQueue.register_key_listener
+*Usage:* <code>EventQueue.register_key_listener()</code>
+
+Registers listener for `EventType.KEY` events as [`KeyEvent`](#keyevent).
+
+*Example:*
 
 ```
-import minescript
-import threading
-
-lock = threading.Lock()
-
-def on_region_loaded(loaded):
-  if loaded:
-    minescript.echo("Region loaded ok.")
-  else:
-    minescript.echo("Region failed to load.")
-  lock.release()
-
-# Acquire the lock, to be released later by on_region_loaded().
-lock.acquire()
-
-# Calls on_region_loaded(...) when region finishes
-# loading all chunks within (x, z) bounds (0, 0)
-# and (320, 160):
-minescript.await_loaded_region(
-    0, 0, 320, 160, on_region_loaded)
-
-minescript.echo("Do other work while region loads...")
-
-minescript.echo("Now wait for region to finish loading...")
-lock.acquire()
-
-minescript.echo("Do more work now that region finished loading...")
+with EventQueue() as event_queue:
+  event_queue.register_key_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.KEY:
+      if event.action == 0:
+        action = 'up'
+      elif event.action == 1:
+        action = 'down'
+      else:
+        action = 'repeat'
+      echo(f"Got key {action} with code {event.key}")
 ```
+
+
+#### EventQueue.register_mouse_listener
+*Usage:* <code>EventQueue.register_mouse_listener()</code>
+
+Registers listener for `EventType.MOUSE` events as [`MouseEvent`](#mouseevent).
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_mouse_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.MOUSE:
+      echo(f"Got mouse {'up' if event.action == 0 else 'down'} of button {event.button}")
+```
+
+
+#### EventQueue.register_chat_listener
+*Usage:* <code>EventQueue.register_chat_listener()</code>
+
+Registers listener for `EventType.CHAT` events as `ChatEvent`.
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_chat_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.CHAT:
+      if not event.message.startswith("> "):
+        echo(f"> Got chat message: {event.message}")
+```
+
+
+#### EventQueue.register_outgoing_chat_interceptor
+*Usage:* <code>EventQueue.register_outgoing_chat_interceptor(\*, prefix: str = None, pattern: str = None)</code>
+
+Registers listener for `EventType.OUTGOING_CHAT_INTERCEPT` events as `ChatEvent`.
+
+Intercepts outgoing chat messages from the local player. Interception can be restricted to
+messages matching `prefix` or `pattern`. Intercepted messages can be chatted with [`chat()`](#chat).
+
+`prefix` or `pattern` can be specified, but not both. If neither `prefix` nor
+`pattern` is specified, all outgoing chat messages are intercepted.
+
+*Args:*
+
+- `prefix`: if specified, intercept only the messages starting with this literal prefix
+- `pattern`: if specified, intercept only the messages matching this regular expression
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_outgoing_chat_interceptor(pattern=".*%p.*")
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.OUTGOING_CHAT_INTERCEPT:
+      # Replace "%p" in outgoing chats with your current position.
+      chat(event.message.replace("%p", str(player().position)))
+```
+
+
+#### EventQueue.register_add_entity_listener
+*Usage:* <code>EventQueue.register_add_entity_listener()</code>
+
+Registers listener for `EventType.ADD_ENTITY` events as `AddEntityEvent`.
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_add_entity_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.ADD_ENTITY:
+      echo(f"Entity added: {event.entity.name}")
+```
+
+
+#### EventQueue.register_block_update_listener
+*Usage:* <code>EventQueue.register_block_update_listener()</code>
+
+Registers listener for `EventType.BLOCK_UPDATE` events as `BlockUpdateEvent`.
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_block_update_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.BLOCK_UPDATE:
+      echo(f"Block updated at {event.position} to {event.new_state}")
+```
+
+
+#### EventQueue.register_take_item_listener
+*Usage:* <code>EventQueue.register_take_item_listener()</code>
+
+Registers listener for `EventType.TAKE_ITEM` events as `TakeItemEvent`.
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_take_item_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.TAKE_ITEM:
+      echo(f"Item taken: {event.item.type}")
+```
+
+
+#### EventQueue.register_damage_listener
+*Usage:* <code>EventQueue.register_damage_listener()</code>
+
+Registers listener for `EventType.DAMAGE` events as `DamageEvent`.
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_damage_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.DAMAGE:
+      echo(f"Damage from {event.source}")
+```
+
+
+#### EventQueue.register_explosion_listener
+*Usage:* <code>EventQueue.register_explosion_listener()</code>
+
+Registers listener for `EventType.EXPLOSION` events as `ExplosionEvent`.
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_explosion_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.EXPLOSION:
+      echo(f"Explosion at {event.position}")
+```
+
+
+#### EventQueue.register_chunk_listener
+*Usage:* <code>EventQueue.register_chunk_listener()</code>
+
+Registers listener for `EventType.CHUNK` events as `ChunkEvent`.
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_chunk_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.CHUNK:
+      x = event.x_min
+      z = event.z_min
+      echo(f"Chunk {'loaded' if event.loaded else 'unloaded'} at {x}, {z}")
+```
+
+
+#### EventQueue.get
+*Usage:* <code>EventQueue.get(block: bool = True, timeout: float = None) -> Any</code>
+
+Gets the next event in the queue.
+
+*Args:*
+
+- `block`: if `True`, block until an event fires
+- `timeout`: timeout in seconds to wait for an event if `block` is `True`
+
+*Returns:*
+
+- subclass-dependent event
+
+*Raises:*
+
+  `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
+  queue is empty.
 
 
 #### KeyEventListener
-Listener for keyboard events.
-
-Only one [`KeyEventListener`](#keyeventlistener) can be instantiated at a time within a job. For a
-list of key codes, see: https://www.glfw.org/docs/3.4/group__keys.html
-
-Since: v3.2
-
-
-#### KeyEventListener.\_\_init\_\_
 *Usage:* <code>KeyEventListener()</code>
 
-Creates a [`KeyEventListener`](#keyeventlistener) for listening to keyboard events.
+Deprecated listener for keyboard events. Use [`EventQueue.register_key_listener`](#eventqueueregister_key_listener) instead.
 
-#### KeyEventListener.get
-*Usage:* <code>KeyEventListener.get(block: bool = True, timeout: float = None) -> str</code>
+Update in v4.0:
+  Deprecated in favor of [`EventQueue.register_key_listener`](#eventqueueregister_key_listener).
 
-Gets the next key event in the queue.
-
-*Args:*
-
-- `block`: if `True`, block until an event fires
-- `timeout`: timeout in seconds to wait for an event if `block` is `True`
-
-*Returns:*
-
-- event dict: `{"key": int, "scanCode": int, "action": int, "modifiers": int,
-  "timeMillis": int, "screen": str}` where `action` is 0 for key up, 1 for
-  key down, and 2 for key repeat.
-
-*Raises:*
-
-  `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
-  queue is empty.
+Since: v3.2
 
 
 #### ChatEventListener
-Listener for chat message events.
+*Usage:* <code>ChatEventListener()</code>
 
-Only one [`ChatEventListener`](#chateventlistener) can be instantiated at a time within a job.
+Deprecated listener for chat message events.
 
-Listener receives both incoming and outgoing chat messages.
+Use `EventQueue.register_chat_message_listener` instead.
+
+Update in v4.0:
+  Deprecated in favor of `EventQueue.register_chat_message_listener`.
 
 Since: v3.2
 
 
-#### ChatEventListener.\_\_init\_\_
-*Usage:* <code>ChatEventListener()</code>
-
-Creates a [`ChatEventListener`](#chateventlistener) to listen for chat messages.
-
-#### ChatEventListener.get
-*Usage:* <code>ChatEventListener.get(block: bool = True, timeout: float = None) -> str</code>
-
-Gets the next chat event in the queue.
-
-*Args:*
-
-- `block`: if `True`, block until an event fires
-- `timeout`: timeout in seconds to wait for an event if `block` is `True`
-
-*Returns:*
-
-- message from chat (str)
-
-*Raises:*
-
-  `queue.Empty` if `block` is `True` and `timeout` expires, or `block` is `False` and
-  queue is empty.
-
-
-#### register_chat_message_listener
-*Usage:* <code>register_chat_message_listener(listener: Callable[[str], None], exception_handler: ExceptionHandler = None)</code>
-
-Registers a listener for receiving chat messages. One listener allowed per job.
-
-Listener receives both incoming and outgoing chat messages.
-
-For a more user-friendly API, use [`ChatEventListener`](#chateventlistener) instead.
-
-*Args:*
-
-- `listener`: callable that repeatedly accepts a string representing chat messages
-- `exception_handler`: callable for handling an `Exception` thrown from Java (optional)
-
-Update in v3.2:
-  Added optional arg `exception_handler`.
-
-Since: v2.0
-
-See also:
-  [`register_chat_message_interceptor()`](#register_chat_message_interceptor) for swallowing outgoing chat messages
-
-
-#### unregister_chat_message_listener
-*Usage:* <code>unregister_chat_message_listener()</code>
-
-Unregisters a chat message listener, if any, for the currently running job.
-
-For a more user-friendly API, use [`ChatEventListener`](#chateventlistener) instead.
-
-*Returns:*
-
-- `True` if successfully unregistered a listener.
-
-Since: v2.0
-
-
-#### register_chat_message_interceptor
-*Usage:* <code>register_chat_message_interceptor(interceptor: Callable[[str], None])</code>
-
-Registers an interceptor for swallowing chat messages.
-
-An interceptor swallows outgoing chat messages, typically for use in
-rewriting outgoing chat messages by calling minecraft.chat(str), e.g. to
-decorate or post-process outgoing messages automatically before they're sent
-to the server.  Only one interceptor is allowed at a time within a Minecraft
-instance.
-
-*Args:*
-
-- `interceptor`: callable that repeatedly accepts a string representing chat messages
-
-Since: v2.1
-
-See also:
-  [`register_chat_message_listener()`](#register_chat_message_listener) for non-destructive listening of chat messages
-
-
-#### unregister_chat_message_interceptor
-*Usage:* <code>unregister_chat_message_interceptor()</code>
-
-Unregisters the chat message interceptor, if one is currently registered.
-
-*Returns:*
-
-- `True` if successfully unregistered an interceptor.
-
-Since: v2.1
-
-
 #### screen_name
-*Usage:* <code>screen_name()</code>
+*Usage:* <code>screen_name() -> str</code>
 
 Gets the current GUI screen name, if there is one.
 
@@ -1026,8 +1473,82 @@ Gets the current GUI screen name, if there is one.
 Since: v3.2
 
 
-#### BlockPos
-Tuple representing `(x: int, y: int, z: int)` position in block space.
+#### show_chat_screen
+*Usage:* <code>show_chat_screen(show: bool, prompt: str = None) -> str</code>
+
+Shows or hides the chat screen.
+
+*Args:*
+
+- `show`: if `True`, show the chat screen; otherwise hide it
+- `prompt`: if show is `True`, insert `prompt` into chat input box upon showing chat screen.
+
+*Returns:*
+
+- `True` if chat screen was successfully shown (`show=True`) or hidden (`show=False`)
+
+Since: v4.0
+
+
+#### append_chat_history
+*Usage:* <code>append_chat_history(message: str)</code>
+
+Appends `message` to chat history, available via up and down arrows in chat.
+
+Since: v4.0
+
+
+#### chat_input
+*Usage:* <code>chat_input()</code>
+
+Gets state of chat input text.
+
+*Returns:*
+
+- `[text, position]` where `text` is `str` and `position` is `int` cursor position within `text`
+
+Since: v4.0
+
+
+#### set_chat_input
+*Usage:* <code>set_chat_input(text: str = None, position: int = None, color: int = None)</code>
+
+Sets state of chat input text.
+
+*Args:*
+
+- `text`: if specified, replace chat input text
+- `position`: if specified, move cursor to this position within the chat input box
+- `color`: if specified, set input text color, formatted as 0xRRGGBB
+
+Since: v4.0
+
+
+#### container_get_items
+*Usage:* <code>container_get_items() -> List[ItemStack]</code>
+
+Gets all items in an open container (chest, furnace, etc. with slots).
+
+*Returns:*
+
+- List of items if a container's contents are displayed; `None` otherwise.
+
+Since: v4.0
+
+
+#### player_look_at
+*Usage:* <code>player_look_at(x: float, y: float, z: float)</code>
+
+Rotates the camera to look at a position.
+
+*Args:*
+
+- `x`: x position
+- `y`: y position
+- `z`: z position
+
+Since: v4.0
+
 
 #### Rotation
 Tuple of 9 `int` values representing a flattened, row-major 3x3 rotation matrix.
@@ -1115,10 +1636,6 @@ Creates a blockpack from blocks in the world within a rectangular volume.
 
 - a new BlockPack containing blocks read from the world
 
-*Raises:*
-
-  `BlockPackException` if blockpack cannot be read
-
 
 #### BlockPack.read_file
 *Usage:* <code>@classmethod BlockPack.read_file(filename: str, \*, relative_to_cwd=False) -> [BlockPack](#blockpack)</code>
@@ -1135,10 +1652,6 @@ Reads a blockpack from a file.
 
 - a new BlockPack containing blocks read from the file
 
-*Raises:*
-
-  `BlockPackException` if blockpack cannot be read
-
 
 #### BlockPack.import_data
 *Usage:* <code>@classmethod BlockPack.import_data(base64_data: str) -> [BlockPack](#blockpack)</code>
@@ -1153,34 +1666,16 @@ Creates a blockpack from base64-encoded serialized blockpack data.
 
 - a new BlockPack containing blocks read from the base64-encoded data
 
-*Raises:*
-
-  `BlockPackException` if blockpack cannot be read
-
 
 #### BlockPack.block_bounds
 *Usage:* <code>BlockPack.block_bounds() -> (BlockPos, BlockPos)</code>
 
 Returns min and max bounding coordinates of blocks in this BlockPack.
 
-*Raises:*
-
-  `BlockPackException` if blockpack cannot be accessed
-
-
 #### BlockPack.comments
 *Usage:* <code>BlockPack.comments() -> Dict[str, str]</code>
 
 Returns comments stored in this BlockPack.
-
-*Raises:*
-
-  `BlockPackException` if blockpack cannot be accessed
-
-*Raises:*
-
-  `BlockPackException` if blockpack operation fails
-
 
 #### BlockPack.write_world
 *Usage:* <code>BlockPack.write_world(\*, rotation: [Rotation](#rotation) = None, offset: [BlockPos](#blockpos) = None)</code>
@@ -1191,10 +1686,6 @@ Writes blocks from this BlockPack into the current world. Requires setblock, fil
 
 - `rotation`: rotation matrix to apply to block coordinates before writing to world
 - `offset`: offset to apply to block coordiantes (applied after rotation)
-
-*Raises:*
-
-  `BlockPackException` if blockpack operation fails
 
 
 #### BlockPack.write_file
@@ -1208,10 +1699,6 @@ Writes this BlockPack to a file.
     (".zip" is automatically appended to filename if it does not end with that extension)
 - `relative_to_cwd`: if `True`, relative filename is taken to be relative to Minecraft dir
 
-*Raises:*
-
-  `BlockPackException` if blockpack operation fails
-
 
 #### BlockPack.export_data
 *Usage:* <code>BlockPack.export_data() -> str</code>
@@ -1222,20 +1709,11 @@ Serializes this BlockPack into a base64-encoded string.
 
 - a base64-encoded string containing this blockpack's data
 
-*Raises:*
-
-  `BlockPackException` if blockpack operation fails
-
 
 #### BlockPack.\_\_del\_\_
 *Usage:* <code>del blockpack</code>
 
 Frees this BlockPack to be garbage collected.
-
-*Raises:*
-
-  `BlockPackException` if blockpack operation fails
-
 
 #### BlockPacker
 BlockPacker is a mutable collection of blocks.
@@ -1298,10 +1776,6 @@ Adds the blocks within a BlockPack into this BlockPacker.
 - `rotation`: rotation matrix to apply to block coordinates before adding to blockpacker
 - `offset`: offset to apply to block coordiantes (applied after rotation)
 
-*Raises:*
-
-  `BlockPackerException` if blockpacker operation fails
-
 
 #### BlockPacker.pack
 *Usage:* <code>BlockPacker.pack(\*, comments: Dict[str, str] = {}) -> [BlockPack](#blockpack)</code>
@@ -1316,18 +1790,210 @@ Packs blocks within this BlockPacker into a new BlockPack.
 
 - a new BlockPack containing a snapshot of blocks from this BlockPacker
 
-*Raises:*
-
-  `BlockPackerException` if blockpacker operation fails
-
 
 #### BlockPacker.\_\_del\_\_
 *Usage:* <code>del blockpacker</code>
 
 Frees this BlockPacker to be garbage collected.
 
-*Raises:*
+#### java_class
+*Usage:* <code>java_class(name: str) -> JavaHandle</code>
 
-  `BlockPackerException` if blockpacker operation fails
+Looks up Java class by fully qualified name. Returns handle to the Java class object.
+
+*Example:*
+ [`java_class("net.minescript.common.Minescript")`](#java_class)
+
+If running Minecraft with unobfuscated Java symbols:
+[`java_class("net.minecraft.client.Minecraft")`](#java_class)
+
+If running Minecraft with obfuscated symbols, `name` must be the fully qualified and obfuscated
+class name.
+
+Since: v4.0
+
+
+#### java_string
+*Usage:* <code>java_string(s: str) -> JavaHandle</code>
+
+Returns handle to a Java String.
+Since: v4.0
+
+
+#### java_double
+*Usage:* <code>java_double(d: float) -> JavaHandle</code>
+
+Returns handle to a Java Double.
+Since: v4.0
+
+
+#### java_float
+*Usage:* <code>java_float(f: float) -> JavaHandle</code>
+
+Returns handle to a Java Float.
+Since: v4.0
+
+
+#### java_long
+*Usage:* <code>java_long(l: int) -> JavaHandle</code>
+
+Returns handle to a Java Long.
+Since: v4.0
+
+
+#### java_int
+*Usage:* <code>java_int(i: int) -> JavaHandle</code>
+
+Returns handle to a Java Integer
+Since: v4.0
+
+
+#### java_bool
+*Usage:* <code>java_bool(b: bool) -> JavaHandle</code>
+
+Returns handle to a Java Boolean.
+Since: v4.0
+
+
+#### java_ctor
+*Usage:* <code>java_ctor(clss: JavaHandle)</code>
+
+Returns handle to a constructor set for the given class handle.
+
+*Args:*
+
+- `clss`: Java class handle returned from [`java_class`](#java_class)
+
+Since: v4.0
+
+
+#### java_new_instance
+*Usage:* <code>java_new_instance(ctor: JavaHandle, \*args: List[JavaHandle]) -> JavaHandle</code>
+
+Creates new Java instance.
+
+*Args:*
+
+- `ctor`: constructor set returned from [`java_ctor`](#java_ctor)
+- `args`: handles to Java objects to pass as constructor params
+
+*Returns:*
+
+- handle to newly created Java object.
+
+Since: v4.0
+
+
+#### java_member
+*Usage:* <code>java_member(clss: JavaHandle, name: str) -> JavaHandle</code>
+
+Gets Java member(s) matching `name`.
+
+*Returns:*
+
+- Java member object for use with [`java_access_field`](#java_access_field) or [`java_call_method`](#java_call_method).
+
+Since: v4.0
+
+
+#### java_access_field
+*Usage:* <code>java_access_field(target: JavaHandle, field: JavaHandle) -> JavaHandle</code>
+
+Accesses a field on a target Java object.
+
+*Args:*
+
+- `target`: Java object handle from which to access a field
+- `field`: handle returned from [`java_member`](#java_member)
+
+*Returns:*
+
+- Handle to Java object returned from field access, or `None` if `null`.
+
+Since: v4.0
+
+
+#### java_call_method
+*Usage:* <code>java_call_method(target: JavaHandle, method: JavaHandle, \*args: List[JavaHandle]) -> JavaHandle</code>
+
+Invokes a method on a target Java object.
+
+*Args:*
+
+- `target`: Java object handle on which to call a method
+- `method`: handle returned from [`java_member`](#java_member)
+- `args`: handles to Java objects to pass as method params
+
+*Returns:*
+
+- handle to Java object returned from method call, or `None` if `null`.
+
+Since: v4.0
+
+
+#### java_call_script_function
+*Usage:* <code>java_call_script_function(func_name: Union[str, JavaHandle], \*args: List[JavaHandle]) -> JavaHandle</code>
+
+Calls the requested script function with Java params.
+
+*Args:*
+
+- `func_name`: name of the script function, as a Python str or a handle to a Java String
+- `args`: handles to Java objects to pass as args to the script function
+
+*Returns:*
+
+- handle to Java object (`Optional<JsonElement>`) returned from the script function.
+
+Since: v4.0
+
+
+#### java_array_length
+*Usage:* <code>java_array_length(array: JavaHandle) -> int</code>
+
+Returns length of Java array as Python integer.
+Since: v4.0
+
+
+#### java_array_index
+*Usage:* <code>java_array_index(array: JavaHandle, i: int) -> JavaHandle</code>
+
+Gets indexed element of Java array handle.
+
+*Args:*
+
+- `array`: handle to Java array object
+- `i`: index into array
+
+*Returns:*
+
+- handle to object at `array[i]` in Java, or `None` if `null`.
+
+Since: v4.0
+
+
+#### java_to_string
+*Usage:* <code>java_to_string(target: JavaHandle) -> str</code>
+
+Returns Python string from calling `target.toString()` in Java.
+Since: v4.0
+
+
+#### java_assign
+*Usage:* <code>java_assign(dest: JavaHandle, source: JavaHandle)</code>
+
+Reassigns `dest` to reference the object referenced by `source`.
+
+Upon success, both `dest` and `source` reference the same Java object that was initially
+referenced by `source`.
+
+Since: v4.0
+
+
+#### java_release
+*Usage:* <code>java_release(\*targets: List[JavaHandle])</code>
+
+Releases Java reference(s) referred to by `targets`.
+Since: v4.0
 
 

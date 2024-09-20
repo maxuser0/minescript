@@ -27,10 +27,9 @@ from dataclasses import dataclass, asdict
 from minescript_runtime import (
     await_script_function, call_async_script_function, send_script_function_request,
     tick_loop, render_loop, script_loop,
-    Task, run_tasks, schedule_tick_tasks, schedule_render_tasks,
     ScriptFunction, NoReturnScriptFunction,
     ExceptionHandler)
-from typing import Any, List, Set, Dict, Tuple, Optional, Callable
+from typing import Any, List, Set, Dict, Tuple, Optional, Callable, Union
 
 
 BlockPos = Tuple[int, int, int]
@@ -329,8 +328,17 @@ player_inventory_select_slot = ScriptFunction(
 def press_key_bind(key_mapping_name: str, pressed: bool):
   """Presses/unpresses a mapped key binding.
 
+  Valid values of `key_mapping_name` include: "key.advancements", "key.attack", "key.back",
+  "key.chat", "key.command", "key.drop", "key.forward", "key.fullscreen", "key.hotbar.1",
+  "key.hotbar.2", "key.hotbar.3", "key.hotbar.4", "key.hotbar.5", "key.hotbar.6", "key.hotbar.7",
+  "key.hotbar.8", "key.hotbar.9", "key.inventory", "key.jump", "key.left",
+  "key.loadToolbarActivator", "key.pickItem", "key.playerlist", "key.right",
+  "key.saveToolbarActivator", "key.screenshot", "key.smoothCamera", "key.sneak",
+  "key.socialInteractions", "key.spectatorOutlines", "key.sprint", "key.swapOffhand",
+  "key.togglePerspective", "key.use"
+
   Args:
-    key_mapping_name: name of key binding, e.g. "key.hotbar.1"
+    key_mapping_name: name of key binding
     pressed: if `True`, press the bound key, otherwise unpress it
 
   Since: v4.0
@@ -743,9 +751,13 @@ class VersionInfo:
   launcher: str
   os_name: str
   os_version: str
+  minecraft_class_name: str
 
 def version_info() -> VersionInfo:
   """Gets version info for Minecraft, Minescript, mod loader, launcher, and OS.
+
+  `minecraft_class_name` is the runtime class name of the main Minecraft class which may be
+  obfuscated.
 
   Returns:
     `VersionInfo`
@@ -926,14 +938,6 @@ def register_chat_message_interceptor(
 
   For a more user-friendly API, use `EventQueue` instead.  (__internal__)
 
-  The handler swallows outgoing chat messages, typically for use in
-  rewriting outgoing chat messages by calling minecraft.chat(str), e.g. to
-  decorate or post-process outgoing messages automatically before they're sent
-  to the server.
-
-  `prefix` or `pattern` can be specified, but not both. If neither `prefix` nor
-  `pattern` is specified, all outgoing chat messages are intercepted.
-
   Args:
     handler: callable that repeatedly accepts chat message events
     exception_handler: callable for handling an `Exception` thrown from Java (optional)
@@ -1082,8 +1086,143 @@ def unregister_event_handler(handler_id: int):
   return await_script_function("unregister_event_handler", (handler_id,))
 
 
+def set_default_executor(executor: minescript_runtime.FunctionExecutor):
+  """Sets the default executor for script functions executed in the current script job.
+
+  Default value is `minescript.render_loop`.
+
+  Args:
+    executor: one of `minescript.tick_loop`, `minescript.render_loop`, or `minescript.script_loop`
+
+  Since: v4.0
+  """
+  minescript_runtime._default_executor = executor
+
+
+@dataclass
+class Task(minescript_runtime.BasicTask):
+  """Executable task that allows multiple operations to execute on the same executor cycle."""
+
+  @staticmethod
+  def as_list(*values):
+    """Creates a task that returns the given values as a list."""
+    return Task(
+        Task._get_next_fcallid(), "as_list",
+        Task._get_immediate_args(values), Task._get_deferred_args(values))
+
+  @staticmethod
+  def get_index(array, index):
+    """Creates a task that looks up an array by index."""
+    return Task(
+        Task._get_next_fcallid(), "get_index",
+        Task._get_immediate_args((array, index)), Task._get_deferred_args((array, index)))
+
+  @staticmethod
+  def get_attr(obj, attr):
+    """Creates a task that looks up a map/dict by key."""
+    return Task(
+        Task._get_next_fcallid(), "get_attr",
+        Task._get_immediate_args((obj, attr)), Task._get_deferred_args((obj, attr)))
+
+  @staticmethod
+  def contains(container, element):
+    """Creates a task that checks if a container (map, list, or string) contains an element."""
+    return Task(
+        Task._get_next_fcallid(), "contains",
+        Task._get_immediate_args((container, element)),
+        Task._get_deferred_args((container, element)))
+
+  @staticmethod
+  def as_int(*numbers):
+    """Creates a task that converts a floating-point number to int."""
+    return Task(
+        Task._get_next_fcallid(), "as_int",
+        Task._get_immediate_args(numbers), Task._get_deferred_args(numbers))
+
+  @staticmethod
+  def negate(condition):
+    """Creates a task that negates a boolean value."""
+    return Task(
+        Task._get_next_fcallid(), "negate",
+        Task._get_immediate_args((condition,)), Task._get_deferred_args((condition,)))
+
+  @staticmethod
+  def is_null(value):
+    """Creates a task that checks a value against null or `None`."""
+    return Task(
+        Task._get_next_fcallid(), "is_null",
+        Task._get_immediate_args((value,)), Task._get_deferred_args((value,)))
+
+  @staticmethod
+  def skip_if(condition):
+    """Creates a task that skips the remainder of the task list if `condition` is true."""
+    return Task(
+        Task._get_next_fcallid(), "skip_if",
+        Task._get_immediate_args((condition,)), Task._get_deferred_args((condition,)))
+
+
+def run_tasks(tasks: List[Task]):
+  """Runs tasks so that multiple tasks can be run on the same executor cycle."""
+  for i, arg in enumerate(tasks):
+    if not isinstance(arg, minescript_runtime.BasicTask):
+      raise ValueError(
+          f"All args to `run_tasks` must be tasks, but arg {i} is {arg} (type `{type(arg)}`)")
+
+  serialized_tasks = [
+    (task.fcallid, task.func_name, task.immediate_args, task.deferred_args) for task in tasks
+  ]
+
+  if tasks:
+    result = await_script_function("run_tasks", serialized_tasks)
+    return tasks[-1].result_transform(result)
+  else:
+    return None
+
+
+def schedule_tick_tasks(tasks: List[Task]) -> int:
+  """Schedules a list of tasks to run every cycle of the tick loop.
+
+  Returns:
+    ID of scheduled task list which can be passed to `cancel_scheduled_tasks(task_list_id)`.
+
+  Since: v4.0
+  """
+  for i, arg in enumerate(tasks):
+    if not isinstance(arg, minescript_runtime.BasicTask):
+      raise ValueError(
+          "All args to `schedule_tick_tasks` must be tasks, "
+          f"but arg {i} is {arg} (type `{type(arg)}`)")
+
+  serialized_tasks = [
+    (task.fcallid, task.func_name, task.immediate_args, task.deferred_args) for task in tasks
+  ]
+
+  return await_script_function("schedule_tick_tasks", serialized_tasks)
+
+
+def schedule_render_tasks(tasks: List[Task]) -> int:
+  """Schedules a list of tasks to run every cycle of the render loop.
+
+  Returns:
+    ID of scheduled task list which can be passed to `cancel_scheduled_tasks(task_list_id)`.
+
+  Since: v4.0
+  """
+  for i, arg in enumerate(tasks):
+    if not isinstance(arg, minescript_runtime.BasicTask):
+      raise ValueError(
+          "All args to `schedule_render_tasks` must be tasks, "
+          f"but arg {i} is {arg} (type `{type(arg)}`)")
+
+  serialized_tasks = [
+    (task.fcallid, task.func_name, task.immediate_args, task.deferred_args) for task in tasks
+  ]
+
+  return await_script_function("schedule_render_tasks", serialized_tasks)
+
+
 def cancel_scheduled_tasks(task_list_id: int):
-  """Cancels a scheduled task list, if any, for the currently running job. (__internal__)
+  """Cancels a scheduled task list for the currently running job.
 
   Args:
     task_list_id: ID of task list returned from `schedule_tick_tasks()` or `schedule_render_tasks`.
@@ -1223,17 +1362,11 @@ class EventQueue:
 
   ```
   with EventQueue() as event_queue:
-    echo("Capturing key events...")
-    event_queue.register_key_listener()
+    event_queue.register_chat_listener()
     while True:
       event = event_queue.get()
-      if event.type == EventType.KEY:
-        # Key code 93 is the `]` key.
-        if event.key == 93:
-          break
-        echo(f"Captured key with code {event.key}.")
-
-  echo("No longer capturing key events.")
+      if event.type == EventType.CHAT and "knock knock" in event.message.lower():
+        echo("Who's there?")
   ```
 
   Since: v4.0
@@ -1245,15 +1378,81 @@ class EventQueue:
     self.event_handler_ids = []
 
   def register_key_listener(self):
+    """Registers listener for `EventType.KEY` events as `KeyEvent`.
+
+    Example:
+    ```
+      with EventQueue() as event_queue:
+        event_queue.register_key_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.KEY:
+            if event.action == 0:
+              action = 'up'
+            elif event.action == 1:
+              action = 'down'
+            else:
+              action = 'repeat'
+            echo(f"Got key {action} with code {event.key}")
+    ```
+    """
     self._register(EventType.KEY, register_key_listener)
 
   def register_mouse_listener(self):
+    """Registers listener for `EventType.MOUSE` events as `MouseEvent`.
+
+    Example:
+    ```
+      with EventQueue() as event_queue:
+        event_queue.register_mouse_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.MOUSE:
+            echo(f"Got mouse {'up' if event.action == 0 else 'down'} of button {event.button}")
+    ```
+    """
     self._register(EventType.MOUSE, register_mouse_listener)
 
   def register_chat_listener(self):
+    """Registers listener for `EventType.CHAT` events as `ChatEvent`.
+
+    Example:
+    ```
+      with EventQueue() as event_queue:
+        event_queue.register_chat_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.CHAT:
+            if not event.message.startswith("> "):
+              echo(f"> Got chat message: {event.message}")
+    ```
+    """
     self._register(EventType.CHAT, register_chat_message_listener)
 
   def register_outgoing_chat_interceptor(self, *, prefix: str = None, pattern: str = None):
+    """Registers listener for `EventType.OUTGOING_CHAT_INTERCEPT` events as `ChatEvent`.
+
+    Intercepts outgoing chat messages from the local player. Interception can be restricted to
+    messages matching `prefix` or `pattern`. Intercepted messages can be chatted with `chat()`.
+
+    `prefix` or `pattern` can be specified, but not both. If neither `prefix` nor
+    `pattern` is specified, all outgoing chat messages are intercepted.
+
+    Args:
+      prefix: if specified, intercept only the messages starting with this literal prefix
+      pattern: if specified, intercept only the messages matching this regular expression
+
+    Example:
+    ```
+      with EventQueue() as event_queue:
+        event_queue.register_outgoing_chat_interceptor(pattern=".*%p.*")
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.OUTGOING_CHAT_INTERCEPT:
+            # Replace "%p" in outgoing chats with your current position.
+            chat(event.message.replace("%p", str(player().position)))
+    ```
+    """
     self._register(
         EventType.OUTGOING_CHAT_INTERCEPT,
         lambda handler, exception_handler: \
@@ -1261,21 +1460,95 @@ class EventQueue:
                 handler, exception_handler, prefix=prefix, pattern=pattern))
 
   def register_add_entity_listener(self):
+    """Registers listener for `EventType.ADD_ENTITY` events as `AddEntityEvent`.
+
+    Example:
+    ```
+      with EventQueue() as event_queue:
+        event_queue.register_add_entity_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.ADD_ENTITY:
+            echo(f"Entity added: {event.entity.name}")
+    ```
+    """
     self._register(EventType.ADD_ENTITY, register_add_entity_listener)
 
   def register_block_update_listener(self):
+    """Registers listener for `EventType.BLOCK_UPDATE` events as `BlockUpdateEvent`.
+
+    Example:
+    ```
+      with EventQueue() as event_queue:
+        event_queue.register_block_update_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.BLOCK_UPDATE:
+            echo(f"Block updated at {event.position} to {event.new_state}")
+    ```
+    """
     self._register(EventType.BLOCK_UPDATE, register_block_update_listener)
 
   def register_take_item_listener(self):
+    """Registers listener for `EventType.TAKE_ITEM` events as `TakeItemEvent`.
+
+    Example:
+    ```
+      with EventQueue() as event_queue:
+        event_queue.register_take_item_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.TAKE_ITEM:
+            echo(f"Item taken: {event.item.type}")
+    ```
+    """
     self._register(EventType.TAKE_ITEM, register_take_item_listener)
 
   def register_damage_listener(self):
+    """Registers listener for `EventType.DAMAGE` events as `DamageEvent`.
+
+    Example:
+    ```
+      with EventQueue() as event_queue:
+        event_queue.register_damage_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.DAMAGE:
+            echo(f"Damage from {event.source}")
+    ```
+    """
     self._register(EventType.DAMAGE, register_damage_listener)
 
   def register_explosion_listener(self):
+    """Registers listener for `EventType.EXPLOSION` events as `ExplosionEvent`.
+
+    Example:
+    ```
+      with EventQueue() as event_queue:
+        event_queue.register_explosion_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.EXPLOSION:
+            echo(f"Explosion at {event.position}")
+    ```
+    """
     self._register(EventType.EXPLOSION, register_explosion_listener)
 
   def register_chunk_listener(self):
+    """Registers listener for `EventType.CHUNK` events as `ChunkEvent`.
+
+    Example:
+    ```
+      with EventQueue() as event_queue:
+        event_queue.register_chunk_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.CHUNK:
+            x = event.x_min
+            z = event.z_min
+            echo(f"Chunk {'loaded' if event.loaded else 'unloaded'} at {x}, {z}")
+    ```
+    """
     self._register(EventType.CHUNK, register_chunk_listener)
 
   def _register(self, event_type: str, registration_func):
@@ -2058,114 +2331,212 @@ class BlockPacker:
     """Frees this BlockPacker to be garbage collected."""
     blockpacker_delete(self._id)
 
+JavaHandle = int
+java_null = 0
 
-def java_class(name: str):
-  """Looks up Java class by fully qualified name. Returns handle to Java object."""
+def java_class(name: str) -> JavaHandle:
+  """Looks up Java class by fully qualified name. Returns handle to the Java class object.
+
+  Example: `java_class("net.minescript.common.Minescript")`
+
+  If running Minecraft with unobfuscated Java symbols:
+  `java_class("net.minecraft.client.Minecraft")`
+
+  If running Minecraft with obfuscated symbols, `name` must be the fully qualified and obfuscated
+  class name.
+
+  Since: v4.0
+  """
   return (name,)
 
 java_class = ScriptFunction("java_class", java_class)
 
-def java_string(s):
-  """Creates Java String. Returns handle to Java object."""
+def java_string(s: str) -> JavaHandle:
+  """Returns handle to a Java String.
+  Since: v4.0
+  """
   return (s,)
 
 java_string = ScriptFunction("java_string", java_string)
 
-def java_double(d):
-  """Creates Java Double. Returns handle to Java object."""
+def java_double(d: float) -> JavaHandle:
+  """Returns handle to a Java Double.
+  Since: v4.0
+  """
   return (d,)
 
 java_double = ScriptFunction("java_double", java_double)
 
-def java_float(f):
-  """Creates Java Float. Returns handle to Java object."""
+def java_float(f: float) -> JavaHandle:
+  """Returns handle to a Java Float.
+  Since: v4.0
+  """
   return (f,)
 
 java_float = ScriptFunction("java_float", java_float)
 
-def java_long(l):
-  """Creates Java Long. Returns handle to Java object."""
+def java_long(l: int) -> JavaHandle:
+  """Returns handle to a Java Long.
+  Since: v4.0
+  """
   return (l,)
 
 java_long = ScriptFunction("java_long", java_long)
 
-def java_int(i):
-  """Creates Java Integer. Returns handle to Java object."""
+def java_int(i: int) -> JavaHandle:
+  """Returns handle to a Java Integer
+  Since: v4.0
+  """
   return (i,)
 
 java_int = ScriptFunction("java_int", java_int)
 
-def java_bool(b):
-  """Creates Java Boolean. Returns handle to Java object."""
+def java_bool(b: bool) -> JavaHandle:
+  """Returns handle to a Java Boolean.
+  Since: v4.0
+  """
   return (b,)
 
 java_bool = ScriptFunction("java_bool", java_bool)
 
-def java_ctor(clss):
-  """Returns handle to constructor for `clss`."""
+def java_ctor(clss: JavaHandle):
+  """Returns handle to a constructor set for the given class handle.
+
+  Args:
+    clss: Java class handle returned from `java_class`
+
+  Since: v4.0
+  """
   return (clss,)
 
 java_ctor = ScriptFunction("java_ctor", java_ctor)
 
-def java_new_instance(ctor, *args):
-  """Creates new Java instance. Returns handle to newly created Java object.
+def java_new_instance(ctor: JavaHandle, *args: List[JavaHandle]) -> JavaHandle:
+  """Creates new Java instance.
 
   Args:
     ctor: constructor set returned from `java_ctor`
     args: handles to Java objects to pass as constructor params
+
+  Returns:
+    handle to newly created Java object.
+
+  Since: v4.0
   """
   return (ctor, *args)
 
 java_new_instance = ScriptFunction("java_new_instance", java_new_instance)
 
-def java_member(clss, name: str):
-  """Gets Java member(s) matching `name`. Returns handle to Java object."""
+def java_member(clss: JavaHandle, name: str) -> JavaHandle:
+  """Gets Java member(s) matching `name`.
+
+  Returns:
+    Java member object for use with `java_access_field` or `java_call_method`.
+
+  Since: v4.0
+  """
   return (clss, name)
 
 java_member = ScriptFunction("java_member", java_member)
 
-def java_access_field(target, field):
-  """Accesses `field` on `target`. Returns handle to Java object, or `None` if `null`."""
+def java_access_field(target: JavaHandle, field: JavaHandle) -> JavaHandle:
+  """Accesses a field on a target Java object.
+
+  Args:
+    target: Java object handle from which to access a field
+    field: handle returned from `java_member`
+
+  Returns:
+    Handle to Java object returned from field access, or `None` if `null`.
+
+  Since: v4.0
+  """
   return (target, field)
 
 java_access_field = ScriptFunction("java_access_field", java_access_field)
 
-def java_call_method(target, method, *args):
-  """Invokes method on target. Returns handle to Java object, or `None` if `null`.
+def java_call_method(target: JavaHandle, method: JavaHandle, *args: List[JavaHandle]) -> JavaHandle:
+  """Invokes a method on a target Java object.
 
   Args:
-    args: handles to Java objects to pass as constructor params
+    target: Java object handle on which to call a method
+    method: handle returned from `java_member`
+    args: handles to Java objects to pass as method params
+
+  Returns:
+    handle to Java object returned from method call, or `None` if `null`.
+
+  Since: v4.0
   """
   return (target, method, *args)
 
 java_call_method = ScriptFunction("java_call_method", java_call_method)
 
-def java_array_length(array):
-  """Returns length of array handle as `int`."""
+def java_call_script_function(
+    func_name: Union[str, JavaHandle], *args: List[JavaHandle]) -> JavaHandle:
+  """Calls the requested script function with Java params.
+
+  Args:
+    func_name: name of the script function, as a Python str or a handle to a Java String
+    args: handles to Java objects to pass as args to the script function
+
+  Returns:
+    handle to Java object (`Optional<JsonElement>`) returned from the script function.
+
+  Since: v4.0
+  """
+  return (func_name, *args)
+
+java_call_script_function = ScriptFunction("java_call_script_function", java_call_script_function)
+
+def java_array_length(array: JavaHandle) -> int:
+  """Returns length of Java array as Python integer.
+  Since: v4.0
+  """
   return (array,)
 
 java_array_length = ScriptFunction("java_array_length", java_array_length)
 
-def java_array_index(array, i):
-  """Gets element `i` of array handle. Returns handle to Java object, or `None` if `null`."""
+def java_array_index(array: JavaHandle, i: int) -> JavaHandle:
+  """Gets indexed element of Java array handle.
+
+  Args:
+    array: handle to Java array object
+    i: index into array
+
+  Returns:
+    handle to object at `array[i]` in Java, or `None` if `null`.
+
+  Since: v4.0
+  """
   return (array, i)
 
 java_array_index = ScriptFunction("java_array_index", java_array_index)
 
-def java_to_string(target):
-  """Returns `str` from calling `target.toString()` in Java."""
+def java_to_string(target: JavaHandle) -> str:
+  """Returns Python string from calling `target.toString()` in Java.
+  Since: v4.0
+  """
   return (target,)
 
 java_to_string = ScriptFunction("java_to_string", java_to_string)
 
-def java_assign(dest, source):
-  """Reassigns `dest` handle to reference the object referenced by `source` handle."""
+def java_assign(dest: JavaHandle, source: JavaHandle):
+  """Reassigns `dest` to reference the object referenced by `source`.
+
+  Upon success, both `dest` and `source` reference the same Java object that was initially
+  referenced by `source`.
+
+  Since: v4.0
+  """
   return (dest, source)
 
 java_assign = ScriptFunction("java_assign", java_assign)
 
-def java_release(*targets):
-  """Releases the Java reference(s) associated with `targets`."""
+def java_release(*targets: List[JavaHandle]):
+  """Releases Java reference(s) referred to by `targets`.
+  Since: v4.0
+  """
   return targets
 
 java_release = ScriptFunction("java_release", java_release)

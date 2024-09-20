@@ -11,14 +11,13 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minescript.common.Minescript;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.LogicalSide;
-import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
-import net.neoforged.neoforge.event.TickEvent;
 import net.neoforged.neoforge.event.level.ChunkEvent;
+import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -27,9 +26,9 @@ public class MinescriptNeoForgeClientMod {
 
   public MinescriptNeoForgeClientMod() {}
 
-  @Mod.EventBusSubscriber(
+  @EventBusSubscriber(
       modid = Constants.MODID,
-      bus = Mod.EventBusSubscriber.Bus.MOD,
+      bus = EventBusSubscriber.Bus.MOD,
       value = Dist.CLIENT)
   public static class ClientModEvents {
     @SubscribeEvent
@@ -39,7 +38,7 @@ public class MinescriptNeoForgeClientMod {
     }
   }
 
-  @Mod.EventBusSubscriber(Dist.CLIENT)
+  @EventBusSubscriber(Dist.CLIENT)
   public static class ClientEvents {
     @SubscribeEvent
     public static void onRender(RenderLevelStageEvent event) {
@@ -86,8 +85,8 @@ public class MinescriptNeoForgeClientMod {
     }
 
     @SubscribeEvent
-    public static void onWorldTick(TickEvent.LevelTickEvent event) {
-      if (event.side == LogicalSide.CLIENT && event.phase == TickEvent.Phase.START) {
+    public static void onWorldTick(LevelTickEvent.Pre event) {
+      if (event.getLevel().isClientSide()) {
         Minescript.onClientWorldTick();
       }
     }
