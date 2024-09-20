@@ -53,7 +53,41 @@ for item in minescript.player_inventory():
 ## Pre-built mod jars
 
 Pre-built mod jars for Fabric and Forge can be downloaded from
+[Modrinth](https://modrinth.com/mod/minescript/versions) and
 [CurseForge](https://www.curseforge.com/minecraft/mc-mods/minescript/files).
+
+## Command-line build instructions
+
+These instructions are for POSIX systems like Linux and macOS.
+
+To run the mod in dev mode, run:
+
+```
+# Fabric client:
+$ ./gradlew fabric:runClient
+
+# Forge client:
+$ ./gradlew forge:runClient
+```
+
+To build the mod, run:
+
+```
+# Build Fabric and Forge mods:
+$ ./gradlew build
+
+# Or build each mod individually:
+$ ./gradlew fabric:build
+$ ./gradlew forge:build
+```
+
+The built mod jar (along with a sources jar) file will be in `build/libs`
+within the given mod platform's subdirectory, e.g.
+
+```
+$ ls fabric/build/libs/
+minescript-mc1.20.4-fabric-mod-3.2-sources.jar	minescript-mc1.20.4-fabric-mod-3.2.jar
+```
 
 ## License
 

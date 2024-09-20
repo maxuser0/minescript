@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-# SPDX-FileCopyrightText: © 2022-2023 Greg Christiana <maxuser@minescript.net>
+# SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: MIT
 
 "Tool for converting pydoc to Markdown."
@@ -17,7 +17,7 @@ METHOD_RE = re.compile(r"^  def ([a-zA-Z_0-9]+)(.*)")
 METHOD_DECORATION_RE = re.compile(r"^  (@(static|class)method)$")
 GLOBAL_ASSIGNMENT_RE = re.compile(r"^([a-zA-Z_0-9]+)(: ([a-zA-Z_0-9.]+))? = ")
 CLASS_ASSIGNMENT_RE = re.compile(r"^  ([a-zA-Z_0-9]+)(: ([a-zA-Z_0-9.]+))? = ")
-BEGIN_TRIPLE_QUOTE = re.compile(r'^ *"""([^ ].*)')
+BEGIN_TRIPLE_QUOTE = re.compile(r'^ *r?"""([^ ].*)')
 END_TRIPLE_QUOTE = re.compile(r'(.*)"""$')
 
 
@@ -252,7 +252,7 @@ def parse_code_entities() -> List[Tuple[CodeEntity, str]]:
       class_member = None
       global_entity = GlobalEntity(name=m.group(1), kind=GlobalEntityType.FUNCTION)
       func = global_entity
-      func.func_decl = m.group(1) + m.group(2)
+      func.func_decl = m.group(1) + m.group(2).replace(", _as_task=False", "")
       continue
 
     m = CLASS_RE.match(line)
