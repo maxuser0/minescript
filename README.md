@@ -2,27 +2,26 @@
 
 ## Introduction
 
-**Minescript** is a platform for controlling and interacting with Minecraft
-using scripts written in the Python programming language. It is implemented as
-mod that comes in two flavors: one for [Forge](https://files.minecraftforge.net/net/minecraftforge/forge/) and one for [Fabric](https://fabricmc.net/).
+**Minescript** is a platform for controlling and interacting with Minecraft using scripts written in
+Python and other scripting languages. It is implemented as mod for [Fabric](https://fabricmc.net/),
+[Forge](https://files.minecraftforge.net/net/minecraftforge/forge/), and
+[NeoForge](https://neoforged.net/).
 
-The examples below require Minescript v2.0 or higher.
+The examples below require Minescript 4.0 or higher.
 
 ## How it works
 
-Users place Python scripts (`.py` files) in the `minecraft/minescript` folder.
-These scripts can be run from the Minecraft chat console with a leading
-backslash and dropping the `.py`. E.g. a file at `minecraft/minescript/example.py`
-could be executed from the Minecraft chat as:
+Place Python scripts (`.py` files) in the `minescript` folder (located inside the `minecraft`
+folder) to run them from the Minecraft chat console. A file at `minecraft/minescript/example.py`
+can be executed from the Minecraft chat as:
 
 ```
 \example
 ```
 
-`minescript.py` is automatically installed in the `minecraft/minescript` folder
-the first time that Minecraft launches with the Minescript mod installed. This
-Python module contains a library of functions for accessing Minecraft
-functionality:
+`minescript.py` is a script library that's automatically installed in the
+`minecraft/minescript/system/lib` folder the first time running Minecraft with the Minescript mod
+installed. `minescript.py` contains a library of functions for accessing Minecraft functionality:
 
 ```
 # example.py:
@@ -36,31 +35,35 @@ minescript.echo("Hello, world!")
 minescript.chat("Hello, everyone!")
 
 # Get your player's current position:
-x, y, z = minescript.player_position()
+x, y, z = minescript.player().position
 
-# Set the block directly beneath your player:
+# Print information for the block that your player is standing on:
+minescript.echo(minescript.getblock(x, y - 1, z))
+
+# Set the block directly beneath your player (assuming commands are enabled):
 x, y, z = int(x), int(y), int(z)
 minescript.execute(f"setblock {x} {y-1} {z} yellow_concrete")
 
-# Print the type of block at a particular location:
-minescript.echo(minescript.getblock(x, y, z))
-
 # Display the contents of your inventory:
 for item in minescript.player_inventory():
-  minescript.echo(item["item"])
+  minescript.echo(item.item)
 ```
 
 ## Pre-built mod jars
 
-Pre-built mod jars for Fabric and Forge can be downloaded from
+Pre-built mod jars for Fabric, Forge, and NeoForge can be downloaded from
 [Modrinth](https://modrinth.com/mod/minescript/versions) and
 [CurseForge](https://www.curseforge.com/minecraft/mc-mods/minescript/files).
 
 ## Command-line build instructions
 
-These instructions are for POSIX systems like Linux and macOS.
+To run the mod in dev mode, clone this repo:
 
-To run the mod in dev mode, run:
+```
+$ git clone https://github.com/maxuser0/minescript.git
+```
+
+Then run the dev client for one of the supported mod loaders:
 
 ```
 # Fabric client:
@@ -68,25 +71,31 @@ $ ./gradlew fabric:runClient
 
 # Forge client:
 $ ./gradlew forge:runClient
+
+# NeoForge client:
+$ ./gradlew neoforge:runClient
 ```
 
-To build the mod, run:
+To build the mod without running it in dev mode, run:
 
 ```
-# Build Fabric and Forge mods:
-$ ./gradlew build
-
-# Or build each mod individually:
+# Build the Fabric mod:
 $ ./gradlew fabric:build
+
+# Build the Forge mod:
 $ ./gradlew forge:build
+
+# Build the NeoForge mod:
+$ ./gradlew neoforge:build
 ```
 
-The built mod jar (along with a sources jar) file will be in `build/libs`
-within the given mod platform's subdirectory, e.g.
+The built mod jars will appear in `build/libs` within the given mod platform's subdirectory, e.g.
 
 ```
-$ ls fabric/build/libs/
-minescript-mc1.20.4-fabric-mod-3.2-sources.jar	minescript-mc1.20.4-fabric-mod-3.2.jar
+$ ls */build/libs/*-4.0.jar
+fabric/build/libs/minescript-fabric-1.21.1-4.0.jar
+forge/build/libs/minescript-forge-1.21.1-4.0.jar
+neoforge/build/libs/minescript-neoforge-1.21.1-4.0.jar
 ```
 
 ## License
