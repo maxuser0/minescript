@@ -5,14 +5,29 @@
 ### Major changes
 
 - Support running script functions during tick loop (20x per second), render loop (30-100+ fps), or script loop (~5000 times per second) ([923f9bb](https://github.com/maxuser0/minescript/commit/923f9bb5851ddf16273a3d9b0d0c8c23b75c2a68), [bfbd192](https://github.com/maxuser0/minescript/commit/bfbd192e782a8d0f01866fae6fb644f2cb0cb935), [fb936b8](https://github.com/maxuser0/minescript/commit/fb936b8f2000fbfde53e713a6b0ed56cb61a53f5))
-- Java reflection via Python script functions ([ebdba54](https://github.com/maxuser0/minescript/commit/ebdba547152f4211939335f051ca7a55466b3374), [8008110](https://github.com/maxuser0/minescript/commit/80081103c03c3b539910370c007c0badb41fec6a), [39160c3](https://github.com/maxuser0/minescript/commit/39160c347659bc0667698a01f27effdf1e29027b))
+- Java reflection via Python script functions, including ability to call script functions from Java
+  ([ebdba54](https://github.com/maxuser0/minescript/commit/ebdba547152f4211939335f051ca7a55466b3374),
+  [8008110](https://github.com/maxuser0/minescript/commit/80081103c03c3b539910370c007c0badb41fec6a),
+  [39160c3](https://github.com/maxuser0/minescript/commit/39160c347659bc0667698a01f27effdf1e29027b),
+  [8d97911](https://github.com/maxuser0/minescript/commit/8d979112e5e6109e0ba500a62f45852b7e250962))
+- Introduce Tasks for efficient, synchronous batching of script function calls, including Java
+  reflection
+  ([d2bd144](https://github.com/maxuser0/minescript/commit/d2bd144ce056459708d75c2e71c28b535e48f308),
+[1377acb](https://github.com/maxuser0/minescript/commit/1377acb6794d8ecdf9090984aa1618b37bad59b3),
+[19eb79c](https://github.com/maxuser0/minescript/commit/19eb79c5bcf9ec1b416662a38608e82d29270e19),
+[0762eaa](https://github.com/maxuser0/minescript/commit/0762eaac0a28b526dfc9502f143c51d0a2e81b59),
+[12e7306](https://github.com/maxuser0/minescript/commit/12e7306682661e60e7bbb61557c3d7ab09788b65),
+[f8ed176](https://github.com/maxuser0/minescript/commit/f8ed176e785258ac260dfc9bd0b749cc9c6d7917),
+[023fd05](https://github.com/maxuser0/minescript/commit/023fd05b1aee172fea8fc0cb5b09cc954ff6e83e),
+[1efbd90](https://github.com/maxuser0/minescript/commit/1efbd90105c5b4d5b75682bb7a15cd657e05b101),
+[07388d9](https://github.com/maxuser0/minescript/commit/07388d971c053abce5af778ba1f437eb406f08e1))
 - Support Python scripts in arbitrary folders using `command_path` in `config.txt` ([791c295](https://github.com/maxuser0/minescript/commit/791c2951dca52257e390e0f2b9cc6b28d76fedc9), [99c8619](https://github.com/maxuser0/minescript/commit/99c8619393830b99506c3c07bb33b5ddbd595dd0), [23ee273](https://github.com/maxuser0/minescript/commit/23ee273e8ac3a8740508ce7477ec09cfab03f2cb))
 - Support alternative script languages for commands ([890d2a9](https://github.com/maxuser0/minescript/commit/890d2a9673b904f07574430f972c6403fbd9d363))
-- Initial version of Minescript mod for NeoForge ([7dd592f](https://github.com/maxuser0/minescript/commit/7dd592febcf3c851a7ac2724a06f0de040c1373b))
+- Support for NeoForge, starting with Minecraft 1.20.2 ([7dd592f](https://github.com/maxuser0/minescript/commit/7dd592febcf3c851a7ac2724a06f0de040c1373b))
 - Schedule groups of script functions to run every render or tick cycle with dynamically updated values ([19eb79c](https://github.com/maxuser0/minescript/commit/19eb79c5bcf9ec1b416662a38608e82d29270e19), [1377acb](https://github.com/maxuser0/minescript/commit/1377acb6794d8ecdf9090984aa1618b37bad59b3), [d2bd144](https://github.com/maxuser0/minescript/commit/d2bd144ce056459708d75c2e71c28b535e48f308), [0762eaa](https://github.com/maxuser0/minescript/commit/0762eaac0a28b526dfc9502f143c51d0a2e81b59))
 - Support for scripting several game and input events with a unified `EventQueue` API ([d1cb4c9](https://github.com/maxuser0/minescript/commit/d1cb4c95ba380d9e10e9baed511a6bbd64076daf), [6628525](https://github.com/maxuser0/minescript/commit/662852592b3c506043aa2d45696a7660deeb7aa1), [993c9b6](https://github.com/maxuser0/minescript/commit/993c9b65eaf58c726dc50cc0e6c0d91be6b93403), [b96159e](https://github.com/maxuser0/minescript/commit/b96159e594768ec736d284ac1400e73a4646cea4), [4af1a32](https://github.com/maxuser0/minescript/commit/4af1a32c23d702591a385e6ade23ba5918fe0590))
 - Async script functions that are more powerful, easier to use, and cancellable ([882bc7e](https://github.com/maxuser0/minescript/commit/882bc7e6cea6adc37b7366b0f72e64f5c9260873))
-- Unify Minescript and Minecraft chat histories ([46a0cde](https://github.com/maxuser0/minescript/commit/46a0cdec9886ee601bc0c4dfeada48f33eb6e80a))
+- Unified Minescript and Minecraft chat histories when using up/down arrows ([46a0cde](https://github.com/maxuser0/minescript/commit/46a0cdec9886ee601bc0c4dfeada48f33eb6e80a))
 - New and updated script functions, including:
   - `press_key_bind()` ([174dac8](https://github.com/maxuser0/minescript/commit/174dac8d1d683fda96c4d74bf9e6d9ae804c7811))
   - `show_chat_screen()` ([adf8dac](https://github.com/maxuser0/minescript/commit/adf8dacaaec8810cca865c0d74ebe2fdaede88a2))
@@ -28,6 +43,49 @@
 
 ### Detailed changes
 
+- Update README for v4.0 and inclusion of neoforge ([f4e42f4](https://github.com/maxuser0/minescript/commit/f4e42f40fb5baf240d0a186870a2846b98521f4a))
+- Update version numbers in gradle configs ([91941d2](https://github.com/maxuser0/minescript/commit/91941d22b23b094e4fe09405cde657a561825539))
+- Update main branch to mc1.21.1 ([5b4d690](https://github.com/maxuser0/minescript/commit/5b4d69008bdd043b55381982e34806bc1846cd43))
+- Fix bug in JobControl::log when no message args ([4c6b4f0](https://github.com/maxuser0/minescript/commit/4c6b4f0566a14b95cde66a09effa1a85ae4b4d55))
+- Fix flaky async_function_test in minescript_test ([79c6559](https://github.com/maxuser0/minescript/commit/79c65598dd769a155058b82df73fd11605cc747c))
+- Bump Minescript version from 4.0-beta2 to 4.0 ([7713ed4](https://github.com/maxuser0/minescript/commit/7713ed4526bf143bec92b13e188de06913ecba8c))
+- Prevent async functions from running as tasks ([07388d9](https://github.com/maxuser0/minescript/commit/07388d971c053abce5af778ba1f437eb406f08e1))
+- Rename ScriptFunctionArgList to ScriptFunctionCall ([0c45363](https://github.com/maxuser0/minescript/commit/0c453632e925483b0e200d35b5a9d6a0c0861ac3))
+- Add java_call_script_function ([8d97911](https://github.com/maxuser0/minescript/commit/8d979112e5e6109e0ba500a62f45852b7e250962))
+- Fix typo in documentation of async timeout ([4f49418](https://github.com/maxuser0/minescript/commit/4f494182b08c5f37daa9fff90639cd61ea5fc5c7))
+- Update docs for tasks and async script functions ([1efbd90](https://github.com/maxuser0/minescript/commit/1efbd90105c5b4d5b75682bb7a15cd657e05b101))
+- Update minescript_test.py to fix flakiness ([7850f61](https://github.com/maxuser0/minescript/commit/7850f61eb1356a52af94efb49013d0c3b921e18a))
+- Simplify task tests with `append` helper function ([023fd05](https://github.com/maxuser0/minescript/commit/023fd05b1aee172fea8fc0cb5b09cc954ff6e83e))
+- Remove obsolete split literal in "Level Loading" ([ee23600](https://github.com/maxuser0/minescript/commit/ee236007de4ae7ebd447f0c8ed7e38612488d31b))
+- Update docs to include Tasks and drop _as_task arg ([f8ed176](https://github.com/maxuser0/minescript/commit/f8ed176e785258ac260dfc9bd0b749cc9c6d7917))
+- Implement Task.contains for an item in container ([9e0f9a3](https://github.com/maxuser0/minescript/commit/9e0f9a3665a120a9b600ec7ed3453478416ab7c8))
+- Add comparison operations to Java Numbers class ([13ca7d2](https://github.com/maxuser0/minescript/commit/13ca7d244f802d6a6b9c6e08b4ee1f11d6c343b3))
+- Updates to script tasks, including Task.skip_if ([12e7306](https://github.com/maxuser0/minescript/commit/12e7306682661e60e7bbb61557c3d7ab09788b65))
+- Change Fabric onRender event from LAST to END ([7c78636](https://github.com/maxuser0/minescript/commit/7c78636e55e444d1c7fef3a83e24501ef5d25ec5))
+- Allow mod-loader builds to be disabled ([6f51835](https://github.com/maxuser0/minescript/commit/6f51835b2b67663aa9f70d4f7241842b83f7e2b9))
+- Add more success messages in minescript_test ([658c2a4](https://github.com/maxuser0/minescript/commit/658c2a445928dbf1f7792bf39b15ffa327bc5c79))
+- Update register_outgoing_chat_interceptor() pydoc ([2d82abe](https://github.com/maxuser0/minescript/commit/2d82abe1050e1ec4fa53a6a1f7e3e1174a15fa43))
+- Update README.md with minescript module docs ([ad9eb5b](https://github.com/maxuser0/minescript/commit/ad9eb5bc6ce6c14e95155c72a6f31b7d82bd8dd8))
+- Fix Python Java API docs, add java_null, add test ([fb320fc](https://github.com/maxuser0/minescript/commit/fb320fc74c88f42459ce9acff8c304a3ad1cd9f4))
+- Add docstrings to EventQueue register methods ([0b2d1ff](https://github.com/maxuser0/minescript/commit/0b2d1ff4d5ab3d559b2b0cca75df6743047c34da))
+- Update docs for v4.0 config ([56acb38](https://github.com/maxuser0/minescript/commit/56acb38c0bb8924e9ccc942dd92bcbf5254d1455))
+- Fix bug in ScriptConfig for precondition check ([b0e6d07](https://github.com/maxuser0/minescript/commit/b0e6d0772dda6c1392b141423ee66a4799cb9e84))
+- Remove legacy "minescript_"-prefixed config vars ([dbd8e98](https://github.com/maxuser0/minescript/commit/dbd8e989ecaa60f17b3818c7fd626315e209739e))
+- Add "Since: 4.0" to java_release pydoc ([5e6652a](https://github.com/maxuser0/minescript/commit/5e6652adb658ac2798b712e5d8276d6dc9510156))
+- Update doc strings for Python Java API functions ([7a9eabc](https://github.com/maxuser0/minescript/commit/7a9eabc480e013bcc1ee60eff15347a0340c76df))
+- Add report_job_success_threshold_millis config var ([12569fe](https://github.com/maxuser0/minescript/commit/12569fef4285166fbb16f98de5a02cbfd95e149e))
+- Add minecraft_class_name to version_info() data ([4fb9542](https://github.com/maxuser0/minescript/commit/4fb9542ebe62df45d8d01b5b93ebb765f3775ca4))
+- Fix Forge mod for 1.21 running in non-dev mode ([a9a7abe](https://github.com/maxuser0/minescript/commit/a9a7abeed41dd08cd89037f0d52c27d762c4b9d0))
+- Add support for Forge on Minescript 4.0, MC 1.21 ([d19ceb1](https://github.com/maxuser0/minescript/commit/d19ceb1ccc7aa1c5ab9c854177186d59a04c7073))
+- Document key_mapping_name values to press_key_bind ([c358650](https://github.com/maxuser0/minescript/commit/c35865008a63ce958f1dc41d32a87742182e4dfb))
+- Update to latest version of MultiLoader-Template ([2262b0f](https://github.com/maxuser0/minescript/commit/2262b0f9f4f2141a9bf4d56c6fc041b6381ca29f))
+- Update to mc1.21 ([4276b39](https://github.com/maxuser0/minescript/commit/4276b398b0a48cf1ffb1ef4005fd77f1b58f36bf))
+- Delete duplicate pack.mcmeta from neoforge build ([9e15517](https://github.com/maxuser0/minescript/commit/9e15517bdf7e6509515f23f2153850979f3a97f8))
+- Update to mc1.20.6 and Java 21 ([9268867](https://github.com/maxuser0/minescript/commit/9268867494ae5ca3d3a1d6a90941ef606f4dda07))
+- Revert "Update Minescript version to 4.0" ([5709e2c](https://github.com/maxuser0/minescript/commit/5709e2c47780f824fe49ec9af9bee498595effa4))
+- Update docs for Minescript 4.0 ([b986258](https://github.com/maxuser0/minescript/commit/b9862588409d38a019008da177b2b3d91fa86d7d))
+- Update Minescript version to 4.0 ([9b9fdb0](https://github.com/maxuser0/minescript/commit/9b9fdb0e7eb5cf69e033b7b5f68282e58e378263))
+- Update changelog with changes in 4.0-beta2 ([97549f7](https://github.com/maxuser0/minescript/commit/97549f73c0bc32de45b26e5f764cf0f620836329))
 - Bump mod version to 4.0-beta2 ([aaca0c0](https://github.com/maxuser0/minescript/commit/aaca0c0c2f03ca1b5004895026d69fd1119a4932))
 - Support raw triple quotes in pydoc_to_markdown.py ([90888fc](https://github.com/maxuser0/minescript/commit/90888fc08540adc0dbbf5f7c0d3ce1e37461af0d))
 - Ignore ID 0 in `java_release(...)` ([d9f0fd8](https://github.com/maxuser0/minescript/commit/d9f0fd8abff1a14d8a93f443a9a154cbc5dd8454))
