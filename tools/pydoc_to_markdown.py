@@ -19,6 +19,7 @@ GLOBAL_ASSIGNMENT_RE = re.compile(r"^([a-zA-Z_0-9]+)(: ([a-zA-Z_0-9.]+))? = ")
 CLASS_ASSIGNMENT_RE = re.compile(r"^  ([a-zA-Z_0-9]+)(: ([a-zA-Z_0-9.]+))? = ")
 BEGIN_TRIPLE_QUOTE = re.compile(r'^ *r?"""([^ ].*)')
 END_TRIPLE_QUOTE = re.compile(r'(.*)"""$')
+REQUIREMENT_LINE = re.compile(r'^  [a-zA-Z0-9_-]+ v.*')
 
 
 class GlobalEntityType(Enum):
@@ -145,10 +146,31 @@ def process_pydoc(code_entity: CodeEntity, pydoc: str, anchors: Dict[str, str]):
 
   if not code_entity:
     # This is the module itself. Get the name from pydoc.
-    module_name = pydoc.split()[0]
-    print(f"### {module_name} module")
-    pydoc = re.sub(r"\nUsage: ([^\n]*)", r"*Usage:* `\1`", pydoc)
-    print("\n".join(pydoc.splitlines()[1:]))
+    module_name, version = pydoc.split()[0:2]
+    if module_name == "minescript":
+      print(f"### {module_name} module")
+    else:
+      print(f"### {module_name} {version}")
+    pydoc = re.sub(r"\nUsage: ([^\n]*)", r"\n*Usage:* `\1`", pydoc)
+    pydoc = pydoc.replace("\nExample:", "\n*Example:*\n")
+    pydoc = pydoc.replace("\nUsage:", "\n*Usage:*\n")
+    pydoc_lines = pydoc.splitlines()[1:]
+    is_requires_block = False
+    for line in pydoc_lines:
+      if line.lstrip().startswith("```"):
+        line = line .lstrip()
+
+      if line == "Requires:":
+        print("*Requires:*\n")
+        is_requires_block = True
+      elif is_requires_block:
+        if REQUIREMENT_LINE.match(line):
+          print(f"- `{line.strip()}`")
+        else:
+          is_requires_block = False
+          print(line)
+      else:
+        print(line)
     print()
     return
 
@@ -268,7 +290,8 @@ def parse_code_entities() -> List[Tuple[CodeEntity, str]]:
     m = METHOD_RE.match(line)
     if m:
       if global_entity is None or global_entity.kind != GlobalEntityType.CLASS:
-        print(f"ERROR: encountered method `{m.group(1)}` while not in class")
+        if global_entity.kind != GlobalEntityType.FUNCTION:
+          print(f"ERROR: encountered method `{m.group(1)}` while not in {global_entity.kind}")
         continue
       class_member = ClassMember(
           classname=global_entity.name, name=m.group(1), kind=ClassMemberType.METHOD,
