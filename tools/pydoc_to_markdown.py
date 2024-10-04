@@ -152,7 +152,6 @@ def process_pydoc(code_entity: CodeEntity, pydoc: str, anchors: Dict[str, str]):
     else:
       print(f"### {module_name} {version}")
     pydoc = re.sub(r"\nUsage: ([^\n]*)", r"\n*Usage:* `\1`", pydoc)
-    pydoc = pydoc.replace("\nExample:", "\n*Example:*\n")
     pydoc = pydoc.replace("\nUsage:", "\n*Usage:*\n")
     pydoc_lines = pydoc.splitlines()[1:]
     is_requires_block = False
@@ -160,7 +159,9 @@ def process_pydoc(code_entity: CodeEntity, pydoc: str, anchors: Dict[str, str]):
       if line.lstrip().startswith("```"):
         line = line .lstrip()
 
-      if line == "Requires:":
+      if line.strip().startswith("Example") and line.strip().endswith(":"):
+        print(f"\n*{line.strip()}*\n")
+      elif line == "Requires:":
         print("*Requires:*\n")
         is_requires_block = True
       elif is_requires_block:
