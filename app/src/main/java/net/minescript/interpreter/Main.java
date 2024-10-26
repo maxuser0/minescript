@@ -4,6 +4,7 @@
 package net.minescript.interpreter;
 
 import com.google.gson.JsonParser;
+import java.util.Arrays;
 
 public class Main {
 
@@ -616,6 +617,97 @@ public class Main {
       }
       """;
 
+  private static final String populateArrayJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "populate_array",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [
+                {
+                  "type": "arg",
+                  "arg": "array",
+                  "annotation": null,
+                  "type_comment": null
+                },
+                {
+                  "type": "arg",
+                  "arg": "index",
+                  "annotation": null,
+                  "type_comment": null
+                },
+                {
+                  "type": "arg",
+                  "arg": "value",
+                  "annotation": null,
+                  "type_comment": null
+                }
+              ],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Subscript",
+                    "value": {
+                      "type": "Name",
+                      "id": "array",
+                      "ctx": {
+                        "type": "Load"
+                      }
+                    },
+                    "slice": {
+                      "type": "Name",
+                      "id": "index",
+                      "ctx": {
+                        "type": "Load"
+                      }
+                    },
+                    "ctx": {
+                      "type": "Store"
+                    }
+                  }
+                ],
+                "value": {
+                  "type": "Name",
+                  "id": "value",
+                  "ctx": {
+                    "type": "Load"
+                  }
+                },
+                "type_comment": null
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Name",
+                  "id": "array",
+                  "ctx": {
+                    "type": "Load"
+                  }
+                }
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
   private static void timesTwo(double x) {
     var jsonAst = JsonParser.parseString(timesTwoJsonAst);
     var ast = Interpreter.JsonAstParser.parseStatements(jsonAst);
@@ -653,9 +745,23 @@ public class Main {
     System.out.println(context.output());
   }
 
+  private static void populateArray(String[] array, int index, String value) {
+    var jsonAst = JsonParser.parseString(populateArrayJsonAst);
+    var ast = Interpreter.JsonAstParser.parseStatements(jsonAst);
+    System.out.println(ast);
+
+    var context = new Interpreter.Context();
+    context.setVariable("array", array);
+    context.setVariable("index", index);
+    context.setVariable("value", value);
+    ast.eval(context);
+    System.out.println(Arrays.toString((String[]) context.output()));
+  }
+
   public static void main(String[] args) {
     timesTwo(Math.PI);
     distanceScalar2(100, 100, 103, 104);
-    distanceVec3(new int[] { -1, 5, -1 }, new int[] { 1, 5, 1 });
+    distanceVec3(new int[] {-1, 5, -1}, new int[] {1, 5, 1});
+    populateArray(new String[3], 0, "first");
   }
 }

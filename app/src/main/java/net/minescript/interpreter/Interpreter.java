@@ -38,9 +38,20 @@ public class Interpreter {
             }
           }
         case "Assign":
-          return Statement.createAssignment(
-              new Assignment(
-                  getId(getTargets(element).get(0)), parseExpression(getAttr(element, "value"))));
+          {
+            Expression lhs = parseExpression(getTargets(element).get(0));
+            switch (lhs.type()) {
+              case IDENTIFIER:
+              case ARRAY_INDEX:
+                return Statement.createAssignment(
+                    new Assignment(lhs, parseExpression(getAttr(element, "value"))));
+              default:
+                throw new IllegalArgumentException(
+                    String.format(
+                        "Unsupported expression type for lhs of assignment: `%s` (%s)",
+                        lhs, lhs.type()));
+            }
+          }
         case "Return":
           return Statement.createReturn(parseExpression(getAttr(element, "value")));
       }
@@ -233,8 +244,42 @@ public class Interpreter {
         case ASSIGNMENT:
           {
             var assign = (Assignment) data;
-            context.setVariable(assign.lhs(), assign.rhs().eval(context));
-            return;
+            Expression lhs = assign.lhs();
+            Object rhsValue = assign.rhs().eval(context);
+            if (lhs.data() instanceof Identifier lhsId) {
+              context.setVariable(lhsId, rhsValue);
+              return;
+            } else if (lhs.data() instanceof ArrayIndex lhsArrayIndex) {
+              var array = lhsArrayIndex.array().eval(context);
+              var index = lhsArrayIndex.index().eval(context);
+              if (array instanceof Object[] objectArray) {
+                objectArray[((Number) index).intValue()] = rhsValue;
+                return;
+              } else if (array instanceof int[] intArray) {
+                intArray[((Number) index).intValue()] = (Integer) rhsValue;
+                return;
+              } else if (array instanceof long[] longArray) {
+                longArray[((Number) index).intValue()] = (Long) rhsValue;
+                return;
+              } else if (array instanceof float[] floatArray) {
+                floatArray[((Number) index).intValue()] = (Float) rhsValue;
+                return;
+              } else if (array instanceof double[] doubleArray) {
+                doubleArray[((Number) index).intValue()] = (Double) rhsValue;
+                return;
+              } else if (array instanceof List list) {
+                list.set(((Number) index).intValue(), rhsValue);
+                return;
+              } else if (array instanceof Map map) {
+                map.put(index, rhsValue);
+                return;
+              }
+            } else {
+              throw new IllegalArgumentException(
+                  String.format(
+                      "Unsupported expression type for lhs of assignment: `%s` (%s)",
+                      lhs, lhs.type()));
+            }
           }
 
         case RETURN:
@@ -274,7 +319,15 @@ public class Interpreter {
         case ASSIGNMENT:
           {
             var assign = (Assignment) data;
-            return String.format("%s = %s;", assign.lhs().name(), assign.rhs());
+            var lhs = assign.lhs().data();
+            if (lhs instanceof Identifier lhsId) {
+              return String.format("%s = %s;", lhsId.name(), assign.rhs());
+            } else if (lhs instanceof ArrayIndex arrayIndex) {
+              return String.format(
+                  "%s[%s] = %s;", arrayIndex.array(), arrayIndex.index(), assign.rhs());
+            } else {
+              return String.format("%s = %s;", lhs, assign.rhs());
+            }
           }
 
         case EXPRESSION:
@@ -505,8 +558,7 @@ public class Interpreter {
     }
   }
 
-  // TODO(maxuser): What about destructuring assignment to a tuple?
-  public record Assignment(Identifier lhs, Expression rhs) {}
+  public record Assignment(Expression lhs, Expression rhs) {}
 
   public record AugmentedAssignment(Identifier lhs, Op op, Expression rhs) {
     public enum Op {

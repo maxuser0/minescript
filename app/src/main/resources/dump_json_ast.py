@@ -61,8 +61,12 @@ def times_two(x):
   y = x * 2
   return y
 
+def populate_array(array, index, value):
+  array[index] = value
+  return array
+
 def main():
-  print_func(distance_vec3)
+  print_func(populate_array)
 
 if __name__ == "__main__":
   main()
