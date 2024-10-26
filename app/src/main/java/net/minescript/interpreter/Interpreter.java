@@ -1,11 +1,131 @@
+// SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
+// SPDX-License-Identifier: GPL-3.0-only
+
 package net.minescript.interpreter;
 
+import static java.util.stream.Collectors.joining;
+import static java.util.stream.Collectors.toList;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.StreamSupport;
+import net.minescript.common.Numbers;
 
 public class Interpreter {
 
+  public static class JsonAstParser {
+
+    public static Statement parseStatements(JsonElement element) {
+      String type = getType(element);
+      switch (type) {
+        case "Module":
+          {
+            return parseStatements(getBody(element).get(0));
+          }
+        case "FunctionDef":
+          {
+            var body = getBody(element);
+            if (body.size() == 1) {
+              return parseStatements(body.get(0));
+            } else {
+              return Statement.createBlock(
+                  StreamSupport.stream(body.spliterator(), false)
+                      .map(elem -> parseStatements(elem))
+                      .collect(toList()));
+            }
+          }
+        case "Assign":
+          return Statement.createAssignment(
+              new Assignment(
+                  getId(getTargets(element).get(0)), parseExpression(getAttr(element, "value"))));
+        case "Return":
+          return Statement.createReturn(parseExpression(getAttr(element, "value")));
+      }
+      throw new IllegalArgumentException("Unknown statement type: " + element.toString());
+    }
+
+    public static Expression parseExpression(JsonElement element) {
+      String type = getType(element);
+      switch (type) {
+        case "BinOp":
+          return Expression.createBinaryOp(
+              new BinaryOp(
+                  parseExpression(getAttr(element, "left")),
+                  parseBinaryOp(getType(getAttr(element, "op"))),
+                  parseExpression(getAttr(element, "right"))));
+        case "Name":
+          return Expression.createIdentifier(getId(element));
+        case "Constant":
+          return parseConstant(getAttr(element, "value"));
+      }
+      throw new IllegalArgumentException("Unknown expression type: " + element.toString());
+    }
+
+    private static BinaryOp.Op parseBinaryOp(String opName) {
+      switch (opName) {
+        case "Mult":
+          return BinaryOp.Op.MUL;
+        default:
+          throw new IllegalArgumentException("Unknown binary op: " + opName);
+      }
+    }
+
+    private static Expression parseConstant(JsonElement element) {
+      var primitive = element.getAsJsonPrimitive();
+      if (primitive.isNumber()) {
+        var number = primitive.getAsNumber();
+        int n = number.intValue();
+        double d = number.doubleValue();
+        if (n == d) {
+          return Expression.createInteger(number.intValue());
+        } else {
+          return Expression.createDouble(number.doubleValue());
+        }
+      } else if (primitive.isBoolean()) {
+        return Expression.createBool(primitive.getAsBoolean());
+      } else if (primitive.isString()) {
+        return Expression.createString(primitive.getAsString());
+      }
+      throw new IllegalArgumentException(String.format("Unsupported primitive type: %s", element));
+    }
+
+    private static String getType(JsonElement element) {
+      return element.getAsJsonObject().get("type").getAsString();
+    }
+
+    private static JsonArray getTargets(JsonElement element) {
+      return element.getAsJsonObject().get("targets").getAsJsonArray();
+    }
+
+    private static JsonElement getAttr(JsonElement element, String attr) {
+      return element.getAsJsonObject().get(attr);
+    }
+
+    private static Identifier getId(JsonElement element) {
+      return new Identifier(element.getAsJsonObject().get("id").getAsString());
+    }
+
+    private static JsonArray getBody(JsonElement element) {
+      return element.getAsJsonObject().get("body").getAsJsonArray();
+    }
+  }
+
+  // TODO(maxuser): Keep this class and refactor Statement and Expression to it?
+  /*
+  public static class AstElement {
+    protected final Type type;
+    protected final Object data;
+
+    protected AstElement(Type type)
+  }
+  */
+
   public static class Statement {
     public enum Type {
+      STATEMENT_BLOCK,
       EXPRESSION,
       ASSIGNMENT,
       AUGMENTED_ASSIGNMENT,
@@ -30,6 +150,10 @@ public class Interpreter {
 
     public Type type() {
       return type;
+    }
+
+    public static Statement createBlock(List<Statement> statements) {
+      return new Statement(Type.STATEMENT_BLOCK, statements);
     }
 
     public static Statement createExpression(Expression expression) {
@@ -79,6 +203,81 @@ public class Interpreter {
     public static Statement createResourceBlock(ResourceBlock resourceBlock) {
       return new Statement(Type.RESOURCE_BLOCK, resourceBlock);
     }
+
+    public void eval(Context context) {
+      switch (type) {
+        case STATEMENT_BLOCK:
+          {
+            var statements = (List<Statement>) data;
+            for (var statement : statements) {
+              statement.eval(context);
+            }
+            return;
+          }
+
+        case ASSIGNMENT:
+          {
+            var assign = (Assignment) data;
+            context.setVariable(assign.lhs(), assign.rhs().eval(context));
+            return;
+          }
+
+        case RETURN:
+          {
+            var returnExpression = (Expression) data;
+            context.setOutput(returnExpression.eval(context));
+            return;
+          }
+
+        case EXPRESSION:
+        case AUGMENTED_ASSIGNMENT:
+        case IF_BLOCK:
+        case WHILE_BLOCK:
+        case FOR_BLOCK:
+        case BREAK:
+        case CONTINUE:
+        case THROW:
+        case TRY_BLOCK:
+        case RESOURCE_BLOCK:
+      }
+      throw new IllegalArgumentException("Statement type not implemented: " + type.toString());
+    }
+
+    @Override
+    public String toString() {
+      switch (type) {
+        case STATEMENT_BLOCK:
+          return ((List<Statement>) data)
+              .stream()
+                  .map(Object::toString)
+                  .map(s -> "  " + s)
+                  .collect(joining("\n", "{\n", "\n}"));
+
+        case RETURN:
+          return String.format("return %s;", data.toString());
+
+        case ASSIGNMENT:
+          {
+            var assign = (Assignment) data;
+            return String.format("%s = %s;", assign.lhs().name(), assign.rhs());
+          }
+
+        case EXPRESSION:
+        case AUGMENTED_ASSIGNMENT:
+        case BREAK:
+        case CONTINUE:
+        case THROW:
+          return data.toString() + ";";
+
+        case IF_BLOCK:
+        case WHILE_BLOCK:
+        case FOR_BLOCK:
+        case TRY_BLOCK:
+        case RESOURCE_BLOCK:
+        default:
+          return data.toString();
+      }
+    }
   }
 
   public record IfBlock(Expression ifCondition, Statement ifBody, Statement elseBody) {}
@@ -100,11 +299,10 @@ public class Interpreter {
     public enum Type {
       NULL,
       CONST_DOUBLE,
-      CONST_FLOAT,
       CONST_INT,
       CONST_BOOL,
       CONST_STRING,
-      VARIABLE,
+      IDENTIFIER,
       UNARY_OP,
       BINARY_OP,
       CAST,
@@ -127,12 +325,44 @@ public class Interpreter {
       return type;
     }
 
-    public static Expression createDouble(Double constDouble) {
-      return new Expression(Type.CONST_DOUBLE, constDouble);
+    public Object eval(Context context) {
+      switch (type) {
+        case NULL:
+          return null;
+        case CONST_DOUBLE:
+          return data;
+        case CONST_INT:
+          return data;
+        case CONST_BOOL:
+          return data;
+        case CONST_STRING:
+          return data;
+        case IDENTIFIER:
+          return context.getVariable((Identifier) data);
+        case UNARY_OP:
+          {
+            var op = (UnaryOp) data;
+            return op.eval(context);
+          }
+        case BINARY_OP:
+          {
+            var op = (BinaryOp) data;
+            return op.eval(context);
+          }
+        case CAST:
+          return null; // TODO(maxuser)
+        case CTOR_CALL:
+          return null; // TODO(maxuser)
+        case FIELD_ACCESS:
+          return null; // TODO(maxuser)
+        case METHOD_CALL:
+          return null; // TODO(maxuser)
+      }
+      throw new IllegalArgumentException("Expression type not implemented: " + type.toString());
     }
 
-    public static Expression createFloat(Float constFloat) {
-      return new Expression(Type.CONST_FLOAT, constFloat);
+    public static Expression createDouble(Double constDouble) {
+      return new Expression(Type.CONST_DOUBLE, constDouble);
     }
 
     public static Expression createInteger(Integer constInt) {
@@ -147,8 +377,8 @@ public class Interpreter {
       return new Expression(Type.CONST_STRING, constString);
     }
 
-    public static Expression createVariable(Identifier variable) {
-      return new Expression(Type.VARIABLE, variable);
+    public static Expression createIdentifier(Identifier variable) {
+      return new Expression(Type.IDENTIFIER, variable);
     }
 
     public static Expression createUnaryOp(UnaryOp unaryOp) {
@@ -174,6 +404,31 @@ public class Interpreter {
     public static Expression createMethodCall(MethodCall methodCall) {
       return new Expression(Type.METHOD_CALL, methodCall);
     }
+
+    @Override
+    public String toString() {
+      switch (type) {
+        case IDENTIFIER:
+          return ((Identifier) data).name();
+        case BINARY_OP:
+          {
+            var op = (BinaryOp) data;
+            return String.format("%s %s %s", op.lhs(), op.op().symbol(), op.rhs());
+          }
+        case NULL:
+        case CONST_DOUBLE:
+        case CONST_INT:
+        case CONST_BOOL:
+        case CONST_STRING:
+        case UNARY_OP:
+        case CAST:
+        case CTOR_CALL:
+        case FIELD_ACCESS:
+        case METHOD_CALL:
+        default:
+          return data.toString();
+      }
+    }
   }
 
   // TODO(maxuser): What about destructuring assignment to a tuple?
@@ -181,35 +436,87 @@ public class Interpreter {
 
   public record AugmentedAssignment(Identifier lhs, Op op, Expression rhs) {
     public enum Op {
-      ADD_EQ,
-      SUB_EQ,
-      MUL_EQ,
-      DIV_EQ,
-      MOD_EQ
+      ADD_EQ("+="),
+      SUB_EQ("-="),
+      MUL_EQ("*="),
+      DIV_EQ("/="),
+      MOD_EQ("%=");
+
+      private final String symbol;
+
+      Op(String symbol) {
+        this.symbol = symbol;
+      }
+
+      public String symbol() {
+        return symbol;
+      }
     }
   }
 
   public record UnaryOp(Op op, Expression operand) {
     public enum Op {
-      NEGATIVE,
-      NOT
+      NEGATIVE("-"),
+      NOT("!");
+
+      private final String symbol;
+
+      Op(String symbol) {
+        this.symbol = symbol;
+      }
+
+      public String symbol() {
+        return symbol;
+      }
+    }
+
+    Object eval(Context context) {
+      switch (op) {
+        case NEGATIVE:
+          return Numbers.negate((Number) operand.eval(context));
+        case NOT:
+          return !(Boolean) operand.eval(context);
+      }
+      throw new IllegalArgumentException("Unary op not implemented");
     }
   }
 
   public record BinaryOp(Expression lhs, Op op, Expression rhs) {
     public enum Op {
-      ADD,
-      SUB,
-      MUL,
-      DIV,
-      MOD,
-      LESS,
-      LT_EQ,
-      EQ,
-      GT,
-      GT_EQ,
-      AND,
-      OR
+      ADD("+"),
+      SUB("-"),
+      MUL("*"),
+      DIV("/"),
+      MOD("%"),
+      EQ("=="),
+      LESS("<"),
+      LT_EQ("<="),
+      GT(">"),
+      GT_EQ(">="),
+      NOT_EQ("!="),
+      AND("&&"),
+      OR("||");
+
+      private final String symbol;
+
+      Op(String symbol) {
+        this.symbol = symbol;
+      }
+
+      public String symbol() {
+        return symbol;
+      }
+    }
+
+    Object eval(Context context) {
+      switch (op) {
+        case EQ:
+          return lhs.eval(context).equals(rhs.eval(context));
+        case MUL:
+          return Numbers.multiply((Number) lhs.eval(context), (Number) rhs.eval(context));
+          // TODO(maxuser): impl ops...
+      }
+      throw new IllegalArgumentException("Binary op not implemented");
     }
   }
 
@@ -221,7 +528,28 @@ public class Interpreter {
 
   public record FieldAccess(Expression target, Identifier fieldId) {}
 
-  public interface Context {
-    Object getVariable(Identifier id);
+  public static class Context {
+    private Map<String, Object> vars = new HashMap<>();
+    private Object output;
+
+    public void setVariable(String name, Object value) {
+      vars.put(name, value);
+    }
+
+    public void setVariable(Identifier id, Object value) {
+      vars.put(id.name(), value);
+    }
+
+    public Object getVariable(Identifier id) {
+      return vars.get(id.name());
+    }
+
+    public void setOutput(Object output) {
+      this.output = output;
+    }
+
+    public Object output() {
+      return output;
+    }
   }
 }
