@@ -62,7 +62,7 @@ def times_two(x):
   return y
 
 def main():
-  print_func(distance_scalar2)
+  print_func(distance_vec3)
 
 if __name__ == "__main__":
   main()

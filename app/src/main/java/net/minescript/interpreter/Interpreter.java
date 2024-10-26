@@ -76,6 +76,11 @@ public class Interpreter {
                       "%s.%s",
                       getAttr(getAttr(element, "value"), "id").getAsString(),
                       getAttr(element, "attr").getAsString())));
+        case "Subscript":
+          return Expression.createArrayIndex(
+              new ArrayIndex(
+                  parseExpression(getAttr(element, "value")),
+                  parseExpression(getAttr(element, "slice"))));
       }
       throw new IllegalArgumentException("Unknown expression type: " + element.toString());
     }
@@ -315,6 +320,7 @@ public class Interpreter {
       IDENTIFIER,
       UNARY_OP,
       BINARY_OP,
+      ARRAY_INDEX,
       CAST,
       CTOR_CALL,
       FIELD_ACCESS,
@@ -363,17 +369,40 @@ public class Interpreter {
             var op = (BinaryOp) data;
             return op.eval(context);
           }
-        case CAST:
-          return null; // TODO(maxuser)
-        case CTOR_CALL:
-          return null; // TODO(maxuser)
-        case FIELD_ACCESS:
-          return null; // TODO(maxuser)
+        case ARRAY_INDEX:
+          {
+            // TODO(maxuser): Distinguish between array[index] being on lhs vs rhs of assignment.
+            var arrayIndex = (ArrayIndex) data;
+            var array = arrayIndex.array().eval(context);
+            var index = arrayIndex.index().eval(context);
+            if (array == null || index == null) {
+              throw new NullPointerException(
+                  String.format(
+                      "%s=%s, %s=%s in %s",
+                      arrayIndex.array(), array, arrayIndex.index(), index, this));
+            }
+            if (array instanceof Object[] objectArray) {
+              return objectArray[((Number) index).intValue()];
+            } else if (array instanceof int[] intArray) {
+              return intArray[((Number) index).intValue()];
+            } else if (array instanceof long[] longArray) {
+              return longArray[((Number) index).intValue()];
+            } else if (array instanceof float[] floatArray) {
+              return floatArray[((Number) index).intValue()];
+            } else if (array instanceof double[] doubleArray) {
+              return doubleArray[((Number) index).intValue()];
+            } else if (array instanceof List list) {
+              return list.get(((Number) index).intValue());
+            } else if (array instanceof Map map) {
+              return map.get(index);
+            }
+            break;
+          }
         case METHOD_CALL:
           {
             var call = (MethodCall) data;
-            if (call.method().type() == Expression.Type.IDENTIFIER
-                && call.method().data() instanceof Identifier methodId) {
+            if (call.method().type() == Expression.Type.IDENTIFIER) {
+              var methodId = (Identifier) call.method().data();
               switch (methodId.name()) {
                 case "math.sqrt":
                   // TODO(maxuser): Check that there's exactly 1 param.
@@ -383,8 +412,12 @@ public class Interpreter {
             }
             return null;
           }
+        case CAST:
+        case CTOR_CALL:
+        case FIELD_ACCESS:
       }
-      throw new IllegalArgumentException("Expression type not implemented: " + type.toString());
+      throw new IllegalArgumentException(
+          String.format("Eval for expression %s not implemented: %s", type, this));
     }
 
     public static Expression createDouble(Double constDouble) {
@@ -415,6 +448,10 @@ public class Interpreter {
       return new Expression(Type.BINARY_OP, binaryOp);
     }
 
+    public static Expression createArrayIndex(ArrayIndex arrayIndex) {
+      return new Expression(Type.ARRAY_INDEX, arrayIndex);
+    }
+
     public static Expression createCast(Cast cast) {
       return new Expression(Type.CAST, cast);
     }
@@ -440,6 +477,11 @@ public class Interpreter {
           {
             var op = (BinaryOp) data;
             return String.format("%s %s %s", op.lhs(), op.op().symbol(), op.rhs());
+          }
+        case ARRAY_INDEX:
+          {
+            var arrayIndex = (ArrayIndex) data;
+            return String.format("%s[%s]", arrayIndex.array(), arrayIndex.index());
           }
         case METHOD_CALL:
           {
@@ -555,6 +597,8 @@ public class Interpreter {
       throw new IllegalArgumentException("Binary op not implemented");
     }
   }
+
+  public record ArrayIndex(Expression array, Expression index) {}
 
   public record Cast(Identifier castType, Expression rhs) {}
 
