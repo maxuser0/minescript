@@ -44,19 +44,25 @@ def print_func(func):
   tree = ast.parse(inspect.getsource(func))
   print(json.dumps(ast_to_dict(tree), indent=2))
 
-def distance(p1, p2):
+def distance_vec3(p1, p2):
   dx = p1[0] - p2[0]
   dy = p1[1] - p2[1]
   dz = p1[2] - p2[2]
   d_squared = dx * dx + dy * dy + dz * dz
-  return math.sqrt(s_squared)
+  return math.sqrt(d_squared)
+
+def distance_scalar2(x1, y1, x2, y2):
+  dx = x1 - x2
+  dy = y1 - y2
+  d_squared = dx * dx + dy * dy
+  return math.sqrt(d_squared)
 
 def times_two(x):
   y = x * 2
   return y
 
 def main():
-  print_func(times_two)
+  print_func(distance_scalar2)
 
 if __name__ == "__main__":
   main()

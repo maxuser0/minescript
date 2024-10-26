@@ -60,12 +60,32 @@ public class Interpreter {
           return Expression.createIdentifier(getId(element));
         case "Constant":
           return parseConstant(getAttr(element, "value"));
+        case "Call":
+          return Expression.createMethodCall(
+              new MethodCall(
+                  parseExpression(getAttr(element, "func")),
+                  StreamSupport.stream(
+                          getAttr(element, "args").getAsJsonArray().spliterator(), false)
+                      .map(elem -> parseExpression(elem))
+                      .collect(toList())));
+        case "Attribute":
+          // TODO(maxuser): Don't assume `value.attr` can be concatenated into a single identifier.
+          return Expression.createIdentifier(
+              new Identifier(
+                  String.format(
+                      "%s.%s",
+                      getAttr(getAttr(element, "value"), "id").getAsString(),
+                      getAttr(element, "attr").getAsString())));
       }
       throw new IllegalArgumentException("Unknown expression type: " + element.toString());
     }
 
     private static BinaryOp.Op parseBinaryOp(String opName) {
       switch (opName) {
+        case "Add":
+          return BinaryOp.Op.ADD;
+        case "Sub":
+          return BinaryOp.Op.SUB;
         case "Mult":
           return BinaryOp.Op.MUL;
         default:
@@ -112,16 +132,6 @@ public class Interpreter {
       return element.getAsJsonObject().get("body").getAsJsonArray();
     }
   }
-
-  // TODO(maxuser): Keep this class and refactor Statement and Expression to it?
-  /*
-  public static class AstElement {
-    protected final Type type;
-    protected final Object data;
-
-    protected AstElement(Type type)
-  }
-  */
 
   public static class Statement {
     public enum Type {
@@ -325,6 +335,10 @@ public class Interpreter {
       return type;
     }
 
+    public Object data() {
+      return data;
+    }
+
     public Object eval(Context context) {
       switch (type) {
         case NULL:
@@ -356,7 +370,19 @@ public class Interpreter {
         case FIELD_ACCESS:
           return null; // TODO(maxuser)
         case METHOD_CALL:
-          return null; // TODO(maxuser)
+          {
+            var call = (MethodCall) data;
+            if (call.method().type() == Expression.Type.IDENTIFIER
+                && call.method().data() instanceof Identifier methodId) {
+              switch (methodId.name()) {
+                case "math.sqrt":
+                  // TODO(maxuser): Check that there's exactly 1 param.
+                  var num = (Number) call.params.get(0).eval(context);
+                  return Math.sqrt(num.doubleValue());
+              }
+            }
+            return null;
+          }
       }
       throw new IllegalArgumentException("Expression type not implemented: " + type.toString());
     }
@@ -415,6 +441,13 @@ public class Interpreter {
             var op = (BinaryOp) data;
             return String.format("%s %s %s", op.lhs(), op.op().symbol(), op.rhs());
           }
+        case METHOD_CALL:
+          {
+            var call = (MethodCall) data;
+            return String.format(
+                "%s(%s)",
+                call.method(), call.params().stream().map(Object::toString).collect(joining(", ")));
+          }
         case NULL:
         case CONST_DOUBLE:
         case CONST_INT:
@@ -424,7 +457,6 @@ public class Interpreter {
         case CAST:
         case CTOR_CALL:
         case FIELD_ACCESS:
-        case METHOD_CALL:
         default:
           return data.toString();
       }
@@ -512,6 +544,10 @@ public class Interpreter {
       switch (op) {
         case EQ:
           return lhs.eval(context).equals(rhs.eval(context));
+        case ADD:
+          return Numbers.add((Number) lhs.eval(context), (Number) rhs.eval(context));
+        case SUB:
+          return Numbers.subtract((Number) lhs.eval(context), (Number) rhs.eval(context));
         case MUL:
           return Numbers.multiply((Number) lhs.eval(context), (Number) rhs.eval(context));
           // TODO(maxuser): impl ops...
@@ -524,7 +560,7 @@ public class Interpreter {
 
   public record CtorCall(Identifier classId, List<Expression> params) {}
 
-  public record MethodCall(Expression target, Identifier methodId, List<Expression> params) {}
+  public record MethodCall(Expression method, List<Expression> params) {}
 
   public record FieldAccess(Expression target, Identifier fieldId) {}
 
