@@ -462,8 +462,9 @@ public class Interpreter {
                   var num = (Number) call.params.get(0).eval(context);
                   return Math.sqrt(num.doubleValue());
               }
+              throw new IllegalArgumentException(
+                  String.format("Function `%s` not implemented: %s", call.method(), this));
             }
-            return null;
           }
         case CAST:
         case CTOR_CALL:

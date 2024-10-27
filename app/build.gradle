@@ -34,3 +34,7 @@ application {
     // Define the main class for the application.
     mainClass = 'net.minescript.interpreter.Main'
 }
+
+tasks.withType(JavaExec) {
+    standardInput = System.in
+}

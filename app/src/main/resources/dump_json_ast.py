@@ -8,6 +8,7 @@ import inspect
 import ast
 import json
 import math
+import sys
 
 def ast_to_dict(
     node: ast.AST,
@@ -40,10 +41,6 @@ def ast_to_dict(
   else:
     return str(node)
 
-def print_func(func):
-  tree = ast.parse(inspect.getsource(func))
-  print(json.dumps(ast_to_dict(tree), indent=2))
-
 def distance_vec3(p1, p2):
   dx = p1[0] - p2[0]
   dy = p1[1] - p2[1]
@@ -65,9 +62,29 @@ def populate_array(array, index, value):
   array[index] = value
   return array
 
-def main():
-  print_func(populate_array)
+USAGE = """Usage:
+    dump_json_ast.py [func_name]
+    cat some_code.py |dump_json_ast.py"""
+
+def main(argv):
+  if len(argv) == 0:
+    code = ""
+    try:
+      for line in sys.stdin.readlines():
+        if line.strip() == ".":
+          break
+        code += line
+    except EOFError:
+      pass
+    tree = ast.parse(code)
+    print(json.dumps(ast_to_dict(tree), indent=2))
+  elif len(argv) == 1:
+    func = globals()[argv[0]]
+    tree = ast.parse(inspect.getsource(func))
+    print(json.dumps(ast_to_dict(tree), indent=2))
+  else:
+    print(USAGE, file=sys.stderr)
 
 if __name__ == "__main__":
-  main()
+  main(sys.argv[1:])
 
