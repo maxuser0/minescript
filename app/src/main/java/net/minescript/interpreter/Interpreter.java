@@ -364,18 +364,31 @@ public class Interpreter {
 
     @Override
     public Object eval(Context context) {
+      var lhsValue = lhs.eval(context);
+      var rhsValue = (op == Op.OR || op == Op.AND) ? null : rhs.eval(context);
       switch (op) {
         case EQ:
-          return lhs.eval(context).equals(rhs.eval(context));
+          return lhsValue.equals(rhsValue);
         case ADD:
-          return Numbers.add((Number) lhs.eval(context), (Number) rhs.eval(context));
+          if (lhsValue instanceof Number lhsNum && rhsValue instanceof Number rhsNum) {
+            return Numbers.add(lhsNum, rhsNum);
+          } else if (lhsValue instanceof String && rhsValue instanceof String) {
+            return lhsValue.toString() + rhsValue.toString();
+          }
+          break;
         case SUB:
-          return Numbers.subtract((Number) lhs.eval(context), (Number) rhs.eval(context));
+          return Numbers.subtract((Number) lhsValue, (Number) rhsValue);
         case MUL:
-          return Numbers.multiply((Number) lhs.eval(context), (Number) rhs.eval(context));
+          return Numbers.multiply((Number) lhsValue, (Number) rhsValue);
           // TODO(maxuser): impl ops...
       }
-      throw new IllegalArgumentException("Binary op not implemented: " + op.symbol());
+      throw new IllegalArgumentException(
+          String.format(
+              "Binary op not implemented for types `%s %s %s`: %s",
+              lhsValue.getClass().getSimpleName(),
+              op.symbol(),
+              rhsValue.getClass().getSimpleName(),
+              this));
     }
 
     @Override
@@ -424,8 +437,6 @@ public class Interpreter {
     }
   }
 
-  public record Cast(Identifier castType, Expression rhs) {}
-
   public record CtorCall(Identifier classId, List<Expression> params) {}
 
   public record MethodCall(Expression method, List<Expression> params) implements Expression {
@@ -433,15 +444,47 @@ public class Interpreter {
     public Object eval(Context context) {
       if (method instanceof Identifier methodId) {
         switch (methodId.name()) {
-          // TODO(maxuser): Add cast functions: int, float, str, bool
+          case "int":
+            {
+              expectNumParams(1);
+              var num = (Number) params.get(0).eval(context);
+              return num.intValue();
+            }
+          case "float":
+            {
+              expectNumParams(1);
+              var num = (Number) params.get(0).eval(context);
+              return num.doubleValue();
+            }
+          case "str":
+            {
+              expectNumParams(1);
+              return params.get(0).eval(context).toString();
+            }
+          case "bool":
+            {
+              expectNumParams(1);
+              var num = (Number) params.get(0).eval(context);
+              return num.doubleValue() != 0.;
+            }
           case "math.sqrt":
-            // TODO(maxuser): Check that there's exactly 1 param.
-            var num = (Number) params.get(0).eval(context);
-            return Math.sqrt(num.doubleValue());
+            {
+              expectNumParams(1);
+              var num = (Number) params.get(0).eval(context);
+              return Math.sqrt(num.doubleValue());
+            }
         }
       }
       throw new IllegalArgumentException(
           String.format("Function `%s` not implemented: %s", method, this));
+    }
+
+    private void expectNumParams(int n) {
+      if (params.size() != n) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Expected %d params but got %d for function: %s", n, params.size(), this));
+      }
     }
 
     @Override
