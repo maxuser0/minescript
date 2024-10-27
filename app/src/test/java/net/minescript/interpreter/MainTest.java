@@ -716,7 +716,7 @@ public class MainTest {
 
     var context = new Interpreter.Context();
     context.setVariable("x", x);
-    ast.eval(context);
+    ast.exec(context);
     assertEquals(2 * Math.PI, ((Number) context.output()).doubleValue(), 0.000000001);
   }
 
@@ -733,7 +733,7 @@ public class MainTest {
     context.setVariable("y1", y1);
     context.setVariable("x2", x2);
     context.setVariable("y2", y2);
-    ast.eval(context);
+    ast.exec(context);
     assertEquals(5., ((Number) context.output()).doubleValue(), 0.00000001);
   }
 
@@ -749,7 +749,7 @@ public class MainTest {
     var context = new Interpreter.Context();
     context.setVariable("p1", p1);
     context.setVariable("p2", p2);
-    ast.eval(context);
+    ast.exec(context);
     assertEquals(2 * Math.sqrt(2), ((Number) context.output()).doubleValue(), 0.000000001);
   }
 
@@ -767,7 +767,7 @@ public class MainTest {
     context.setVariable("array", array);
     context.setVariable("index", index);
     context.setVariable("value", value);
-    ast.eval(context);
+    ast.exec(context);
     assertArrayEquals(new String[] {"first", null, null}, (String[]) context.output());
   }
 }

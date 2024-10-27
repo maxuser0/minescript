@@ -31,7 +31,7 @@ public class Interpreter {
             if (body.size() == 1) {
               return parseStatements(body.get(0));
             } else {
-              return Statement.createBlock(
+              return new StatementBlock(
                   StreamSupport.stream(body.spliterator(), false)
                       .map(elem -> parseStatements(elem))
                       .collect(toList()));
@@ -40,20 +40,17 @@ public class Interpreter {
         case "Assign":
           {
             Expression lhs = parseExpression(getTargets(element).get(0));
-            switch (lhs.type()) {
-              case IDENTIFIER:
-              case ARRAY_INDEX:
-                return Statement.createAssignment(
-                    new Assignment(lhs, parseExpression(getAttr(element, "value"))));
-              default:
-                throw new IllegalArgumentException(
-                    String.format(
-                        "Unsupported expression type for lhs of assignment: `%s` (%s)",
-                        lhs, lhs.type()));
+            if (lhs instanceof Identifier || lhs instanceof ArrayIndex) {
+              return new Assignment(lhs, parseExpression(getAttr(element, "value")));
+            } else {
+              throw new IllegalArgumentException(
+                  String.format(
+                      "Unsupported expression type for lhs of assignment: `%s` (%s)",
+                      lhs, lhs.getClass().getSimpleName()));
             }
           }
         case "Return":
-          return Statement.createReturn(parseExpression(getAttr(element, "value")));
+          return new ReturnStatement(parseExpression(getAttr(element, "value")));
       }
       throw new IllegalArgumentException("Unknown statement type: " + element.toString());
     }
@@ -62,36 +59,31 @@ public class Interpreter {
       String type = getType(element);
       switch (type) {
         case "BinOp":
-          return Expression.createBinaryOp(
-              new BinaryOp(
-                  parseExpression(getAttr(element, "left")),
-                  parseBinaryOp(getType(getAttr(element, "op"))),
-                  parseExpression(getAttr(element, "right"))));
+          return new BinaryOp(
+              parseExpression(getAttr(element, "left")),
+              parseBinaryOp(getType(getAttr(element, "op"))),
+              parseExpression(getAttr(element, "right")));
         case "Name":
-          return Expression.createIdentifier(getId(element));
+          return getId(element);
         case "Constant":
           return parseConstant(getAttr(element, "value"));
         case "Call":
-          return Expression.createMethodCall(
-              new MethodCall(
-                  parseExpression(getAttr(element, "func")),
-                  StreamSupport.stream(
-                          getAttr(element, "args").getAsJsonArray().spliterator(), false)
-                      .map(elem -> parseExpression(elem))
-                      .collect(toList())));
+          return new MethodCall(
+              parseExpression(getAttr(element, "func")),
+              StreamSupport.stream(getAttr(element, "args").getAsJsonArray().spliterator(), false)
+                  .map(elem -> parseExpression(elem))
+                  .collect(toList()));
         case "Attribute":
           // TODO(maxuser): Don't assume `value.attr` can be concatenated into a single identifier.
-          return Expression.createIdentifier(
-              new Identifier(
-                  String.format(
-                      "%s.%s",
-                      getAttr(getAttr(element, "value"), "id").getAsString(),
-                      getAttr(element, "attr").getAsString())));
+          return new Identifier(
+              String.format(
+                  "%s.%s",
+                  getAttr(getAttr(element, "value"), "id").getAsString(),
+                  getAttr(element, "attr").getAsString()));
         case "Subscript":
-          return Expression.createArrayIndex(
-              new ArrayIndex(
-                  parseExpression(getAttr(element, "value")),
-                  parseExpression(getAttr(element, "slice"))));
+          return new ArrayIndex(
+              parseExpression(getAttr(element, "value")),
+              parseExpression(getAttr(element, "slice")));
       }
       throw new IllegalArgumentException("Unknown expression type: " + element.toString());
     }
@@ -116,14 +108,14 @@ public class Interpreter {
         int n = number.intValue();
         double d = number.doubleValue();
         if (n == d) {
-          return Expression.createInteger(number.intValue());
+          return new ConstantExpression(number.intValue());
         } else {
-          return Expression.createDouble(number.doubleValue());
+          return new ConstantExpression(number.doubleValue());
         }
       } else if (primitive.isBoolean()) {
-        return Expression.createBool(primitive.getAsBoolean());
+        return new ConstantExpression(primitive.getAsBoolean());
       } else if (primitive.isString()) {
-        return Expression.createString(primitive.getAsString());
+        return new ConstantExpression(primitive.getAsString());
       }
       throw new IllegalArgumentException(String.format("Unsupported primitive type: %s", element));
     }
@@ -149,419 +141,124 @@ public class Interpreter {
     }
   }
 
-  public static class Statement {
-    public enum Type {
-      STATEMENT_BLOCK,
-      EXPRESSION,
-      ASSIGNMENT,
-      AUGMENTED_ASSIGNMENT,
-      IF_BLOCK,
-      WHILE_BLOCK,
-      FOR_BLOCK,
-      BREAK,
-      CONTINUE,
-      RETURN,
-      THROW,
-      TRY_BLOCK,
-      RESOURCE_BLOCK
+  public interface Statement {
+    default void exec(Context context) {
+      throw new IllegalArgumentException(
+          "Execution of statement type not implemented: " + getClass().getSimpleName());
     }
+  }
 
-    private final Type type;
-    private final Object data;
+  public record IfBlock(Expression ifCondition, Statement ifBody, Statement elseBody)
+      implements Statement {}
 
-    private Statement(Type type, Object data) {
-      this.type = type;
-      this.data = data;
-    }
+  public record WhileBlock(Expression condition, Statement body) implements Statement {}
 
-    public Type type() {
-      return type;
-    }
+  public record ForBlock(Expression vars, Expression iterator, Statement body)
+      implements Statement {}
 
-    public static Statement createBlock(List<Statement> statements) {
-      return new Statement(Type.STATEMENT_BLOCK, statements);
-    }
-
-    public static Statement createExpression(Expression expression) {
-      return new Statement(Type.EXPRESSION, expression);
-    }
-
-    public static Statement createAssignment(Assignment assignment) {
-      return new Statement(Type.ASSIGNMENT, assignment);
-    }
-
-    public static Statement createAugmentedAssignment(AugmentedAssignment augmentedAssignment) {
-      return new Statement(Type.AUGMENTED_ASSIGNMENT, augmentedAssignment);
-    }
-
-    public static Statement createIfBlock(IfBlock ifBlock) {
-      return new Statement(Type.IF_BLOCK, ifBlock);
-    }
-
-    public static Statement createWhileBlock(WhileBlock whileBlock) {
-      return new Statement(Type.WHILE_BLOCK, whileBlock);
-    }
-
-    public static Statement createForBlock(ForBlock forBlock) {
-      return new Statement(Type.FOR_BLOCK, forBlock);
-    }
-
-    public static Statement createBreak() {
-      return new Statement(Type.BREAK, null);
-    }
-
-    public static Statement createContinue() {
-      return new Statement(Type.CONTINUE, null);
-    }
-
-    public static Statement createReturn(Expression returnValue) {
-      return new Statement(Type.RETURN, returnValue);
-    }
-
-    public static Statement createThrow(Expression exception) {
-      return new Statement(Type.THROW, exception);
-    }
-
-    public static Statement createTryBlock(TryBlock tryBlock) {
-      return new Statement(Type.TRY_BLOCK, tryBlock);
-    }
-
-    public static Statement createResourceBlock(ResourceBlock resourceBlock) {
-      return new Statement(Type.RESOURCE_BLOCK, resourceBlock);
-    }
-
-    public void eval(Context context) {
-      switch (type) {
-        case STATEMENT_BLOCK:
-          {
-            var statements = (List<Statement>) data;
-            for (var statement : statements) {
-              statement.eval(context);
-            }
-            return;
-          }
-
-        case ASSIGNMENT:
-          {
-            var assign = (Assignment) data;
-            Expression lhs = assign.lhs();
-            Object rhsValue = assign.rhs().eval(context);
-            if (lhs.data() instanceof Identifier lhsId) {
-              context.setVariable(lhsId, rhsValue);
-              return;
-            } else if (lhs.data() instanceof ArrayIndex lhsArrayIndex) {
-              var array = lhsArrayIndex.array().eval(context);
-              var index = lhsArrayIndex.index().eval(context);
-              if (array instanceof Object[] objectArray) {
-                objectArray[((Number) index).intValue()] = rhsValue;
-                return;
-              } else if (array instanceof int[] intArray) {
-                intArray[((Number) index).intValue()] = (Integer) rhsValue;
-                return;
-              } else if (array instanceof long[] longArray) {
-                longArray[((Number) index).intValue()] = (Long) rhsValue;
-                return;
-              } else if (array instanceof float[] floatArray) {
-                floatArray[((Number) index).intValue()] = (Float) rhsValue;
-                return;
-              } else if (array instanceof double[] doubleArray) {
-                doubleArray[((Number) index).intValue()] = (Double) rhsValue;
-                return;
-              } else if (array instanceof List list) {
-                list.set(((Number) index).intValue(), rhsValue);
-                return;
-              } else if (array instanceof Map map) {
-                map.put(index, rhsValue);
-                return;
-              }
-            } else {
-              throw new IllegalArgumentException(
-                  String.format(
-                      "Unsupported expression type for lhs of assignment: `%s` (%s)",
-                      lhs, lhs.type()));
-            }
-          }
-
-        case RETURN:
-          {
-            var returnExpression = (Expression) data;
-            context.setOutput(returnExpression.eval(context));
-            return;
-          }
-
-        case EXPRESSION:
-        case AUGMENTED_ASSIGNMENT:
-        case IF_BLOCK:
-        case WHILE_BLOCK:
-        case FOR_BLOCK:
-        case BREAK:
-        case CONTINUE:
-        case THROW:
-        case TRY_BLOCK:
-        case RESOURCE_BLOCK:
-      }
-      throw new IllegalArgumentException("Statement type not implemented: " + type.toString());
+  public record Identifier(String name) implements Expression {
+    @Override
+    public Object eval(Context context) {
+      return context.getVariable(this);
     }
 
     @Override
     public String toString() {
-      switch (type) {
-        case STATEMENT_BLOCK:
-          return ((List<Statement>) data)
-              .stream()
-                  .map(Object::toString)
-                  .map(s -> "  " + s)
-                  .collect(joining("\n", "{\n", "\n}"));
-
-        case RETURN:
-          return String.format("return %s;", data.toString());
-
-        case ASSIGNMENT:
-          {
-            var assign = (Assignment) data;
-            var lhs = assign.lhs().data();
-            if (lhs instanceof Identifier lhsId) {
-              return String.format("%s = %s;", lhsId.name(), assign.rhs());
-            } else if (lhs instanceof ArrayIndex arrayIndex) {
-              return String.format(
-                  "%s[%s] = %s;", arrayIndex.array(), arrayIndex.index(), assign.rhs());
-            } else {
-              return String.format("%s = %s;", lhs, assign.rhs());
-            }
-          }
-
-        case EXPRESSION:
-        case AUGMENTED_ASSIGNMENT:
-        case BREAK:
-        case CONTINUE:
-        case THROW:
-          return data.toString() + ";";
-
-        case IF_BLOCK:
-        case WHILE_BLOCK:
-        case FOR_BLOCK:
-        case TRY_BLOCK:
-        case RESOURCE_BLOCK:
-        default:
-          return data.toString();
-      }
+      return name;
     }
   }
-
-  public record IfBlock(Expression ifCondition, Statement ifBody, Statement elseBody) {}
-
-  public record WhileBlock(Expression condition, Statement body) {}
-
-  public record ForBlock(Expression vars, Expression iterator, Statement body) {}
-
-  public record Identifier(String name) {}
 
   public record ExceptionHandler(Identifier exceptionType, Identifier exceptionVariable) {}
 
   public record TryBlock(
-      Statement tryBody, List<ExceptionHandler> exceptionHandlers, Statement finallyBlock) {}
+      Statement tryBody, List<ExceptionHandler> exceptionHandlers, Statement finallyBlock)
+      implements Statement {}
 
-  public record ResourceBlock(Expression resource, Statement body) {}
+  public record ResourceBlock(Expression resource, Statement body) implements Statement {}
 
-  public static class Expression {
-    public enum Type {
-      NULL,
-      CONST_DOUBLE,
-      CONST_INT,
-      CONST_BOOL,
-      CONST_STRING,
-      IDENTIFIER,
-      UNARY_OP,
-      BINARY_OP,
-      ARRAY_INDEX,
-      CAST,
-      CTOR_CALL,
-      FIELD_ACCESS,
-      METHOD_CALL
+  public interface Expression extends Statement {
+    @Override
+    default void exec(Context context) {
+      eval(context);
     }
 
-    public static final Expression NULL = new Expression(Type.NULL, null);
-
-    private final Type type;
-    private final Object data;
-
-    private Expression(Type type, Object data) {
-      this.type = type;
-      this.data = data;
-    }
-
-    public Type type() {
-      return type;
-    }
-
-    public Object data() {
-      return data;
-    }
-
-    public Object eval(Context context) {
-      switch (type) {
-        case NULL:
-          return null;
-        case CONST_DOUBLE:
-          return data;
-        case CONST_INT:
-          return data;
-        case CONST_BOOL:
-          return data;
-        case CONST_STRING:
-          return data;
-        case IDENTIFIER:
-          return context.getVariable((Identifier) data);
-        case UNARY_OP:
-          {
-            var op = (UnaryOp) data;
-            return op.eval(context);
-          }
-        case BINARY_OP:
-          {
-            var op = (BinaryOp) data;
-            return op.eval(context);
-          }
-        case ARRAY_INDEX:
-          {
-            // TODO(maxuser): Distinguish between array[index] being on lhs vs rhs of assignment.
-            var arrayIndex = (ArrayIndex) data;
-            var array = arrayIndex.array().eval(context);
-            var index = arrayIndex.index().eval(context);
-            if (array == null || index == null) {
-              throw new NullPointerException(
-                  String.format(
-                      "%s=%s, %s=%s in %s",
-                      arrayIndex.array(), array, arrayIndex.index(), index, this));
-            }
-            if (array instanceof Object[] objectArray) {
-              return objectArray[((Number) index).intValue()];
-            } else if (array instanceof int[] intArray) {
-              return intArray[((Number) index).intValue()];
-            } else if (array instanceof long[] longArray) {
-              return longArray[((Number) index).intValue()];
-            } else if (array instanceof float[] floatArray) {
-              return floatArray[((Number) index).intValue()];
-            } else if (array instanceof double[] doubleArray) {
-              return doubleArray[((Number) index).intValue()];
-            } else if (array instanceof List list) {
-              return list.get(((Number) index).intValue());
-            } else if (array instanceof Map map) {
-              return map.get(index);
-            }
-            break;
-          }
-        case METHOD_CALL:
-          {
-            var call = (MethodCall) data;
-            if (call.method().type() == Expression.Type.IDENTIFIER) {
-              var methodId = (Identifier) call.method().data();
-              switch (methodId.name()) {
-                case "math.sqrt":
-                  // TODO(maxuser): Check that there's exactly 1 param.
-                  var num = (Number) call.params.get(0).eval(context);
-                  return Math.sqrt(num.doubleValue());
-              }
-              throw new IllegalArgumentException(
-                  String.format("Function `%s` not implemented: %s", call.method(), this));
-            }
-          }
-        case CAST:
-        case CTOR_CALL:
-        case FIELD_ACCESS:
-      }
+    default Object eval(Context context) {
       throw new IllegalArgumentException(
-          String.format("Eval for expression %s not implemented: %s", type, this));
+          String.format(
+              "Eval for expression %s not implemented: %s", getClass().getSimpleName(), this));
     }
+  }
 
-    public static Expression createDouble(Double constDouble) {
-      return new Expression(Type.CONST_DOUBLE, constDouble);
-    }
-
-    public static Expression createInteger(Integer constInt) {
-      return new Expression(Type.CONST_INT, constInt);
-    }
-
-    public static Expression createBool(Boolean constBool) {
-      return new Expression(Type.CONST_BOOL, constBool);
-    }
-
-    public static Expression createString(String constString) {
-      return new Expression(Type.CONST_STRING, constString);
-    }
-
-    public static Expression createIdentifier(Identifier variable) {
-      return new Expression(Type.IDENTIFIER, variable);
-    }
-
-    public static Expression createUnaryOp(UnaryOp unaryOp) {
-      return new Expression(Type.UNARY_OP, unaryOp);
-    }
-
-    public static Expression createBinaryOp(BinaryOp binaryOp) {
-      return new Expression(Type.BINARY_OP, binaryOp);
-    }
-
-    public static Expression createArrayIndex(ArrayIndex arrayIndex) {
-      return new Expression(Type.ARRAY_INDEX, arrayIndex);
-    }
-
-    public static Expression createCast(Cast cast) {
-      return new Expression(Type.CAST, cast);
-    }
-
-    public static Expression createCtorCall(CtorCall ctorCall) {
-      return new Expression(Type.CTOR_CALL, ctorCall);
-    }
-
-    public static Expression createFieldAccess(FieldAccess fieldAccess) {
-      return new Expression(Type.FIELD_ACCESS, fieldAccess);
-    }
-
-    public static Expression createMethodCall(MethodCall methodCall) {
-      return new Expression(Type.METHOD_CALL, methodCall);
+  public record StatementBlock(List<Statement> statements) implements Statement {
+    @Override
+    public void exec(Context context) {
+      for (var statement : statements) {
+        statement.exec(context);
+      }
     }
 
     @Override
     public String toString() {
-      switch (type) {
-        case IDENTIFIER:
-          return ((Identifier) data).name();
-        case BINARY_OP:
-          {
-            var op = (BinaryOp) data;
-            return String.format("%s %s %s", op.lhs(), op.op().symbol(), op.rhs());
-          }
-        case ARRAY_INDEX:
-          {
-            var arrayIndex = (ArrayIndex) data;
-            return String.format("%s[%s]", arrayIndex.array(), arrayIndex.index());
-          }
-        case METHOD_CALL:
-          {
-            var call = (MethodCall) data;
-            return String.format(
-                "%s(%s)",
-                call.method(), call.params().stream().map(Object::toString).collect(joining(", ")));
-          }
-        case NULL:
-        case CONST_DOUBLE:
-        case CONST_INT:
-        case CONST_BOOL:
-        case CONST_STRING:
-        case UNARY_OP:
-        case CAST:
-        case CTOR_CALL:
-        case FIELD_ACCESS:
-        default:
-          return data.toString();
+      return statements.stream()
+          .map(Object::toString)
+          .map(s -> "  " + s)
+          .collect(joining("\n", "{\n", "\n}"));
+    }
+  }
+
+  public record Assignment(Expression lhs, Expression rhs) implements Statement {
+    @Override
+    public void exec(Context context) {
+      Object rhsValue = rhs.eval(context);
+      if (lhs instanceof Identifier lhsId) {
+        context.setVariable(lhsId, rhsValue);
+        return;
+      } else if (lhs instanceof ArrayIndex lhsArrayIndex) {
+        var array = lhsArrayIndex.array().eval(context);
+        var index = lhsArrayIndex.index().eval(context);
+        if (array instanceof Object[] objectArray) {
+          objectArray[((Number) index).intValue()] = rhsValue;
+          return;
+        } else if (array instanceof int[] intArray) {
+          intArray[((Number) index).intValue()] = (Integer) rhsValue;
+          return;
+        } else if (array instanceof long[] longArray) {
+          longArray[((Number) index).intValue()] = (Long) rhsValue;
+          return;
+        } else if (array instanceof float[] floatArray) {
+          floatArray[((Number) index).intValue()] = (Float) rhsValue;
+          return;
+        } else if (array instanceof double[] doubleArray) {
+          doubleArray[((Number) index).intValue()] = (Double) rhsValue;
+          return;
+        } else if (array instanceof List list) {
+          list.set(((Number) index).intValue(), rhsValue);
+          return;
+        } else if (array instanceof Map map) {
+          map.put(index, rhsValue);
+          return;
+        }
+      } else {
+        throw new IllegalArgumentException(
+            String.format(
+                "Unsupported expression type for lhs of assignment: `%s` (%s)",
+                lhs, lhs.getClass().getSimpleName()));
+      }
+    }
+
+    @Override
+    public String toString() {
+      if (lhs instanceof Identifier lhsId) {
+        return String.format("%s = %s;", lhsId.name(), rhs);
+      } else if (lhs instanceof ArrayIndex arrayIndex) {
+        return String.format("%s[%s] = %s;", arrayIndex.array(), arrayIndex.index(), rhs);
+      } else {
+        return String.format("%s = %s;", lhs, rhs);
       }
     }
   }
 
-  public record Assignment(Expression lhs, Expression rhs) {}
-
-  public record AugmentedAssignment(Identifier lhs, Op op, Expression rhs) {
+  public record AugmentedAssignment(Identifier lhs, Op op, Expression rhs) implements Statement {
     public enum Op {
       ADD_EQ("+="),
       SUB_EQ("-="),
@@ -581,7 +278,20 @@ public class Interpreter {
     }
   }
 
-  public record UnaryOp(Op op, Expression operand) {
+  public record ReturnStatement(Expression returnValue) implements Statement {
+    @Override
+    public void exec(Context context) {
+      context.setOutput(returnValue.eval(context));
+      return;
+    }
+
+    @Override
+    public String toString() {
+      return String.format("return %s;", returnValue);
+    }
+  }
+
+  public record UnaryOp(Op op, Expression operand) implements Expression {
     public enum Op {
       NEGATIVE("-"),
       NOT("!");
@@ -597,7 +307,8 @@ public class Interpreter {
       }
     }
 
-    Object eval(Context context) {
+    @Override
+    public Object eval(Context context) {
       switch (op) {
         case NEGATIVE:
           return Numbers.negate((Number) operand.eval(context));
@@ -608,7 +319,23 @@ public class Interpreter {
     }
   }
 
-  public record BinaryOp(Expression lhs, Op op, Expression rhs) {
+  public record ConstantExpression(Object value) implements Expression {
+    @Override
+    public Object eval(Context context) {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      if (value instanceof String) {
+        return String.format("\"%s\"", value);
+      } else {
+        return value.toString();
+      }
+    }
+  }
+
+  public record BinaryOp(Expression lhs, Op op, Expression rhs) implements Expression {
     public enum Op {
       ADD("+"),
       SUB("-"),
@@ -635,7 +362,8 @@ public class Interpreter {
       }
     }
 
-    Object eval(Context context) {
+    @Override
+    public Object eval(Context context) {
       switch (op) {
         case EQ:
           return lhs.eval(context).equals(rhs.eval(context));
@@ -647,17 +375,81 @@ public class Interpreter {
           return Numbers.multiply((Number) lhs.eval(context), (Number) rhs.eval(context));
           // TODO(maxuser): impl ops...
       }
-      throw new IllegalArgumentException("Binary op not implemented");
+      throw new IllegalArgumentException("Binary op not implemented: " + op.symbol());
+    }
+
+    @Override
+    public String toString() {
+      // TODO(maxuser): Fix output for proper order of operations that may need parentheses.
+      // E.g. `(1 + 2) * 3` evaluates correctly but gets output to String as `1 + 2 * 3`.
+      return String.format("%s %s %s", lhs, op.symbol(), rhs);
     }
   }
 
-  public record ArrayIndex(Expression array, Expression index) {}
+  public record ArrayIndex(Expression array, Expression index) implements Expression {
+    @Override
+    public Object eval(Context context) {
+      var arrayValue = array.eval(context);
+      var indexValue = index.eval(context);
+      if (arrayValue == null || indexValue == null) {
+        throw new NullPointerException(
+            String.format("%s=%s, %s=%s in %s", array, arrayValue, index, indexValue, this));
+      }
+
+      if (arrayValue instanceof Object[] objectArray) {
+        return objectArray[((Number) indexValue).intValue()];
+      } else if (arrayValue instanceof int[] intArray) {
+        return intArray[((Number) indexValue).intValue()];
+      } else if (arrayValue instanceof long[] longArray) {
+        return longArray[((Number) indexValue).intValue()];
+      } else if (arrayValue instanceof float[] floatArray) {
+        return floatArray[((Number) indexValue).intValue()];
+      } else if (arrayValue instanceof double[] doubleArray) {
+        return doubleArray[((Number) indexValue).intValue()];
+      } else if (arrayValue instanceof List list) {
+        return list.get(((Number) indexValue).intValue());
+      } else if (arrayValue instanceof Map map) {
+        return map.get(indexValue);
+      }
+
+      throw new IllegalArgumentException(
+          String.format(
+              "Eval for ArrayIndex expression not implemented for types: %s[%s]",
+              array.getClass().getSimpleName(), index.getClass().getSimpleName()));
+    }
+
+    @Override
+    public String toString() {
+      return String.format("%s[%s]", array, index);
+    }
+  }
 
   public record Cast(Identifier castType, Expression rhs) {}
 
   public record CtorCall(Identifier classId, List<Expression> params) {}
 
-  public record MethodCall(Expression method, List<Expression> params) {}
+  public record MethodCall(Expression method, List<Expression> params) implements Expression {
+    @Override
+    public Object eval(Context context) {
+      if (method instanceof Identifier methodId) {
+        switch (methodId.name()) {
+          // TODO(maxuser): Add cast functions: int, float, str, bool
+          case "math.sqrt":
+            // TODO(maxuser): Check that there's exactly 1 param.
+            var num = (Number) params.get(0).eval(context);
+            return Math.sqrt(num.doubleValue());
+        }
+      }
+      throw new IllegalArgumentException(
+          String.format("Function `%s` not implemented: %s", method, this));
+    }
+
+    @Override
+    public String toString() {
+      return String.format(
+          "%s(%s)", method, params.stream().map(Object::toString).collect(joining(", ")));
+    }
+  }
 
   public record FieldAccess(Expression target, Identifier fieldId) {}
 

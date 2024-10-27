@@ -21,7 +21,7 @@ public class Main {
     System.out.println(ast);
 
     var context = new Interpreter.Context();
-    ast.eval(context);
+    ast.exec(context);
     System.out.println(context.output());
   }
 }
