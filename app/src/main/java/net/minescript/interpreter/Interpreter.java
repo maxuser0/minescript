@@ -9,6 +9,7 @@ import static java.util.stream.Collectors.toList;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -58,17 +59,7 @@ public class Interpreter {
             List<FunctionArg> args =
                 parseFunctionArgs(
                     getAttr(getAttr(element, "args").getAsJsonObject(), "args").getAsJsonArray());
-            final Statement body;
-            var bodyArray = getBody(element);
-            if (bodyArray.size() == 1) {
-              body = parseStatements(bodyArray.get(0));
-            } else {
-              body =
-                  new StatementBlock(
-                      StreamSupport.stream(bodyArray.spliterator(), false)
-                          .map(elem -> parseStatements(elem))
-                          .collect(toList()));
-            }
+            Statement body = parseStatementBlock(getBody(element));
             globals.functions().put(identifier.name, new FunctionDef(identifier, args, body));
             return;
           }
@@ -76,6 +67,17 @@ public class Interpreter {
         default:
           globals.addGlobalStatement(parseStatements(element));
           return;
+      }
+    }
+
+    public static Statement parseStatementBlock(JsonArray block) {
+      if (block.size() == 1) {
+        return parseStatements(block.get(0));
+      } else {
+        return new StatementBlock(
+            StreamSupport.stream(block.spliterator(), false)
+                .map(elem -> parseStatements(elem))
+                .collect(toList()));
       }
     }
 
@@ -106,6 +108,12 @@ public class Interpreter {
 
         case "Expr":
           return parseExpression(getAttr(element, "value"));
+
+        case "If":
+          return new IfBlock(
+              parseExpression(getAttr(element, "test")),
+              parseStatementBlock(getBody(element)),
+              parseStatementBlock(getAttr(element, "orelse").getAsJsonArray()));
 
         case "Return":
           return new ReturnStatement(parseExpression(getAttr(element, "value")));
@@ -215,6 +223,22 @@ public class Interpreter {
     }
   }
 
+  public static boolean convertToBool(Object value) {
+    if (value == null) {
+      return false;
+    } else if (value instanceof Boolean bool) {
+      return bool;
+    } else if (value instanceof String string) {
+      return Boolean.parseBoolean(string);
+    } else if (value instanceof Collection collection) {
+      return !collection.isEmpty();
+    } else if (value instanceof Number number) {
+      return number.doubleValue() != 0.;
+    } else {
+      return true;
+    }
+  }
+
   public record FunctionDef(Identifier identifier, List<FunctionArg> args, Statement body)
       implements Statement {
     /**
@@ -261,8 +285,20 @@ public class Interpreter {
 
   public record FunctionArg(Identifier identifier) {}
 
-  public record IfBlock(Expression ifCondition, Statement ifBody, Statement elseBody)
-      implements Statement {}
+  public record IfBlock(Expression condition, Statement thenBody, Statement elseBody)
+      implements Statement {
+    @Override
+    public void exec(Context context) {
+      if (context.returned()) {
+        return;
+      }
+      if (convertToBool(condition.eval(context))) {
+        thenBody.exec(context);
+      } else {
+        elseBody.exec(context);
+      }
+    }
+  }
 
   public record WhileBlock(Expression condition, Statement body) implements Statement {}
 
@@ -292,6 +328,9 @@ public class Interpreter {
   public interface Expression extends Statement {
     @Override
     default void exec(Context context) {
+      if (context.returned()) {
+        return;
+      }
       eval(context);
     }
 
@@ -306,6 +345,9 @@ public class Interpreter {
     @Override
     public void exec(Context context) {
       for (var statement : statements) {
+        if (context.returned()) {
+          break;
+        }
         statement.exec(context);
       }
     }
@@ -409,7 +451,7 @@ public class Interpreter {
   public record ReturnStatement(Expression returnValue) implements Statement {
     @Override
     public void exec(Context context) {
-      context.setOutput(returnValue.eval(context));
+      context.returnWithValue(returnValue.eval(context));
     }
 
     @Override
@@ -599,12 +641,7 @@ public class Interpreter {
           case "bool":
             {
               expectNumParams(1);
-              var value = params.get(0).eval(context);
-              if (value instanceof String string) {
-                return Boolean.parseBoolean(string);
-              } else {
-                return ((Number) value).doubleValue() != 0.;
-              }
+              return convertToBool(params.get(0).eval(context));
             }
           case "print":
             System.out.println(
@@ -657,6 +694,7 @@ public class Interpreter {
     private Map<String, FunctionDef> functions = null;
     private final Map<String, Object> vars = new HashMap<>();
     private Object output;
+    private boolean returned = false;
 
     private Context() {
       globals = this;
@@ -744,8 +782,16 @@ public class Interpreter {
       }
     }
 
-    public void setOutput(Object output) {
+    public void returnWithValue(Object output) {
+      if (this == globals) {
+        throw new IllegalStateException("'return' outside function");
+      }
       this.output = output;
+      this.returned = true;
+    }
+
+    public boolean returned() {
+      return returned;
     }
 
     public Object output() {

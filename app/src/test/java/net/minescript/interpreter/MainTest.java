@@ -1082,7 +1082,117 @@ public class MainTest {
         ],
         "type_ignores": []
       }
+      """;
 
+  /* Generated from Python code:
+
+      def factorial(n):
+        if n:
+          return n * factorial(n - 1)
+        return 1
+  */
+  private static final String factorialJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "factorial",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [
+                {
+                  "type": "arg",
+                  "arg": "n",
+                  "annotation": null,
+                  "type_comment": null
+                }
+              ],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "If",
+                "test": {
+                  "type": "Name",
+                  "id": "n",
+                  "ctx": {
+                    "type": "Load"
+                  }
+                },
+                "body": [
+                  {
+                    "type": "Return",
+                    "value": {
+                      "type": "BinOp",
+                      "left": {
+                        "type": "Name",
+                        "id": "n",
+                        "ctx": {
+                          "type": "Load"
+                        }
+                      },
+                      "op": {
+                        "type": "Mult"
+                      },
+                      "right": {
+                        "type": "Call",
+                        "func": {
+                          "type": "Name",
+                          "id": "factorial",
+                          "ctx": {
+                            "type": "Load"
+                          }
+                        },
+                        "args": [
+                          {
+                            "type": "BinOp",
+                            "left": {
+                              "type": "Name",
+                              "id": "n",
+                              "ctx": {
+                                "type": "Load"
+                              }
+                            },
+                            "op": {
+                              "type": "Sub"
+                            },
+                            "right": {
+                              "type": "Constant",
+                              "value": 1,
+                              "kind": null
+                            }
+                          }
+                        ],
+                        "keywords": []
+                      }
+                    }
+                  }
+                ],
+                "orelse": []
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Constant",
+                  "value": 1,
+                  "kind": null
+                }
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null
+          }
+        ],
+        "type_ignores": []
+      }
       """;
 
   @Test
@@ -1162,6 +1272,17 @@ public class MainTest {
     interpreter.exec();
 
     var output = interpreter.invoke(func);
-    assertEquals((Integer) 2, (Integer) output);
+    assertEquals(Integer.valueOf(2), (Integer) output);
+  }
+
+  @Test
+  public void factorial() {
+    var jsonAst = JsonParser.parseString(factorialJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).getFunction("factorial");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func, 5);
+    assertEquals(Integer.valueOf(120), (Integer) output);
   }
 }
