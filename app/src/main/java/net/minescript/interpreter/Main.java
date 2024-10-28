@@ -19,10 +19,13 @@ public class Main {
 
     var interpreter = new Interpreter();
     interpreter.parse(jsonAst);
-    var func = args.length == 0 ? interpreter.getFunction() : interpreter.getFunction(args[0]);
-    System.out.println(func);
+    interpreter.exec();
 
-    var output = interpreter.invoke(func);
-    System.out.println(output);
+    if (args.length == 1) {
+      var func = interpreter.getFunction(args[0]);
+      System.out.println(func);
+      var output = interpreter.invoke(func);
+      System.out.println(output);
+    }
   }
 }

@@ -8,9 +8,9 @@ import org.junit.Test;
 public class MainTest {
   /* Generated from Python code:
 
-    def times_two(x):
-      y = x * 2
-      return y
+      def times_two(x):
+        y = x * 2
+        return y
   */
   private static final String timesTwoJsonAst =
       """
@@ -91,11 +91,11 @@ public class MainTest {
 
   /* Generated from Python code:
 
-    def distance_scalar2(x1, y1, x2, y2):
-      dx = x1 - x2
-      dy = y1 - y2
-      d_squared = dx * dx + dy * dy
-      return math.sqrt(d_squared)
+      def distance_scalar2(x1, y1, x2, y2):
+        dx = x1 - x2
+        dy = y1 - y2
+        d_squared = dx * dx + dy * dy
+        return math.sqrt(d_squared)
   */
   private static final String distanceScalar2JsonAst =
       """
@@ -308,12 +308,12 @@ public class MainTest {
 
   /* Generated from Python code:
 
-    def distance_vec3(p1, p2):
-      dx = p1[0] - p2[0]
-      dy = p1[1] - p2[1]
-      dz = p1[2] - p2[2]
-      d_squared = dx * dx + dy * dy + dz * dz
-      return math.sqrt(d_squared)
+      def distance_vec3(p1, p2):
+        dx = p1[0] - p2[0]
+        dy = p1[1] - p2[1]
+        dz = p1[2] - p2[2]
+        d_squared = dx * dx + dy * dy + dz * dz
+        return math.sqrt(d_squared)
   */
   private static final String distanceVec3JsonAst =
       """
@@ -639,9 +639,9 @@ public class MainTest {
 
   /* Generated from Python code:
 
-  def populate_array(array, index, value):
-    array[index] = value
-    return array
+      def populate_array(array, index, value):
+        array[index] = value
+        return array
   */
   private static final String populateArrayJsonAst =
       """
@@ -928,13 +928,170 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+      x = 0
+
+      def add_one():
+        global x
+        x = x + 1
+
+      def increment_global():
+        add_one()
+        add_one()
+        return x
+  */
+  private static final String incrementGlobalJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "Assign",
+            "targets": [
+              {
+                "type": "Name",
+                "id": "x",
+                "ctx": {
+                  "type": "Store"
+                }
+              }
+            ],
+            "value": {
+              "type": "Constant",
+              "value": 0,
+              "kind": null
+            },
+            "type_comment": null
+          },
+          {
+            "type": "FunctionDef",
+            "name": "add_one",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Global",
+                "names": [
+                  "x"
+                ]
+              },
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "x",
+                    "ctx": {
+                      "type": "Store"
+                    }
+                  }
+                ],
+                "value": {
+                  "type": "BinOp",
+                  "left": {
+                    "type": "Name",
+                    "id": "x",
+                    "ctx": {
+                      "type": "Load"
+                    }
+                  },
+                  "op": {
+                    "type": "Add"
+                  },
+                  "right": {
+                    "type": "Constant",
+                    "value": 1,
+                    "kind": null
+                  }
+                },
+                "type_comment": null
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null
+          },
+          {
+            "type": "FunctionDef",
+            "name": "increment_global",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Expr",
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Name",
+                    "id": "add_one",
+                    "ctx": {
+                      "type": "Load"
+                    }
+                  },
+                  "args": [],
+                  "keywords": []
+                }
+              },
+              {
+                "type": "Expr",
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Name",
+                    "id": "add_one",
+                    "ctx": {
+                      "type": "Load"
+                    }
+                  },
+                  "args": [],
+                  "keywords": []
+                }
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Name",
+                  "id": "x",
+                  "ctx": {
+                    "type": "Load"
+                  }
+                }
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null
+          }
+        ],
+        "type_ignores": []
+      }
+
+      """;
+
   @Test
   public void timesTwo() {
     double x = Math.PI;
 
     var jsonAst = JsonParser.parseString(timesTwoJsonAst);
     var interpreter = new Interpreter();
-    var func = interpreter.parse(jsonAst).getFunction();
+    var func = interpreter.parse(jsonAst).getFunction("times_two");
     System.out.println(func);
 
     var output = interpreter.invoke(func, x);
@@ -947,7 +1104,7 @@ public class MainTest {
 
     var jsonAst = JsonParser.parseString(distanceScalar2JsonAst);
     var interpreter = new Interpreter();
-    var func = interpreter.parse(jsonAst).getFunction();
+    var func = interpreter.parse(jsonAst).getFunction("distance_scalar2");
     System.out.println(func);
 
     var output = interpreter.invoke(func, x1, y1, x2, y2);
@@ -961,7 +1118,7 @@ public class MainTest {
 
     var jsonAst = JsonParser.parseString(distanceVec3JsonAst);
     var interpreter = new Interpreter();
-    var func = interpreter.parse(jsonAst).getFunction();
+    var func = interpreter.parse(jsonAst).getFunction("distance_vec3");
     System.out.println(func);
 
     var output = interpreter.invoke(func, p1, p2);
@@ -976,7 +1133,7 @@ public class MainTest {
 
     var jsonAst = JsonParser.parseString(populateArrayJsonAst);
     var interpreter = new Interpreter();
-    var func = interpreter.parse(jsonAst).getFunction();
+    var func = interpreter.parse(jsonAst).getFunction("populate_array");
     System.out.println(func);
 
     var output = interpreter.invoke(func, array, index, value);
@@ -992,5 +1149,19 @@ public class MainTest {
 
     var output = interpreter.invoke(func);
     assertEquals("false2.3", (String) output);
+  }
+
+  @Test
+  public void incrementGlobal() {
+    var jsonAst = JsonParser.parseString(incrementGlobalJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).getFunction("increment_global");
+    System.out.println(func);
+
+    // Execute global statement to define global var: `x = 0`
+    interpreter.exec();
+
+    var output = interpreter.invoke(func);
+    assertEquals((Integer) 2, (Integer) output);
   }
 }

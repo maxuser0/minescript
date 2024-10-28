@@ -8,9 +8,12 @@ import static java.util.stream.Collectors.toList;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.StreamSupport;
 import net.minescript.common.Numbers;
 
@@ -23,8 +26,9 @@ public class Interpreter {
     return this;
   }
 
-  public FunctionDef getFunction() {
-    return globals.getFunction();
+  public Interpreter exec() {
+    globals.execGlobalStatements();
+    return this;
   }
 
   public FunctionDef getFunction(String name) {
@@ -68,8 +72,11 @@ public class Interpreter {
             globals.functions().put(identifier.name, new FunctionDef(identifier, args, body));
             return;
           }
+
+        default:
+          globals.addGlobalStatement(parseStatements(element));
+          return;
       }
-      throw new IllegalArgumentException("Unknown global element: " + element.toString());
     }
 
     public static Statement parseStatements(JsonElement element) {
@@ -87,6 +94,19 @@ public class Interpreter {
                       lhs, lhs.getClass().getSimpleName()));
             }
           }
+
+        case "Global":
+          {
+            return new GlobalVarDecl(
+                StreamSupport.stream(
+                        getAttr(element, "names").getAsJsonArray().spliterator(), false)
+                    .map(name -> new Identifier(name.getAsString()))
+                    .collect(toList()));
+          }
+
+        case "Expr":
+          return parseExpression(getAttr(element, "value"));
+
         case "Return":
           return new ReturnStatement(parseExpression(getAttr(element, "value")));
       }
@@ -371,11 +391,25 @@ public class Interpreter {
     }
   }
 
+  public record GlobalVarDecl(List<Identifier> globalVars) implements Statement {
+    @Override
+    public void exec(Context context) {
+      for (var identifier : globalVars) {
+        context.declareGlobalVar(identifier.name());
+      }
+    }
+
+    @Override
+    public String toString() {
+      return String.format(
+          "global %s;", globalVars.stream().map(Object::toString).collect(joining(", ")));
+    }
+  }
+
   public record ReturnStatement(Expression returnValue) implements Statement {
     @Override
     public void exec(Context context) {
       context.setOutput(returnValue.eval(context));
-      return;
     }
 
     @Override
@@ -572,6 +606,10 @@ public class Interpreter {
                 return ((Number) value).doubleValue() != 0.;
               }
             }
+          case "print":
+            System.out.println(
+                params.stream().map(p -> p.eval(context).toString()).collect(joining(" ")));
+            return null;
           case "math.sqrt":
             {
               expectNumParams(1);
@@ -614,16 +652,20 @@ public class Interpreter {
     private static final Object NOT_FOUND = new Object();
 
     private final Context globals;
+    private final List<Statement> globalStatements;
+    private Set<String> globalVarNames = null;
     private Map<String, FunctionDef> functions = null;
     private final Map<String, Object> vars = new HashMap<>();
     private Object output;
 
     private Context() {
       globals = this;
+      globalStatements = new ArrayList<>();
     }
 
     private Context(Context globals) {
       this.globals = globals;
+      this.globalStatements = null; // Defined only for global context.
     }
 
     public static Context createGlobals() {
@@ -634,24 +676,34 @@ public class Interpreter {
       return new Context(globals);
     }
 
+    public void declareGlobalVar(String name) {
+      if (globalVarNames == null) {
+        globalVarNames = new HashSet<>();
+      }
+      globalVarNames.add(name);
+    }
+
+    public void addGlobalStatement(Statement statement) {
+      if (this != globals) {
+        throw new IllegalStateException("Cannot add global statements in local context");
+      }
+      globalStatements.add(statement);
+    }
+
+    public void execGlobalStatements() {
+      if (this != globals) {
+        throw new IllegalStateException("Cannot execute global statements in local context");
+      }
+      for (var statement : globalStatements) {
+        statement.exec(globals);
+      }
+    }
+
     public Map<String, FunctionDef> functions() {
       if (functions == null) {
         functions = new HashMap<>();
       }
       return functions;
-    }
-
-    public FunctionDef getFunction() {
-      var funcs = functions == null ? globals.functions : functions;
-
-      if (funcs.size() != 1) {
-        throw new IllegalArgumentException(
-            String.format(
-                "getFunction() requires exactly one function defined but there are %d%s",
-                funcs.size(),
-                funcs.isEmpty() ? "" : funcs.keySet().stream().collect(joining(", ", " [", "]"))));
-      }
-      return funcs.entrySet().iterator().next().getValue();
     }
 
     public FunctionDef getFunction(String name) {
@@ -666,15 +718,22 @@ public class Interpreter {
     }
 
     public void setVariable(String name, Object value) {
-      vars.put(name, value);
+      if (this != globals && globalVarNames != null && globalVarNames.contains(name)) {
+        globals.vars.put(name, value);
+      } else {
+        vars.put(name, value);
+      }
     }
 
     public void setVariable(Identifier id, Object value) {
-      vars.put(id.name(), value);
+      setVariable(id.name(), value);
     }
 
     public Object getVariable(Identifier id) {
       String name = id.name();
+      if (this != globals && globalVarNames != null && globalVarNames.contains(name)) {
+        return globals.getVariable(id);
+      }
       var value = vars.getOrDefault(id.name(), NOT_FOUND);
       if (value != NOT_FOUND) {
         return value;
