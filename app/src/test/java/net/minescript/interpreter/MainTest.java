@@ -6,7 +6,12 @@ import com.google.gson.JsonParser;
 import org.junit.Test;
 
 public class MainTest {
-  // JSON AST strings generated from dump_json_ast.py.
+  /* Generated from Python code:
+
+    def times_two(x):
+      y = x * 2
+      return y
+  */
   private static final String timesTwoJsonAst =
       """
       {
@@ -84,6 +89,14 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+    def distance_scalar2(x1, y1, x2, y2):
+      dx = x1 - x2
+      dy = y1 - y2
+      d_squared = dx * dx + dy * dy
+      return math.sqrt(d_squared)
+  */
   private static final String distanceScalar2JsonAst =
       """
       {
@@ -293,6 +306,15 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+    def distance_vec3(p1, p2):
+      dx = p1[0] - p2[0]
+      dy = p1[1] - p2[1]
+      dz = p1[2] - p2[2]
+      d_squared = dx * dx + dy * dy + dz * dz
+      return math.sqrt(d_squared)
+  */
   private static final String distanceVec3JsonAst =
       """
       {
@@ -615,6 +637,12 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+  def populate_array(array, index, value):
+    array[index] = value
+    return array
+  */
   private static final String populateArrayJsonAst =
       """
       {
@@ -706,18 +734,211 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+      def str_int_func(x, y):
+        return str(float(x + str(y)))
+
+      def type_conversions():
+        return str(bool(0.0)) + str_int_func("2.", 3)
+  */
+  private static final String typeConversionsJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "str_int_func",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [
+                {
+                  "type": "arg",
+                  "arg": "x",
+                  "annotation": null,
+                  "type_comment": null
+                },
+                {
+                  "type": "arg",
+                  "arg": "y",
+                  "annotation": null,
+                  "type_comment": null
+                }
+              ],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Name",
+                    "id": "str",
+                    "ctx": {
+                      "type": "Load"
+                    }
+                  },
+                  "args": [
+                    {
+                      "type": "Call",
+                      "func": {
+                        "type": "Name",
+                        "id": "float",
+                        "ctx": {
+                          "type": "Load"
+                        }
+                      },
+                      "args": [
+                        {
+                          "type": "BinOp",
+                          "left": {
+                            "type": "Name",
+                            "id": "x",
+                            "ctx": {
+                              "type": "Load"
+                            }
+                          },
+                          "op": {
+                            "type": "Add"
+                          },
+                          "right": {
+                            "type": "Call",
+                            "func": {
+                              "type": "Name",
+                              "id": "str",
+                              "ctx": {
+                                "type": "Load"
+                              }
+                            },
+                            "args": [
+                              {
+                                "type": "Name",
+                                "id": "y",
+                                "ctx": {
+                                  "type": "Load"
+                                }
+                              }
+                            ],
+                            "keywords": []
+                          }
+                        }
+                      ],
+                      "keywords": []
+                    }
+                  ],
+                  "keywords": []
+                }
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null
+          },
+          {
+            "type": "FunctionDef",
+            "name": "type_conversions",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Return",
+                "value": {
+                  "type": "BinOp",
+                  "left": {
+                    "type": "Call",
+                    "func": {
+                      "type": "Name",
+                      "id": "str",
+                      "ctx": {
+                        "type": "Load"
+                      }
+                    },
+                    "args": [
+                      {
+                        "type": "Call",
+                        "func": {
+                          "type": "Name",
+                          "id": "bool",
+                          "ctx": {
+                            "type": "Load"
+                          }
+                        },
+                        "args": [
+                          {
+                            "type": "Constant",
+                            "value": 0.0,
+                            "kind": null
+                          }
+                        ],
+                        "keywords": []
+                      }
+                    ],
+                    "keywords": []
+                  },
+                  "op": {
+                    "type": "Add"
+                  },
+                  "right": {
+                    "type": "Call",
+                    "func": {
+                      "type": "Name",
+                      "id": "str_int_func",
+                      "ctx": {
+                        "type": "Load"
+                      }
+                    },
+                    "args": [
+                      {
+                        "type": "Constant",
+                        "value": "2.",
+                        "kind": null
+                      },
+                      {
+                        "type": "Constant",
+                        "value": 3,
+                        "kind": null
+                      }
+                    ],
+                    "keywords": []
+                  }
+                }
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
   @Test
   public void timesTwo() {
     double x = Math.PI;
 
     var jsonAst = JsonParser.parseString(timesTwoJsonAst);
-    var ast = Interpreter.JsonAstParser.parseStatements(jsonAst);
-    System.out.println(ast);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).getFunction();
+    System.out.println(func);
 
-    var context = new Interpreter.Context();
-    context.setVariable("x", x);
-    ast.exec(context);
-    assertEquals(2 * Math.PI, ((Number) context.output()).doubleValue(), 0.000000001);
+    var output = interpreter.invoke(func, x);
+    assertEquals(2 * Math.PI, ((Number) output).doubleValue(), 0.000000001);
   }
 
   @Test
@@ -725,16 +946,12 @@ public class MainTest {
     int x1 = 100, y1 = 100, x2 = 103, y2 = 104;
 
     var jsonAst = JsonParser.parseString(distanceScalar2JsonAst);
-    var ast = Interpreter.JsonAstParser.parseStatements(jsonAst);
-    System.out.println(ast);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).getFunction();
+    System.out.println(func);
 
-    var context = new Interpreter.Context();
-    context.setVariable("x1", x1);
-    context.setVariable("y1", y1);
-    context.setVariable("x2", x2);
-    context.setVariable("y2", y2);
-    ast.exec(context);
-    assertEquals(5., ((Number) context.output()).doubleValue(), 0.00000001);
+    var output = interpreter.invoke(func, x1, y1, x2, y2);
+    assertEquals(5., ((Number) output).doubleValue(), 0.00000001);
   }
 
   @Test
@@ -743,14 +960,12 @@ public class MainTest {
     int[] p2 = new int[] {1, 5, 1};
 
     var jsonAst = JsonParser.parseString(distanceVec3JsonAst);
-    var ast = Interpreter.JsonAstParser.parseStatements(jsonAst);
-    System.out.println(ast);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).getFunction();
+    System.out.println(func);
 
-    var context = new Interpreter.Context();
-    context.setVariable("p1", p1);
-    context.setVariable("p2", p2);
-    ast.exec(context);
-    assertEquals(2 * Math.sqrt(2), ((Number) context.output()).doubleValue(), 0.000000001);
+    var output = interpreter.invoke(func, p1, p2);
+    assertEquals(2 * Math.sqrt(2), ((Number) output).doubleValue(), 0.000000001);
   }
 
   @Test
@@ -760,14 +975,22 @@ public class MainTest {
     String value = "first";
 
     var jsonAst = JsonParser.parseString(populateArrayJsonAst);
-    var ast = Interpreter.JsonAstParser.parseStatements(jsonAst);
-    System.out.println(ast);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).getFunction();
+    System.out.println(func);
 
-    var context = new Interpreter.Context();
-    context.setVariable("array", array);
-    context.setVariable("index", index);
-    context.setVariable("value", value);
-    ast.exec(context);
-    assertArrayEquals(new String[] {"first", null, null}, (String[]) context.output());
+    var output = interpreter.invoke(func, array, index, value);
+    assertArrayEquals(new String[] {"first", null, null}, (String[]) output);
+  }
+
+  @Test
+  public void typeConversions() {
+    var jsonAst = JsonParser.parseString(typeConversionsJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).getFunction("type_conversions");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals("false2.3", (String) output);
   }
 }

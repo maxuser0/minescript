@@ -17,11 +17,12 @@ public class Main {
                 .lines()
                 .collect(Collectors.joining("\n")));
 
-    var ast = Interpreter.JsonAstParser.parseStatements(jsonAst);
-    System.out.println(ast);
+    var interpreter = new Interpreter();
+    interpreter.parse(jsonAst);
+    var func = args.length == 0 ? interpreter.getFunction() : interpreter.getFunction(args[0]);
+    System.out.println(func);
 
-    var context = new Interpreter.Context();
-    ast.exec(context);
-    System.out.println(context.output());
+    var output = interpreter.invoke(func);
+    System.out.println(output);
   }
 }
