@@ -4,10 +4,8 @@
 
 """Utility for dumping JSON representation of Python function AST."""
 
-import inspect
 import ast
 import json
-import math
 import sys
 
 def ast_to_dict(
@@ -41,27 +39,6 @@ def ast_to_dict(
   else:
     return str(node)
 
-def distance_vec3(p1, p2):
-  dx = p1[0] - p2[0]
-  dy = p1[1] - p2[1]
-  dz = p1[2] - p2[2]
-  d_squared = dx * dx + dy * dy + dz * dz
-  return math.sqrt(d_squared)
-
-def distance_scalar2(x1, y1, x2, y2):
-  dx = x1 - x2
-  dy = y1 - y2
-  d_squared = dx * dx + dy * dy
-  return math.sqrt(d_squared)
-
-def times_two(x):
-  y = x * 2
-  return y
-
-def populate_array(array, index, value):
-  array[index] = value
-  return array
-
 USAGE = """Usage:
     dump_json_ast.py [func_name]
     cat some_code.py |dump_json_ast.py"""
@@ -77,10 +54,6 @@ def main(argv):
     except EOFError:
       pass
     tree = ast.parse(code)
-    print(json.dumps(ast_to_dict(tree), indent=2))
-  elif len(argv) == 1:
-    func = globals()[argv[0]]
-    tree = ast.parse(inspect.getsource(func))
     print(json.dumps(ast_to_dict(tree), indent=2))
   else:
     print(USAGE, file=sys.stderr)
