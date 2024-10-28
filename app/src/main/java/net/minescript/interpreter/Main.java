@@ -24,8 +24,8 @@ public class Main {
     if (args.length == 1) {
       var func = interpreter.getFunction(args[0]);
       System.out.println(func);
-      var output = interpreter.invoke(func);
-      System.out.println(output);
+      var returnValue = interpreter.invoke(func);
+      System.out.println(returnValue);
     }
   }
 }

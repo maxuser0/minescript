@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.StreamSupport;
 import net.minescript.common.Numbers;
@@ -116,7 +117,16 @@ public class Interpreter {
               parseStatementBlock(getAttr(element, "orelse").getAsJsonArray()));
 
         case "Return":
-          return new ReturnStatement(parseExpression(getAttr(element, "value")));
+          {
+            var returnValue = getAttr(element, "value");
+            if (returnValue.isJsonNull()) {
+              // No return value. This differs from `return None` in terms of the AST, but the two
+              // evaluate the same.
+              return new ReturnStatement(null);
+            } else {
+              return new ReturnStatement(parseExpression(returnValue));
+            }
+          }
       }
       throw new IllegalArgumentException("Unknown statement type: " + element.toString());
     }
@@ -177,20 +187,24 @@ public class Interpreter {
     }
 
     private static Expression parseConstant(JsonElement element) {
-      var primitive = element.getAsJsonPrimitive();
-      if (primitive.isNumber()) {
-        var number = primitive.getAsNumber();
-        int n = number.intValue();
-        double d = number.doubleValue();
-        if (n == d) {
-          return new ConstantExpression(number.intValue());
-        } else {
-          return new ConstantExpression(number.doubleValue());
+      if (element.isJsonPrimitive()) {
+        var primitive = element.getAsJsonPrimitive();
+        if (primitive.isNumber()) {
+          var number = primitive.getAsNumber();
+          int n = number.intValue();
+          double d = number.doubleValue();
+          if (n == d) {
+            return new ConstantExpression(number.intValue());
+          } else {
+            return new ConstantExpression(number.doubleValue());
+          }
+        } else if (primitive.isBoolean()) {
+          return new ConstantExpression(primitive.getAsBoolean());
+        } else if (primitive.isString()) {
+          return new ConstantExpression(primitive.getAsString());
         }
-      } else if (primitive.isBoolean()) {
-        return new ConstantExpression(primitive.getAsBoolean());
-      } else if (primitive.isString()) {
-        return new ConstantExpression(primitive.getAsString());
+      } else if (element.isJsonNull()) {
+        return new ConstantExpression(null);
       }
       throw new IllegalArgumentException(String.format("Unsupported primitive type: %s", element));
     }
@@ -218,7 +232,7 @@ public class Interpreter {
 
   public interface Statement {
     default void exec(Context context) {
-      throw new IllegalArgumentException(
+      throw new UnsupportedOperationException(
           "Execution of statement type not implemented: " + getClass().getSimpleName());
     }
   }
@@ -266,7 +280,7 @@ public class Interpreter {
         callContext.setVariable(arg.identifier().name(), argValue);
       }
       exec(callContext);
-      return callContext.output();
+      return callContext.returnValue();
     }
 
     @Override
@@ -335,7 +349,7 @@ public class Interpreter {
     }
 
     default Object eval(Context context) {
-      throw new IllegalArgumentException(
+      throw new UnsupportedOperationException(
           String.format(
               "Eval for expression %s not implemented: %s", getClass().getSimpleName(), this));
     }
@@ -451,12 +465,16 @@ public class Interpreter {
   public record ReturnStatement(Expression returnValue) implements Statement {
     @Override
     public void exec(Context context) {
-      context.returnWithValue(returnValue.eval(context));
+      context.returnWithValue(returnValue == null ? null : returnValue.eval(context));
     }
 
     @Override
     public String toString() {
-      return String.format("return %s;", returnValue);
+      if (returnValue == null) {
+        return "return;";
+      } else {
+        return String.format("return %s;", returnValue);
+      }
     }
   }
 
@@ -484,7 +502,7 @@ public class Interpreter {
         case NOT:
           return !(Boolean) operand.eval(context);
       }
-      throw new IllegalArgumentException("Unary op not implemented");
+      throw new UnsupportedOperationException("Unary op not implemented");
     }
   }
 
@@ -496,7 +514,9 @@ public class Interpreter {
 
     @Override
     public String toString() {
-      if (value instanceof String) {
+      if (value == null) {
+        return "null";
+      } else if (value instanceof String) {
         return String.format("\"%s\"", value);
       } else {
         return value.toString();
@@ -551,7 +571,7 @@ public class Interpreter {
           return Numbers.multiply((Number) lhsValue, (Number) rhsValue);
           // TODO(maxuser): impl ops...
       }
-      throw new IllegalArgumentException(
+      throw new UnsupportedOperationException(
           String.format(
               "Binary op not implemented for types `%s %s %s`: %s",
               lhsValue.getClass().getSimpleName(),
@@ -596,8 +616,9 @@ public class Interpreter {
 
       throw new IllegalArgumentException(
           String.format(
-              "Eval for ArrayIndex expression not implemented for types: %s[%s]",
-              array.getClass().getSimpleName(), index.getClass().getSimpleName()));
+              "Eval for ArrayIndex expression not supported for types: %s[%s] (evaluated as:"
+                  + " %s[%s])",
+              array, index, arrayValue, indexValue));
     }
 
     @Override
@@ -645,7 +666,7 @@ public class Interpreter {
             }
           case "print":
             System.out.println(
-                params.stream().map(p -> p.eval(context).toString()).collect(joining(" ")));
+                params.stream().map(p -> Objects.toString(p.eval(context))).collect(joining(" ")));
             return null;
           case "math.sqrt":
             {
@@ -693,7 +714,7 @@ public class Interpreter {
     private Set<String> globalVarNames = null;
     private Map<String, FunctionDef> functions = null;
     private final Map<String, Object> vars = new HashMap<>();
-    private Object output;
+    private Object returnValue;
     private boolean returned = false;
 
     private Context() {
@@ -782,11 +803,11 @@ public class Interpreter {
       }
     }
 
-    public void returnWithValue(Object output) {
+    public void returnWithValue(Object returnValue) {
       if (this == globals) {
         throw new IllegalStateException("'return' outside function");
       }
-      this.output = output;
+      this.returnValue = returnValue;
       this.returned = true;
     }
 
@@ -794,8 +815,8 @@ public class Interpreter {
       return returned;
     }
 
-    public Object output() {
-      return output;
+    public Object returnValue() {
+      return returnValue;
     }
   }
 }
