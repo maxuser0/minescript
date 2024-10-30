@@ -1195,6 +1195,68 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+      def sqrt9():
+        return Math.sqrt(9)
+  */
+  private static final String sqrt9JsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "sqrt9",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Attribute",
+                    "value": {
+                      "type": "Name",
+                      "id": "Math",
+                      "ctx": {
+                        "type": "Load"
+                      }
+                    },
+                    "attr": "sqrt",
+                    "ctx": {
+                      "type": "Load"
+                    }
+                  },
+                  "args": [
+                    {
+                      "type": "Constant",
+                      "value": 9,
+                      "kind": null
+                    }
+                  ],
+                  "keywords": []
+                }
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
   @Test
   public void timesTwo() {
     double x = Math.PI;
@@ -1284,5 +1346,16 @@ public class MainTest {
 
     var output = interpreter.invoke(func, 5);
     assertEquals(Integer.valueOf(120), (Integer) output);
+  }
+
+  @Test
+  public void sqrt9() {
+    var jsonAst = JsonParser.parseString(sqrt9JsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).getFunction("sqrt9");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals(3., ((Number) output).doubleValue(), 0.000000001);
   }
 }

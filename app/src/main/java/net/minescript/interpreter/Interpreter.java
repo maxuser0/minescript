@@ -8,6 +8,8 @@ import static java.util.stream.Collectors.toList;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -140,7 +142,20 @@ public class Interpreter {
           .collect(toList());
     }
 
+    private enum ParseContext {
+      // Default context. Attributes parsed within NONE context are field accesses: foo.member
+      NONE,
+
+      // Attributes parsed within CALLER context are method bindings: foo.method(...)
+      CALLER,
+    }
+
     public static Expression parseExpression(JsonElement element) {
+      return parseExpressionWithContext(element, ParseContext.NONE);
+    }
+
+    private static Expression parseExpressionWithContext(
+        JsonElement element, ParseContext parseContext) {
       String type = getType(element);
       switch (type) {
         case "BinOp":
@@ -154,17 +169,20 @@ public class Interpreter {
           return parseConstant(getAttr(element, "value"));
         case "Call":
           return new MethodCall(
-              parseExpression(getAttr(element, "func")),
+              parseExpressionWithContext(getAttr(element, "func"), ParseContext.CALLER),
               StreamSupport.stream(getAttr(element, "args").getAsJsonArray().spliterator(), false)
                   .map(elem -> parseExpression(elem))
                   .collect(toList()));
         case "Attribute":
-          // TODO(maxuser): Don't assume `value.attr` can be concatenated into a single identifier.
-          return new Identifier(
-              String.format(
-                  "%s.%s",
-                  getAttr(getAttr(element, "value"), "id").getAsString(),
-                  getAttr(element, "attr").getAsString()));
+          {
+            var object = parseExpression(getAttr(element, "value"));
+            var attr = new Identifier(getAttr(element, "attr").getAsString());
+            if (parseContext == ParseContext.CALLER) {
+              return new BoundMethod(object, attr);
+            } else {
+              return new FieldAccess(object, attr);
+            }
+          }
         case "Subscript":
           return new ArrayIndex(
               parseExpression(getAttr(element, "value")),
@@ -633,60 +651,99 @@ public class Interpreter {
     @Override
     public Object eval(Context context) {
       if (method instanceof Identifier methodId) {
-        switch (methodId.name()) {
-          case "int":
-            {
-              expectNumParams(1);
-              var value = params.get(0).eval(context);
-              if (value instanceof String string) {
-                return Integer.parseInt(string);
-              } else {
-                return ((Number) value).intValue();
-              }
-            }
-          case "float":
-            {
-              expectNumParams(1);
-              var value = params.get(0).eval(context);
-              if (value instanceof String string) {
-                return Double.parseDouble(string);
-              } else {
-                return ((Number) value).doubleValue();
-              }
-            }
-          case "str":
-            {
-              expectNumParams(1);
-              return params.get(0).eval(context).toString();
-            }
-          case "bool":
-            {
-              expectNumParams(1);
-              return convertToBool(params.get(0).eval(context));
-            }
-          case "print":
-            System.out.println(
-                params.stream().map(p -> Objects.toString(p.eval(context))).collect(joining(" ")));
-            return null;
-          case "math.sqrt":
-            {
-              expectNumParams(1);
-              var num = (Number) params.get(0).eval(context);
-              return Math.sqrt(num.doubleValue());
-            }
-          default:
-            {
-              FunctionDef func = context.getFunction(methodId.name());
-              if (func != null) {
-                expectNumParams(func.args.size());
-                return func.invoke(
-                    context, params.stream().map(p -> p.eval(context)).toArray(Object[]::new));
-              }
-            }
-        }
+        return callFunction(methodId, context);
+      } else if (method instanceof BoundMethod boundMethod
+          && boundMethod.object() instanceof Identifier objId) {
+        return callBoundMethod(objId.name(), boundMethod.method().name(), context);
       }
       throw new IllegalArgumentException(
           String.format("Function `%s` not defined: %s", method, this));
+    }
+
+    private Object callFunction(Identifier methodId, Context context) {
+      switch (methodId.name()) {
+        case "int":
+          {
+            expectNumParams(1);
+            var value = params.get(0).eval(context);
+            if (value instanceof String string) {
+              return Integer.parseInt(string);
+            } else {
+              return ((Number) value).intValue();
+            }
+          }
+        case "float":
+          {
+            expectNumParams(1);
+            var value = params.get(0).eval(context);
+            if (value instanceof String string) {
+              return Double.parseDouble(string);
+            } else {
+              return ((Number) value).doubleValue();
+            }
+          }
+        case "str":
+          {
+            expectNumParams(1);
+            return params.get(0).eval(context).toString();
+          }
+        case "bool":
+          {
+            expectNumParams(1);
+            return convertToBool(params.get(0).eval(context));
+          }
+        case "print":
+          System.out.println(
+              params.stream().map(p -> Objects.toString(p.eval(context))).collect(joining(" ")));
+          return null;
+        default:
+          {
+            FunctionDef func = context.getFunction(methodId.name());
+            if (func != null) {
+              expectNumParams(func.args.size());
+              return func.invoke(
+                  context, params.stream().map(p -> p.eval(context)).toArray(Object[]::new));
+            }
+          }
+      }
+      throw new IllegalArgumentException(
+          String.format("Function `%s` not defined: %s", methodId, this));
+    }
+
+    private Object callBoundMethod(String objectName, String methodName, Context context) {
+      switch (objectName) {
+        case "math":
+          if (methodName.equals("sqrt")) {
+            expectNumParams(1);
+            var num = (Number) params.get(0).eval(context);
+            return Math.sqrt(num.doubleValue());
+          }
+          break;
+        case "Math":
+          {
+            try {
+              // TODO(maxuser): cache class lookups
+              Class<?> clss = Class.forName("java.lang.Math");
+              // TODO(maxuser): cache method lookups
+              for (Method m : clss.getMethods()) {
+                // TODO(maxuser): also check param number and types
+                if (m.getName().equals(methodName)) {
+                  return m.invoke(
+                      null, // static method ignores obj param
+                      params.stream().map(p -> p.eval(context)).toArray(Object[]::new));
+                }
+              }
+              throw new IllegalArgumentException(
+                  String.format("Method not found: %s %s\n", clss.getName(), methodName));
+            } catch (ClassNotFoundException
+                | IllegalAccessException
+                | InvocationTargetException e) {
+              throw new RuntimeException(e);
+            }
+          }
+      }
+      throw new IllegalArgumentException(
+          String.format("Function not defined: %s.%s", objectName, methodName));
     }
 
     private void expectNumParams(int n) {
@@ -704,7 +761,25 @@ public class Interpreter {
     }
   }
 
-  public record FieldAccess(Expression target, Identifier fieldId) {}
+  public record BoundMethod(Expression object, Identifier method) implements Expression {
+    @Override
+    public Object eval(Context context) {
+      throw new UnsupportedOperationException(
+          String.format("Bound methods can be called but not evaluated: %s.%s", object, method));
+    }
+
+    @Override
+    public String toString() {
+      return String.format("%s.%s", object, method);
+    }
+  }
+
+  public record FieldAccess(Expression object, Identifier field) implements Expression {
+    @Override
+    public String toString() {
+      return String.format("%s.%s", object, field);
+    }
+  }
 
   public static class Context {
     private static final Object NOT_FOUND = new Object();
