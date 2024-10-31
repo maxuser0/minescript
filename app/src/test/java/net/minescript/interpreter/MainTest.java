@@ -1198,6 +1198,7 @@ public class MainTest {
   /* Generated from Python code:
 
       def sqrt9():
+        Math = JavaClass("java.lang.Math")
         return Math.sqrt(9)
   */
   private static final String sqrt9JsonAst =
@@ -1219,6 +1220,37 @@ public class MainTest {
               "defaults": []
             },
             "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "Math",
+                    "ctx": {
+                      "type": "Store"
+                    }
+                  }
+                ],
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Name",
+                    "id": "JavaClass",
+                    "ctx": {
+                      "type": "Load"
+                    }
+                  },
+                  "args": [
+                    {
+                      "type": "Constant",
+                      "value": "java.lang.Math",
+                      "kind": null
+                    }
+                  ],
+                  "keywords": []
+                },
+                "type_comment": null
+              },
               {
                 "type": "Return",
                 "value": {

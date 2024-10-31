@@ -26,7 +26,8 @@ public class Interpreter {
   private Context globals = Context.createGlobals();
 
   public Interpreter parse(JsonElement element) {
-    JsonAstParser.parseGlobals(element, globals);
+    var parser = new JsonAstParser();
+    parser.parseGlobals(element, globals);
     return this;
   }
 
@@ -45,7 +46,10 @@ public class Interpreter {
 
   public static class JsonAstParser {
 
-    public static void parseGlobals(JsonElement element, Context globals) {
+    private boolean insideFunctionScope = false;
+    private Map<String, Class<?>> functionScopeClassAliases = new HashMap<>();
+
+    public void parseGlobals(JsonElement element, Context globals) {
       String type = getType(element);
       switch (type) {
         case "Module":
@@ -58,12 +62,22 @@ public class Interpreter {
 
         case "FunctionDef":
           {
-            var identifier = new Identifier(getAttr(element, "name").getAsString());
-            List<FunctionArg> args =
-                parseFunctionArgs(
-                    getAttr(getAttr(element, "args").getAsJsonObject(), "args").getAsJsonArray());
-            Statement body = parseStatementBlock(getBody(element));
-            globals.functions().put(identifier.name, new FunctionDef(identifier, args, body));
+            insideFunctionScope = true;
+            try {
+              var identifier = new Identifier(getAttr(element, "name").getAsString());
+              List<FunctionArg> args =
+                  parseFunctionArgs(
+                      getAttr(getAttr(element, "args").getAsJsonObject(), "args").getAsJsonArray());
+              Statement body = parseStatementBlock(getBody(element));
+              globals
+                  .functions()
+                  .put(
+                      identifier.name,
+                      new FunctionDef(identifier, args, body, functionScopeClassAliases));
+            } finally {
+              functionScopeClassAliases.clear();
+              insideFunctionScope = false;
+            }
             return;
           }
 
@@ -73,7 +87,7 @@ public class Interpreter {
       }
     }
 
-    public static Statement parseStatementBlock(JsonArray block) {
+    public Statement parseStatementBlock(JsonArray block) {
       if (block.size() == 1) {
         return parseStatements(block.get(0));
       } else {
@@ -84,14 +98,38 @@ public class Interpreter {
       }
     }
 
-    public static Statement parseStatements(JsonElement element) {
+    public Statement parseStatements(JsonElement element) {
       String type = getType(element);
       switch (type) {
         case "Assign":
           {
             Expression lhs = parseExpression(getTargets(element).get(0));
-            if (lhs instanceof Identifier || lhs instanceof ArrayIndex) {
-              return new Assignment(lhs, parseExpression(getAttr(element, "value")));
+            Expression rhs = parseExpression(getAttr(element, "value"));
+            if (lhs instanceof Identifier lhsId) {
+              if (rhs instanceof JavaClassId classId) {
+                var alias = new ClassAliasAssignment(lhsId, classId.clss());
+                var oldClass =
+                    functionScopeClassAliases.put(alias.identifier().name(), alias.clss());
+                if (oldClass != null) {
+                  throw new IllegalArgumentException(
+                      String.format(
+                          "Class alias `%s` multiply defined; first defined as %s and then as %s",
+                          oldClass.getName(), alias.clss()));
+                }
+                return alias;
+              } else {
+                var oldClass = functionScopeClassAliases.get(lhsId.name());
+                if (oldClass != null) {
+                  throw new IllegalArgumentException(
+                      String.format(
+                          "Class alias `%s` multiply defined; first defined as class %s and then as"
+                              + " non-class %s",
+                          oldClass.getName(), rhs));
+                }
+                return new Assignment(lhs, rhs);
+              }
+            } else if (lhs instanceof ArrayIndex) {
+              return new Assignment(lhs, rhs);
             } else {
               throw new IllegalArgumentException(
                   String.format(
@@ -133,7 +171,7 @@ public class Interpreter {
       throw new IllegalArgumentException("Unknown statement type: " + element.toString());
     }
 
-    private static List<FunctionArg> parseFunctionArgs(JsonArray args) {
+    private List<FunctionArg> parseFunctionArgs(JsonArray args) {
       return StreamSupport.stream(args.spliterator(), false)
           .map(
               arg ->
@@ -150,12 +188,11 @@ public class Interpreter {
       CALLER,
     }
 
-    public static Expression parseExpression(JsonElement element) {
+    public Expression parseExpression(JsonElement element) {
       return parseExpressionWithContext(element, ParseContext.NONE);
     }
 
-    private static Expression parseExpressionWithContext(
-        JsonElement element, ParseContext parseContext) {
+    private Expression parseExpressionWithContext(JsonElement element, ParseContext parseContext) {
       String type = getType(element);
       switch (type) {
         case "BinOp":
@@ -163,26 +200,71 @@ public class Interpreter {
               parseExpression(getAttr(element, "left")),
               parseBinaryOp(getType(getAttr(element, "op"))),
               parseExpression(getAttr(element, "right")));
+
         case "Name":
-          return getId(element);
+          {
+            Class<?> clss;
+            Identifier id = getId(element);
+            if (id.name().equals("JavaClass")) {
+              return new JavaClass();
+            } else if (insideFunctionScope
+                && (clss = functionScopeClassAliases.get(id.name())) != null) {
+              return new JavaClassId(id, clss);
+            } else {
+              return id;
+            }
+          }
+
         case "Constant":
           return parseConstant(getAttr(element, "value"));
+
         case "Call":
-          return new MethodCall(
-              parseExpressionWithContext(getAttr(element, "func"), ParseContext.CALLER),
-              StreamSupport.stream(getAttr(element, "args").getAsJsonArray().spliterator(), false)
-                  .map(elem -> parseExpression(elem))
-                  .collect(toList()));
+          {
+            var func = parseExpressionWithContext(getAttr(element, "func"), ParseContext.CALLER);
+            var args = getAttr(element, "args").getAsJsonArray();
+            if (func instanceof JavaClass) {
+              if (args.size() != 1) {
+                throw new IllegalArgumentException(
+                    "Expected exactly one argument to JavaClass but got " + args.size());
+              }
+              var arg = parseExpression(args.get(0));
+              if (arg instanceof ConstantExpression constExpr
+                  && constExpr.value() instanceof String constString) {
+                try {
+                  return new JavaClassId(null, Class.forName(constString));
+                } catch (ClassNotFoundException e) {
+                  throw new IllegalArgumentException(e);
+                }
+              } else {
+                throw new IllegalArgumentException(
+                    String.format(
+                        "Expected JavaClass argument to be a string literal but got %s (%s)",
+                        arg, args.get(0)));
+              }
+            } else {
+              return new MethodCall(
+                  func,
+                  StreamSupport.stream(args.spliterator(), false)
+                      .map(elem -> parseExpression(elem))
+                      .collect(toList()));
+            }
+          }
+
         case "Attribute":
           {
             var object = parseExpression(getAttr(element, "value"));
             var attr = new Identifier(getAttr(element, "attr").getAsString());
             if (parseContext == ParseContext.CALLER) {
-              return new BoundMethod(object, attr);
+              if (object instanceof JavaClassId classId) {
+                return new StaticMethod(classId, attr);
+              } else {
+                return new BoundMethod(object, attr);
+              }
             } else {
               return new FieldAccess(object, attr);
             }
           }
+
         case "Subscript":
           return new ArrayIndex(
               parseExpression(getAttr(element, "value")),
@@ -271,7 +353,11 @@ public class Interpreter {
     }
   }
 
-  public record FunctionDef(Identifier identifier, List<FunctionArg> args, Statement body)
+  public record FunctionDef(
+      Identifier identifier,
+      List<FunctionArg> args,
+      Statement body,
+      Map<String, Class<?>> classAliases)
       implements Statement {
     /**
      * Executes function body.
@@ -291,7 +377,7 @@ public class Interpreter {
                 identifier, argValues.length, args.size()));
       }
 
-      var callContext = context.createLocalContext();
+      var callContext = context.createLocalContext(classAliases);
       for (int i = 0; i < args.size(); ++i) {
         var arg = args.get(i);
         var argValue = argValues[i];
@@ -390,6 +476,16 @@ public class Interpreter {
           .map(Object::toString)
           .map(s -> "  " + s)
           .collect(joining("\n", "{\n", "\n}"));
+    }
+  }
+
+  public record ClassAliasAssignment(Identifier identifier, Class<?> clss) implements Statement {
+    @Override
+    public void exec(Context context) {}
+
+    @Override
+    public String toString() {
+      return String.format("import %s as %s;", clss.getName(), identifier);
     }
   }
 
@@ -647,6 +743,34 @@ public class Interpreter {
 
   public record CtorCall(Identifier classId, List<Expression> params) {}
 
+  public record JavaClass() implements Expression {
+    @Override
+    public Object eval(Context context) {
+      throw new UnsupportedOperationException("JavaClass can be called but not evaluated");
+    }
+
+    @Override
+    public String toString() {
+      return "JavaClass";
+    }
+  }
+
+  public record JavaClassId(Identifier alias, Class<?> clss) implements Expression {
+    @Override
+    public Object eval(Context context) {
+      return clss;
+    }
+
+    @Override
+    public String toString() {
+      if (alias != null) {
+        return alias.name();
+      } else {
+        return String.format("JavaClass(\"%s\")", clss.getName());
+      }
+    }
+  }
+
   public record MethodCall(Expression method, List<Expression> params) implements Expression {
     @Override
     public Object eval(Context context) {
@@ -655,6 +779,9 @@ public class Interpreter {
       } else if (method instanceof BoundMethod boundMethod
           && boundMethod.object() instanceof Identifier objId) {
         return callBoundMethod(objId.name(), boundMethod.method().name(), context);
+      } else if (method instanceof StaticMethod staticMethod) {
+        return callStaticMethod(
+            staticMethod.classId().clss(), staticMethod.method().name(), context);
       }
       throw new IllegalArgumentException(
           String.format("Function `%s` not defined: %s", method, this));
@@ -719,31 +846,27 @@ public class Interpreter {
             return Math.sqrt(num.doubleValue());
           }
           break;
-        case "Math":
-          {
-            try {
-              // TODO(maxuser): cache class lookups
-              Class<?> clss = Class.forName("java.lang.Math");
-              // TODO(maxuser): cache method lookups
-              for (Method m : clss.getMethods()) {
-                // TODO(maxuser): also check param number and types
-                if (m.getName().equals(methodName)) {
-                  return m.invoke(
-                      null, // static method ignores obj param
-                      params.stream().map(p -> p.eval(context)).toArray(Object[]::new));
-                }
-              }
-              throw new IllegalArgumentException(
-                  String.format("Method not found: %s %s\n", clss.getName(), methodName));
-            } catch (ClassNotFoundException
-                | IllegalAccessException
-                | InvocationTargetException e) {
-              throw new RuntimeException(e);
-            }
-          }
       }
       throw new IllegalArgumentException(
           String.format("Function not defined: %s.%s", objectName, methodName));
+    }
+
+    private Object callStaticMethod(Class<?> clss, String methodName, Context context) {
+      // TODO(maxuser): cache and filter method lookups by name
+      try {
+        for (Method m : clss.getMethods()) {
+          // TODO(maxuser): also check param number and types
+          if (m.getName().equals(methodName)) {
+            return m.invoke(
+                null, // static method ignores obj param
+                params.stream().map(p -> p.eval(context)).toArray(Object[]::new));
+          }
+        }
+        throw new IllegalArgumentException(
+            String.format("Method not found: %s %s\n", clss.getName(), methodName));
+      } catch (IllegalAccessException | InvocationTargetException e) {
+        throw new RuntimeException(e);
+      }
     }
 
     private void expectNumParams(int n) {
@@ -758,6 +881,19 @@ public class Interpreter {
     public String toString() {
       return String.format(
           "%s(%s)", method, params.stream().map(Object::toString).collect(joining(", ")));
+    }
+  }
+
+  public record StaticMethod(JavaClassId classId, Identifier method) implements Expression {
+    @Override
+    public Object eval(Context context) {
+      throw new UnsupportedOperationException(
+          String.format("Static methods can be called but not evaluated: %s.%s", classId, method));
+    }
+
+    @Override
+    public String toString() {
+      return String.format("%s.%s", classId, method);
     }
   }
 
@@ -791,23 +927,25 @@ public class Interpreter {
     private final Map<String, Object> vars = new HashMap<>();
     private Object returnValue;
     private boolean returned = false;
+    private Map<String, Class<?>> classAliases;
 
     private Context() {
       globals = this;
       globalStatements = new ArrayList<>();
     }
 
-    private Context(Context globals) {
+    private Context(Context globals, Map<String, Class<?>> classAliases) {
       this.globals = globals;
       this.globalStatements = null; // Defined only for global context.
+      this.classAliases = classAliases;
     }
 
     public static Context createGlobals() {
       return new Context();
     }
 
-    public Context createLocalContext() {
-      return new Context(globals);
+    public Context createLocalContext(Map<String, Class<?>> classAliases) {
+      return new Context(globals, classAliases);
     }
 
     public void declareGlobalVar(String name) {
