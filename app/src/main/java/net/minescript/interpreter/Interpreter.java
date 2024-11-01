@@ -8,6 +8,7 @@ import static java.util.stream.Collectors.toList;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import java.lang.reflect.Array;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayDeque;
@@ -359,7 +360,7 @@ public class Interpreter {
       return bool;
     } else if (value instanceof String string) {
       return Boolean.parseBoolean(string);
-    } else if (value instanceof Collection collection) {
+    } else if (value instanceof Collection<?> collection) {
       return !collection.isEmpty();
     } else if (value instanceof Number number) {
       return number.doubleValue() != 0.;
@@ -510,20 +511,8 @@ public class Interpreter {
       } else if (lhs instanceof ArrayIndex lhsArrayIndex) {
         var array = lhsArrayIndex.array().eval(context);
         var index = lhsArrayIndex.index().eval(context);
-        if (array instanceof Object[] objectArray) {
-          objectArray[((Number) index).intValue()] = rhsValue;
-          return;
-        } else if (array instanceof int[] intArray) {
-          intArray[((Number) index).intValue()] = (Integer) rhsValue;
-          return;
-        } else if (array instanceof long[] longArray) {
-          longArray[((Number) index).intValue()] = (Long) rhsValue;
-          return;
-        } else if (array instanceof float[] floatArray) {
-          floatArray[((Number) index).intValue()] = (Float) rhsValue;
-          return;
-        } else if (array instanceof double[] doubleArray) {
-          doubleArray[((Number) index).intValue()] = (Double) rhsValue;
+        if (array.getClass().isArray()) {
+          Array.set(array, ((Number) index).intValue(), rhsValue);
           return;
         } else if (array instanceof List list) {
           list.set(((Number) index).intValue(), rhsValue);
@@ -829,6 +818,23 @@ public class Interpreter {
             expectNumParams(1);
             return convertToBool(params.get(0).eval(context));
           }
+        case "len":
+          {
+            expectNumParams(1);
+            var value = params.get(0).eval(context);
+            if (value.getClass().isArray()) {
+              return Array.getLength(value);
+            } else if (value instanceof Collection<?> collection) {
+              return collection.size();
+            } else if (value instanceof Map map) {
+              return map.size();
+            } else if (value instanceof String str) {
+              return str.length();
+            }
+            throw new IllegalArgumentException(
+                String.format(
+                    "Object of type '%s' has no len(): %s", value.getClass().getName(), this));
+          }
         case "print":
           System.out.println(
               params.stream().map(p -> pyToString(p.eval(context))).collect(joining(" ")));
@@ -851,6 +857,7 @@ public class Interpreter {
       if (value == null) {
         return "None";
       } else if (value instanceof Object[] array) {
+        // TODO(maxuser): Support for primitive array types too.
         return Arrays.stream(array).map(MethodCall::pyToString).collect(joining(", ", "[", "]"));
       } else if (value instanceof List<?> list) {
         return list.stream().map(MethodCall::pyToString).collect(joining(", ", "[", "]"));
