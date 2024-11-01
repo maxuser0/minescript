@@ -1352,7 +1352,7 @@ public class MainTest {
     System.out.println(func);
 
     var output = interpreter.invoke(func);
-    assertEquals("false2.3", (String) output);
+    assertEquals("False2.3", (String) output);
   }
 
   @Test
