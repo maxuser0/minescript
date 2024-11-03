@@ -40,22 +40,25 @@ public class Interpreter {
   }
 
   public FunctionDef getFunction(String name) {
-    return globals.getFunction(name);
+    return globals.getBoundFunction(name).function();
   }
 
   public Object invoke(FunctionDef function, Object... args) {
-    return function.invoke(globals, args);
+    return function.invoke(globals, globals, args);
   }
 
   public static class JsonAstParser {
 
-    // TODO(maxuser): Evolve this into a class that tracks and caches reflection lookups.
-    private final Deque<Map<String, Class<?>>> classAliasesInScope = new ArrayDeque<>();
+    private final Deque<LexicalScope> lexicalScopes = new ArrayDeque<>();
 
     public JsonAstParser() {
-      // Class aliases for global scope, reused across calls to parseGlobals(). To get a new, empty
-      // map of class aliases for global scope, instantiate a new JsonAstParser.
-      classAliasesInScope.push(new HashMap<>());
+      // Lexical scope for global scope, reused across calls to parseGlobals(). To get a new, empty
+      // stack of lexical scopes, instantiate a new JsonAstParser.
+      lexicalScopes.push(new LexicalScope());
+    }
+
+    private static class LexicalScope {
+      public final Map<String, Class<?>> classAliases = new HashMap<>();
     }
 
     public void parseGlobals(JsonElement element, Context globals) {
@@ -65,22 +68,6 @@ public class Interpreter {
           {
             for (var global : getBody(element)) {
               parseGlobals(global, globals);
-            }
-            return;
-          }
-
-        case "FunctionDef":
-          {
-            classAliasesInScope.push(new HashMap<>());
-            try {
-              var identifier = new Identifier(getAttr(element, "name").getAsString());
-              List<FunctionArg> args =
-                  parseFunctionArgs(
-                      getAttr(getAttr(element, "args").getAsJsonObject(), "args").getAsJsonArray());
-              Statement body = parseStatementBlock(getBody(element));
-              globals.functions().put(identifier.name, new FunctionDef(identifier, args, body));
-            } finally {
-              classAliasesInScope.pop();
             }
             return;
           }
@@ -102,9 +89,28 @@ public class Interpreter {
       }
     }
 
+    private FunctionDef parseFunctionDef(JsonElement element) {
+      lexicalScopes.push(new LexicalScope());
+      final FunctionDef func;
+      try {
+        var identifier = new Identifier(getAttr(element, "name").getAsString());
+        List<FunctionArg> args =
+            parseFunctionArgs(
+                getAttr(getAttr(element, "args").getAsJsonObject(), "args").getAsJsonArray());
+        Statement body = parseStatementBlock(getBody(element));
+        func = new FunctionDef(identifier, args, body);
+      } finally {
+        lexicalScopes.pop();
+      }
+      return func;
+    }
+
     public Statement parseStatements(JsonElement element) {
       String type = getType(element);
       switch (type) {
+        case "FunctionDef":
+          return parseFunctionDef(element);
+
         case "Assign":
           {
             Expression lhs = parseExpression(getTargets(element).get(0));
@@ -113,7 +119,7 @@ public class Interpreter {
               if (rhs instanceof JavaClassId classId) {
                 var alias = new ClassAliasAssignment(lhsId, classId.clss());
                 var oldClass =
-                    classAliasesInScope.peek().put(alias.identifier().name(), alias.clss());
+                    lexicalScopes.peek().classAliases.put(alias.identifier().name(), alias.clss());
                 if (oldClass != null) {
                   throw new IllegalArgumentException(
                       String.format(
@@ -122,7 +128,7 @@ public class Interpreter {
                 }
                 return alias;
               } else {
-                var oldClass = classAliasesInScope.peek().get(lhsId.name());
+                var oldClass = lexicalScopes.peek().classAliases.get(lhsId.name());
                 if (oldClass != null) {
                   throw new IllegalArgumentException(
                       String.format(
@@ -200,9 +206,9 @@ public class Interpreter {
     }
 
     private Class<?> findClassNameInEnclosingScopes(String className) {
-      for (var map : classAliasesInScope) {
+      for (var scope : lexicalScopes) {
         Class<?> clss;
-        if ((clss = map.get(className)) != null) {
+        if ((clss = scope.classAliases.get(className)) != null) {
           return clss;
         }
       }
@@ -369,19 +375,25 @@ public class Interpreter {
     }
   }
 
+  public record BoundFunction(FunctionDef function, Context enclosingContext) {}
+
   public record FunctionDef(Identifier identifier, List<FunctionArg> args, Statement body)
       implements Statement {
-    /**
-     * Executes function body.
-     *
-     * <p>The caller is responsible for binding function args in {@code Context}.
-     */
+    /** Adds this function to the specified {@code context}. */
     @Override
     public void exec(Context context) {
-      body.exec(context);
+      context.setBoundFunction(new BoundFunction(this, context));
     }
 
-    public Object invoke(Context context, Object... argValues) {
+    /**
+     * Invoke this function.
+     *
+     * @param callerContext Context from which this function was invoked.
+     * @param enclosingContext Context enclosing the definition of this function.
+     * @param argValues Values to pass to this function's body.
+     * @return Return value from invoking this function.
+     */
+    public Object invoke(Context callerContext, Context enclosingContext, Object... argValues) {
       if (args.size() != argValues.length) {
         throw new IllegalArgumentException(
             String.format(
@@ -389,14 +401,14 @@ public class Interpreter {
                 identifier, argValues.length, args.size()));
       }
 
-      var callContext = context.createLocalContext();
+      var localContext = callerContext.createLocalContext(enclosingContext);
       for (int i = 0; i < args.size(); ++i) {
         var arg = args.get(i);
         var argValue = argValues[i];
-        callContext.setVariable(arg.identifier().name(), argValue);
+        localContext.setVariable(arg.identifier().name(), argValue);
       }
-      exec(callContext);
-      return callContext.returnValue();
+      body.exec(localContext);
+      return localContext.returnValue();
     }
 
     @Override
@@ -841,11 +853,14 @@ public class Interpreter {
           return null;
         default:
           {
-            FunctionDef func = context.getFunction(methodId.name());
-            if (func != null) {
+            BoundFunction boundFunction = context.getBoundFunction(methodId.name());
+            if (boundFunction != null) {
+              var func = boundFunction.function();
               expectNumParams(func.args.size());
               return func.invoke(
-                  context, params.stream().map(p -> p.eval(context)).toArray(Object[]::new));
+                  context,
+                  boundFunction.enclosingContext,
+                  params.stream().map(p -> p.eval(context)).toArray(Object[]::new));
             }
           }
       }
@@ -970,20 +985,23 @@ public class Interpreter {
     private static final Object NOT_FOUND = new Object();
 
     private final Context globals;
+    private final Context enclosingContext;
     private final List<Statement> globalStatements;
     private Set<String> globalVarNames = null;
-    private Map<String, FunctionDef> functions = null;
+    private Map<String, BoundFunction> boundFunctions = null;
     private final Map<String, Object> vars = new HashMap<>();
     private Object returnValue;
     private boolean returned = false;
 
     private Context() {
       globals = this;
+      enclosingContext = null;
       globalStatements = new ArrayList<>();
     }
 
-    private Context(Context globals) {
+    private Context(Context globals, Context enclosingContext) {
       this.globals = globals;
+      this.enclosingContext = enclosingContext == globals ? null : enclosingContext;
       this.globalStatements = null; // Defined only for global context.
     }
 
@@ -993,8 +1011,8 @@ public class Interpreter {
       return context;
     }
 
-    public Context createLocalContext() {
-      return new Context(globals);
+    public Context createLocalContext(Context enclosingContext) {
+      return new Context(globals, enclosingContext);
     }
 
     public void declareGlobalVar(String name) {
@@ -1011,6 +1029,10 @@ public class Interpreter {
       globalStatements.add(statement);
     }
 
+    /**
+     * Executes statements added via {@code addGlobalStatement} since last call to {@code
+     * execGlobalStatements}.
+     */
     public void execGlobalStatements() {
       if (this != globals) {
         throw new IllegalStateException("Cannot execute global statements in local context");
@@ -1018,24 +1040,32 @@ public class Interpreter {
       for (var statement : globalStatements) {
         statement.exec(globals);
       }
+      globalStatements.clear();
     }
 
-    public Map<String, FunctionDef> functions() {
-      if (functions == null) {
-        functions = new HashMap<>();
+    public void setBoundFunction(BoundFunction boundFunction) {
+      if (boundFunctions == null) {
+        boundFunctions = new HashMap<>();
       }
-      return functions;
+      boundFunctions.put(boundFunction.function().identifier().name(), boundFunction);
     }
 
-    public FunctionDef getFunction(String name) {
-      var funcs = functions == null ? globals.functions : functions;
+    public BoundFunction getBoundFunction(String name) {
+      var funcs = boundFunctions == null ? globals.boundFunctions : boundFunctions;
 
       var func = funcs.get(name);
-      if (func == null && this != globals) {
-        return globals.getFunction(name);
-      } else {
+      if (func != null) {
         return func;
       }
+      if (enclosingContext != null) {
+        if ((func = enclosingContext.getBoundFunction(name)) != null) {
+          return func;
+        }
+      }
+      if (this != globals) {
+        return globals.getBoundFunction(name);
+      }
+      return null;
     }
 
     public void setVariable(String name, Object value) {
@@ -1058,6 +1088,8 @@ public class Interpreter {
       var value = vars.getOrDefault(id.name(), NOT_FOUND);
       if (value != NOT_FOUND) {
         return value;
+      } else if (enclosingContext != null) {
+        return enclosingContext.getVariable(id);
       } else if (this != globals) {
         return globals.getVariable(id);
       } else {

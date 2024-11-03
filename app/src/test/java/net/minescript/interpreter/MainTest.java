@@ -1289,13 +1289,431 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+      def nested_func_vars():
+        x = "x"
+        def bar():
+          y = "y"
+          def baz():
+            z = "z"
+            return "baz(" + x + y + z + ")"
+          return baz() + ", bar(" + x + y + ")"
+        return bar() + ", foo(" + x + ")"
+  */
+  private static final String nestedFuncVarsJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "nested_func_vars",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "x",
+                    "ctx": {
+                      "type": "Store"
+                    }
+                  }
+                ],
+                "value": {
+                  "type": "Constant",
+                  "value": "x",
+                  "kind": null
+                },
+                "type_comment": null
+              },
+              {
+                "type": "FunctionDef",
+                "name": "bar",
+                "args": {
+                  "type": "arguments",
+                  "posonlyargs": [],
+                  "args": [],
+                  "vararg": null,
+                  "kwonlyargs": [],
+                  "kw_defaults": [],
+                  "kwarg": null,
+                  "defaults": []
+                },
+                "body": [
+                  {
+                    "type": "Assign",
+                    "targets": [
+                      {
+                        "type": "Name",
+                        "id": "y",
+                        "ctx": {
+                          "type": "Store"
+                        }
+                      }
+                    ],
+                    "value": {
+                      "type": "Constant",
+                      "value": "y",
+                      "kind": null
+                    },
+                    "type_comment": null
+                  },
+                  {
+                    "type": "FunctionDef",
+                    "name": "baz",
+                    "args": {
+                      "type": "arguments",
+                      "posonlyargs": [],
+                      "args": [],
+                      "vararg": null,
+                      "kwonlyargs": [],
+                      "kw_defaults": [],
+                      "kwarg": null,
+                      "defaults": []
+                    },
+                    "body": [
+                      {
+                        "type": "Assign",
+                        "targets": [
+                          {
+                            "type": "Name",
+                            "id": "z",
+                            "ctx": {
+                              "type": "Store"
+                            }
+                          }
+                        ],
+                        "value": {
+                          "type": "Constant",
+                          "value": "z",
+                          "kind": null
+                        },
+                        "type_comment": null
+                      },
+                      {
+                        "type": "Return",
+                        "value": {
+                          "type": "BinOp",
+                          "left": {
+                            "type": "BinOp",
+                            "left": {
+                              "type": "BinOp",
+                              "left": {
+                                "type": "BinOp",
+                                "left": {
+                                  "type": "Constant",
+                                  "value": "baz(",
+                                  "kind": null
+                                },
+                                "op": {
+                                  "type": "Add"
+                                },
+                                "right": {
+                                  "type": "Name",
+                                  "id": "x",
+                                  "ctx": {
+                                    "type": "Load"
+                                  }
+                                }
+                              },
+                              "op": {
+                                "type": "Add"
+                              },
+                              "right": {
+                                "type": "Name",
+                                "id": "y",
+                                "ctx": {
+                                  "type": "Load"
+                                }
+                              }
+                            },
+                            "op": {
+                              "type": "Add"
+                            },
+                            "right": {
+                              "type": "Name",
+                              "id": "z",
+                              "ctx": {
+                                "type": "Load"
+                              }
+                            }
+                          },
+                          "op": {
+                            "type": "Add"
+                          },
+                          "right": {
+                            "type": "Constant",
+                            "value": ")",
+                            "kind": null
+                          }
+                        }
+                      }
+                    ],
+                    "decorator_list": [],
+                    "returns": null,
+                    "type_comment": null
+                  },
+                  {
+                    "type": "Return",
+                    "value": {
+                      "type": "BinOp",
+                      "left": {
+                        "type": "BinOp",
+                        "left": {
+                          "type": "BinOp",
+                          "left": {
+                            "type": "BinOp",
+                            "left": {
+                              "type": "Call",
+                              "func": {
+                                "type": "Name",
+                                "id": "baz",
+                                "ctx": {
+                                  "type": "Load"
+                                }
+                              },
+                              "args": [],
+                              "keywords": []
+                            },
+                            "op": {
+                              "type": "Add"
+                            },
+                            "right": {
+                              "type": "Constant",
+                              "value": ", bar(",
+                              "kind": null
+                            }
+                          },
+                          "op": {
+                            "type": "Add"
+                          },
+                          "right": {
+                            "type": "Name",
+                            "id": "x",
+                            "ctx": {
+                              "type": "Load"
+                            }
+                          }
+                        },
+                        "op": {
+                          "type": "Add"
+                        },
+                        "right": {
+                          "type": "Name",
+                          "id": "y",
+                          "ctx": {
+                            "type": "Load"
+                          }
+                        }
+                      },
+                      "op": {
+                        "type": "Add"
+                      },
+                      "right": {
+                        "type": "Constant",
+                        "value": ")",
+                        "kind": null
+                      }
+                    }
+                  }
+                ],
+                "decorator_list": [],
+                "returns": null,
+                "type_comment": null
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "BinOp",
+                  "left": {
+                    "type": "BinOp",
+                    "left": {
+                      "type": "BinOp",
+                      "left": {
+                        "type": "Call",
+                        "func": {
+                          "type": "Name",
+                          "id": "bar",
+                          "ctx": {
+                            "type": "Load"
+                          }
+                        },
+                        "args": [],
+                        "keywords": []
+                      },
+                      "op": {
+                        "type": "Add"
+                      },
+                      "right": {
+                        "type": "Constant",
+                        "value": ", foo(",
+                        "kind": null
+                      }
+                    },
+                    "op": {
+                      "type": "Add"
+                    },
+                    "right": {
+                      "type": "Name",
+                      "id": "x",
+                      "ctx": {
+                        "type": "Load"
+                      }
+                    }
+                  },
+                  "op": {
+                    "type": "Add"
+                  },
+                  "right": {
+                    "type": "Constant",
+                    "value": ")",
+                    "kind": null
+                  }
+                }
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
+  /* Generated from Python code:
+
+      def call_sibling_nested_func():
+        def bar():
+          return "bar"
+        def baz():
+          return bar()
+        return baz()
+  */
+  private static final String callSiblingNestedFuncJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "call_sibling_nested_func",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "FunctionDef",
+                "name": "bar",
+                "args": {
+                  "type": "arguments",
+                  "posonlyargs": [],
+                  "args": [],
+                  "vararg": null,
+                  "kwonlyargs": [],
+                  "kw_defaults": [],
+                  "kwarg": null,
+                  "defaults": []
+                },
+                "body": [
+                  {
+                    "type": "Return",
+                    "value": {
+                      "type": "Constant",
+                      "value": "bar",
+                      "kind": null
+                    }
+                  }
+                ],
+                "decorator_list": [],
+                "returns": null,
+                "type_comment": null
+              },
+              {
+                "type": "FunctionDef",
+                "name": "baz",
+                "args": {
+                  "type": "arguments",
+                  "posonlyargs": [],
+                  "args": [],
+                  "vararg": null,
+                  "kwonlyargs": [],
+                  "kw_defaults": [],
+                  "kwarg": null,
+                  "defaults": []
+                },
+                "body": [
+                  {
+                    "type": "Return",
+                    "value": {
+                      "type": "Call",
+                      "func": {
+                        "type": "Name",
+                        "id": "bar",
+                        "ctx": {
+                          "type": "Load"
+                        }
+                      },
+                      "args": [],
+                      "keywords": []
+                    }
+                  }
+                ],
+                "decorator_list": [],
+                "returns": null,
+                "type_comment": null
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Name",
+                    "id": "baz",
+                    "ctx": {
+                      "type": "Load"
+                    }
+                  },
+                  "args": [],
+                  "keywords": []
+                }
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
   @Test
   public void timesTwo() {
     double x = Math.PI;
 
     var jsonAst = JsonParser.parseString(timesTwoJsonAst);
     var interpreter = new Interpreter();
-    var func = interpreter.parse(jsonAst).getFunction("times_two");
+    var func = interpreter.parse(jsonAst).exec().getFunction("times_two");
     System.out.println(func);
 
     var output = interpreter.invoke(func, x);
@@ -1308,7 +1726,7 @@ public class MainTest {
 
     var jsonAst = JsonParser.parseString(distanceScalar2JsonAst);
     var interpreter = new Interpreter();
-    var func = interpreter.parse(jsonAst).getFunction("distance_scalar2");
+    var func = interpreter.parse(jsonAst).exec().getFunction("distance_scalar2");
     System.out.println(func);
 
     var output = interpreter.invoke(func, x1, y1, x2, y2);
@@ -1322,7 +1740,7 @@ public class MainTest {
 
     var jsonAst = JsonParser.parseString(distanceVec3JsonAst);
     var interpreter = new Interpreter();
-    var func = interpreter.parse(jsonAst).getFunction("distance_vec3");
+    var func = interpreter.parse(jsonAst).exec().getFunction("distance_vec3");
     System.out.println(func);
 
     var output = interpreter.invoke(func, p1, p2);
@@ -1337,7 +1755,7 @@ public class MainTest {
 
     var jsonAst = JsonParser.parseString(populateArrayJsonAst);
     var interpreter = new Interpreter();
-    var func = interpreter.parse(jsonAst).getFunction("populate_array");
+    var func = interpreter.parse(jsonAst).exec().getFunction("populate_array");
     System.out.println(func);
 
     var output = interpreter.invoke(func, array, index, value);
@@ -1348,7 +1766,7 @@ public class MainTest {
   public void typeConversions() {
     var jsonAst = JsonParser.parseString(typeConversionsJsonAst);
     var interpreter = new Interpreter();
-    var func = interpreter.parse(jsonAst).getFunction("type_conversions");
+    var func = interpreter.parse(jsonAst).exec().getFunction("type_conversions");
     System.out.println(func);
 
     var output = interpreter.invoke(func);
@@ -1359,7 +1777,7 @@ public class MainTest {
   public void incrementGlobal() {
     var jsonAst = JsonParser.parseString(incrementGlobalJsonAst);
     var interpreter = new Interpreter();
-    var func = interpreter.parse(jsonAst).getFunction("increment_global");
+    var func = interpreter.parse(jsonAst).exec().getFunction("increment_global");
     System.out.println(func);
 
     // Execute global statement to define global var: `x = 0`
@@ -1373,7 +1791,7 @@ public class MainTest {
   public void factorial() {
     var jsonAst = JsonParser.parseString(factorialJsonAst);
     var interpreter = new Interpreter();
-    var func = interpreter.parse(jsonAst).getFunction("factorial");
+    var func = interpreter.parse(jsonAst).exec().getFunction("factorial");
     System.out.println(func);
 
     var output = interpreter.invoke(func, 5);
@@ -1384,10 +1802,32 @@ public class MainTest {
   public void sqrt9() {
     var jsonAst = JsonParser.parseString(sqrt9JsonAst);
     var interpreter = new Interpreter();
-    var func = interpreter.parse(jsonAst).getFunction("sqrt9");
+    var func = interpreter.parse(jsonAst).exec().getFunction("sqrt9");
     System.out.println(func);
 
     var output = interpreter.invoke(func);
     assertEquals(3., ((Number) output).doubleValue(), 0.000000001);
+  }
+
+  @Test
+  public void nestedFuncVars() {
+    var jsonAst = JsonParser.parseString(nestedFuncVarsJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("nested_func_vars");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals("baz(xyz), bar(xy), foo(x)", (String) output);
+  }
+
+  @Test
+  public void callSiblingNestedFunc() {
+    var jsonAst = JsonParser.parseString(callSiblingNestedFuncJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("call_sibling_nested_func");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals("bar", (String) output);
   }
 }
