@@ -6,8 +6,11 @@ package net.minescript.interpreter;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import java.lang.reflect.Array;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -15,11 +18,14 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.stream.StreamSupport;
 import net.minescript.common.Numbers;
@@ -143,6 +149,41 @@ public class Interpreter {
                   "JavaClass identifier cannot be reassigned: " + lhsClassId.toString());
             } else if (lhs instanceof ArrayIndex) {
               return new Assignment(lhs, rhs);
+            } else {
+              throw new IllegalArgumentException(
+                  String.format(
+                      "Unsupported expression type for lhs of assignment: `%s` (%s)",
+                      lhs, lhs.getClass().getSimpleName()));
+            }
+          }
+
+        case "AugAssign":
+          {
+            Expression lhs = parseExpression(getTarget(element));
+            Expression rhs = parseExpression(getAttr(element, "value"));
+            String opName = getType(getAttr(element, "op"));
+            final AugmentedAssignment.Op op;
+            switch (opName) {
+              case "Add":
+                op = AugmentedAssignment.Op.ADD_EQ;
+                break;
+              case "Sub":
+                op = AugmentedAssignment.Op.SUB_EQ;
+                break;
+              case "Mult":
+                op = AugmentedAssignment.Op.MULT_EQ;
+                break;
+              case "Div":
+                op = AugmentedAssignment.Op.DIV_EQ;
+                break;
+              default:
+                throw new IllegalArgumentException(
+                    "Unsupported type of augmented assignment: " + opName);
+            }
+            if (lhs instanceof Identifier lhsId) {
+              return new AugmentedAssignment(lhs, op, rhs);
+            } else if (lhs instanceof ArrayIndex) {
+              return new AugmentedAssignment(lhs, op, rhs);
             } else {
               throw new IllegalArgumentException(
                   String.format(
@@ -291,6 +332,12 @@ public class Interpreter {
           return new ArrayIndex(
               parseExpression(getAttr(element, "value")),
               parseExpression(getAttr(element, "slice")));
+
+        case "List":
+          return new NewList(
+              StreamSupport.stream(getAttr(element, "elts").getAsJsonArray().spliterator(), false)
+                  .map(elem -> parseExpression(elem))
+                  .collect(toList()));
       }
       throw new IllegalArgumentException("Unknown expression type: " + element.toString());
     }
@@ -333,6 +380,10 @@ public class Interpreter {
 
     private static String getType(JsonElement element) {
       return element.getAsJsonObject().get("type").getAsString();
+    }
+
+    private static JsonObject getTarget(JsonElement element) {
+      return element.getAsJsonObject().get("target").getAsJsonObject();
     }
 
     private static JsonArray getTargets(JsonElement element) {
@@ -526,6 +577,9 @@ public class Interpreter {
         if (array.getClass().isArray()) {
           Array.set(array, ((Number) index).intValue(), rhsValue);
           return;
+        } else if (array instanceof PyList pyList) {
+          pyList.__setitem__(index, rhsValue);
+          return;
         } else if (array instanceof List list) {
           list.set(((Number) index).intValue(), rhsValue);
           return;
@@ -553,13 +607,12 @@ public class Interpreter {
     }
   }
 
-  public record AugmentedAssignment(Identifier lhs, Op op, Expression rhs) implements Statement {
+  public record AugmentedAssignment(Expression lhs, Op op, Expression rhs) implements Statement {
     public enum Op {
       ADD_EQ("+="),
       SUB_EQ("-="),
-      MUL_EQ("*="),
-      DIV_EQ("/="),
-      MOD_EQ("%=");
+      MULT_EQ("*="),
+      DIV_EQ("/=");
 
       private final String symbol;
 
@@ -570,6 +623,97 @@ public class Interpreter {
       public String symbol() {
         return symbol;
       }
+
+      public Object apply(Object lhs, Object rhs) {
+        switch (this) {
+          case ADD_EQ:
+            if (lhs instanceof Number lhsNum && rhs instanceof Number rhsNum) {
+              return Numbers.add(lhsNum, rhsNum);
+            } else if (lhs instanceof String lhsStr && rhs instanceof String rhsStr) {
+              return lhsStr + rhsStr;
+            }
+            if (lhs instanceof PyList pyList) {
+              lhs = pyList.getJavaList();
+            }
+            if (rhs instanceof PyList pyList) {
+              rhs = pyList.getJavaList();
+            }
+            if (lhs instanceof List lhsList && rhs instanceof List rhsList) {
+              lhsList.addAll(rhsList);
+              return null; // Return value unused because op has already been applied to the list.
+            }
+            break;
+
+          case SUB_EQ:
+            if (lhs instanceof Number lhsNum && rhs instanceof Number rhsNum) {
+              return Numbers.add(lhsNum, rhsNum);
+            }
+            break;
+
+          case MULT_EQ:
+            if (lhs instanceof Number lhsNum && rhs instanceof Number rhsNum) {
+              return Numbers.multiply(lhsNum, rhsNum);
+            }
+            break;
+
+          case DIV_EQ:
+            if (lhs instanceof Number lhsNum && rhs instanceof Number rhsNum) {
+              return Numbers.divide(lhsNum, rhsNum);
+            }
+            break;
+        }
+        String lhsType = lhs == null ? "None" : lhs.getClass().getName();
+        String rhsType = rhs == null ? "None" : rhs.getClass().getName();
+        throw new IllegalArgumentException(
+            String.format(
+                "unsupported operand type(s) for %s: '%s' and '%s' ('%s %s %s')",
+                symbol(), lhsType, rhsType, lhs, symbol(), rhs));
+      }
+    }
+
+    @Override
+    public void exec(Context context) {
+      Object rhsValue = rhs.eval(context);
+      if (lhs instanceof Identifier lhsId) {
+        var oldValue = context.getVariable(lhsId);
+        var newValue = op.apply(oldValue, rhsValue);
+        if (newValue != null) {
+          context.setVariable(lhsId, newValue);
+        }
+        return;
+      } else if (lhs instanceof ArrayIndex lhsArrayIndex) {
+        var array = lhsArrayIndex.array().eval(context);
+        var index = lhsArrayIndex.index().eval(context);
+        if (array.getClass().isArray()) {
+          int intKey = ((Number) index).intValue();
+          var oldValue = Array.get(array, intKey);
+          Array.set(array, intKey, op.apply(oldValue, rhsValue));
+          return;
+        } else if (array instanceof PyList pyList) {
+          var oldValue = pyList.__getitem__(index);
+          pyList.__setitem__(index, op.apply(oldValue, rhsValue));
+          return;
+        } else if (array instanceof List list) {
+          int intKey = ((Number) index).intValue();
+          var oldValue = list.get(intKey);
+          list.set(intKey, op.apply(oldValue, rhsValue));
+          return;
+        } else if (array instanceof Map map) {
+          var oldValue = map.get(index);
+          map.put(index, op.apply(oldValue, rhsValue));
+          return;
+        }
+      } else {
+        throw new IllegalArgumentException(
+            String.format(
+                "Unsupported expression type for lhs of assignment: `%s` (%s)",
+                lhs, lhs.getClass().getSimpleName()));
+      }
+    }
+
+    @Override
+    public String toString() {
+      return String.format("%s %s %s;", lhs, op.symbol(), rhs);
     }
   }
 
@@ -755,6 +899,191 @@ public class Interpreter {
 
   public record CtorCall(Identifier classId, List<Expression> params) {}
 
+  public static String pyToString(Object value) {
+    if (value == null) {
+      return "None";
+    } else if (value instanceof Object[] array) {
+      // TODO(maxuser): Support for primitive array types too.
+      return Arrays.stream(array).map(Interpreter::pyToString).collect(joining(", ", "[", "]"));
+    } else if (value instanceof List<?> list) {
+      return list.stream().map(Interpreter::pyToString).collect(joining(", ", "[", "]"));
+    } else if (value instanceof Boolean bool) {
+      return bool ? "True" : "False";
+    } else if (value instanceof String string) {
+      Gson gson =
+          new GsonBuilder()
+              .setPrettyPrinting() // Optional: for pretty printing
+              .disableHtmlEscaping() // Important: to prevent double escaping
+              .create();
+      return gson.toJson(string);
+    } else {
+      return value.toString();
+    }
+  }
+
+  public record NewList(List<Expression> elements) implements Expression {
+    @Override
+    public Object eval(Context context) {
+      return new PyList(elements.stream().map(e -> e.eval(context)).collect(toList()));
+    }
+
+    @Override
+    public String toString() {
+      return elements.stream().map(Interpreter::pyToString).collect(joining(", ", "[", "]"));
+    }
+  }
+
+  public interface Lengthable {
+    int __len__();
+  }
+
+  public static class PyList implements Iterable<Object>, Lengthable {
+    private final List<Object> list;
+
+    public PyList() {
+      list = new ArrayList<>();
+    }
+
+    public PyList(List<Object> list) {
+      this.list = list;
+    }
+
+    protected List<Object> getJavaList() {
+      return list;
+    }
+
+    @Override
+    public boolean equals(Object value) {
+      return value instanceof PyList pyList && this.list.equals(pyList.list);
+    }
+
+    @Override
+    public Iterator<Object> iterator() {
+      return list.iterator();
+    }
+
+    @Override
+    public String toString() {
+      return list.stream().map(Interpreter::pyToString).collect(joining(", ", "[", "]"));
+    }
+
+    public PyList __add__(Object value) {
+      PyList newList = copy();
+      if (value instanceof PyList pyList) {
+        newList.list.addAll(pyList.list);
+      } else if (value instanceof List<?> list) {
+        newList.list.addAll(list);
+      } else {
+        throw new IllegalArgumentException(
+            String.format(
+                "can only concatenate list (not \"%s\") to list",
+                value == null ? "None" : value.getClass().getName()));
+      }
+      return newList;
+    }
+
+    public boolean __contains__(Object key) {
+      return list.contains(key);
+    }
+
+    public void __delitem__(Object key) {
+      remove(key);
+    }
+
+    public boolean __eq__(Object value) {
+      return this.equals(value);
+    }
+
+    public boolean __ne__(Object value) {
+      return !this.equals(value);
+    }
+
+    public void __iadd__(Object value) {
+      list.add(value);
+    }
+
+    @Override
+    public int __len__() {
+      return list.size();
+    }
+
+    // TODO(maxuser): Support slice notation.
+    public Object __getitem__(Object key) {
+      if (key instanceof Integer i) {
+        return list.get(i);
+      }
+      throw new IllegalArgumentException(
+          String.format(
+              "list indices must be integers or slices, not %s (%s)",
+              key.getClass().getName(), key));
+    }
+
+    // TODO(maxuser): Support slice notation.
+    public Object __setitem__(Object key, Object value) {
+      if (key instanceof Integer i) {
+        return list.set(i, value);
+      }
+      throw new IllegalArgumentException(
+          String.format(
+              "list indices must be integers or slices, not %s (%s)",
+              key.getClass().getName(), key));
+    }
+
+    public void append(Object object) {
+      list.add(object);
+    }
+
+    public void clear() {
+      list.clear();
+    }
+
+    public PyList copy() {
+      return new PyList(new ArrayList<>(list));
+    }
+
+    public long count(Object value) {
+      return list.stream().filter(o -> o.equals(value)).count();
+    }
+
+    public void extend(Iterable<?> iterable) {
+      for (var value : iterable) {
+        list.add(value);
+      }
+    }
+
+    public int index(Object value) {
+      int index = list.indexOf(value);
+      if (index == -1) {
+        throw new NoSuchElementException(String.format("%s is not in list", value));
+      }
+      return index;
+    }
+
+    public void insert(int index, Object object) {
+      list.add(index, object);
+    }
+
+    public Object pop() {
+      return list.remove(list.size() - 1);
+    }
+
+    public Object pop(int index) {
+      return list.remove(index);
+    }
+
+    public void remove(Object value) {
+      pop(index(value));
+    }
+
+    public void reverse() {
+      Collections.reverse(list);
+    }
+
+    public void sort() {
+      list.sort(null);
+    }
+  }
+
   public record JavaClass() implements Expression {
     @Override
     public Object eval(Context context) {
@@ -836,6 +1165,8 @@ public class Interpreter {
             var value = params.get(0).eval(context);
             if (value.getClass().isArray()) {
               return Array.getLength(value);
+            } else if (value instanceof Lengthable lengthable) {
+              return lengthable.__len__();
             } else if (value instanceof Collection<?> collection) {
               return collection.size();
             } else if (value instanceof Map map) {
@@ -868,29 +1199,14 @@ public class Interpreter {
           String.format("Function `%s` not defined: %s", methodId, this));
     }
 
-    private static String pyToString(Object value) {
-      if (value == null) {
-        return "None";
-      } else if (value instanceof Object[] array) {
-        // TODO(maxuser): Support for primitive array types too.
-        return Arrays.stream(array).map(MethodCall::pyToString).collect(joining(", ", "[", "]"));
-      } else if (value instanceof List<?> list) {
-        return list.stream().map(MethodCall::pyToString).collect(joining(", ", "[", "]"));
-      } else if (value instanceof Boolean bool) {
-        return bool ? "True" : "False";
-      } else {
-        return value.toString();
-      }
-    }
-
     private Object callBoundMethod(Expression object, String methodName, Context context) {
       var objectValue = object.eval(context);
       // TODO(maxuser): cache and filter method lookups by name
       try {
         var clss = objectValue.getClass();
         for (Method m : clss.getMethods()) {
-          // TODO(maxuser): also check param number and types
-          if (m.getName().equals(methodName)) {
+          // TODO(maxuser): also check convertibility of param types
+          if (m.getName().equals(methodName) && m.getParameterTypes().length == params.size()) {
             return m.invoke(
                 objectValue, params.stream().map(p -> p.eval(context)).toArray(Object[]::new));
           }

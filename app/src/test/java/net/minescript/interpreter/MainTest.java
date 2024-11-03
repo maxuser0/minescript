@@ -3,6 +3,7 @@ package net.minescript.interpreter;
 import static org.junit.Assert.*;
 
 import com.google.gson.JsonParser;
+import java.util.List;
 import org.junit.Test;
 
 public class MainTest {
@@ -1707,6 +1708,144 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+      def list_ops():
+        x = [1, 2, 3]
+        x[0] += 100
+        x += ["bar"]
+        return x
+  */
+  private static final String listOpsJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "list_ops",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "x",
+                    "ctx": {
+                      "type": "Store"
+                    }
+                  }
+                ],
+                "value": {
+                  "type": "List",
+                  "elts": [
+                    {
+                      "type": "Constant",
+                      "value": 1,
+                      "kind": null
+                    },
+                    {
+                      "type": "Constant",
+                      "value": 2,
+                      "kind": null
+                    },
+                    {
+                      "type": "Constant",
+                      "value": 3,
+                      "kind": null
+                    }
+                  ],
+                  "ctx": {
+                    "type": "Load"
+                  }
+                },
+                "type_comment": null
+              },
+              {
+                "type": "AugAssign",
+                "target": {
+                  "type": "Subscript",
+                  "value": {
+                    "type": "Name",
+                    "id": "x",
+                    "ctx": {
+                      "type": "Load"
+                    }
+                  },
+                  "slice": {
+                    "type": "Constant",
+                    "value": 0,
+                    "kind": null
+                  },
+                  "ctx": {
+                    "type": "Store"
+                  }
+                },
+                "op": {
+                  "type": "Add"
+                },
+                "value": {
+                  "type": "Constant",
+                  "value": 100,
+                  "kind": null
+                }
+              },
+              {
+                "type": "AugAssign",
+                "target": {
+                  "type": "Name",
+                  "id": "x",
+                  "ctx": {
+                    "type": "Store"
+                  }
+                },
+                "op": {
+                  "type": "Add"
+                },
+                "value": {
+                  "type": "List",
+                  "elts": [
+                    {
+                      "type": "Constant",
+                      "value": "bar",
+                      "kind": null
+                    }
+                  ],
+                  "ctx": {
+                    "type": "Load"
+                  }
+                }
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Name",
+                  "id": "x",
+                  "ctx": {
+                    "type": "Load"
+                  }
+                }
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
   @Test
   public void timesTwo() {
     double x = Math.PI;
@@ -1829,5 +1968,16 @@ public class MainTest {
 
     var output = interpreter.invoke(func);
     assertEquals("bar", (String) output);
+  }
+
+  @Test
+  public void listOps() {
+    var jsonAst = JsonParser.parseString(listOpsJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("list_ops");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals(new Interpreter.PyList(List.of(101, 2, 3, "bar")), output);
   }
 }
