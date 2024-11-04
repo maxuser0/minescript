@@ -1846,6 +1846,213 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+      def ctor_and_method_overloads():
+        StringBuilder = JavaClass("java.lang.StringBuilder")
+        builder = StringBuilder("This")
+        builder.append(" is")
+        builder.append(" a")
+        builder.append(" test.")
+        return builder.toString()
+  */
+  private static final String ctorAndMethodOverloadsJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "ctor_and_method_overloads",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "StringBuilder",
+                    "ctx": {
+                      "type": "Store"
+                    }
+                  }
+                ],
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Name",
+                    "id": "JavaClass",
+                    "ctx": {
+                      "type": "Load"
+                    }
+                  },
+                  "args": [
+                    {
+                      "type": "Constant",
+                      "value": "java.lang.StringBuilder",
+                      "kind": null
+                    }
+                  ],
+                  "keywords": []
+                },
+                "type_comment": null
+              },
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "builder",
+                    "ctx": {
+                      "type": "Store"
+                    }
+                  }
+                ],
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Name",
+                    "id": "StringBuilder",
+                    "ctx": {
+                      "type": "Load"
+                    }
+                  },
+                  "args": [
+                    {
+                      "type": "Constant",
+                      "value": "This",
+                      "kind": null
+                    }
+                  ],
+                  "keywords": []
+                },
+                "type_comment": null
+              },
+              {
+                "type": "Expr",
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Attribute",
+                    "value": {
+                      "type": "Name",
+                      "id": "builder",
+                      "ctx": {
+                        "type": "Load"
+                      }
+                    },
+                    "attr": "append",
+                    "ctx": {
+                      "type": "Load"
+                    }
+                  },
+                  "args": [
+                    {
+                      "type": "Constant",
+                      "value": " is",
+                      "kind": null
+                    }
+                  ],
+                  "keywords": []
+                }
+              },
+              {
+                "type": "Expr",
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Attribute",
+                    "value": {
+                      "type": "Name",
+                      "id": "builder",
+                      "ctx": {
+                        "type": "Load"
+                      }
+                    },
+                    "attr": "append",
+                    "ctx": {
+                      "type": "Load"
+                    }
+                  },
+                  "args": [
+                    {
+                      "type": "Constant",
+                      "value": " a",
+                      "kind": null
+                    }
+                  ],
+                  "keywords": []
+                }
+              },
+              {
+                "type": "Expr",
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Attribute",
+                    "value": {
+                      "type": "Name",
+                      "id": "builder",
+                      "ctx": {
+                        "type": "Load"
+                      }
+                    },
+                    "attr": "append",
+                    "ctx": {
+                      "type": "Load"
+                    }
+                  },
+                  "args": [
+                    {
+                      "type": "Constant",
+                      "value": " test.",
+                      "kind": null
+                    }
+                  ],
+                  "keywords": []
+                }
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Attribute",
+                    "value": {
+                      "type": "Name",
+                      "id": "builder",
+                      "ctx": {
+                        "type": "Load"
+                      }
+                    },
+                    "attr": "toString",
+                    "ctx": {
+                      "type": "Load"
+                    }
+                  },
+                  "args": [],
+                  "keywords": []
+                }
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
   @Test
   public void timesTwo() {
     double x = Math.PI;
@@ -1979,5 +2186,16 @@ public class MainTest {
 
     var output = interpreter.invoke(func);
     assertEquals(new Interpreter.PyList(List.of(101, 2, 3, "bar")), output);
+  }
+
+  @Test
+  public void ctorAndMethodOverloads() {
+    var jsonAst = JsonParser.parseString(ctorAndMethodOverloadsJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("ctor_and_method_overloads");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals("This is a test.", (String) output);
   }
 }

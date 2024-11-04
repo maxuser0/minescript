@@ -12,6 +12,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayDeque;
@@ -304,6 +305,12 @@ public class Interpreter {
                         "Expected JavaClass argument to be a string literal but got %s (%s)",
                         arg, args.get(0)));
               }
+            } else if (func instanceof JavaClassId javaClassId) {
+              return new CtorCall(
+                  javaClassId,
+                  StreamSupport.stream(args.spliterator(), false)
+                      .map(elem -> parseExpression(elem))
+                      .collect(toList()));
             } else {
               return new MethodCall(
                   func,
@@ -633,13 +640,7 @@ public class Interpreter {
               return lhsStr + rhsStr;
             }
             if (lhs instanceof PyList pyList) {
-              lhs = pyList.getJavaList();
-            }
-            if (rhs instanceof PyList pyList) {
-              rhs = pyList.getJavaList();
-            }
-            if (lhs instanceof List lhsList && rhs instanceof List rhsList) {
-              lhsList.addAll(rhsList);
+              pyList.__iadd__(rhs);
               return null; // Return value unused because op has already been applied to the list.
             }
             break;
@@ -834,6 +835,17 @@ public class Interpreter {
           } else if (lhsValue instanceof String && rhsValue instanceof String) {
             return lhsValue.toString() + rhsValue.toString();
           }
+          if (lhsValue instanceof PyList pyList) {
+            lhsValue = pyList.getJavaList();
+          }
+          if (rhsValue instanceof PyList pyList) {
+            rhsValue = pyList.getJavaList();
+          }
+          if (lhsValue instanceof List lhsList && rhsValue instanceof List rhsList) {
+            var newList = new PyList(new ArrayList<>(lhsList));
+            newList.__iadd__(rhsList);
+            return newList;
+          }
           break;
         case SUB:
           return Numbers.subtract((Number) lhsValue, (Number) rhsValue);
@@ -897,7 +909,86 @@ public class Interpreter {
     }
   }
 
-  public record CtorCall(Identifier classId, List<Expression> params) {}
+  public record CtorCall(JavaClassId classId, List<Expression> params) implements Expression {
+    @Override
+    public Object eval(Context context) {
+      // TODO(maxuser): Check param types at parse time to select the appropriate ctor.
+      Constructor<?>[] ctors = classId.clss().getConstructors();
+      Object[] paramValues = params.stream().map(p -> p.eval(context)).toArray(Object[]::new);
+      for (var ctor : ctors) {
+        // TODO(maxuser): Find the best method overload rather than the first compatible one.
+        if (paramsAreCompatible(ctor.getParameterTypes(), paramValues)) {
+          try {
+            return ctor.newInstance(paramValues);
+          } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
+            throw new RuntimeException(e);
+          }
+        }
+      }
+      throw new IllegalArgumentException(
+          String.format(
+              "No matching construtor for %s with %d params",
+              classId.clss().getName(), params.size()));
+    }
+
+    @Override
+    public String toString() {
+      return String.format(
+          "%s(%s)", classId, params.stream().map(Object::toString).collect(joining(", ")));
+    }
+  }
+
+  private static boolean paramsAreCompatible(Class<?>[] formalParamTypes, Object[] paramValues) {
+    if (formalParamTypes.length != paramValues.length) {
+      return false;
+    }
+    for (int i = 0; i < formalParamTypes.length; ++i) {
+      Class<?> type = promotePrimitiveType(formalParamTypes[i]);
+      Object value = paramValues[i];
+      if (value == null) {
+        continue; // null is convertible to everything.
+      }
+      Class<?> valueType = value.getClass();
+      if (Number.class.isAssignableFrom(type)
+          && Number.class.isAssignableFrom(valueType)
+          && numericTypeIsConvertible(valueType, type)) {
+        continue;
+      }
+      if (!type.isAssignableFrom(value.getClass())) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private static Class<?> promotePrimitiveType(Class<?> type) {
+    if (type == boolean.class) {
+      return Boolean.class;
+    } else if (type == int.class) {
+      return Integer.class;
+    } else if (type == float.class) {
+      return Float.class;
+    } else if (type == double.class) {
+      return Double.class;
+    } else if (type == char.class) {
+      return Character.class;
+    } else {
+      return type;
+    }
+  }
+
+  private static boolean numericTypeIsConvertible(Class<?> from, Class<?> to) {
+    if (to == Double.class) {
+      return true;
+    }
+    if (to == Float.class) {
+      return from != Double.class;
+    }
+    if (to == Integer.class) {
+      return from == Integer.class;
+    }
+    return false;
+  }
 
   public static String pyToString(Object value) {
     if (value == null) {
@@ -948,7 +1039,7 @@ public class Interpreter {
       this.list = list;
     }
 
-    protected List<Object> getJavaList() {
+    public List<Object> getJavaList() {
       return list;
     }
 
@@ -999,7 +1090,16 @@ public class Interpreter {
     }
 
     public void __iadd__(Object value) {
-      list.add(value);
+      if (value instanceof PyList pyList) {
+        this.list.addAll(pyList.list);
+      } else if (value instanceof List<?> list) {
+        this.list.addAll(list);
+      } else {
+        throw new IllegalArgumentException(
+            String.format(
+                "can only concatenate list (not \"%s\") to list",
+                value == null ? "None" : value.getClass().getName()));
+      }
     }
 
     @Override
@@ -1201,14 +1301,15 @@ public class Interpreter {
 
     private Object callBoundMethod(Expression object, String methodName, Context context) {
       var objectValue = object.eval(context);
+      var clss = objectValue.getClass();
+      Object[] paramValues = params.stream().map(p -> p.eval(context)).toArray(Object[]::new);
       // TODO(maxuser): cache and filter method lookups by name
       try {
-        var clss = objectValue.getClass();
         for (Method m : clss.getMethods()) {
-          // TODO(maxuser): also check convertibility of param types
-          if (m.getName().equals(methodName) && m.getParameterTypes().length == params.size()) {
-            return m.invoke(
-                objectValue, params.stream().map(p -> p.eval(context)).toArray(Object[]::new));
+          // TODO(maxuser): Find the best method overload rather than the first compatible one.
+          if (m.getName().equals(methodName)
+              && paramsAreCompatible(m.getParameterTypes(), paramValues)) {
+            return m.invoke(objectValue, paramValues);
           }
         }
       } catch (IllegalAccessException | InvocationTargetException e) {
@@ -1216,18 +1317,27 @@ public class Interpreter {
       }
 
       throw new IllegalArgumentException(
-          String.format("Function not defined: %s.%s", object, methodName));
+          String.format(
+              "Method not defined on %s: %s.%s(%s)",
+              clss.getName(),
+              object,
+              methodName,
+              Arrays.stream(paramValues)
+                  .map(v -> String.format("(%s) %s", v.getClass().getName(), v))
+                  .collect(joining(", "))));
     }
 
     private Object callStaticMethod(Class<?> clss, String methodName, Context context) {
       // TODO(maxuser): cache and filter method lookups by name
+      Object[] paramValues = params.stream().map(p -> p.eval(context)).toArray(Object[]::new);
       try {
         for (Method m : clss.getMethods()) {
-          // TODO(maxuser): also check param number and types
-          if (m.getName().equals(methodName)) {
+          // TODO(maxuser): Find the best method overload rather than the first compatible one.
+          if (m.getName().equals(methodName)
+              && paramsAreCompatible(m.getParameterTypes(), paramValues)) {
             return m.invoke(
                 null, // static method ignores obj param
-                params.stream().map(p -> p.eval(context)).toArray(Object[]::new));
+                paramValues);
           }
         }
         throw new IllegalArgumentException(
