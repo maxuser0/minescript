@@ -11,6 +11,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.ToNumberPolicy;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -880,18 +881,14 @@ public class Interpreter {
             String.format("%s=%s, %s=%s in %s", array, arrayValue, index, indexValue, this));
       }
 
-      if (arrayValue instanceof Object[] objectArray) {
-        return objectArray[((Number) indexValue).intValue()];
-      } else if (arrayValue instanceof int[] intArray) {
-        return intArray[((Number) indexValue).intValue()];
-      } else if (arrayValue instanceof long[] longArray) {
-        return longArray[((Number) indexValue).intValue()];
-      } else if (arrayValue instanceof float[] floatArray) {
-        return floatArray[((Number) indexValue).intValue()];
-      } else if (arrayValue instanceof double[] doubleArray) {
-        return doubleArray[((Number) indexValue).intValue()];
+      if (arrayValue instanceof PyList list) {
+        return list.__getitem__(indexValue);
+      } else if (arrayValue.getClass().isArray()) {
+        int intKey = ((Number) indexValue).intValue();
+        return Array.get(arrayValue, intKey);
       } else if (arrayValue instanceof List list) {
-        return list.get(((Number) indexValue).intValue());
+        int intKey = ((Number) indexValue).intValue();
+        return list.get(intKey);
       } else if (arrayValue instanceof Map map) {
         return map.get(indexValue);
       }
@@ -1003,6 +1000,8 @@ public class Interpreter {
     } else if (value instanceof String string) {
       Gson gson =
           new GsonBuilder()
+              .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
+              .serializeNulls()
               .setPrettyPrinting() // Optional: for pretty printing
               .disableHtmlEscaping() // Important: to prevent double escaping
               .create();
