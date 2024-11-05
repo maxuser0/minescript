@@ -1851,8 +1851,8 @@ public class MainTest {
       def ctor_and_method_overloads():
         StringBuilder = JavaClass("java.lang.StringBuilder")
         builder = StringBuilder("This")
-        builder.append(" is")
-        builder.append(" a")
+        builder.append(" is ")
+        builder.append(1)
         builder.append(" test.")
         return builder.toString()
   */
@@ -1958,7 +1958,7 @@ public class MainTest {
                   "args": [
                     {
                       "type": "Constant",
-                      "value": " is",
+                      "value": " is ",
                       "kind": null
                     }
                   ],
@@ -1986,7 +1986,7 @@ public class MainTest {
                   "args": [
                     {
                       "type": "Constant",
-                      "value": " a",
+                      "value": 1,
                       "kind": null
                     }
                   ],
@@ -2196,6 +2196,6 @@ public class MainTest {
     System.out.println(func);
 
     var output = interpreter.invoke(func);
-    assertEquals("This is a test.", (String) output);
+    assertEquals("This is 1 test.", (String) output);
   }
 }
