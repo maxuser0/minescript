@@ -11,7 +11,6 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.ToNumberPolicy;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -212,6 +211,15 @@ public class Interpreter {
               parseStatementBlock(getBody(element)),
               parseStatementBlock(getAttr(element, "orelse").getAsJsonArray()));
 
+        case "For":
+          return new ForBlock(
+              parseExpression(getAttr(element, "target")),
+              parseExpression(getAttr(element, "iter")),
+              parseStatementBlock(getBody(element)));
+
+        case "Break":
+          return new Break();
+
         case "Return":
           {
             var returnValue = getAttr(element, "value");
@@ -261,11 +269,22 @@ public class Interpreter {
     private Expression parseExpressionWithContext(JsonElement element, ParseContext parseContext) {
       String type = getType(element);
       switch (type) {
+        case "UnaryOp":
+          return new UnaryOp(
+              UnaryOp.parse(getType(getAttr(element, "op"))),
+              parseExpression(getAttr(element, "operand")));
+
         case "BinOp":
           return new BinaryOp(
               parseExpression(getAttr(element, "left")),
-              parseBinaryOp(getType(getAttr(element, "op"))),
+              BinaryOp.parse(getType(getAttr(element, "op"))),
               parseExpression(getAttr(element, "right")));
+
+        case "Compare":
+          return new Comparison(
+              parseExpression(getAttr(element, "left")),
+              Comparison.parse(getType(getAttr(element, "ops").getAsJsonArray().get(0))),
+              parseExpression(getAttr(element, "comparators").getAsJsonArray().get(0)));
 
         case "Name":
           {
@@ -350,27 +369,16 @@ public class Interpreter {
       throw new IllegalArgumentException("Unknown expression type: " + element.toString());
     }
 
-    private static BinaryOp.Op parseBinaryOp(String opName) {
-      switch (opName) {
-        case "Add":
-          return BinaryOp.Op.ADD;
-        case "Sub":
-          return BinaryOp.Op.SUB;
-        case "Mult":
-          return BinaryOp.Op.MUL;
-        default:
-          throw new IllegalArgumentException("Unknown binary op: " + opName);
-      }
-    }
-
     private static Expression parseConstant(JsonElement element) {
       if (element.isJsonPrimitive()) {
         var primitive = element.getAsJsonPrimitive();
         if (primitive.isNumber()) {
+          // TODO(maxuser): This is an unreliable way to determine if a numeric constant is an int
+          // or double. Modify the JSON output from Python to record the numeric type.
           var number = primitive.getAsNumber();
           int n = number.intValue();
           double d = number.doubleValue();
-          if (n == d) {
+          if ((double) n == d) {
             return new ConstantExpression(number.intValue());
           } else {
             return new ConstantExpression(number.doubleValue());
@@ -425,8 +433,12 @@ public class Interpreter {
       return bool;
     } else if (value instanceof String string) {
       return Boolean.parseBoolean(string);
+    } else if (value instanceof Lengthable lengthable) {
+      return lengthable.__len__() != 0;
     } else if (value instanceof Collection<?> collection) {
       return !collection.isEmpty();
+    } else if (value instanceof Map<?, ?> map) {
+      return !map.isEmpty();
     } else if (value instanceof Number number) {
       return number.doubleValue() != 0.;
     } else {
@@ -490,7 +502,7 @@ public class Interpreter {
       implements Statement {
     @Override
     public void exec(Context context) {
-      if (context.returned()) {
+      if (context.skipStatement()) {
         return;
       }
       if (convertToBool(condition.eval(context))) {
@@ -501,10 +513,37 @@ public class Interpreter {
     }
   }
 
-  public record WhileBlock(Expression condition, Statement body) implements Statement {}
+  public record ForBlock(Expression vars, Expression iter, Statement body) implements Statement {
+    @Override
+    public void exec(Context context) {
+      if (context.skipStatement()) {
+        return;
+      }
+      // TODO(maxuser): Support arrays and other iterable values that don't implement Iterable<>.
+      var iterValue = iter.eval(context);
+      var iterableValue = (Iterable<?>) iterValue;
+      // TODO(maxuser): Support unpacked values like `for k, v in map: ...`
+      var varId = (Identifier) vars;
+      try {
+        context.enterLoop();
+        for (var value : iterableValue) {
+          context.setVariable(varId.name(), value);
+          body.exec(context);
+        }
+      } finally {
+        context.exitLoop();
+      }
+    }
+  }
 
-  public record ForBlock(Expression vars, Expression iterator, Statement body)
-      implements Statement {}
+  public record Break() implements Statement {
+    @Override
+    public void exec(Context context) {
+      context.breakLoop();
+    }
+  }
+
+  public record WhileBlock(Expression condition, Statement body) implements Statement {}
 
   public record Identifier(String name) implements Expression {
     @Override
@@ -529,7 +568,7 @@ public class Interpreter {
   public interface Expression extends Statement {
     @Override
     default void exec(Context context) {
-      if (context.returned()) {
+      if (context.skipStatement()) {
         return;
       }
       eval(context);
@@ -546,7 +585,7 @@ public class Interpreter {
     @Override
     public void exec(Context context) {
       for (var statement : statements) {
-        if (context.returned()) {
+        if (context.skipStatement()) {
           break;
         }
         statement.exec(context);
@@ -575,6 +614,9 @@ public class Interpreter {
   public record Assignment(Expression lhs, Expression rhs) implements Statement {
     @Override
     public void exec(Context context) {
+      if (context.skipStatement()) {
+        return;
+      }
       Object rhsValue = rhs.eval(context);
       if (lhs instanceof Identifier lhsId) {
         context.setVariable(lhsId, rhsValue);
@@ -675,6 +717,9 @@ public class Interpreter {
 
     @Override
     public void exec(Context context) {
+      if (context.skipStatement()) {
+        return;
+      }
       Object rhsValue = rhs.eval(context);
       if (lhs instanceof Identifier lhsId) {
         var oldValue = context.getVariable(lhsId);
@@ -737,6 +782,9 @@ public class Interpreter {
   public record ReturnStatement(Expression returnValue) implements Statement {
     @Override
     public void exec(Context context) {
+      if (context.skipStatement()) {
+        return;
+      }
       context.returnWithValue(returnValue == null ? null : returnValue.eval(context));
     }
 
@@ -747,34 +795,6 @@ public class Interpreter {
       } else {
         return String.format("return %s;", returnValue);
       }
-    }
-  }
-
-  public record UnaryOp(Op op, Expression operand) implements Expression {
-    public enum Op {
-      NEGATIVE("-"),
-      NOT("!");
-
-      private final String symbol;
-
-      Op(String symbol) {
-        this.symbol = symbol;
-      }
-
-      public String symbol() {
-        return symbol;
-      }
-    }
-
-    @Override
-    public Object eval(Context context) {
-      switch (op) {
-        case NEGATIVE:
-          return Numbers.negate((Number) operand.eval(context));
-        case NOT:
-          return !(Boolean) operand.eval(context);
-      }
-      throw new UnsupportedOperationException("Unary op not implemented");
     }
   }
 
@@ -796,21 +816,109 @@ public class Interpreter {
     }
   }
 
-  public record BinaryOp(Expression lhs, Op op, Expression rhs) implements Expression {
+  public record Comparison(Expression lhs, Op op, Expression rhs) implements Expression {
     public enum Op {
-      ADD("+"),
-      SUB("-"),
-      MUL("*"),
-      DIV("/"),
-      MOD("%"),
       EQ("=="),
-      LESS("<"),
+      LT("<"),
       LT_EQ("<="),
       GT(">"),
       GT_EQ(">="),
-      NOT_EQ("!="),
-      AND("&&"),
-      OR("||");
+      NOT_EQ("!=");
+
+      private final String symbol;
+
+      Op(String symbol) {
+        this.symbol = symbol;
+      }
+
+      public String symbol() {
+        return symbol;
+      }
+    }
+
+    public static Op parse(String opName) {
+      switch (opName) {
+        case "Eq":
+          return Op.EQ;
+        case "Lt":
+          return Op.LT;
+        case "LtE":
+          return Op.LT_EQ;
+        case "Gt":
+          return Op.GT;
+        case "GtE":
+          return Op.GT_EQ;
+        case "NotEq":
+          return Op.NOT_EQ;
+        default:
+          throw new UnsupportedOperationException("Unsupported binary op: " + opName);
+      }
+    }
+
+    @Override
+    public Object eval(Context context) {
+      var lhsValue = lhs.eval(context);
+      var rhsValue = rhs.eval(context);
+      switch (op) {
+        case EQ:
+          if (lhsValue instanceof Number lhsNumber && rhsValue instanceof Number rhsNumber) {
+            return Numbers.equals(lhsNumber, rhsNumber);
+          } else {
+            return lhsValue.equals(rhsValue);
+          }
+        case LT:
+          if (lhsValue instanceof Number lhsNumber && rhsValue instanceof Number rhsNumber) {
+            return Numbers.lessThan(lhsNumber, rhsNumber);
+          } else if (lhsValue instanceof Comparable lhsComp
+              && rhsValue instanceof Comparable rhsComp
+              && lhsValue.getClass() == rhsValue.getClass()) {
+            return lhsComp.compareTo(rhsComp) < 0;
+          }
+        case LT_EQ:
+          if (lhsValue instanceof Number lhsNumber && rhsValue instanceof Number rhsNumber) {
+            return Numbers.lessThanOrEquals(lhsNumber, rhsNumber);
+          } else if (lhsValue instanceof Comparable lhsComp
+              && rhsValue instanceof Comparable rhsComp
+              && lhsValue.getClass() == rhsValue.getClass()) {
+            return lhsComp.compareTo(rhsComp) <= 0;
+          }
+        case GT:
+          if (lhsValue instanceof Number lhsNumber && rhsValue instanceof Number rhsNumber) {
+            return Numbers.greaterThan(lhsNumber, rhsNumber);
+          } else if (lhsValue instanceof Comparable lhsComp
+              && rhsValue instanceof Comparable rhsComp
+              && lhsValue.getClass() == rhsValue.getClass()) {
+            return lhsComp.compareTo(rhsComp) > 0;
+          }
+        case GT_EQ:
+          if (lhsValue instanceof Number lhsNumber && rhsValue instanceof Number rhsNumber) {
+            return Numbers.greaterThanOrEquals(lhsNumber, rhsNumber);
+          } else if (lhsValue instanceof Comparable lhsComp
+              && rhsValue instanceof Comparable rhsComp
+              && lhsValue.getClass() == rhsValue.getClass()) {
+            return lhsComp.compareTo(rhsComp) >= 0;
+          }
+        case NOT_EQ:
+          if (lhsValue instanceof Number lhsNumber && rhsValue instanceof Number rhsNumber) {
+            return !Numbers.equals(lhsNumber, rhsNumber);
+          } else {
+            return !lhsValue.equals(rhsValue);
+          }
+      }
+      throw new UnsupportedOperationException(
+          String.format("Comparison op not supported: %s %s %s", lhs, op, rhs));
+    }
+
+    @Override
+    public String toString() {
+      return String.format("%s %s %s", lhs, op.symbol(), rhs);
+    }
+  }
+
+  public record BoolOp(Expression lhs, Op op, Expression rhs) implements Expression {
+    public enum Op {
+      AND("and"),
+      OR("or");
 
       private final String symbol;
 
@@ -825,11 +933,115 @@ public class Interpreter {
 
     @Override
     public Object eval(Context context) {
+      boolean lhsBool = convertToBool(lhs.eval(context));
+      switch (op) {
+        case AND:
+          return lhsBool && convertToBool(rhs.eval(context));
+        case OR:
+          return lhsBool || convertToBool(rhs.eval(context));
+      }
+      throw new UnsupportedOperationException(
+          String.format("Boolean op not supported: %s %s %s", lhs, op, rhs));
+    }
+
+    @Override
+    public String toString() {
+      // TODO(maxuser): Fix output for proper order of operations that may need parentheses.
+      // E.g. `(1 + 2) * 3` evaluates correctly but gets output to String as `1 + 2 * 3`.
+      return String.format("%s %s %s", lhs, op.symbol(), rhs);
+    }
+  }
+
+  public record UnaryOp(Op op, Expression operand) implements Expression {
+    public enum Op {
+      SUB("-"),
+      NOT("not");
+
+      private final String symbol;
+
+      Op(String symbol) {
+        this.symbol = symbol;
+      }
+
+      public String symbol() {
+        return symbol;
+      }
+    }
+
+    public static Op parse(String opName) {
+      switch (opName) {
+        case "USub":
+          return Op.SUB;
+        case "Not":
+          return Op.NOT;
+        default:
+          throw new UnsupportedOperationException("Unsupported unary op: " + opName);
+      }
+    }
+
+    @Override
+    public Object eval(Context context) {
+      var value = operand.eval(context);
+      switch (op) {
+        case SUB:
+          if (value instanceof Number number) {
+            return Numbers.negate(number);
+          }
+          break;
+        case NOT:
+          return !convertToBool(operand.eval(context));
+      }
+      throw new IllegalArgumentException(
+          String.format(
+              "bad operand type for unary %s: '%s' (%s)",
+              op.symbol(), value.getClass().getName(), operand));
+    }
+
+    @Override
+    public String toString() {
+      return String.format("%s%s%s", op, op == Op.NOT ? " " : "", op.symbol(), operand);
+    }
+  }
+
+  public record BinaryOp(Expression lhs, Op op, Expression rhs) implements Expression {
+    public enum Op {
+      ADD("+"),
+      SUB("-"),
+      MUL("*"),
+      DIV("/"),
+      MOD("%"),
+      OR("||"),
+      AND("&&");
+
+      private final String symbol;
+
+      Op(String symbol) {
+        this.symbol = symbol;
+      }
+
+      public String symbol() {
+        return symbol;
+      }
+    }
+
+    public static Op parse(String opName) {
+      switch (opName) {
+        case "Add":
+          return Op.ADD;
+        case "Sub":
+          return Op.SUB;
+        case "Mult":
+          return Op.MUL;
+        default:
+          throw new UnsupportedOperationException("Unsupported binary op: " + opName);
+      }
+    }
+
+    @Override
+    public Object eval(Context context) {
       var lhsValue = lhs.eval(context);
       var rhsValue = (op == Op.OR || op == Op.AND) ? null : rhs.eval(context);
       switch (op) {
-        case EQ:
-          return lhsValue.equals(rhsValue);
         case ADD:
           if (lhsValue instanceof Number lhsNum && rhsValue instanceof Number rhsNum) {
             return Numbers.add(lhsNum, rhsNum);
@@ -843,7 +1055,7 @@ public class Interpreter {
             rhsValue = pyList.getJavaList();
           }
           if (lhsValue instanceof List lhsList && rhsValue instanceof List rhsList) {
-            var newList = new PyList(new ArrayList<>(lhsList));
+            var newList = new PyList(new ArrayList<Object>(lhsList));
             newList.__iadd__(rhsList);
             return newList;
           }
@@ -1000,8 +1212,6 @@ public class Interpreter {
     } else if (value instanceof String string) {
       Gson gson =
           new GsonBuilder()
-              .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
-              .serializeNulls()
               .setPrettyPrinting() // Optional: for pretty printing
               .disableHtmlEscaping() // Important: to prevent double escaping
               .create();
@@ -1281,6 +1491,8 @@ public class Interpreter {
           System.out.println(
               params.stream().map(p -> pyToString(p.eval(context))).collect(joining(" ")));
           return null;
+        case "range":
+          return new RangeIterable(params.stream().map(p -> p.eval(context)).collect(toList()));
         default:
           {
             BoundFunction boundFunction = context.getBoundFunction(methodId.name());
@@ -1361,6 +1573,53 @@ public class Interpreter {
     }
   }
 
+  public static class RangeIterable implements Iterable<Integer> {
+    private final int start;
+    private final int stop;
+    private final int step;
+
+    public RangeIterable(List<Object> params) {
+      switch (params.size()) {
+        case 1:
+          start = 0;
+          stop = ((Number) params.get(0)).intValue();
+          step = 1;
+          break;
+        case 2:
+          start = ((Number) params.get(0)).intValue();
+          stop = ((Number) params.get(1)).intValue();
+          step = 1;
+          break;
+        case 3:
+          start = ((Number) params.get(0)).intValue();
+          stop = ((Number) params.get(1)).intValue();
+          step = ((Number) params.get(2)).intValue();
+          break;
+        default:
+          throw new IllegalArgumentException(
+              "range expected 1 to 3 arguments, got " + params.size());
+      }
+    }
+
+    public Iterator<Integer> iterator() {
+      return new Iterator<Integer>() {
+        private int pos = start;
+
+        @Override
+        public boolean hasNext() {
+          return pos < stop;
+        }
+
+        @Override
+        public Integer next() {
+          int n = pos;
+          pos += step;
+          return n;
+        }
+      };
+    }
+  }
+
   public record StaticMethod(JavaClassId classId, Identifier method) implements Expression {
     @Override
     public Object eval(Context context) {
@@ -1417,6 +1676,8 @@ public class Interpreter {
     private final Map<String, Object> vars = new HashMap<>();
     private Object returnValue;
     private boolean returned = false;
+    private int loopDepth = 0;
+    private boolean breakingLoop = false;
 
     private Context() {
       globals = this;
@@ -1522,6 +1783,25 @@ public class Interpreter {
       }
     }
 
+    public void enterLoop() {
+      ++loopDepth;
+    }
+
+    public void exitLoop() {
+      --loopDepth;
+      if (loopDepth < 0) {
+        throw new IllegalStateException("Exited more loops than were entered");
+      }
+      breakingLoop = false;
+    }
+
+    public void breakLoop() {
+      if (loopDepth <= 0) {
+        throw new IllegalStateException("'break' outside loop");
+      }
+      breakingLoop = true;
+    }
+
     public void returnWithValue(Object returnValue) {
       if (this == globals) {
         throw new IllegalStateException("'return' outside function");
@@ -1530,8 +1810,8 @@ public class Interpreter {
       this.returned = true;
     }
 
-    public boolean returned() {
-      return returned;
+    public boolean skipStatement() {
+      return returned || breakingLoop;
     }
 
     public Object returnValue() {

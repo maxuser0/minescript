@@ -1852,7 +1852,7 @@ public class MainTest {
         StringBuilder = JavaClass("java.lang.StringBuilder")
         builder = StringBuilder("This")
         builder.append(" is ")
-        builder.append(1)
+        builder.append(int(1))
         builder.append(" test.")
         return builder.toString()
   */
@@ -1985,9 +1985,22 @@ public class MainTest {
                   },
                   "args": [
                     {
-                      "type": "Constant",
-                      "value": 1,
-                      "kind": null
+                      "type": "Call",
+                      "func": {
+                        "type": "Name",
+                        "id": "int",
+                        "ctx": {
+                          "type": "Load"
+                        }
+                      },
+                      "args": [
+                        {
+                          "type": "Constant",
+                          "value": 1,
+                          "kind": null
+                        }
+                      ],
+                      "keywords": []
                     }
                   ],
                   "keywords": []
@@ -2041,6 +2054,436 @@ public class MainTest {
                   },
                   "args": [],
                   "keywords": []
+                }
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
+  /* Generated from Python code:
+
+      def range_stop():
+        x = []
+        for i in range(3):
+          x.append(i)
+        return x
+  */
+  private static final String rangeStopJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "range_stop",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "x",
+                    "ctx": {
+                      "type": "Store"
+                    }
+                  }
+                ],
+                "value": {
+                  "type": "List",
+                  "elts": [],
+                  "ctx": {
+                    "type": "Load"
+                  }
+                },
+                "type_comment": null
+              },
+              {
+                "type": "For",
+                "target": {
+                  "type": "Name",
+                  "id": "i",
+                  "ctx": {
+                    "type": "Store"
+                  }
+                },
+                "iter": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Name",
+                    "id": "range",
+                    "ctx": {
+                      "type": "Load"
+                    }
+                  },
+                  "args": [
+                    {
+                      "type": "Constant",
+                      "value": 3,
+                      "kind": null
+                    }
+                  ],
+                  "keywords": []
+                },
+                "body": [
+                  {
+                    "type": "Expr",
+                    "value": {
+                      "type": "Call",
+                      "func": {
+                        "type": "Attribute",
+                        "value": {
+                          "type": "Name",
+                          "id": "x",
+                          "ctx": {
+                            "type": "Load"
+                          }
+                        },
+                        "attr": "append",
+                        "ctx": {
+                          "type": "Load"
+                        }
+                      },
+                      "args": [
+                        {
+                          "type": "Name",
+                          "id": "i",
+                          "ctx": {
+                            "type": "Load"
+                          }
+                        }
+                      ],
+                      "keywords": []
+                    }
+                  }
+                ],
+                "orelse": [],
+                "type_comment": null
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Name",
+                  "id": "x",
+                  "ctx": {
+                    "type": "Load"
+                  }
+                }
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
+  /* Generated from Python code:
+
+      def range_start_stop_step():
+        x = []
+        for i in range(4, 10, 2):
+          x.append(i)
+        return x
+  */
+  private static final String rangeStartStopStepJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "range_start_stop_step",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "x",
+                    "ctx": {
+                      "type": "Store"
+                    }
+                  }
+                ],
+                "value": {
+                  "type": "List",
+                  "elts": [],
+                  "ctx": {
+                    "type": "Load"
+                  }
+                },
+                "type_comment": null
+              },
+              {
+                "type": "For",
+                "target": {
+                  "type": "Name",
+                  "id": "i",
+                  "ctx": {
+                    "type": "Store"
+                  }
+                },
+                "iter": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Name",
+                    "id": "range",
+                    "ctx": {
+                      "type": "Load"
+                    }
+                  },
+                  "args": [
+                    {
+                      "type": "Constant",
+                      "value": 4,
+                      "kind": null
+                    },
+                    {
+                      "type": "Constant",
+                      "value": 10,
+                      "kind": null
+                    },
+                    {
+                      "type": "Constant",
+                      "value": 2,
+                      "kind": null
+                    }
+                  ],
+                  "keywords": []
+                },
+                "body": [
+                  {
+                    "type": "Expr",
+                    "value": {
+                      "type": "Call",
+                      "func": {
+                        "type": "Attribute",
+                        "value": {
+                          "type": "Name",
+                          "id": "x",
+                          "ctx": {
+                            "type": "Load"
+                          }
+                        },
+                        "attr": "append",
+                        "ctx": {
+                          "type": "Load"
+                        }
+                      },
+                      "args": [
+                        {
+                          "type": "Name",
+                          "id": "i",
+                          "ctx": {
+                            "type": "Load"
+                          }
+                        }
+                      ],
+                      "keywords": []
+                    }
+                  }
+                ],
+                "orelse": [],
+                "type_comment": null
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Name",
+                  "id": "x",
+                  "ctx": {
+                    "type": "Load"
+                  }
+                }
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
+  /* Generated from Python code:
+
+      def break_for_loop():
+        x = []
+        for i in range(10):
+          if i >= 2:
+            break
+          x.append(i)
+        return x
+  */
+  private static final String breakForLoopJsonAst =
+      """
+        {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "break_for_loop",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "x",
+                    "ctx": {
+                      "type": "Store"
+                    }
+                  }
+                ],
+                "value": {
+                  "type": "List",
+                  "elts": [],
+                  "ctx": {
+                    "type": "Load"
+                  }
+                },
+                "type_comment": null
+              },
+              {
+                "type": "For",
+                "target": {
+                  "type": "Name",
+                  "id": "i",
+                  "ctx": {
+                    "type": "Store"
+                  }
+                },
+                "iter": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Name",
+                    "id": "range",
+                    "ctx": {
+                      "type": "Load"
+                    }
+                  },
+                  "args": [
+                    {
+                      "type": "Constant",
+                      "value": 10,
+                      "kind": null
+                    }
+                  ],
+                  "keywords": []
+                },
+                "body": [
+                  {
+                    "type": "If",
+                    "test": {
+                      "type": "Compare",
+                      "left": {
+                        "type": "Name",
+                        "id": "i",
+                        "ctx": {
+                          "type": "Load"
+                        }
+                      },
+                      "ops": [
+                        {
+                          "type": "GtE"
+                        }
+                      ],
+                      "comparators": [
+                        {
+                          "type": "Constant",
+                          "value": 2,
+                          "kind": null
+                        }
+                      ]
+                    },
+                    "body": [
+                      {
+                        "type": "Break"
+                      }
+                    ],
+                    "orelse": []
+                  },
+                  {
+                    "type": "Expr",
+                    "value": {
+                      "type": "Call",
+                      "func": {
+                        "type": "Attribute",
+                        "value": {
+                          "type": "Name",
+                          "id": "x",
+                          "ctx": {
+                            "type": "Load"
+                          }
+                        },
+                        "attr": "append",
+                        "ctx": {
+                          "type": "Load"
+                        }
+                      },
+                      "args": [
+                        {
+                          "type": "Name",
+                          "id": "i",
+                          "ctx": {
+                            "type": "Load"
+                          }
+                        }
+                      ],
+                      "keywords": []
+                    }
+                  }
+                ],
+                "orelse": [],
+                "type_comment": null
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Name",
+                  "id": "x",
+                  "ctx": {
+                    "type": "Load"
+                  }
                 }
               }
             ],
@@ -2197,5 +2640,38 @@ public class MainTest {
 
     var output = interpreter.invoke(func);
     assertEquals("This is 1 test.", (String) output);
+  }
+
+  @Test
+  public void rangeStop() {
+    var jsonAst = JsonParser.parseString(rangeStopJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("range_stop");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals(new Interpreter.PyList(List.of(0, 1, 2)), output);
+  }
+
+  @Test
+  public void rangeStartStopStep() {
+    var jsonAst = JsonParser.parseString(rangeStartStopStepJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("range_start_stop_step");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals(new Interpreter.PyList(List.of(4, 6, 8)), output);
+  }
+
+  @Test
+  public void breakForLoop() {
+    var jsonAst = JsonParser.parseString(breakForLoopJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("break_for_loop");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals(new Interpreter.PyList(List.of(0, 1)), output);
   }
 }
