@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.stream.StreamSupport;
 import net.minescript.common.Numbers;
@@ -39,8 +40,11 @@ public class Interpreter {
 
   private Context globals = Context.createGlobals();
 
+  private final ConcurrentHashMap<ExecutableCacheKey, Optional<Executable>> executableCache =
+      new ConcurrentHashMap<>();
+
   public Interpreter parse(JsonElement element) {
-    var parser = new JsonAstParser();
+    var parser = new JsonAstParser(executableCache);
     parser.parseGlobals(element, globals);
     return this;
   }
@@ -61,11 +65,13 @@ public class Interpreter {
   public static class JsonAstParser {
 
     private final Deque<LexicalScope> lexicalScopes = new ArrayDeque<>();
+    private final Map<ExecutableCacheKey, Optional<Executable>> executableCache;
 
-    public JsonAstParser() {
+    public JsonAstParser(Map<ExecutableCacheKey, Optional<Executable>> executableCache) {
       // Lexical scope for global scope, reused across calls to parseGlobals(). To get a new, empty
       // stack of lexical scopes, instantiate a new JsonAstParser.
       lexicalScopes.push(new LexicalScope());
+      this.executableCache = executableCache;
     }
 
     private static class LexicalScope {
@@ -339,13 +345,15 @@ public class Interpreter {
                   javaClassId,
                   StreamSupport.stream(args.spliterator(), false)
                       .map(elem -> parseExpression(elem))
-                      .collect(toList()));
+                      .collect(toList()),
+                  executableCache);
             } else {
               return new MethodCall(
                   func,
                   StreamSupport.stream(args.spliterator(), false)
                       .map(elem -> parseExpression(elem))
-                      .collect(toList()));
+                      .collect(toList()),
+                  executableCache);
             }
           }
 
@@ -400,6 +408,76 @@ public class Interpreter {
 
     private static JsonArray getBody(JsonElement element) {
       return element.getAsJsonObject().get("body").getAsJsonArray();
+    }
+  }
+
+  private static class ExecutableCacheKey {
+    private final Object[] callSignature;
+
+    private enum ExecutableType {
+      INSTANCE_METHOD,
+      STATIC_METHOD,
+      CONSTRUCTOR
+    }
+
+    public static ExecutableCacheKey forInstanceMethod(
+        Class<?> methodClass, String methodName, Object[] paramValues) {
+      Object[] callSignature = new Object[paramValues.length + 3];
+      callSignature[0] = ExecutableType.INSTANCE_METHOD.ordinal();
+      callSignature[1] = methodClass;
+      callSignature[2] = methodName;
+      for (int i = 0; i < paramValues.length; ++i) {
+        Object paramValue = paramValues[i];
+        callSignature[i + 3] = paramValue == null ? null : paramValue.getClass();
+      }
+      return new ExecutableCacheKey(callSignature);
+    }
+
+    public static ExecutableCacheKey forStaticMethod(
+        Class<?> methodClass, String methodName, Object[] paramValues) {
+      Object[] callSignature = new Object[paramValues.length + 3];
+      callSignature[0] = ExecutableType.STATIC_METHOD.ordinal();
+      callSignature[1] = methodClass;
+      callSignature[2] = methodName;
+      for (int i = 0; i < paramValues.length; ++i) {
+        Object paramValue = paramValues[i];
+        callSignature[i + 3] = paramValue == null ? null : paramValue.getClass();
+      }
+      return new ExecutableCacheKey(callSignature);
+    }
+
+    public static ExecutableCacheKey forConstructor(Class<?> ctorClass, Object[] paramValues) {
+      Object[] callSignature = new Object[paramValues.length + 2];
+      callSignature[0] = ExecutableType.CONSTRUCTOR.ordinal();
+      callSignature[1] = ctorClass;
+      for (int i = 0; i < paramValues.length; ++i) {
+        Object paramValue = paramValues[i];
+        callSignature[i + 2] = paramValue == null ? null : paramValue.getClass();
+      }
+      return new ExecutableCacheKey(callSignature);
+    }
+
+    private ExecutableCacheKey(Object[] callSignature) {
+      this.callSignature = callSignature;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+
+      ExecutableCacheKey other = (ExecutableCacheKey) o;
+      return Arrays.equals(callSignature, other.callSignature);
+    }
+
+    @Override
+    public int hashCode() {
+      return Arrays.hashCode(callSignature);
+    }
+
+    @Override
+    public String toString() {
+      return Arrays.deepToString(callSignature);
     }
   }
 
@@ -1160,24 +1238,42 @@ public class Interpreter {
     }
   }
 
-  public record CtorCall(JavaClassId classId, List<Expression> params) implements Expression {
+  public record CtorCall(
+      JavaClassId classId,
+      List<Expression> params,
+      Map<ExecutableCacheKey, Optional<Executable>> executableCache)
+      implements Expression {
     @Override
     public Object eval(Context context) {
-      // TODO(maxuser): Check param types at parse time to select the appropriate ctor.
-      Constructor<?>[] ctors = classId.clss().getConstructors();
       Object[] paramValues = params.stream().map(p -> p.eval(context)).toArray(Object[]::new);
-      Optional<Constructor<?>> ctor = findBestMatchingExecutable(ctors, c -> true, paramValues);
-      if (ctor.isPresent()) {
+      var cacheKey = ExecutableCacheKey.forConstructor(classId.clss(), paramValues);
+      Optional<Constructor<?>> matchedCtor =
+          executableCache
+              .computeIfAbsent(
+                  cacheKey,
+                  ignoreKey ->
+                      TypeChecker.findBestMatchingExecutable(
+                          classId.clss().getConstructors(), c -> true, paramValues))
+              .map(Constructor.class::cast);
+      if (matchedCtor.isPresent()) {
         try {
-          return ctor.get().newInstance(paramValues);
+          return matchedCtor.get().newInstance(paramValues);
         } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
           throw new RuntimeException(e);
         }
+      } else {
+        throw new IllegalArgumentException(
+            String.format(
+                "No matching constructor: %s(%s)",
+                classId.clss().getName(),
+                Arrays.stream(paramValues)
+                    .map(
+                        v ->
+                            v == null
+                                ? "null"
+                                : String.format("(%s) %s", v.getClass().getName(), pyRepr(v)))
+                    .collect(joining(", "))));
       }
-      throw new IllegalArgumentException(
-          String.format(
-              "No matching construtor for %s with %d params",
-              classId.clss().getName(), params.size()));
     }
 
     @Override
@@ -1187,89 +1283,101 @@ public class Interpreter {
     }
   }
 
-  private static <T extends Executable> Optional<T> findBestMatchingExecutable(
-      T[] executables, Predicate<T> filter, Object[] paramValues) {
-    int bestScore = 0;
-    Optional<T> bestExecutable = Optional.empty();
+  public static class TypeChecker {
+    public static <T extends Executable> Optional<T> findBestMatchingExecutable(
+        T[] executables, Predicate<T> filter, Object[] paramValues) {
+      int bestScore = 0;
+      Optional<T> bestExecutable = Optional.empty();
 
-    for (T executable : executables) {
-      if (filter.test(executable)) {
-        int score = getTypeCheckScore(executable.getParameterTypes(), paramValues);
-        if (score > bestScore) {
-          bestScore = score;
-          bestExecutable = Optional.of(executable);
+      for (T executable : executables) {
+        if (filter.test(executable)) {
+          int score = getTypeCheckScore(executable.getParameterTypes(), paramValues);
+          if (score > bestScore) {
+            bestScore = score;
+            bestExecutable = Optional.of(executable);
+          }
         }
       }
-    }
-    return bestExecutable;
-  }
-
-  /**
-   * Computes a score reflecting how well {@code paramValues} matches the {@code formalParamTypes}.
-   *
-   * <p>Add 1 point for a param requiring conversion, 2 points for a param that's an exact match.
-   */
-  private static int getTypeCheckScore(Class<?>[] formalParamTypes, Object[] paramValues) {
-    if (formalParamTypes.length != paramValues.length) {
-      return 0;
+      return bestExecutable;
     }
 
-    // Start score at 1 so it's non-zero if there's an exact match of no params.
-    int score = 1;
-
-    for (int i = 0; i < formalParamTypes.length; ++i) {
-      Class<?> type = promotePrimitiveType(formalParamTypes[i]);
-      Object value = paramValues[i];
-      if (value == null) {
-        // null is convertible to everything.
-        score += 1;
-        continue;
-      }
-      Class<?> valueType = value.getClass();
-      if (valueType == type) {
-        score += 2;
-        continue;
-      }
-      if (Number.class.isAssignableFrom(type)
-          && Number.class.isAssignableFrom(valueType)
-          && numericTypeIsConvertible(valueType, type)) {
-        score += 1;
-        continue;
-      }
-      if (!type.isAssignableFrom(value.getClass())) {
+    /**
+     * Computes a score reflecting how well {@code paramValues} matches the {@code
+     * formalParamTypes}.
+     *
+     * <p>Add 1 point for a param requiring conversion, 2 points for a param that's an exact match.
+     * Return value of 0 indicates that {@code paramValues} are incompatible with {@code
+     * formalParamTypes}.
+     */
+    private static int getTypeCheckScore(Class<?>[] formalParamTypes, Object[] paramValues) {
+      if (formalParamTypes.length != paramValues.length) {
         return 0;
       }
-    }
-    return score;
-  }
 
-  private static Class<?> promotePrimitiveType(Class<?> type) {
-    if (type == boolean.class) {
-      return Boolean.class;
-    } else if (type == int.class) {
-      return Integer.class;
-    } else if (type == float.class) {
-      return Float.class;
-    } else if (type == double.class) {
-      return Double.class;
-    } else if (type == char.class) {
-      return Character.class;
-    } else {
-      return type;
-    }
-  }
+      // Start score at 1 so it's non-zero if there's an exact match of no params.
+      int score = 1;
 
-  private static boolean numericTypeIsConvertible(Class<?> from, Class<?> to) {
-    if (to == Double.class) {
-      return true;
+      for (int i = 0; i < formalParamTypes.length; ++i) {
+        Class<?> type = promotePrimitiveType(formalParamTypes[i]);
+        Object value = paramValues[i];
+        if (value == null) {
+          // null is convertible to everything except primitive types.
+          if (type != formalParamTypes[i]) {
+            return 0;
+          }
+          if (type.isArray()) {
+            score += 1;
+          } else {
+            score += 2;
+          }
+          continue;
+        }
+        Class<?> valueType = value.getClass();
+        if (valueType == type) {
+          score += 2;
+          continue;
+        }
+        if (Number.class.isAssignableFrom(type)
+            && Number.class.isAssignableFrom(valueType)
+            && numericTypeIsConvertible(valueType, type)) {
+          score += 1;
+          continue;
+        }
+        if (!type.isAssignableFrom(value.getClass())) {
+          return 0;
+        }
+      }
+      return score;
     }
-    if (to == Float.class) {
-      return from != Double.class;
+
+    private static Class<?> promotePrimitiveType(Class<?> type) {
+      if (type == boolean.class) {
+        return Boolean.class;
+      } else if (type == int.class) {
+        return Integer.class;
+      } else if (type == float.class) {
+        return Float.class;
+      } else if (type == double.class) {
+        return Double.class;
+      } else if (type == char.class) {
+        return Character.class;
+      } else {
+        return type;
+      }
     }
-    if (to == Integer.class) {
-      return from == Integer.class;
+
+    private static boolean numericTypeIsConvertible(Class<?> from, Class<?> to) {
+      if (to == Double.class) {
+        return true;
+      }
+      if (to == Float.class) {
+        return from != Double.class;
+      }
+      if (to == Integer.class) {
+        return from == Integer.class;
+      }
+      return false;
     }
-    return false;
   }
 
   public static String pyToString(Object value) {
@@ -1504,7 +1612,11 @@ public class Interpreter {
     }
   }
 
-  public record MethodCall(Expression method, List<Expression> params) implements Expression {
+  public record MethodCall(
+      Expression method,
+      List<Expression> params,
+      Map<ExecutableCacheKey, Optional<Executable>> executableCache)
+      implements Expression {
     @Override
     public Object eval(Context context) {
       if (method instanceof Identifier methodId) {
@@ -1600,48 +1712,76 @@ public class Interpreter {
       var objectValue = object.eval(context);
       var clss = objectValue.getClass();
       Object[] paramValues = params.stream().map(p -> p.eval(context)).toArray(Object[]::new);
-      // TODO(maxuser): cache and filter method lookups by name
-      Optional<Method> meth =
-          findBestMatchingExecutable(
-              clss.getMethods(),
-              m -> !Modifier.isStatic(m.getModifiers()) && m.getName().equals(methodName),
-              paramValues);
-      if (meth.isPresent()) {
+      var cacheKey = ExecutableCacheKey.forInstanceMethod(clss, methodName, paramValues);
+      Optional<Method> matchedMethod =
+          executableCache
+              .computeIfAbsent(
+                  cacheKey,
+                  ignoreKey ->
+                      TypeChecker.findBestMatchingExecutable(
+                          clss.getMethods(),
+                          m ->
+                              !Modifier.isStatic(m.getModifiers())
+                                  && m.getName().equals(methodName),
+                          paramValues))
+              .map(Method.class::cast);
+      if (matchedMethod.isPresent()) {
         try {
-          return meth.get().invoke(objectValue, paramValues);
+          return matchedMethod.get().invoke(objectValue, paramValues);
         } catch (IllegalAccessException | InvocationTargetException e) {
           throw new RuntimeException(e);
         }
+      } else {
+        throw new IllegalArgumentException(
+            String.format(
+                "No matching method on %s: %s.%s(%s)",
+                object,
+                clss.getName(),
+                methodName,
+                Arrays.stream(paramValues)
+                    .map(
+                        v ->
+                            v == null
+                                ? "null"
+                                : String.format("(%s) %s", v.getClass().getName(), pyRepr(v)))
+                    .collect(joining(", "))));
       }
-
-      throw new IllegalArgumentException(
-          String.format(
-              "Method not defined on %s: %s.%s(%s)",
-              clss.getName(),
-              object,
-              methodName,
-              Arrays.stream(paramValues)
-                  .map(v -> String.format("(%s) %s", v.getClass().getName(), v))
-                  .collect(joining(", "))));
     }
 
     private Object callStaticMethod(Class<?> clss, String methodName, Context context) {
-      // TODO(maxuser): cache and filter method lookups by name
       Object[] paramValues = params.stream().map(p -> p.eval(context)).toArray(Object[]::new);
-      Optional<Method> meth =
-          findBestMatchingExecutable(
-              clss.getMethods(),
-              m -> Modifier.isStatic(m.getModifiers()) && m.getName().equals(methodName),
-              paramValues);
-      if (meth.isPresent()) {
+      var cacheKey = ExecutableCacheKey.forStaticMethod(clss, methodName, paramValues);
+      Optional<Method> matchedMethod =
+          executableCache
+              .computeIfAbsent(
+                  cacheKey,
+                  ignoreKey ->
+                      TypeChecker.findBestMatchingExecutable(
+                          clss.getMethods(),
+                          m ->
+                              Modifier.isStatic(m.getModifiers()) && m.getName().equals(methodName),
+                          paramValues))
+              .map(Method.class::cast);
+      if (matchedMethod.isPresent()) {
         try {
-          return meth.get().invoke(null, paramValues);
+          return matchedMethod.get().invoke(null, paramValues);
         } catch (IllegalAccessException | InvocationTargetException e) {
           throw new RuntimeException(e);
         }
+      } else {
+        throw new IllegalArgumentException(
+            String.format(
+                "No matching method: %s.%s(%s)",
+                clss.getName(),
+                methodName,
+                Arrays.stream(paramValues)
+                    .map(
+                        v ->
+                            v == null
+                                ? "null"
+                                : String.format("(%s) %s", v.getClass().getName(), pyRepr(v)))
+                    .collect(joining(", "))));
       }
-      throw new IllegalArgumentException(
-          String.format("Method not found: %s %s\n", clss.getName(), methodName));
     }
 
     private void expectNumParams(int n) {
@@ -1736,7 +1876,8 @@ public class Interpreter {
     @Override
     public Object eval(Context context) {
       var objectValue = object.eval(context);
-      var objectClass = objectValue instanceof Class ? (Class) objectValue : objectValue.getClass();
+      var objectClass =
+          objectValue instanceof Class<?> ? (Class<?>) objectValue : objectValue.getClass();
       try {
         var fieldAccess = objectClass.getField(field.name());
         return fieldAccess.get(objectValue);
