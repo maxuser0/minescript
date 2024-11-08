@@ -10,7 +10,7 @@ import sys
 
 def ast_to_dict(
     node: ast.AST,
-    skip_attributes={"lineno", "col_offset", "end_lineno", "end_col_offset"}):
+    skip_attributes={"end_lineno", "end_col_offset", "kind", "ctx"}):
   """Recursively converts an AST node to a dictionary
 
   Args:
@@ -31,6 +31,8 @@ def ast_to_dict(
     for attr in node._attributes:
       if attr not in skip_attributes:  # Skip attribute if in the list
         d[attr] = ast_to_dict(getattr(node, attr), skip_attributes)
+    if d['type'] == 'Constant':
+      d['typename'] = type(d['value']).__name__
     return d
   elif isinstance(node, list):
     return [ast_to_dict(x, skip_attributes) for x in node]

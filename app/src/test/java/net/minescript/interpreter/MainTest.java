@@ -29,7 +29,9 @@ public class MainTest {
                   "type": "arg",
                   "arg": "x",
                   "annotation": null,
-                  "type_comment": null
+                  "type_comment": null,
+                  "lineno": 1,
+                  "col_offset": 14
                 }
               ],
               "vararg": null,
@@ -45,9 +47,8 @@ public class MainTest {
                   {
                     "type": "Name",
                     "id": "y",
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 2,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
@@ -55,9 +56,8 @@ public class MainTest {
                   "left": {
                     "type": "Name",
                     "id": "x",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 2,
+                    "col_offset": 6
                   },
                   "op": {
                     "type": "Mult"
@@ -65,25 +65,34 @@ public class MainTest {
                   "right": {
                     "type": "Constant",
                     "value": 2,
-                    "kind": null
-                  }
+                    "lineno": 2,
+                    "col_offset": 10,
+                    "typename": "int"
+                  },
+                  "lineno": 2,
+                  "col_offset": 6
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
               },
               {
                 "type": "Return",
                 "value": {
                   "type": "Name",
                   "id": "y",
-                  "ctx": {
-                    "type": "Load"
-                  }
-                }
+                  "lineno": 3,
+                  "col_offset": 9
+                },
+                "lineno": 3,
+                "col_offset": 2
               }
             ],
             "decorator_list": [],
             "returns": null,
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
           }
         ],
         "type_ignores": []
@@ -114,25 +123,33 @@ public class MainTest {
                   "type": "arg",
                   "arg": "x1",
                   "annotation": null,
-                  "type_comment": null
+                  "type_comment": null,
+                  "lineno": 1,
+                  "col_offset": 21
                 },
                 {
                   "type": "arg",
                   "arg": "y1",
                   "annotation": null,
-                  "type_comment": null
+                  "type_comment": null,
+                  "lineno": 1,
+                  "col_offset": 25
                 },
                 {
                   "type": "arg",
                   "arg": "x2",
                   "annotation": null,
-                  "type_comment": null
+                  "type_comment": null,
+                  "lineno": 1,
+                  "col_offset": 29
                 },
                 {
                   "type": "arg",
                   "arg": "y2",
                   "annotation": null,
-                  "type_comment": null
+                  "type_comment": null,
+                  "lineno": 1,
+                  "col_offset": 33
                 }
               ],
               "vararg": null,
@@ -148,9 +165,8 @@ public class MainTest {
                   {
                     "type": "Name",
                     "id": "dx",
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 2,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
@@ -158,9 +174,8 @@ public class MainTest {
                   "left": {
                     "type": "Name",
                     "id": "x1",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 2,
+                    "col_offset": 7
                   },
                   "op": {
                     "type": "Sub"
@@ -168,12 +183,15 @@ public class MainTest {
                   "right": {
                     "type": "Name",
                     "id": "x2",
-                    "ctx": {
-                      "type": "Load"
-                    }
-                  }
+                    "lineno": 2,
+                    "col_offset": 12
+                  },
+                  "lineno": 2,
+                  "col_offset": 7
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
               },
               {
                 "type": "Assign",
@@ -181,9 +199,8 @@ public class MainTest {
                   {
                     "type": "Name",
                     "id": "dy",
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 3,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
@@ -191,9 +208,8 @@ public class MainTest {
                   "left": {
                     "type": "Name",
                     "id": "y1",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 3,
+                    "col_offset": 7
                   },
                   "op": {
                     "type": "Sub"
@@ -201,12 +217,15 @@ public class MainTest {
                   "right": {
                     "type": "Name",
                     "id": "y2",
-                    "ctx": {
-                      "type": "Load"
-                    }
-                  }
+                    "lineno": 3,
+                    "col_offset": 12
+                  },
+                  "lineno": 3,
+                  "col_offset": 7
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 3,
+                "col_offset": 2
               },
               {
                 "type": "Assign",
@@ -214,9 +233,8 @@ public class MainTest {
                   {
                     "type": "Name",
                     "id": "d_squared",
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 4,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
@@ -226,9 +244,8 @@ public class MainTest {
                     "left": {
                       "type": "Name",
                       "id": "dx",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 4,
+                      "col_offset": 14
                     },
                     "op": {
                       "type": "Mult"
@@ -236,10 +253,11 @@ public class MainTest {
                     "right": {
                       "type": "Name",
                       "id": "dx",
-                      "ctx": {
-                        "type": "Load"
-                      }
-                    }
+                      "lineno": 4,
+                      "col_offset": 19
+                    },
+                    "lineno": 4,
+                    "col_offset": 14
                   },
                   "op": {
                     "type": "Add"
@@ -249,9 +267,8 @@ public class MainTest {
                     "left": {
                       "type": "Name",
                       "id": "dy",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 4,
+                      "col_offset": 24
                     },
                     "op": {
                       "type": "Mult"
@@ -259,13 +276,18 @@ public class MainTest {
                     "right": {
                       "type": "Name",
                       "id": "dy",
-                      "ctx": {
-                        "type": "Load"
-                      }
-                    }
-                  }
+                      "lineno": 4,
+                      "col_offset": 29
+                    },
+                    "lineno": 4,
+                    "col_offset": 24
+                  },
+                  "lineno": 4,
+                  "col_offset": 14
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 4,
+                "col_offset": 2
               },
               {
                 "type": "Return",
@@ -276,31 +298,34 @@ public class MainTest {
                     "value": {
                       "type": "Name",
                       "id": "math",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 5,
+                      "col_offset": 9
                     },
                     "attr": "sqrt",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 5,
+                    "col_offset": 9
                   },
                   "args": [
                     {
                       "type": "Name",
                       "id": "d_squared",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 5,
+                      "col_offset": 19
                     }
                   ],
-                  "keywords": []
-                }
+                  "keywords": [],
+                  "lineno": 5,
+                  "col_offset": 9
+                },
+                "lineno": 5,
+                "col_offset": 2
               }
             ],
             "decorator_list": [],
             "returns": null,
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
           }
         ],
         "type_ignores": []
@@ -332,13 +357,17 @@ public class MainTest {
                   "type": "arg",
                   "arg": "p1",
                   "annotation": null,
-                  "type_comment": null
+                  "type_comment": null,
+                  "lineno": 1,
+                  "col_offset": 18
                 },
                 {
                   "type": "arg",
                   "arg": "p2",
                   "annotation": null,
-                  "type_comment": null
+                  "type_comment": null,
+                  "lineno": 1,
+                  "col_offset": 22
                 }
               ],
               "vararg": null,
@@ -354,9 +383,8 @@ public class MainTest {
                   {
                     "type": "Name",
                     "id": "dx",
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 2,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
@@ -366,18 +394,18 @@ public class MainTest {
                     "value": {
                       "type": "Name",
                       "id": "p1",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 2,
+                      "col_offset": 7
                     },
                     "slice": {
                       "type": "Constant",
                       "value": 0,
-                      "kind": null
+                      "lineno": 2,
+                      "col_offset": 10,
+                      "typename": "int"
                     },
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 2,
+                    "col_offset": 7
                   },
                   "op": {
                     "type": "Sub"
@@ -387,21 +415,25 @@ public class MainTest {
                     "value": {
                       "type": "Name",
                       "id": "p2",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 2,
+                      "col_offset": 15
                     },
                     "slice": {
                       "type": "Constant",
                       "value": 0,
-                      "kind": null
+                      "lineno": 2,
+                      "col_offset": 18,
+                      "typename": "int"
                     },
-                    "ctx": {
-                      "type": "Load"
-                    }
-                  }
+                    "lineno": 2,
+                    "col_offset": 15
+                  },
+                  "lineno": 2,
+                  "col_offset": 7
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
               },
               {
                 "type": "Assign",
@@ -409,9 +441,8 @@ public class MainTest {
                   {
                     "type": "Name",
                     "id": "dy",
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 3,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
@@ -421,18 +452,18 @@ public class MainTest {
                     "value": {
                       "type": "Name",
                       "id": "p1",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 3,
+                      "col_offset": 7
                     },
                     "slice": {
                       "type": "Constant",
                       "value": 1,
-                      "kind": null
+                      "lineno": 3,
+                      "col_offset": 10,
+                      "typename": "int"
                     },
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 3,
+                    "col_offset": 7
                   },
                   "op": {
                     "type": "Sub"
@@ -442,21 +473,25 @@ public class MainTest {
                     "value": {
                       "type": "Name",
                       "id": "p2",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 3,
+                      "col_offset": 15
                     },
                     "slice": {
                       "type": "Constant",
                       "value": 1,
-                      "kind": null
+                      "lineno": 3,
+                      "col_offset": 18,
+                      "typename": "int"
                     },
-                    "ctx": {
-                      "type": "Load"
-                    }
-                  }
+                    "lineno": 3,
+                    "col_offset": 15
+                  },
+                  "lineno": 3,
+                  "col_offset": 7
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 3,
+                "col_offset": 2
               },
               {
                 "type": "Assign",
@@ -464,9 +499,8 @@ public class MainTest {
                   {
                     "type": "Name",
                     "id": "dz",
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 4,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
@@ -476,18 +510,18 @@ public class MainTest {
                     "value": {
                       "type": "Name",
                       "id": "p1",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 4,
+                      "col_offset": 7
                     },
                     "slice": {
                       "type": "Constant",
                       "value": 2,
-                      "kind": null
+                      "lineno": 4,
+                      "col_offset": 10,
+                      "typename": "int"
                     },
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 4,
+                    "col_offset": 7
                   },
                   "op": {
                     "type": "Sub"
@@ -497,21 +531,25 @@ public class MainTest {
                     "value": {
                       "type": "Name",
                       "id": "p2",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 4,
+                      "col_offset": 15
                     },
                     "slice": {
                       "type": "Constant",
                       "value": 2,
-                      "kind": null
+                      "lineno": 4,
+                      "col_offset": 18,
+                      "typename": "int"
                     },
-                    "ctx": {
-                      "type": "Load"
-                    }
-                  }
+                    "lineno": 4,
+                    "col_offset": 15
+                  },
+                  "lineno": 4,
+                  "col_offset": 7
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 4,
+                "col_offset": 2
               },
               {
                 "type": "Assign",
@@ -519,9 +557,8 @@ public class MainTest {
                   {
                     "type": "Name",
                     "id": "d_squared",
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 5,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
@@ -533,9 +570,8 @@ public class MainTest {
                       "left": {
                         "type": "Name",
                         "id": "dx",
-                        "ctx": {
-                          "type": "Load"
-                        }
+                        "lineno": 5,
+                        "col_offset": 14
                       },
                       "op": {
                         "type": "Mult"
@@ -543,10 +579,11 @@ public class MainTest {
                       "right": {
                         "type": "Name",
                         "id": "dx",
-                        "ctx": {
-                          "type": "Load"
-                        }
-                      }
+                        "lineno": 5,
+                        "col_offset": 19
+                      },
+                      "lineno": 5,
+                      "col_offset": 14
                     },
                     "op": {
                       "type": "Add"
@@ -556,9 +593,8 @@ public class MainTest {
                       "left": {
                         "type": "Name",
                         "id": "dy",
-                        "ctx": {
-                          "type": "Load"
-                        }
+                        "lineno": 5,
+                        "col_offset": 24
                       },
                       "op": {
                         "type": "Mult"
@@ -566,11 +602,14 @@ public class MainTest {
                       "right": {
                         "type": "Name",
                         "id": "dy",
-                        "ctx": {
-                          "type": "Load"
-                        }
-                      }
-                    }
+                        "lineno": 5,
+                        "col_offset": 29
+                      },
+                      "lineno": 5,
+                      "col_offset": 24
+                    },
+                    "lineno": 5,
+                    "col_offset": 14
                   },
                   "op": {
                     "type": "Add"
@@ -580,9 +619,8 @@ public class MainTest {
                     "left": {
                       "type": "Name",
                       "id": "dz",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 5,
+                      "col_offset": 34
                     },
                     "op": {
                       "type": "Mult"
@@ -590,13 +628,18 @@ public class MainTest {
                     "right": {
                       "type": "Name",
                       "id": "dz",
-                      "ctx": {
-                        "type": "Load"
-                      }
-                    }
-                  }
+                      "lineno": 5,
+                      "col_offset": 39
+                    },
+                    "lineno": 5,
+                    "col_offset": 34
+                  },
+                  "lineno": 5,
+                  "col_offset": 14
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 5,
+                "col_offset": 2
               },
               {
                 "type": "Return",
@@ -607,31 +650,34 @@ public class MainTest {
                     "value": {
                       "type": "Name",
                       "id": "math",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 6,
+                      "col_offset": 9
                     },
                     "attr": "sqrt",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 6,
+                    "col_offset": 9
                   },
                   "args": [
                     {
                       "type": "Name",
                       "id": "d_squared",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 6,
+                      "col_offset": 19
                     }
                   ],
-                  "keywords": []
-                }
+                  "keywords": [],
+                  "lineno": 6,
+                  "col_offset": 9
+                },
+                "lineno": 6,
+                "col_offset": 2
               }
             ],
             "decorator_list": [],
             "returns": null,
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
           }
         ],
         "type_ignores": []
@@ -660,19 +706,25 @@ public class MainTest {
                   "type": "arg",
                   "arg": "array",
                   "annotation": null,
-                  "type_comment": null
+                  "type_comment": null,
+                  "lineno": 1,
+                  "col_offset": 19
                 },
                 {
                   "type": "arg",
                   "arg": "index",
                   "annotation": null,
-                  "type_comment": null
+                  "type_comment": null,
+                  "lineno": 1,
+                  "col_offset": 26
                 },
                 {
                   "type": "arg",
                   "arg": "value",
                   "annotation": null,
-                  "type_comment": null
+                  "type_comment": null,
+                  "lineno": 1,
+                  "col_offset": 33
                 }
               ],
               "vararg": null,
@@ -690,45 +742,46 @@ public class MainTest {
                     "value": {
                       "type": "Name",
                       "id": "array",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 2,
+                      "col_offset": 2
                     },
                     "slice": {
                       "type": "Name",
                       "id": "index",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 2,
+                      "col_offset": 8
                     },
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 2,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
                   "type": "Name",
                   "id": "value",
-                  "ctx": {
-                    "type": "Load"
-                  }
+                  "lineno": 2,
+                  "col_offset": 17
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
               },
               {
                 "type": "Return",
                 "value": {
                   "type": "Name",
                   "id": "array",
-                  "ctx": {
-                    "type": "Load"
-                  }
-                }
+                  "lineno": 3,
+                  "col_offset": 9
+                },
+                "lineno": 3,
+                "col_offset": 2
               }
             ],
             "decorator_list": [],
             "returns": null,
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
           }
         ],
         "type_ignores": []
@@ -759,13 +812,17 @@ public class MainTest {
                   "type": "arg",
                   "arg": "x",
                   "annotation": null,
-                  "type_comment": null
+                  "type_comment": null,
+                  "lineno": 1,
+                  "col_offset": 17
                 },
                 {
                   "type": "arg",
                   "arg": "y",
                   "annotation": null,
-                  "type_comment": null
+                  "type_comment": null,
+                  "lineno": 1,
+                  "col_offset": 20
                 }
               ],
               "vararg": null,
@@ -782,9 +839,8 @@ public class MainTest {
                   "func": {
                     "type": "Name",
                     "id": "str",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 2,
+                    "col_offset": 9
                   },
                   "args": [
                     {
@@ -792,9 +848,8 @@ public class MainTest {
                       "func": {
                         "type": "Name",
                         "id": "float",
-                        "ctx": {
-                          "type": "Load"
-                        }
+                        "lineno": 2,
+                        "col_offset": 13
                       },
                       "args": [
                         {
@@ -802,9 +857,8 @@ public class MainTest {
                           "left": {
                             "type": "Name",
                             "id": "x",
-                            "ctx": {
-                              "type": "Load"
-                            }
+                            "lineno": 2,
+                            "col_offset": 19
                           },
                           "op": {
                             "type": "Add"
@@ -814,33 +868,43 @@ public class MainTest {
                             "func": {
                               "type": "Name",
                               "id": "str",
-                              "ctx": {
-                                "type": "Load"
-                              }
+                              "lineno": 2,
+                              "col_offset": 23
                             },
                             "args": [
                               {
                                 "type": "Name",
                                 "id": "y",
-                                "ctx": {
-                                  "type": "Load"
-                                }
+                                "lineno": 2,
+                                "col_offset": 27
                               }
                             ],
-                            "keywords": []
-                          }
+                            "keywords": [],
+                            "lineno": 2,
+                            "col_offset": 23
+                          },
+                          "lineno": 2,
+                          "col_offset": 19
                         }
                       ],
-                      "keywords": []
+                      "keywords": [],
+                      "lineno": 2,
+                      "col_offset": 13
                     }
                   ],
-                  "keywords": []
-                }
+                  "keywords": [],
+                  "lineno": 2,
+                  "col_offset": 9
+                },
+                "lineno": 2,
+                "col_offset": 2
               }
             ],
             "decorator_list": [],
             "returns": null,
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
           },
           {
             "type": "FunctionDef",
@@ -865,9 +929,8 @@ public class MainTest {
                     "func": {
                       "type": "Name",
                       "id": "str",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 5,
+                      "col_offset": 9
                     },
                     "args": [
                       {
@@ -875,21 +938,26 @@ public class MainTest {
                         "func": {
                           "type": "Name",
                           "id": "bool",
-                          "ctx": {
-                            "type": "Load"
-                          }
+                          "lineno": 5,
+                          "col_offset": 13
                         },
                         "args": [
                           {
                             "type": "Constant",
                             "value": 0.0,
-                            "kind": null
+                            "lineno": 5,
+                            "col_offset": 18,
+                            "typename": "float"
                           }
                         ],
-                        "keywords": []
+                        "keywords": [],
+                        "lineno": 5,
+                        "col_offset": 13
                       }
                     ],
-                    "keywords": []
+                    "keywords": [],
+                    "lineno": 5,
+                    "col_offset": 9
                   },
                   "op": {
                     "type": "Add"
@@ -899,30 +967,41 @@ public class MainTest {
                     "func": {
                       "type": "Name",
                       "id": "str_int_func",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 5,
+                      "col_offset": 26
                     },
                     "args": [
                       {
                         "type": "Constant",
                         "value": "2.",
-                        "kind": null
+                        "lineno": 5,
+                        "col_offset": 39,
+                        "typename": "str"
                       },
                       {
                         "type": "Constant",
                         "value": 3,
-                        "kind": null
+                        "lineno": 5,
+                        "col_offset": 45,
+                        "typename": "int"
                       }
                     ],
-                    "keywords": []
-                  }
-                }
+                    "keywords": [],
+                    "lineno": 5,
+                    "col_offset": 26
+                  },
+                  "lineno": 5,
+                  "col_offset": 9
+                },
+                "lineno": 5,
+                "col_offset": 2
               }
             ],
             "decorator_list": [],
             "returns": null,
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 4,
+            "col_offset": 0
           }
         ],
         "type_ignores": []
@@ -953,17 +1032,20 @@ public class MainTest {
               {
                 "type": "Name",
                 "id": "x",
-                "ctx": {
-                  "type": "Store"
-                }
+                "lineno": 1,
+                "col_offset": 0
               }
             ],
             "value": {
               "type": "Constant",
               "value": 0,
-              "kind": null
+              "lineno": 1,
+              "col_offset": 4,
+              "typename": "int"
             },
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
           },
           {
             "type": "FunctionDef",
@@ -983,7 +1065,9 @@ public class MainTest {
                 "type": "Global",
                 "names": [
                   "x"
-                ]
+                ],
+                "lineno": 4,
+                "col_offset": 2
               },
               {
                 "type": "Assign",
@@ -991,9 +1075,8 @@ public class MainTest {
                   {
                     "type": "Name",
                     "id": "x",
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 5,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
@@ -1001,9 +1084,8 @@ public class MainTest {
                   "left": {
                     "type": "Name",
                     "id": "x",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 5,
+                    "col_offset": 6
                   },
                   "op": {
                     "type": "Add"
@@ -1011,15 +1093,23 @@ public class MainTest {
                   "right": {
                     "type": "Constant",
                     "value": 1,
-                    "kind": null
-                  }
+                    "lineno": 5,
+                    "col_offset": 10,
+                    "typename": "int"
+                  },
+                  "lineno": 5,
+                  "col_offset": 6
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 5,
+                "col_offset": 2
               }
             ],
             "decorator_list": [],
             "returns": null,
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 3,
+            "col_offset": 0
           },
           {
             "type": "FunctionDef",
@@ -1042,13 +1132,16 @@ public class MainTest {
                   "func": {
                     "type": "Name",
                     "id": "add_one",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 8,
+                    "col_offset": 2
                   },
                   "args": [],
-                  "keywords": []
-                }
+                  "keywords": [],
+                  "lineno": 8,
+                  "col_offset": 2
+                },
+                "lineno": 8,
+                "col_offset": 2
               },
               {
                 "type": "Expr",
@@ -1057,28 +1150,34 @@ public class MainTest {
                   "func": {
                     "type": "Name",
                     "id": "add_one",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 9,
+                    "col_offset": 2
                   },
                   "args": [],
-                  "keywords": []
-                }
+                  "keywords": [],
+                  "lineno": 9,
+                  "col_offset": 2
+                },
+                "lineno": 9,
+                "col_offset": 2
               },
               {
                 "type": "Return",
                 "value": {
                   "type": "Name",
                   "id": "x",
-                  "ctx": {
-                    "type": "Load"
-                  }
-                }
+                  "lineno": 10,
+                  "col_offset": 9
+                },
+                "lineno": 10,
+                "col_offset": 2
               }
             ],
             "decorator_list": [],
             "returns": null,
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 7,
+            "col_offset": 0
           }
         ],
         "type_ignores": []
@@ -1108,7 +1207,9 @@ public class MainTest {
                   "type": "arg",
                   "arg": "n",
                   "annotation": null,
-                  "type_comment": null
+                  "type_comment": null,
+                  "lineno": 1,
+                  "col_offset": 14
                 }
               ],
               "vararg": null,
@@ -1123,9 +1224,8 @@ public class MainTest {
                 "test": {
                   "type": "Name",
                   "id": "n",
-                  "ctx": {
-                    "type": "Load"
-                  }
+                  "lineno": 2,
+                  "col_offset": 5
                 },
                 "body": [
                   {
@@ -1135,9 +1235,8 @@ public class MainTest {
                       "left": {
                         "type": "Name",
                         "id": "n",
-                        "ctx": {
-                          "type": "Load"
-                        }
+                        "lineno": 3,
+                        "col_offset": 11
                       },
                       "op": {
                         "type": "Mult"
@@ -1147,9 +1246,8 @@ public class MainTest {
                         "func": {
                           "type": "Name",
                           "id": "factorial",
-                          "ctx": {
-                            "type": "Load"
-                          }
+                          "lineno": 3,
+                          "col_offset": 15
                         },
                         "args": [
                           {
@@ -1157,9 +1255,8 @@ public class MainTest {
                             "left": {
                               "type": "Name",
                               "id": "n",
-                              "ctx": {
-                                "type": "Load"
-                              }
+                              "lineno": 3,
+                              "col_offset": 25
                             },
                             "op": {
                               "type": "Sub"
@@ -1167,29 +1264,47 @@ public class MainTest {
                             "right": {
                               "type": "Constant",
                               "value": 1,
-                              "kind": null
-                            }
+                              "lineno": 3,
+                              "col_offset": 29,
+                              "typename": "int"
+                            },
+                            "lineno": 3,
+                            "col_offset": 25
                           }
                         ],
-                        "keywords": []
-                      }
-                    }
+                        "keywords": [],
+                        "lineno": 3,
+                        "col_offset": 15
+                      },
+                      "lineno": 3,
+                      "col_offset": 11
+                    },
+                    "lineno": 3,
+                    "col_offset": 4
                   }
                 ],
-                "orelse": []
+                "orelse": [],
+                "lineno": 2,
+                "col_offset": 2
               },
               {
                 "type": "Return",
                 "value": {
                   "type": "Constant",
                   "value": 1,
-                  "kind": null
-                }
+                  "lineno": 4,
+                  "col_offset": 9,
+                  "typename": "int"
+                },
+                "lineno": 4,
+                "col_offset": 2
               }
             ],
             "decorator_list": [],
             "returns": null,
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
           }
         ],
         "type_ignores": []
@@ -1227,9 +1342,8 @@ public class MainTest {
                   {
                     "type": "Name",
                     "id": "Math",
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 2,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
@@ -1237,20 +1351,25 @@ public class MainTest {
                   "func": {
                     "type": "Name",
                     "id": "JavaClass",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 2,
+                    "col_offset": 9
                   },
                   "args": [
                     {
                       "type": "Constant",
                       "value": "java.lang.Math",
-                      "kind": null
+                      "lineno": 2,
+                      "col_offset": 19,
+                      "typename": "str"
                     }
                   ],
-                  "keywords": []
+                  "keywords": [],
+                  "lineno": 2,
+                  "col_offset": 9
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
               },
               {
                 "type": "Return",
@@ -1261,29 +1380,35 @@ public class MainTest {
                     "value": {
                       "type": "Name",
                       "id": "Math",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 3,
+                      "col_offset": 9
                     },
                     "attr": "sqrt",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 3,
+                    "col_offset": 9
                   },
                   "args": [
                     {
                       "type": "Constant",
                       "value": 9,
-                      "kind": null
+                      "lineno": 3,
+                      "col_offset": 19,
+                      "typename": "int"
                     }
                   ],
-                  "keywords": []
-                }
+                  "keywords": [],
+                  "lineno": 3,
+                  "col_offset": 9
+                },
+                "lineno": 3,
+                "col_offset": 2
               }
             ],
             "decorator_list": [],
             "returns": null,
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
           }
         ],
         "type_ignores": []
@@ -1327,17 +1452,20 @@ public class MainTest {
                   {
                     "type": "Name",
                     "id": "x",
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 2,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
                   "type": "Constant",
                   "value": "x",
-                  "kind": null
+                  "lineno": 2,
+                  "col_offset": 6,
+                  "typename": "str"
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
               },
               {
                 "type": "FunctionDef",
@@ -1359,17 +1487,20 @@ public class MainTest {
                       {
                         "type": "Name",
                         "id": "y",
-                        "ctx": {
-                          "type": "Store"
-                        }
+                        "lineno": 4,
+                        "col_offset": 4
                       }
                     ],
                     "value": {
                       "type": "Constant",
                       "value": "y",
-                      "kind": null
+                      "lineno": 4,
+                      "col_offset": 8,
+                      "typename": "str"
                     },
-                    "type_comment": null
+                    "type_comment": null,
+                    "lineno": 4,
+                    "col_offset": 4
                   },
                   {
                     "type": "FunctionDef",
@@ -1391,17 +1522,20 @@ public class MainTest {
                           {
                             "type": "Name",
                             "id": "z",
-                            "ctx": {
-                              "type": "Store"
-                            }
+                            "lineno": 6,
+                            "col_offset": 6
                           }
                         ],
                         "value": {
                           "type": "Constant",
                           "value": "z",
-                          "kind": null
+                          "lineno": 6,
+                          "col_offset": 10,
+                          "typename": "str"
                         },
-                        "type_comment": null
+                        "type_comment": null,
+                        "lineno": 6,
+                        "col_offset": 6
                       },
                       {
                         "type": "Return",
@@ -1416,7 +1550,9 @@ public class MainTest {
                                 "left": {
                                   "type": "Constant",
                                   "value": "baz(",
-                                  "kind": null
+                                  "lineno": 7,
+                                  "col_offset": 13,
+                                  "typename": "str"
                                 },
                                 "op": {
                                   "type": "Add"
@@ -1424,10 +1560,11 @@ public class MainTest {
                                 "right": {
                                   "type": "Name",
                                   "id": "x",
-                                  "ctx": {
-                                    "type": "Load"
-                                  }
-                                }
+                                  "lineno": 7,
+                                  "col_offset": 22
+                                },
+                                "lineno": 7,
+                                "col_offset": 13
                               },
                               "op": {
                                 "type": "Add"
@@ -1435,10 +1572,11 @@ public class MainTest {
                               "right": {
                                 "type": "Name",
                                 "id": "y",
-                                "ctx": {
-                                  "type": "Load"
-                                }
-                              }
+                                "lineno": 7,
+                                "col_offset": 26
+                              },
+                              "lineno": 7,
+                              "col_offset": 13
                             },
                             "op": {
                               "type": "Add"
@@ -1446,10 +1584,11 @@ public class MainTest {
                             "right": {
                               "type": "Name",
                               "id": "z",
-                              "ctx": {
-                                "type": "Load"
-                              }
-                            }
+                              "lineno": 7,
+                              "col_offset": 30
+                            },
+                            "lineno": 7,
+                            "col_offset": 13
                           },
                           "op": {
                             "type": "Add"
@@ -1457,14 +1596,22 @@ public class MainTest {
                           "right": {
                             "type": "Constant",
                             "value": ")",
-                            "kind": null
-                          }
-                        }
+                            "lineno": 7,
+                            "col_offset": 34,
+                            "typename": "str"
+                          },
+                          "lineno": 7,
+                          "col_offset": 13
+                        },
+                        "lineno": 7,
+                        "col_offset": 6
                       }
                     ],
                     "decorator_list": [],
                     "returns": null,
-                    "type_comment": null
+                    "type_comment": null,
+                    "lineno": 5,
+                    "col_offset": 4
                   },
                   {
                     "type": "Return",
@@ -1481,12 +1628,13 @@ public class MainTest {
                               "func": {
                                 "type": "Name",
                                 "id": "baz",
-                                "ctx": {
-                                  "type": "Load"
-                                }
+                                "lineno": 8,
+                                "col_offset": 11
                               },
                               "args": [],
-                              "keywords": []
+                              "keywords": [],
+                              "lineno": 8,
+                              "col_offset": 11
                             },
                             "op": {
                               "type": "Add"
@@ -1494,8 +1642,12 @@ public class MainTest {
                             "right": {
                               "type": "Constant",
                               "value": ", bar(",
-                              "kind": null
-                            }
+                              "lineno": 8,
+                              "col_offset": 19,
+                              "typename": "str"
+                            },
+                            "lineno": 8,
+                            "col_offset": 11
                           },
                           "op": {
                             "type": "Add"
@@ -1503,10 +1655,11 @@ public class MainTest {
                           "right": {
                             "type": "Name",
                             "id": "x",
-                            "ctx": {
-                              "type": "Load"
-                            }
-                          }
+                            "lineno": 8,
+                            "col_offset": 30
+                          },
+                          "lineno": 8,
+                          "col_offset": 11
                         },
                         "op": {
                           "type": "Add"
@@ -1514,10 +1667,11 @@ public class MainTest {
                         "right": {
                           "type": "Name",
                           "id": "y",
-                          "ctx": {
-                            "type": "Load"
-                          }
-                        }
+                          "lineno": 8,
+                          "col_offset": 34
+                        },
+                        "lineno": 8,
+                        "col_offset": 11
                       },
                       "op": {
                         "type": "Add"
@@ -1525,14 +1679,22 @@ public class MainTest {
                       "right": {
                         "type": "Constant",
                         "value": ")",
-                        "kind": null
-                      }
-                    }
+                        "lineno": 8,
+                        "col_offset": 38,
+                        "typename": "str"
+                      },
+                      "lineno": 8,
+                      "col_offset": 11
+                    },
+                    "lineno": 8,
+                    "col_offset": 4
                   }
                 ],
                 "decorator_list": [],
                 "returns": null,
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 3,
+                "col_offset": 2
               },
               {
                 "type": "Return",
@@ -1547,12 +1709,13 @@ public class MainTest {
                         "func": {
                           "type": "Name",
                           "id": "bar",
-                          "ctx": {
-                            "type": "Load"
-                          }
+                          "lineno": 9,
+                          "col_offset": 9
                         },
                         "args": [],
-                        "keywords": []
+                        "keywords": [],
+                        "lineno": 9,
+                        "col_offset": 9
                       },
                       "op": {
                         "type": "Add"
@@ -1560,8 +1723,12 @@ public class MainTest {
                       "right": {
                         "type": "Constant",
                         "value": ", foo(",
-                        "kind": null
-                      }
+                        "lineno": 9,
+                        "col_offset": 17,
+                        "typename": "str"
+                      },
+                      "lineno": 9,
+                      "col_offset": 9
                     },
                     "op": {
                       "type": "Add"
@@ -1569,10 +1736,11 @@ public class MainTest {
                     "right": {
                       "type": "Name",
                       "id": "x",
-                      "ctx": {
-                        "type": "Load"
-                      }
-                    }
+                      "lineno": 9,
+                      "col_offset": 28
+                    },
+                    "lineno": 9,
+                    "col_offset": 9
                   },
                   "op": {
                     "type": "Add"
@@ -1580,14 +1748,22 @@ public class MainTest {
                   "right": {
                     "type": "Constant",
                     "value": ")",
-                    "kind": null
-                  }
-                }
+                    "lineno": 9,
+                    "col_offset": 32,
+                    "typename": "str"
+                  },
+                  "lineno": 9,
+                  "col_offset": 9
+                },
+                "lineno": 9,
+                "col_offset": 2
               }
             ],
             "decorator_list": [],
             "returns": null,
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
           }
         ],
         "type_ignores": []
@@ -1641,13 +1817,19 @@ public class MainTest {
                     "value": {
                       "type": "Constant",
                       "value": "bar",
-                      "kind": null
-                    }
+                      "lineno": 3,
+                      "col_offset": 11,
+                      "typename": "str"
+                    },
+                    "lineno": 3,
+                    "col_offset": 4
                   }
                 ],
                 "decorator_list": [],
                 "returns": null,
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
               },
               {
                 "type": "FunctionDef",
@@ -1670,18 +1852,23 @@ public class MainTest {
                       "func": {
                         "type": "Name",
                         "id": "bar",
-                        "ctx": {
-                          "type": "Load"
-                        }
+                        "lineno": 5,
+                        "col_offset": 11
                       },
                       "args": [],
-                      "keywords": []
-                    }
+                      "keywords": [],
+                      "lineno": 5,
+                      "col_offset": 11
+                    },
+                    "lineno": 5,
+                    "col_offset": 4
                   }
                 ],
                 "decorator_list": [],
                 "returns": null,
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 4,
+                "col_offset": 2
               },
               {
                 "type": "Return",
@@ -1690,18 +1877,23 @@ public class MainTest {
                   "func": {
                     "type": "Name",
                     "id": "baz",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 6,
+                    "col_offset": 9
                   },
                   "args": [],
-                  "keywords": []
-                }
+                  "keywords": [],
+                  "lineno": 6,
+                  "col_offset": 9
+                },
+                "lineno": 6,
+                "col_offset": 2
               }
             ],
             "decorator_list": [],
             "returns": null,
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
           }
         ],
         "type_ignores": []
@@ -1741,9 +1933,8 @@ public class MainTest {
                   {
                     "type": "Name",
                     "id": "x",
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 2,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
@@ -1752,24 +1943,31 @@ public class MainTest {
                     {
                       "type": "Constant",
                       "value": 1,
-                      "kind": null
+                      "lineno": 2,
+                      "col_offset": 7,
+                      "typename": "int"
                     },
                     {
                       "type": "Constant",
                       "value": 2,
-                      "kind": null
+                      "lineno": 2,
+                      "col_offset": 10,
+                      "typename": "int"
                     },
                     {
                       "type": "Constant",
                       "value": 3,
-                      "kind": null
+                      "lineno": 2,
+                      "col_offset": 13,
+                      "typename": "int"
                     }
                   ],
-                  "ctx": {
-                    "type": "Load"
-                  }
+                  "lineno": 2,
+                  "col_offset": 6
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
               },
               {
                 "type": "AugAssign",
@@ -1778,18 +1976,18 @@ public class MainTest {
                   "value": {
                     "type": "Name",
                     "id": "x",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 3,
+                    "col_offset": 2
                   },
                   "slice": {
                     "type": "Constant",
                     "value": 0,
-                    "kind": null
+                    "lineno": 3,
+                    "col_offset": 4,
+                    "typename": "int"
                   },
-                  "ctx": {
-                    "type": "Store"
-                  }
+                  "lineno": 3,
+                  "col_offset": 2
                 },
                 "op": {
                   "type": "Add"
@@ -1797,17 +1995,20 @@ public class MainTest {
                 "value": {
                   "type": "Constant",
                   "value": 100,
-                  "kind": null
-                }
+                  "lineno": 3,
+                  "col_offset": 10,
+                  "typename": "int"
+                },
+                "lineno": 3,
+                "col_offset": 2
               },
               {
                 "type": "AugAssign",
                 "target": {
                   "type": "Name",
                   "id": "x",
-                  "ctx": {
-                    "type": "Store"
-                  }
+                  "lineno": 4,
+                  "col_offset": 2
                 },
                 "op": {
                   "type": "Add"
@@ -1818,28 +2019,34 @@ public class MainTest {
                     {
                       "type": "Constant",
                       "value": "bar",
-                      "kind": null
+                      "lineno": 4,
+                      "col_offset": 8,
+                      "typename": "str"
                     }
                   ],
-                  "ctx": {
-                    "type": "Load"
-                  }
-                }
+                  "lineno": 4,
+                  "col_offset": 7
+                },
+                "lineno": 4,
+                "col_offset": 2
               },
               {
                 "type": "Return",
                 "value": {
                   "type": "Name",
                   "id": "x",
-                  "ctx": {
-                    "type": "Load"
-                  }
-                }
+                  "lineno": 5,
+                  "col_offset": 9
+                },
+                "lineno": 5,
+                "col_offset": 2
               }
             ],
             "decorator_list": [],
             "returns": null,
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
           }
         ],
         "type_ignores": []
@@ -1852,7 +2059,7 @@ public class MainTest {
         StringBuilder = JavaClass("java.lang.StringBuilder")
         builder = StringBuilder("This")
         builder.append(" is ")
-        builder.append(int(1))
+        builder.append(1)
         builder.append(" test.")
         return builder.toString()
   */
@@ -1881,9 +2088,8 @@ public class MainTest {
                   {
                     "type": "Name",
                     "id": "StringBuilder",
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 2,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
@@ -1891,20 +2097,25 @@ public class MainTest {
                   "func": {
                     "type": "Name",
                     "id": "JavaClass",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 2,
+                    "col_offset": 18
                   },
                   "args": [
                     {
                       "type": "Constant",
                       "value": "java.lang.StringBuilder",
-                      "kind": null
+                      "lineno": 2,
+                      "col_offset": 28,
+                      "typename": "str"
                     }
                   ],
-                  "keywords": []
+                  "keywords": [],
+                  "lineno": 2,
+                  "col_offset": 18
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
               },
               {
                 "type": "Assign",
@@ -1912,9 +2123,8 @@ public class MainTest {
                   {
                     "type": "Name",
                     "id": "builder",
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 3,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
@@ -1922,20 +2132,25 @@ public class MainTest {
                   "func": {
                     "type": "Name",
                     "id": "StringBuilder",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 3,
+                    "col_offset": 12
                   },
                   "args": [
                     {
                       "type": "Constant",
                       "value": "This",
-                      "kind": null
+                      "lineno": 3,
+                      "col_offset": 26,
+                      "typename": "str"
                     }
                   ],
-                  "keywords": []
+                  "keywords": [],
+                  "lineno": 3,
+                  "col_offset": 12
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 3,
+                "col_offset": 2
               },
               {
                 "type": "Expr",
@@ -1946,24 +2161,28 @@ public class MainTest {
                     "value": {
                       "type": "Name",
                       "id": "builder",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 4,
+                      "col_offset": 2
                     },
                     "attr": "append",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 4,
+                    "col_offset": 2
                   },
                   "args": [
                     {
                       "type": "Constant",
                       "value": " is ",
-                      "kind": null
+                      "lineno": 4,
+                      "col_offset": 17,
+                      "typename": "str"
                     }
                   ],
-                  "keywords": []
-                }
+                  "keywords": [],
+                  "lineno": 4,
+                  "col_offset": 2
+                },
+                "lineno": 4,
+                "col_offset": 2
               },
               {
                 "type": "Expr",
@@ -1974,37 +2193,28 @@ public class MainTest {
                     "value": {
                       "type": "Name",
                       "id": "builder",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 5,
+                      "col_offset": 2
                     },
                     "attr": "append",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 5,
+                    "col_offset": 2
                   },
                   "args": [
                     {
-                      "type": "Call",
-                      "func": {
-                        "type": "Name",
-                        "id": "int",
-                        "ctx": {
-                          "type": "Load"
-                        }
-                      },
-                      "args": [
-                        {
-                          "type": "Constant",
-                          "value": 1,
-                          "kind": null
-                        }
-                      ],
-                      "keywords": []
+                      "type": "Constant",
+                      "value": 1,
+                      "lineno": 5,
+                      "col_offset": 17,
+                      "typename": "int"
                     }
                   ],
-                  "keywords": []
-                }
+                  "keywords": [],
+                  "lineno": 5,
+                  "col_offset": 2
+                },
+                "lineno": 5,
+                "col_offset": 2
               },
               {
                 "type": "Expr",
@@ -2015,24 +2225,28 @@ public class MainTest {
                     "value": {
                       "type": "Name",
                       "id": "builder",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 6,
+                      "col_offset": 2
                     },
                     "attr": "append",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 6,
+                    "col_offset": 2
                   },
                   "args": [
                     {
                       "type": "Constant",
                       "value": " test.",
-                      "kind": null
+                      "lineno": 6,
+                      "col_offset": 17,
+                      "typename": "str"
                     }
                   ],
-                  "keywords": []
-                }
+                  "keywords": [],
+                  "lineno": 6,
+                  "col_offset": 2
+                },
+                "lineno": 6,
+                "col_offset": 2
               },
               {
                 "type": "Return",
@@ -2043,23 +2257,27 @@ public class MainTest {
                     "value": {
                       "type": "Name",
                       "id": "builder",
-                      "ctx": {
-                        "type": "Load"
-                      }
+                      "lineno": 7,
+                      "col_offset": 9
                     },
                     "attr": "toString",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 7,
+                    "col_offset": 9
                   },
                   "args": [],
-                  "keywords": []
-                }
+                  "keywords": [],
+                  "lineno": 7,
+                  "col_offset": 9
+                },
+                "lineno": 7,
+                "col_offset": 2
               }
             ],
             "decorator_list": [],
             "returns": null,
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
           }
         ],
         "type_ignores": []
@@ -2099,46 +2317,48 @@ public class MainTest {
                   {
                     "type": "Name",
                     "id": "x",
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 2,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
                   "type": "List",
                   "elts": [],
-                  "ctx": {
-                    "type": "Load"
-                  }
+                  "lineno": 2,
+                  "col_offset": 6
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
               },
               {
                 "type": "For",
                 "target": {
                   "type": "Name",
                   "id": "i",
-                  "ctx": {
-                    "type": "Store"
-                  }
+                  "lineno": 3,
+                  "col_offset": 6
                 },
                 "iter": {
                   "type": "Call",
                   "func": {
                     "type": "Name",
                     "id": "range",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 3,
+                    "col_offset": 11
                   },
                   "args": [
                     {
                       "type": "Constant",
                       "value": 3,
-                      "kind": null
+                      "lineno": 3,
+                      "col_offset": 17,
+                      "typename": "int"
                     }
                   ],
-                  "keywords": []
+                  "keywords": [],
+                  "lineno": 3,
+                  "col_offset": 11
                 },
                 "body": [
                   {
@@ -2150,45 +2370,51 @@ public class MainTest {
                         "value": {
                           "type": "Name",
                           "id": "x",
-                          "ctx": {
-                            "type": "Load"
-                          }
+                          "lineno": 4,
+                          "col_offset": 4
                         },
                         "attr": "append",
-                        "ctx": {
-                          "type": "Load"
-                        }
+                        "lineno": 4,
+                        "col_offset": 4
                       },
                       "args": [
                         {
                           "type": "Name",
                           "id": "i",
-                          "ctx": {
-                            "type": "Load"
-                          }
+                          "lineno": 4,
+                          "col_offset": 13
                         }
                       ],
-                      "keywords": []
-                    }
+                      "keywords": [],
+                      "lineno": 4,
+                      "col_offset": 4
+                    },
+                    "lineno": 4,
+                    "col_offset": 4
                   }
                 ],
                 "orelse": [],
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 3,
+                "col_offset": 2
               },
               {
                 "type": "Return",
                 "value": {
                   "type": "Name",
                   "id": "x",
-                  "ctx": {
-                    "type": "Load"
-                  }
-                }
+                  "lineno": 5,
+                  "col_offset": 9
+                },
+                "lineno": 5,
+                "col_offset": 2
               }
             ],
             "decorator_list": [],
             "returns": null,
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
           }
         ],
         "type_ignores": []
@@ -2228,56 +2454,62 @@ public class MainTest {
                   {
                     "type": "Name",
                     "id": "x",
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 2,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
                   "type": "List",
                   "elts": [],
-                  "ctx": {
-                    "type": "Load"
-                  }
+                  "lineno": 2,
+                  "col_offset": 6
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
               },
               {
                 "type": "For",
                 "target": {
                   "type": "Name",
                   "id": "i",
-                  "ctx": {
-                    "type": "Store"
-                  }
+                  "lineno": 3,
+                  "col_offset": 6
                 },
                 "iter": {
                   "type": "Call",
                   "func": {
                     "type": "Name",
                     "id": "range",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 3,
+                    "col_offset": 11
                   },
                   "args": [
                     {
                       "type": "Constant",
                       "value": 4,
-                      "kind": null
+                      "lineno": 3,
+                      "col_offset": 17,
+                      "typename": "int"
                     },
                     {
                       "type": "Constant",
                       "value": 10,
-                      "kind": null
+                      "lineno": 3,
+                      "col_offset": 20,
+                      "typename": "int"
                     },
                     {
                       "type": "Constant",
                       "value": 2,
-                      "kind": null
+                      "lineno": 3,
+                      "col_offset": 24,
+                      "typename": "int"
                     }
                   ],
-                  "keywords": []
+                  "keywords": [],
+                  "lineno": 3,
+                  "col_offset": 11
                 },
                 "body": [
                   {
@@ -2289,45 +2521,51 @@ public class MainTest {
                         "value": {
                           "type": "Name",
                           "id": "x",
-                          "ctx": {
-                            "type": "Load"
-                          }
+                          "lineno": 4,
+                          "col_offset": 4
                         },
                         "attr": "append",
-                        "ctx": {
-                          "type": "Load"
-                        }
+                        "lineno": 4,
+                        "col_offset": 4
                       },
                       "args": [
                         {
                           "type": "Name",
                           "id": "i",
-                          "ctx": {
-                            "type": "Load"
-                          }
+                          "lineno": 4,
+                          "col_offset": 13
                         }
                       ],
-                      "keywords": []
-                    }
+                      "keywords": [],
+                      "lineno": 4,
+                      "col_offset": 4
+                    },
+                    "lineno": 4,
+                    "col_offset": 4
                   }
                 ],
                 "orelse": [],
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 3,
+                "col_offset": 2
               },
               {
                 "type": "Return",
                 "value": {
                   "type": "Name",
                   "id": "x",
-                  "ctx": {
-                    "type": "Load"
-                  }
-                }
+                  "lineno": 5,
+                  "col_offset": 9
+                },
+                "lineno": 5,
+                "col_offset": 2
               }
             ],
             "decorator_list": [],
             "returns": null,
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
           }
         ],
         "type_ignores": []
@@ -2346,7 +2584,7 @@ public class MainTest {
   */
   private static final String breakForLoopJsonAst =
       """
-        {
+      {
         "type": "Module",
         "body": [
           {
@@ -2369,46 +2607,48 @@ public class MainTest {
                   {
                     "type": "Name",
                     "id": "x",
-                    "ctx": {
-                      "type": "Store"
-                    }
+                    "lineno": 2,
+                    "col_offset": 2
                   }
                 ],
                 "value": {
                   "type": "List",
                   "elts": [],
-                  "ctx": {
-                    "type": "Load"
-                  }
+                  "lineno": 2,
+                  "col_offset": 6
                 },
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
               },
               {
                 "type": "For",
                 "target": {
                   "type": "Name",
                   "id": "i",
-                  "ctx": {
-                    "type": "Store"
-                  }
+                  "lineno": 3,
+                  "col_offset": 6
                 },
                 "iter": {
                   "type": "Call",
                   "func": {
                     "type": "Name",
                     "id": "range",
-                    "ctx": {
-                      "type": "Load"
-                    }
+                    "lineno": 3,
+                    "col_offset": 11
                   },
                   "args": [
                     {
                       "type": "Constant",
                       "value": 10,
-                      "kind": null
+                      "lineno": 3,
+                      "col_offset": 17,
+                      "typename": "int"
                     }
                   ],
-                  "keywords": []
+                  "keywords": [],
+                  "lineno": 3,
+                  "col_offset": 11
                 },
                 "body": [
                   {
@@ -2418,9 +2658,8 @@ public class MainTest {
                       "left": {
                         "type": "Name",
                         "id": "i",
-                        "ctx": {
-                          "type": "Load"
-                        }
+                        "lineno": 4,
+                        "col_offset": 7
                       },
                       "ops": [
                         {
@@ -2431,16 +2670,24 @@ public class MainTest {
                         {
                           "type": "Constant",
                           "value": 2,
-                          "kind": null
+                          "lineno": 4,
+                          "col_offset": 12,
+                          "typename": "int"
                         }
-                      ]
+                      ],
+                      "lineno": 4,
+                      "col_offset": 7
                     },
                     "body": [
                       {
-                        "type": "Break"
+                        "type": "Break",
+                        "lineno": 5,
+                        "col_offset": 6
                       }
                     ],
-                    "orelse": []
+                    "orelse": [],
+                    "lineno": 4,
+                    "col_offset": 4
                   },
                   {
                     "type": "Expr",
@@ -2451,45 +2698,254 @@ public class MainTest {
                         "value": {
                           "type": "Name",
                           "id": "x",
-                          "ctx": {
-                            "type": "Load"
-                          }
+                          "lineno": 6,
+                          "col_offset": 4
                         },
                         "attr": "append",
-                        "ctx": {
-                          "type": "Load"
-                        }
+                        "lineno": 6,
+                        "col_offset": 4
                       },
                       "args": [
                         {
                           "type": "Name",
                           "id": "i",
-                          "ctx": {
-                            "type": "Load"
-                          }
+                          "lineno": 6,
+                          "col_offset": 13
                         }
                       ],
-                      "keywords": []
-                    }
+                      "keywords": [],
+                      "lineno": 6,
+                      "col_offset": 4
+                    },
+                    "lineno": 6,
+                    "col_offset": 4
                   }
                 ],
                 "orelse": [],
-                "type_comment": null
+                "type_comment": null,
+                "lineno": 3,
+                "col_offset": 2
               },
               {
                 "type": "Return",
                 "value": {
                   "type": "Name",
                   "id": "x",
-                  "ctx": {
-                    "type": "Load"
-                  }
-                }
+                  "lineno": 7,
+                  "col_offset": 9
+                },
+                "lineno": 7,
+                "col_offset": 2
               }
             ],
             "decorator_list": [],
             "returns": null,
-            "type_comment": null
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
+  /* Generated from Python code:
+
+      def numeric_types():
+        def t(x):
+          return type(x).getSimpleName()
+
+        return [t(123), t(91234567890), t(123.), t(3.14159265359)]
+  */
+  private static final String numericTypesJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "numeric_types",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "FunctionDef",
+                "name": "t",
+                "args": {
+                  "type": "arguments",
+                  "posonlyargs": [],
+                  "args": [
+                    {
+                      "type": "arg",
+                      "arg": "x",
+                      "annotation": null,
+                      "type_comment": null,
+                      "lineno": 2,
+                      "col_offset": 8
+                    }
+                  ],
+                  "vararg": null,
+                  "kwonlyargs": [],
+                  "kw_defaults": [],
+                  "kwarg": null,
+                  "defaults": []
+                },
+                "body": [
+                  {
+                    "type": "Return",
+                    "value": {
+                      "type": "Call",
+                      "func": {
+                        "type": "Attribute",
+                        "value": {
+                          "type": "Call",
+                          "func": {
+                            "type": "Name",
+                            "id": "type",
+                            "lineno": 3,
+                            "col_offset": 11
+                          },
+                          "args": [
+                            {
+                              "type": "Name",
+                              "id": "x",
+                              "lineno": 3,
+                              "col_offset": 16
+                            }
+                          ],
+                          "keywords": [],
+                          "lineno": 3,
+                          "col_offset": 11
+                        },
+                        "attr": "getSimpleName",
+                        "lineno": 3,
+                        "col_offset": 11
+                      },
+                      "args": [],
+                      "keywords": [],
+                      "lineno": 3,
+                      "col_offset": 11
+                    },
+                    "lineno": 3,
+                    "col_offset": 4
+                  }
+                ],
+                "decorator_list": [],
+                "returns": null,
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "List",
+                  "elts": [
+                    {
+                      "type": "Call",
+                      "func": {
+                        "type": "Name",
+                        "id": "t",
+                        "lineno": 5,
+                        "col_offset": 10
+                      },
+                      "args": [
+                        {
+                          "type": "Constant",
+                          "value": 123,
+                          "lineno": 5,
+                          "col_offset": 12,
+                          "typename": "int"
+                        }
+                      ],
+                      "keywords": [],
+                      "lineno": 5,
+                      "col_offset": 10
+                    },
+                    {
+                      "type": "Call",
+                      "func": {
+                        "type": "Name",
+                        "id": "t",
+                        "lineno": 5,
+                        "col_offset": 18
+                      },
+                      "args": [
+                        {
+                          "type": "Constant",
+                          "value": 91234567890,
+                          "lineno": 5,
+                          "col_offset": 20,
+                          "typename": "int"
+                        }
+                      ],
+                      "keywords": [],
+                      "lineno": 5,
+                      "col_offset": 18
+                    },
+                    {
+                      "type": "Call",
+                      "func": {
+                        "type": "Name",
+                        "id": "t",
+                        "lineno": 5,
+                        "col_offset": 34
+                      },
+                      "args": [
+                        {
+                          "type": "Constant",
+                          "value": 123.0,
+                          "lineno": 5,
+                          "col_offset": 36,
+                          "typename": "float"
+                        }
+                      ],
+                      "keywords": [],
+                      "lineno": 5,
+                      "col_offset": 34
+                    },
+                    {
+                      "type": "Call",
+                      "func": {
+                        "type": "Name",
+                        "id": "t",
+                        "lineno": 5,
+                        "col_offset": 43
+                      },
+                      "args": [
+                        {
+                          "type": "Constant",
+                          "value": 3.14159265359,
+                          "lineno": 5,
+                          "col_offset": 45,
+                          "typename": "float"
+                        }
+                      ],
+                      "keywords": [],
+                      "lineno": 5,
+                      "col_offset": 43
+                    }
+                  ],
+                  "lineno": 5,
+                  "col_offset": 9
+                },
+                "lineno": 5,
+                "col_offset": 2
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
           }
         ],
         "type_ignores": []
@@ -2673,5 +3129,16 @@ public class MainTest {
 
     var output = interpreter.invoke(func);
     assertEquals(new Interpreter.PyList(List.of(0, 1)), output);
+  }
+
+  @Test
+  public void numericTypes() {
+    var jsonAst = JsonParser.parseString(numericTypesJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("numeric_types");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals(new Interpreter.PyList(List.of("Integer", "Long", "Float", "Double")), output);
   }
 }

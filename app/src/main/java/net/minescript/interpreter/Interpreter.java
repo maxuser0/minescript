@@ -300,7 +300,8 @@ public class Interpreter {
           }
 
         case "Constant":
-          return parseConstant(getAttr(element, "value"));
+          return ConstantExpression.parse(
+              getAttr(element, "typename").getAsString(), getAttr(element, "value"));
 
         case "Call":
           {
@@ -367,31 +368,6 @@ public class Interpreter {
                   .collect(toList()));
       }
       throw new IllegalArgumentException("Unknown expression type: " + element.toString());
-    }
-
-    private static Expression parseConstant(JsonElement element) {
-      if (element.isJsonPrimitive()) {
-        var primitive = element.getAsJsonPrimitive();
-        if (primitive.isNumber()) {
-          // TODO(maxuser): This is an unreliable way to determine if a numeric constant is an int
-          // or double. Modify the JSON output from Python to record the numeric type.
-          var number = primitive.getAsNumber();
-          int n = number.intValue();
-          double d = number.doubleValue();
-          if ((double) n == d) {
-            return new ConstantExpression(number.intValue());
-          } else {
-            return new ConstantExpression(number.doubleValue());
-          }
-        } else if (primitive.isBoolean()) {
-          return new ConstantExpression(primitive.getAsBoolean());
-        } else if (primitive.isString()) {
-          return new ConstantExpression(primitive.getAsString());
-        }
-      } else if (element.isJsonNull()) {
-        return new ConstantExpression(null);
-      }
-      throw new IllegalArgumentException(String.format("Unsupported primitive type: %s", element));
     }
 
     private static String getType(JsonElement element) {
@@ -798,7 +774,42 @@ public class Interpreter {
     }
   }
 
+  public static Number parseIntegralValue(Number value) {
+    long l = value.longValue();
+    int i = (int) l;
+    if (l == i) {
+      return i;
+    } else {
+      return l;
+    }
+  }
+
+  public static Number parseFloatingPointValue(Number value) {
+    double d = value.doubleValue();
+    float f = (float) d;
+    if (d == f) {
+      return f;
+    } else {
+      return d;
+    }
+  }
+
   public record ConstantExpression(Object value) implements Expression {
+    public static ConstantExpression parse(String typename, JsonElement value) {
+      switch (typename) {
+        case "int":
+          return new ConstantExpression(parseIntegralValue(value.getAsNumber()));
+        case "float":
+          return new ConstantExpression(parseFloatingPointValue(value.getAsNumber()));
+        case "str":
+          return new ConstantExpression(value.getAsString());
+        case "NoneType":
+          return new ConstantExpression(null);
+      }
+      throw new IllegalArgumentException(
+          String.format("Unsupported primitive type: %s (%s)", value, typename));
+    }
+
     @Override
     public Object eval(Context context) {
       return value;
@@ -1204,12 +1215,22 @@ public class Interpreter {
       return "None";
     } else if (value instanceof Object[] array) {
       // TODO(maxuser): Support for primitive array types too.
-      return Arrays.stream(array).map(Interpreter::pyToString).collect(joining(", ", "[", "]"));
+      return Arrays.stream(array).map(Interpreter::pyRepr).collect(joining(", ", "[", "]"));
+    } else if (value instanceof PyList pyList) {
+      return pyList.getJavaList().stream()
+          .map(Interpreter::pyRepr)
+          .collect(joining(", ", "[", "]"));
     } else if (value instanceof List<?> list) {
-      return list.stream().map(Interpreter::pyToString).collect(joining(", ", "[", "]"));
+      return list.stream().map(Interpreter::pyRepr).collect(joining(", ", "[", "]"));
     } else if (value instanceof Boolean bool) {
       return bool ? "True" : "False";
-    } else if (value instanceof String string) {
+    } else {
+      return value.toString();
+    }
+  }
+
+  public static String pyRepr(Object value) {
+    if (value instanceof String string) {
       Gson gson =
           new GsonBuilder()
               .setPrettyPrinting() // Optional: for pretty printing
@@ -1217,7 +1238,7 @@ public class Interpreter {
               .create();
       return gson.toJson(string);
     } else {
-      return value.toString();
+      return pyToString(value);
     }
   }
 
@@ -1443,9 +1464,9 @@ public class Interpreter {
             expectNumParams(1);
             var value = params.get(0).eval(context);
             if (value instanceof String string) {
-              return Integer.parseInt(string);
+              return parseIntegralValue(Long.parseLong(string));
             } else {
-              return ((Number) value).intValue();
+              return parseIntegralValue((Number) value);
             }
           }
         case "float":
@@ -1453,9 +1474,9 @@ public class Interpreter {
             expectNumParams(1);
             var value = params.get(0).eval(context);
             if (value instanceof String string) {
-              return Double.parseDouble(string);
+              return parseFloatingPointValue(Double.parseDouble(string));
             } else {
-              return ((Number) value).doubleValue();
+              return parseFloatingPointValue((Number) value);
             }
           }
         case "str":
@@ -1491,6 +1512,9 @@ public class Interpreter {
           System.out.println(
               params.stream().map(p -> pyToString(p.eval(context))).collect(joining(" ")));
           return null;
+        case "type":
+          expectNumParams(1);
+          return params.get(0).eval(context).getClass();
         case "range":
           return new RangeIterable(params.stream().map(p -> p.eval(context)).collect(toList()));
         default:
