@@ -13,8 +13,10 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Executable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -27,7 +29,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.StreamSupport;
 import net.minescript.common.Numbers;
 
@@ -1162,14 +1166,12 @@ public class Interpreter {
       // TODO(maxuser): Check param types at parse time to select the appropriate ctor.
       Constructor<?>[] ctors = classId.clss().getConstructors();
       Object[] paramValues = params.stream().map(p -> p.eval(context)).toArray(Object[]::new);
-      for (var ctor : ctors) {
-        // TODO(maxuser): Find the best method overload rather than the first compatible one.
-        if (paramsAreCompatible(ctor.getParameterTypes(), paramValues)) {
-          try {
-            return ctor.newInstance(paramValues);
-          } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
-            throw new RuntimeException(e);
-          }
+      Optional<Constructor<?>> ctor = findBestMatchingExecutable(ctors, c -> true, paramValues);
+      if (ctor.isPresent()) {
+        try {
+          return ctor.get().newInstance(paramValues);
+        } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
+          throw new RuntimeException(e);
         }
       }
       throw new IllegalArgumentException(
@@ -1185,27 +1187,60 @@ public class Interpreter {
     }
   }
 
-  private static boolean paramsAreCompatible(Class<?>[] formalParamTypes, Object[] paramValues) {
-    if (formalParamTypes.length != paramValues.length) {
-      return false;
+  private static <T extends Executable> Optional<T> findBestMatchingExecutable(
+      T[] executables, Predicate<T> filter, Object[] paramValues) {
+    int bestScore = 0;
+    Optional<T> bestExecutable = Optional.empty();
+
+    for (T executable : executables) {
+      if (filter.test(executable)) {
+        int score = getTypeCheckScore(executable.getParameterTypes(), paramValues);
+        if (score > bestScore) {
+          bestScore = score;
+          bestExecutable = Optional.of(executable);
+        }
+      }
     }
+    return bestExecutable;
+  }
+
+  /**
+   * Computes a score reflecting how well {@code paramValues} matches the {@code formalParamTypes}.
+   *
+   * <p>Add 1 point for a param requiring conversion, 2 points for a param that's an exact match.
+   */
+  private static int getTypeCheckScore(Class<?>[] formalParamTypes, Object[] paramValues) {
+    if (formalParamTypes.length != paramValues.length) {
+      return 0;
+    }
+
+    // Start score at 1 so it's non-zero if there's an exact match of no params.
+    int score = 1;
+
     for (int i = 0; i < formalParamTypes.length; ++i) {
       Class<?> type = promotePrimitiveType(formalParamTypes[i]);
       Object value = paramValues[i];
       if (value == null) {
-        continue; // null is convertible to everything.
+        // null is convertible to everything.
+        score += 1;
+        continue;
       }
       Class<?> valueType = value.getClass();
+      if (valueType == type) {
+        score += 2;
+        continue;
+      }
       if (Number.class.isAssignableFrom(type)
           && Number.class.isAssignableFrom(valueType)
           && numericTypeIsConvertible(valueType, type)) {
+        score += 1;
         continue;
       }
       if (!type.isAssignableFrom(value.getClass())) {
-        return false;
+        return 0;
       }
     }
-    return true;
+    return score;
   }
 
   private static Class<?> promotePrimitiveType(Class<?> type) {
@@ -1566,16 +1601,17 @@ public class Interpreter {
       var clss = objectValue.getClass();
       Object[] paramValues = params.stream().map(p -> p.eval(context)).toArray(Object[]::new);
       // TODO(maxuser): cache and filter method lookups by name
-      try {
-        for (Method m : clss.getMethods()) {
-          // TODO(maxuser): Find the best method overload rather than the first compatible one.
-          if (m.getName().equals(methodName)
-              && paramsAreCompatible(m.getParameterTypes(), paramValues)) {
-            return m.invoke(objectValue, paramValues);
-          }
+      Optional<Method> meth =
+          findBestMatchingExecutable(
+              clss.getMethods(),
+              m -> !Modifier.isStatic(m.getModifiers()) && m.getName().equals(methodName),
+              paramValues);
+      if (meth.isPresent()) {
+        try {
+          return meth.get().invoke(objectValue, paramValues);
+        } catch (IllegalAccessException | InvocationTargetException e) {
+          throw new RuntimeException(e);
         }
-      } catch (IllegalAccessException | InvocationTargetException e) {
-        throw new RuntimeException(e);
       }
 
       throw new IllegalArgumentException(
@@ -1592,21 +1628,20 @@ public class Interpreter {
     private Object callStaticMethod(Class<?> clss, String methodName, Context context) {
       // TODO(maxuser): cache and filter method lookups by name
       Object[] paramValues = params.stream().map(p -> p.eval(context)).toArray(Object[]::new);
-      try {
-        for (Method m : clss.getMethods()) {
-          // TODO(maxuser): Find the best method overload rather than the first compatible one.
-          if (m.getName().equals(methodName)
-              && paramsAreCompatible(m.getParameterTypes(), paramValues)) {
-            return m.invoke(
-                null, // static method ignores obj param
-                paramValues);
-          }
+      Optional<Method> meth =
+          findBestMatchingExecutable(
+              clss.getMethods(),
+              m -> Modifier.isStatic(m.getModifiers()) && m.getName().equals(methodName),
+              paramValues);
+      if (meth.isPresent()) {
+        try {
+          return meth.get().invoke(null, paramValues);
+        } catch (IllegalAccessException | InvocationTargetException e) {
+          throw new RuntimeException(e);
         }
-        throw new IllegalArgumentException(
-            String.format("Method not found: %s %s\n", clss.getName(), methodName));
-      } catch (IllegalAccessException | InvocationTargetException e) {
-        throw new RuntimeException(e);
       }
+      throw new IllegalArgumentException(
+          String.format("Method not found: %s %s\n", clss.getName(), methodName));
     }
 
     private void expectNumParams(int n) {
