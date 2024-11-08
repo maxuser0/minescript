@@ -2952,6 +2952,307 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+      def while_loop():
+        a = []
+        n = 0
+        while n < 3:
+          a.append(n)
+          n += 1
+        return a
+  */
+  private static final String whileLoopJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "while_loop",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "a",
+                    "lineno": 2,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "List",
+                  "elts": [],
+                  "lineno": 2,
+                  "col_offset": 6
+                },
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
+              },
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "n",
+                    "lineno": 3,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "Constant",
+                  "value": 0,
+                  "lineno": 3,
+                  "col_offset": 6,
+                  "typename": "int"
+                },
+                "type_comment": null,
+                "lineno": 3,
+                "col_offset": 2
+              },
+              {
+                "type": "While",
+                "test": {
+                  "type": "Compare",
+                  "left": {
+                    "type": "Name",
+                    "id": "n",
+                    "lineno": 4,
+                    "col_offset": 8
+                  },
+                  "ops": [
+                    {
+                      "type": "Lt"
+                    }
+                  ],
+                  "comparators": [
+                    {
+                      "type": "Constant",
+                      "value": 3,
+                      "lineno": 4,
+                      "col_offset": 12,
+                      "typename": "int"
+                    }
+                  ],
+                  "lineno": 4,
+                  "col_offset": 8
+                },
+                "body": [
+                  {
+                    "type": "Expr",
+                    "value": {
+                      "type": "Call",
+                      "func": {
+                        "type": "Attribute",
+                        "value": {
+                          "type": "Name",
+                          "id": "a",
+                          "lineno": 5,
+                          "col_offset": 4
+                        },
+                        "attr": "append",
+                        "lineno": 5,
+                        "col_offset": 4
+                      },
+                      "args": [
+                        {
+                          "type": "Name",
+                          "id": "n",
+                          "lineno": 5,
+                          "col_offset": 13
+                        }
+                      ],
+                      "keywords": [],
+                      "lineno": 5,
+                      "col_offset": 4
+                    },
+                    "lineno": 5,
+                    "col_offset": 4
+                  },
+                  {
+                    "type": "AugAssign",
+                    "target": {
+                      "type": "Name",
+                      "id": "n",
+                      "lineno": 6,
+                      "col_offset": 4
+                    },
+                    "op": {
+                      "type": "Add"
+                    },
+                    "value": {
+                      "type": "Constant",
+                      "value": 1,
+                      "lineno": 6,
+                      "col_offset": 9,
+                      "typename": "int"
+                    },
+                    "lineno": 6,
+                    "col_offset": 4
+                  }
+                ],
+                "orelse": [],
+                "lineno": 4,
+                "col_offset": 2
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Name",
+                  "id": "a",
+                  "lineno": 7,
+                  "col_offset": 9
+                },
+                "lineno": 7,
+                "col_offset": 2
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
+  /* Generated from Python code:
+
+      def break_while_loop():
+        a = []
+        while True:
+          a.append(1)
+          break
+        return a
+  */
+  private static final String breakWhileLoopJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "break_while_loop",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "a",
+                    "lineno": 2,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "List",
+                  "elts": [],
+                  "lineno": 2,
+                  "col_offset": 6
+                },
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
+              },
+              {
+                "type": "While",
+                "test": {
+                  "type": "Constant",
+                  "value": true,
+                  "lineno": 3,
+                  "col_offset": 8,
+                  "typename": "bool"
+                },
+                "body": [
+                  {
+                    "type": "Expr",
+                    "value": {
+                      "type": "Call",
+                      "func": {
+                        "type": "Attribute",
+                        "value": {
+                          "type": "Name",
+                          "id": "a",
+                          "lineno": 4,
+                          "col_offset": 4
+                        },
+                        "attr": "append",
+                        "lineno": 4,
+                        "col_offset": 4
+                      },
+                      "args": [
+                        {
+                          "type": "Constant",
+                          "value": 1,
+                          "lineno": 4,
+                          "col_offset": 13,
+                          "typename": "int"
+                        }
+                      ],
+                      "keywords": [],
+                      "lineno": 4,
+                      "col_offset": 4
+                    },
+                    "lineno": 4,
+                    "col_offset": 4
+                  },
+                  {
+                    "type": "Break",
+                    "lineno": 5,
+                    "col_offset": 4
+                  }
+                ],
+                "orelse": [],
+                "lineno": 3,
+                "col_offset": 2
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Name",
+                  "id": "a",
+                  "lineno": 6,
+                  "col_offset": 9
+                },
+                "lineno": 6,
+                "col_offset": 2
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
   @Test
   public void timesTwo() {
     double x = Math.PI;
@@ -3140,5 +3441,27 @@ public class MainTest {
 
     var output = interpreter.invoke(func);
     assertEquals(new Interpreter.PyList(List.of("Integer", "Long", "Float", "Double")), output);
+  }
+
+  @Test
+  public void whileLoop() {
+    var jsonAst = JsonParser.parseString(whileLoopJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("while_loop");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals(new Interpreter.PyList(List.of(0, 1, 2)), output);
+  }
+
+  @Test
+  public void breakWhileLoop() {
+    var jsonAst = JsonParser.parseString(breakWhileLoopJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("break_while_loop");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals(new Interpreter.PyList(List.of(1)), output);
   }
 }

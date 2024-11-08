@@ -217,6 +217,10 @@ public class Interpreter {
               parseExpression(getAttr(element, "iter")),
               parseStatementBlock(getBody(element)));
 
+        case "While":
+          return new WhileBlock(
+              parseExpression(getAttr(element, "test")), parseStatementBlock(getBody(element)));
+
         case "Break":
           return new Break();
 
@@ -505,6 +509,29 @@ public class Interpreter {
         for (var value : iterableValue) {
           context.setVariable(varId.name(), value);
           body.exec(context);
+          if (context.shouldBreak()) {
+            break;
+          }
+        }
+      } finally {
+        context.exitLoop();
+      }
+    }
+  }
+
+  public record WhileBlock(Expression condition, Statement body) implements Statement {
+    @Override
+    public void exec(Context context) {
+      if (context.skipStatement()) {
+        return;
+      }
+      try {
+        context.enterLoop();
+        while (convertToBool(condition.eval(context))) {
+          body.exec(context);
+          if (context.shouldBreak()) {
+            break;
+          }
         }
       } finally {
         context.exitLoop();
@@ -518,8 +545,6 @@ public class Interpreter {
       context.breakLoop();
     }
   }
-
-  public record WhileBlock(Expression condition, Statement body) implements Statement {}
 
   public record Identifier(String name) implements Expression {
     @Override
@@ -797,6 +822,8 @@ public class Interpreter {
   public record ConstantExpression(Object value) implements Expression {
     public static ConstantExpression parse(String typename, JsonElement value) {
       switch (typename) {
+        case "bool":
+          return new ConstantExpression(value.getAsBoolean());
         case "int":
           return new ConstantExpression(parseIntegralValue(value.getAsNumber()));
         case "float":
@@ -1836,6 +1863,10 @@ public class Interpreter {
 
     public boolean skipStatement() {
       return returned || breakingLoop;
+    }
+
+    public boolean shouldBreak() {
+      return breakingLoop;
     }
 
     public Object returnValue() {
