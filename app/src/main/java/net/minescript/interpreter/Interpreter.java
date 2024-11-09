@@ -362,11 +362,7 @@ public class Interpreter {
             var object = parseExpression(getAttr(element, "value"));
             var attr = new Identifier(getAttr(element, "attr").getAsString());
             if (parseContext == ParseContext.CALLER) {
-              if (object instanceof JavaClassId classId) {
-                return new StaticMethod(classId, attr);
-              } else {
-                return new BoundMethod(object, attr);
-              }
+              return new BoundMethod(object, attr);
             } else {
               return new FieldAccess(object, attr);
             }
@@ -420,23 +416,13 @@ public class Interpreter {
       CONSTRUCTOR
     }
 
-    public static ExecutableCacheKey forInstanceMethod(
-        Class<?> methodClass, String methodName, Object[] paramValues) {
+    public static ExecutableCacheKey forMethod(
+        Class<?> methodClass, boolean isStaticMethod, String methodName, Object[] paramValues) {
       Object[] callSignature = new Object[paramValues.length + 3];
-      callSignature[0] = ExecutableType.INSTANCE_METHOD.ordinal();
-      callSignature[1] = methodClass;
-      callSignature[2] = methodName;
-      for (int i = 0; i < paramValues.length; ++i) {
-        Object paramValue = paramValues[i];
-        callSignature[i + 3] = paramValue == null ? null : paramValue.getClass();
-      }
-      return new ExecutableCacheKey(callSignature);
-    }
-
-    public static ExecutableCacheKey forStaticMethod(
-        Class<?> methodClass, String methodName, Object[] paramValues) {
-      Object[] callSignature = new Object[paramValues.length + 3];
-      callSignature[0] = ExecutableType.STATIC_METHOD.ordinal();
+      callSignature[0] =
+          isStaticMethod
+              ? ExecutableType.STATIC_METHOD.ordinal()
+              : ExecutableType.INSTANCE_METHOD.ordinal();
       callSignature[1] = methodClass;
       callSignature[2] = methodName;
       for (int i = 0; i < paramValues.length; ++i) {
@@ -1599,13 +1585,13 @@ public class Interpreter {
   public record JavaClassId(Identifier alias, Class<?> clss) implements Expression {
     @Override
     public Object eval(Context context) {
-      return clss;
+      return this;
     }
 
     @Override
     public String toString() {
       if (alias != null) {
-        return alias.name();
+        return String.format("%s=JavaClass(\"%s\")", alias, clss.getName());
       } else {
         return String.format("JavaClass(\"%s\")", clss.getName());
       }
@@ -1623,9 +1609,6 @@ public class Interpreter {
         return callFunction(methodId, context);
       } else if (method instanceof BoundMethod boundMethod) {
         return callBoundMethod(boundMethod.object(), boundMethod.method().name(), context);
-      } else if (method instanceof StaticMethod staticMethod) {
-        return callStaticMethod(
-            staticMethod.classId().clss(), staticMethod.method().name(), context);
       }
       throw new IllegalArgumentException(
           String.format("Function `%s` not defined: %s", method, this));
@@ -1687,8 +1670,15 @@ public class Interpreter {
               params.stream().map(p -> pyToString(p.eval(context))).collect(joining(" ")));
           return null;
         case "type":
-          expectNumParams(1);
-          return params.get(0).eval(context).getClass();
+          {
+            expectNumParams(1);
+            var value = params.get(0).eval(context);
+            if (value instanceof JavaClassId classId) {
+              return classId.clss();
+            } else {
+              return value.getClass();
+            }
+          }
         case "range":
           return new RangeIterable(params.stream().map(p -> p.eval(context)).collect(toList()));
         default:
@@ -1710,9 +1700,19 @@ public class Interpreter {
 
     private Object callBoundMethod(Expression object, String methodName, Context context) {
       var objectValue = object.eval(context);
-      var clss = objectValue.getClass();
+
+      final boolean isStaticMethod;
+      final Class<?> clss;
+      if (objectValue instanceof JavaClassId classId) {
+        isStaticMethod = true;
+        clss = classId.clss();
+      } else {
+        isStaticMethod = false;
+        clss = objectValue.getClass();
+      }
+
       Object[] paramValues = params.stream().map(p -> p.eval(context)).toArray(Object[]::new);
-      var cacheKey = ExecutableCacheKey.forInstanceMethod(clss, methodName, paramValues);
+      var cacheKey = ExecutableCacheKey.forMethod(clss, isStaticMethod, methodName, paramValues);
       Optional<Method> matchedMethod =
           executableCache
               .computeIfAbsent(
@@ -1721,13 +1721,13 @@ public class Interpreter {
                       TypeChecker.findBestMatchingExecutable(
                           clss.getMethods(),
                           m ->
-                              !Modifier.isStatic(m.getModifiers())
+                              Modifier.isStatic(m.getModifiers()) == isStaticMethod
                                   && m.getName().equals(methodName),
                           paramValues))
               .map(Method.class::cast);
       if (matchedMethod.isPresent()) {
         try {
-          return matchedMethod.get().invoke(objectValue, paramValues);
+          return matchedMethod.get().invoke(isStaticMethod ? null : objectValue, paramValues);
         } catch (IllegalAccessException | InvocationTargetException e) {
           throw new RuntimeException(e);
         }
@@ -1736,42 +1736,6 @@ public class Interpreter {
             String.format(
                 "No matching method on %s: %s.%s(%s)",
                 object,
-                clss.getName(),
-                methodName,
-                Arrays.stream(paramValues)
-                    .map(
-                        v ->
-                            v == null
-                                ? "null"
-                                : String.format("(%s) %s", v.getClass().getName(), pyRepr(v)))
-                    .collect(joining(", "))));
-      }
-    }
-
-    private Object callStaticMethod(Class<?> clss, String methodName, Context context) {
-      Object[] paramValues = params.stream().map(p -> p.eval(context)).toArray(Object[]::new);
-      var cacheKey = ExecutableCacheKey.forStaticMethod(clss, methodName, paramValues);
-      Optional<Method> matchedMethod =
-          executableCache
-              .computeIfAbsent(
-                  cacheKey,
-                  ignoreKey ->
-                      TypeChecker.findBestMatchingExecutable(
-                          clss.getMethods(),
-                          m ->
-                              Modifier.isStatic(m.getModifiers()) && m.getName().equals(methodName),
-                          paramValues))
-              .map(Method.class::cast);
-      if (matchedMethod.isPresent()) {
-        try {
-          return matchedMethod.get().invoke(null, paramValues);
-        } catch (IllegalAccessException | InvocationTargetException e) {
-          throw new RuntimeException(e);
-        }
-      } else {
-        throw new IllegalArgumentException(
-            String.format(
-                "No matching method: %s.%s(%s)",
                 clss.getName(),
                 methodName,
                 Arrays.stream(paramValues)
@@ -1846,19 +1810,6 @@ public class Interpreter {
     }
   }
 
-  public record StaticMethod(JavaClassId classId, Identifier method) implements Expression {
-    @Override
-    public Object eval(Context context) {
-      throw new UnsupportedOperationException(
-          String.format("Static methods can be called but not evaluated: %s.%s", classId, method));
-    }
-
-    @Override
-    public String toString() {
-      return String.format("%s.%s", classId, method);
-    }
-  }
-
   public record BoundMethod(Expression object, Identifier method) implements Expression {
     @Override
     public Object eval(Context context) {
@@ -1899,6 +1850,7 @@ public class Interpreter {
     private final Context enclosingContext;
     private final List<Statement> globalStatements;
     private Set<String> globalVarNames = null;
+    // TODO(maxuser): Merge boundFunctions into vars.
     private Map<String, BoundFunction> boundFunctions = null;
     private final Map<String, Object> vars = new HashMap<>();
     private Object returnValue;
@@ -1920,7 +1872,7 @@ public class Interpreter {
 
     public static Context createGlobals() {
       var context = new Context();
-      context.setVariable(new Identifier("math"), new math());
+      context.setVariable(new Identifier("math"), new JavaClassId(null, math.class));
       return context;
     }
 
@@ -2052,11 +2004,11 @@ public class Interpreter {
 
   /** Emulation of Python math module. */
   public static class math {
-    public final double pi = Math.PI;
-    public final double e = Math.E;
-    public final double tau = Math.TAU;
+    public static final double pi = Math.PI;
+    public static final double e = Math.E;
+    public static final double tau = Math.TAU;
 
-    public double sqrt(double x) {
+    public static double sqrt(double x) {
       return Math.sqrt(x);
     }
   }
