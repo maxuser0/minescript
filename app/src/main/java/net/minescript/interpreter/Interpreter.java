@@ -36,10 +36,10 @@ import net.minescript.common.Numbers;
 
 public class Interpreter {
 
-  private Context globals = Context.createGlobals();
-
   private final ConcurrentHashMap<ExecutableCacheKey, Optional<Executable>> executableCache =
       new ConcurrentHashMap<>();
+
+  private Context globals = Context.createGlobals(executableCache);
 
   public Interpreter parse(JsonElement element) {
     var parser = new JsonAstParser(executableCache);
@@ -252,7 +252,6 @@ public class Interpreter {
 
         case "Name":
           {
-            Class<?> clss;
             Identifier id = getId(element);
             if (id.name().equals("JavaClass")) {
               return new JavaClass();
@@ -278,7 +277,7 @@ public class Interpreter {
               if (arg instanceof ConstantExpression constExpr
                   && constExpr.value() instanceof String constString) {
                 try {
-                  return new JavaClassId(Class.forName(constString));
+                  return new JavaClassId(Class.forName(constString), executableCache);
                 } catch (ClassNotFoundException e) {
                   throw new IllegalArgumentException(e);
                 }
@@ -289,7 +288,7 @@ public class Interpreter {
                         arg, args.get(0)));
               }
             } else {
-              return new MethodCall(
+              return new FunctionCall(
                   func,
                   StreamSupport.stream(args.spliterator(), false)
                       .map(elem -> parseExpression(elem))
@@ -303,7 +302,7 @@ public class Interpreter {
             var object = parseExpression(getAttr(element, "value"));
             var attr = new Identifier(getAttr(element, "attr").getAsString());
             if (parseContext == ParseContext.CALLER) {
-              return new BoundMethod(object, attr);
+              return new BoundMethod(object, attr, executableCache);
             } else {
               return new FieldAccess(object, attr);
             }
@@ -435,7 +434,18 @@ public class Interpreter {
     }
   }
 
-  public record BoundFunction(FunctionDef function, Context enclosingContext) {}
+  public record BoundFunction(FunctionDef function, Context enclosingContext) implements Function {
+    @Override
+    public Object invoke(Context context, Object[] params) {
+      if (params.length != function.args().size()) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Expected %d params but got %d for function: %s",
+                function.args().size(), params.length, function));
+      }
+      return function.invoke(context, enclosingContext, params);
+    }
+  }
 
   public record FunctionDef(Identifier identifier, List<FunctionArg> args, Statement body)
       implements Statement {
@@ -453,7 +463,7 @@ public class Interpreter {
      * @param argValues Values to pass to this function's body.
      * @return Return value from invoking this function.
      */
-    public Object invoke(Context callerContext, Context enclosingContext, Object... argValues) {
+    public Object invoke(Context callerContext, Context enclosingContext, Object[] argValues) {
       if (args.size() != argValues.length) {
         throw new IllegalArgumentException(
             String.format(
@@ -558,7 +568,7 @@ public class Interpreter {
   public record Identifier(String name) implements Expression {
     @Override
     public Object eval(Context context) {
-      return context.getVariable(this);
+      return context.getVariable(name);
     }
 
     @Override
@@ -732,7 +742,7 @@ public class Interpreter {
       }
       Object rhsValue = rhs.eval(context);
       if (lhs instanceof Identifier lhsId) {
-        var oldValue = context.getVariable(lhsId);
+        var oldValue = context.getVariable(lhsId.name());
         var newValue = op.apply(oldValue, rhsValue);
         if (newValue != null) {
           context.setVariable(lhsId, newValue);
@@ -1478,7 +1488,9 @@ public class Interpreter {
     }
   }
 
-  public record JavaClassId(Class<?> clss) implements Expression {
+  public record JavaClassId(
+      Class<?> clss, Map<ExecutableCacheKey, Optional<Executable>> executableCache)
+      implements Expression, Function {
     @Override
     public Object eval(Context context) {
       return this;
@@ -1488,124 +1500,21 @@ public class Interpreter {
     public String toString() {
       return String.format("JavaClass(\"%s\")", clss.getName());
     }
-  }
 
-  public record MethodCall(
-      Expression method,
-      List<Expression> params,
-      Map<ExecutableCacheKey, Optional<Executable>> executableCache)
-      implements Expression {
     @Override
-    public Object eval(Context context) {
-      if (method instanceof BoundMethod boundMethod) {
-        return callBoundMethod(boundMethod.object(), boundMethod.method().name(), context);
-      } else if (method instanceof Identifier methodId) {
-        // TODO(maxuser): Redefine these functions as global vars.
-        switch (methodId.name()) {
-          case "int":
-            {
-              expectNumParams(1);
-              var value = params.get(0).eval(context);
-              if (value instanceof String string) {
-                return parseIntegralValue(Long.parseLong(string));
-              } else {
-                return parseIntegralValue((Number) value);
-              }
-            }
-          case "float":
-            {
-              expectNumParams(1);
-              var value = params.get(0).eval(context);
-              if (value instanceof String string) {
-                return parseFloatingPointValue(Double.parseDouble(string));
-              } else {
-                return parseFloatingPointValue((Number) value);
-              }
-            }
-          case "str":
-            {
-              expectNumParams(1);
-              return pyToString(params.get(0).eval(context));
-            }
-          case "bool":
-            {
-              expectNumParams(1);
-              return convertToBool(params.get(0).eval(context));
-            }
-          case "len":
-            {
-              expectNumParams(1);
-              var value = params.get(0).eval(context);
-              if (value.getClass().isArray()) {
-                return Array.getLength(value);
-              } else if (value instanceof Lengthable lengthable) {
-                return lengthable.__len__();
-              } else if (value instanceof Collection<?> collection) {
-                return collection.size();
-              } else if (value instanceof Map map) {
-                return map.size();
-              } else if (value instanceof String str) {
-                return str.length();
-              }
-              throw new IllegalArgumentException(
-                  String.format(
-                      "Object of type '%s' has no len(): %s", value.getClass().getName(), this));
-            }
-          case "print":
-            System.out.println(
-                params.stream().map(p -> pyToString(p.eval(context))).collect(joining(" ")));
-            return null;
-          case "type":
-            {
-              expectNumParams(1);
-              var value = params.get(0).eval(context);
-              if (value instanceof JavaClassId classId) {
-                return classId.clss();
-              } else {
-                return value.getClass();
-              }
-            }
-          case "range":
-            return new RangeIterable(params.stream().map(p -> p.eval(context)).collect(toList()));
-          default:
-            {
-              // TODO(maxuser): Merge bound functions into context vars.
-              BoundFunction boundFunction = context.getBoundFunction(methodId.name());
-              if (boundFunction != null) {
-                var func = boundFunction.function();
-                expectNumParams(func.args.size());
-                return func.invoke(
-                    context,
-                    boundFunction.enclosingContext,
-                    params.stream().map(p -> p.eval(context)).toArray(Object[]::new));
-              }
-            }
-        }
-      }
-
-      var func = method.eval(context);
-      if (func instanceof JavaClassId classId) {
-        return callCtor(classId, context);
-      }
-
-      throw new IllegalArgumentException(
-          String.format("Function `%s` not defined: %s", method, this));
-    }
-
-    public Object callCtor(JavaClassId classId, Context context) {
-      Object[] paramValues = params.stream().map(p -> p.eval(context)).toArray(Object[]::new);
-      var cacheKey = ExecutableCacheKey.forConstructor(classId.clss(), paramValues);
+    public Object invoke(Context context, Object[] params) {
+      var cacheKey = ExecutableCacheKey.forConstructor(clss, params);
       Optional<Constructor<?>> matchedCtor =
           executableCache
               .computeIfAbsent(
                   cacheKey,
                   ignoreKey ->
                       TypeChecker.findBestMatchingExecutable(
-                          classId.clss().getConstructors(), c -> true, paramValues))
+                          clss.getConstructors(), c -> true, params))
               .map(Constructor.class::cast);
       if (matchedCtor.isPresent()) {
         try {
-          return matchedCtor.get().newInstance(paramValues);
+          return matchedCtor.get().newInstance(params);
         } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
           throw new RuntimeException(e);
         }
@@ -1613,58 +1522,8 @@ public class Interpreter {
         throw new IllegalArgumentException(
             String.format(
                 "No matching constructor: %s(%s)",
-                classId.clss().getName(),
-                Arrays.stream(paramValues)
-                    .map(
-                        v ->
-                            v == null
-                                ? "null"
-                                : String.format("(%s) %s", v.getClass().getName(), pyRepr(v)))
-                    .collect(joining(", "))));
-      }
-    }
-
-    private Object callBoundMethod(Expression object, String methodName, Context context) {
-      var objectValue = object.eval(context);
-
-      final boolean isStaticMethod;
-      final Class<?> clss;
-      if (objectValue instanceof JavaClassId classId) {
-        isStaticMethod = true;
-        clss = classId.clss();
-      } else {
-        isStaticMethod = false;
-        clss = objectValue.getClass();
-      }
-
-      Object[] paramValues = params.stream().map(p -> p.eval(context)).toArray(Object[]::new);
-      var cacheKey = ExecutableCacheKey.forMethod(clss, isStaticMethod, methodName, paramValues);
-      Optional<Method> matchedMethod =
-          executableCache
-              .computeIfAbsent(
-                  cacheKey,
-                  ignoreKey ->
-                      TypeChecker.findBestMatchingExecutable(
-                          clss.getMethods(),
-                          m ->
-                              Modifier.isStatic(m.getModifiers()) == isStaticMethod
-                                  && m.getName().equals(methodName),
-                          paramValues))
-              .map(Method.class::cast);
-      if (matchedMethod.isPresent()) {
-        try {
-          return matchedMethod.get().invoke(isStaticMethod ? null : objectValue, paramValues);
-        } catch (IllegalAccessException | InvocationTargetException e) {
-          throw new RuntimeException(e);
-        }
-      } else {
-        throw new IllegalArgumentException(
-            String.format(
-                "No matching method on %s: %s.%s(%s)",
-                object,
                 clss.getName(),
-                methodName,
-                Arrays.stream(paramValues)
+                Arrays.stream(params)
                     .map(
                         v ->
                             v == null
@@ -1673,13 +1532,129 @@ public class Interpreter {
                     .collect(joining(", "))));
       }
     }
+  }
 
-    private void expectNumParams(int n) {
-      if (params.size() != n) {
+  public interface Function {
+    Object invoke(Context context, Object[] params);
+
+    default void expectNumParams(Object[] params, int n) {
+      if (params.length != n) {
         throw new IllegalArgumentException(
             String.format(
-                "Expected %d params but got %d for function: %s", n, params.size(), this));
+                "Expected %d params but got %d for function: %s", n, params.length, this));
       }
+    }
+  }
+
+  public static class IntFunction implements Function {
+    @Override
+    public Object invoke(Context context, Object[] params) {
+      expectNumParams(params, 1);
+      var value = params[0];
+      if (value instanceof String string) {
+        return parseIntegralValue(Long.parseLong(string));
+      } else {
+        return parseIntegralValue((Number) value);
+      }
+    }
+  }
+
+  public static class FloatFunction implements Function {
+    @Override
+    public Object invoke(Context context, Object[] params) {
+      expectNumParams(params, 1);
+      var value = params[0];
+      if (value instanceof String string) {
+        return parseFloatingPointValue(Double.parseDouble(string));
+      } else {
+        return parseFloatingPointValue((Number) value);
+      }
+    }
+  }
+
+  public static class StrFunction implements Function {
+    @Override
+    public Object invoke(Context context, Object[] params) {
+      expectNumParams(params, 1);
+      return pyToString(params[0]);
+    }
+  }
+
+  public static class BoolFunction implements Function {
+    @Override
+    public Object invoke(Context context, Object[] params) {
+      expectNumParams(params, 1);
+      return convertToBool(params[0]);
+    }
+  }
+
+  public static class LenFunction implements Function {
+    @Override
+    public Object invoke(Context context, Object[] params) {
+      expectNumParams(params, 1);
+      var value = params[0];
+      if (value.getClass().isArray()) {
+        return Array.getLength(value);
+      } else if (value instanceof Lengthable lengthable) {
+        return lengthable.__len__();
+      } else if (value instanceof Collection<?> collection) {
+        return collection.size();
+      } else if (value instanceof Map map) {
+        return map.size();
+      } else if (value instanceof String str) {
+        return str.length();
+      }
+      throw new IllegalArgumentException(
+          String.format("Object of type '%s' has no len(): %s", value.getClass().getName(), this));
+    }
+  }
+
+  public static class PrintFunction implements Function {
+    @Override
+    public Object invoke(Context context, Object[] params) {
+      System.out.println(Arrays.stream(params).map(Interpreter::pyToString).collect(joining(" ")));
+      return null;
+    }
+  }
+
+  public record TypeFunction(Map<ExecutableCacheKey, Optional<Executable>> executableCache)
+      implements Function {
+    @Override
+    public Object invoke(Context context, Object[] params) {
+      expectNumParams(params, 1);
+      var value = params[0];
+      if (value instanceof JavaClassId classId) {
+        return classId.clss();
+      } else {
+        return new JavaClassId(value.getClass(), executableCache);
+      }
+    }
+  }
+
+  public static class RangeFunction implements Function {
+    @Override
+    public Object invoke(Context context, Object[] params) {
+      return new RangeIterable(params);
+    }
+  }
+
+  public record FunctionCall(
+      Expression method,
+      List<Expression> params,
+      Map<ExecutableCacheKey, Optional<Executable>> executableCache)
+      implements Expression {
+    @Override
+    public Object eval(Context context) {
+      var caller = method.eval(context);
+      Object[] paramValues = params.stream().map(p -> p.eval(context)).toArray(Object[]::new);
+      if (caller instanceof Function function) {
+        return function.invoke(context, paramValues);
+      }
+
+      throw new IllegalArgumentException(
+          String.format(
+              "'%s' is not callable: %s",
+              caller == null ? "NoneType" : caller.getClass().getName(), method));
     }
 
     @Override
@@ -1694,26 +1669,26 @@ public class Interpreter {
     private final int stop;
     private final int step;
 
-    public RangeIterable(List<Object> params) {
-      switch (params.size()) {
+    public RangeIterable(Object[] params) {
+      switch (params.length) {
         case 1:
           start = 0;
-          stop = ((Number) params.get(0)).intValue();
+          stop = ((Number) params[0]).intValue();
           step = 1;
           break;
         case 2:
-          start = ((Number) params.get(0)).intValue();
-          stop = ((Number) params.get(1)).intValue();
+          start = ((Number) params[0]).intValue();
+          stop = ((Number) params[1]).intValue();
           step = 1;
           break;
         case 3:
-          start = ((Number) params.get(0)).intValue();
-          stop = ((Number) params.get(1)).intValue();
-          step = ((Number) params.get(2)).intValue();
+          start = ((Number) params[0]).intValue();
+          stop = ((Number) params[1]).intValue();
+          step = ((Number) params[2]).intValue();
           break;
         default:
           throw new IllegalArgumentException(
-              "range expected 1 to 3 arguments, got " + params.size());
+              "range expected 1 to 3 arguments, got " + params.length);
       }
     }
 
@@ -1736,16 +1711,70 @@ public class Interpreter {
     }
   }
 
-  public record BoundMethod(Expression object, Identifier method) implements Expression {
+  public record BoundMethod(
+      Expression object,
+      Identifier method,
+      Map<ExecutableCacheKey, Optional<Executable>> executableCache)
+      implements Expression, Function {
     @Override
     public Object eval(Context context) {
-      throw new UnsupportedOperationException(
-          String.format("Bound methods can be called but not evaluated: %s.%s", object, method));
+      return this;
     }
 
     @Override
     public String toString() {
       return String.format("%s.%s", object, method);
+    }
+
+    @Override
+    public Object invoke(Context context, Object[] params) {
+      String methodName = method.name();
+      var objectValue = object.eval(context);
+
+      final boolean isStaticMethod;
+      final Class<?> clss;
+      if (objectValue instanceof JavaClassId classId) {
+        isStaticMethod = true;
+        clss = classId.clss();
+      } else {
+        isStaticMethod = false;
+        clss = objectValue.getClass();
+      }
+
+      var cacheKey = ExecutableCacheKey.forMethod(clss, isStaticMethod, methodName, params);
+      Optional<Method> matchedMethod =
+          executableCache
+              .computeIfAbsent(
+                  cacheKey,
+                  ignoreKey ->
+                      TypeChecker.findBestMatchingExecutable(
+                          clss.getMethods(),
+                          m ->
+                              Modifier.isStatic(m.getModifiers()) == isStaticMethod
+                                  && m.getName().equals(methodName),
+                          params))
+              .map(Method.class::cast);
+      if (matchedMethod.isPresent()) {
+        try {
+          return matchedMethod.get().invoke(isStaticMethod ? null : objectValue, params);
+        } catch (IllegalAccessException | InvocationTargetException e) {
+          throw new RuntimeException(e);
+        }
+      } else {
+        throw new IllegalArgumentException(
+            String.format(
+                "No matching method on %s: %s.%s(%s)",
+                object,
+                clss.getName(),
+                methodName,
+                Arrays.stream(params)
+                    .map(
+                        v ->
+                            v == null
+                                ? "null"
+                                : String.format("(%s) %s", v.getClass().getName(), pyRepr(v)))
+                    .collect(joining(", "))));
+      }
     }
   }
 
@@ -1776,8 +1805,6 @@ public class Interpreter {
     private final Context enclosingContext;
     private final List<Statement> globalStatements;
     private Set<String> globalVarNames = null;
-    // TODO(maxuser): Merge boundFunctions into vars.
-    private Map<String, BoundFunction> boundFunctions = null;
     private final Map<String, Object> vars = new HashMap<>();
     private Object returnValue;
     private boolean returned = false;
@@ -1796,9 +1823,18 @@ public class Interpreter {
       this.globalStatements = null; // Defined only for global context.
     }
 
-    public static Context createGlobals() {
+    public static Context createGlobals(
+        Map<ExecutableCacheKey, Optional<Executable>> executableCache) {
       var context = new Context();
-      context.setVariable(new Identifier("math"), new JavaClassId(math.class));
+      context.setVariable("math", new JavaClassId(math.class, executableCache));
+      context.setVariable("int", new IntFunction());
+      context.setVariable("float", new FloatFunction());
+      context.setVariable("str", new StrFunction());
+      context.setVariable("bool", new BoolFunction());
+      context.setVariable("len", new LenFunction());
+      context.setVariable("print", new PrintFunction());
+      context.setVariable("type", new TypeFunction(executableCache));
+      context.setVariable("range", new RangeFunction());
       return context;
     }
 
@@ -1835,31 +1871,11 @@ public class Interpreter {
     }
 
     public void setBoundFunction(BoundFunction boundFunction) {
-      if (boundFunctions == null) {
-        boundFunctions = new HashMap<>();
-      }
-      boundFunctions.put(boundFunction.function().identifier().name(), boundFunction);
+      setVariable(boundFunction.function().identifier().name(), boundFunction);
     }
 
     public BoundFunction getBoundFunction(String name) {
-      var funcs = boundFunctions == null ? globals.boundFunctions : boundFunctions;
-      if (funcs == null) {
-        return null;
-      }
-
-      var func = funcs.get(name);
-      if (func != null) {
-        return func;
-      }
-      if (enclosingContext != null) {
-        if ((func = enclosingContext.getBoundFunction(name)) != null) {
-          return func;
-        }
-      }
-      if (this != globals) {
-        return globals.getBoundFunction(name);
-      }
-      return null;
+      return (BoundFunction) getVariable(name);
     }
 
     public void setVariable(String name, Object value) {
@@ -1874,20 +1890,19 @@ public class Interpreter {
       setVariable(id.name(), value);
     }
 
-    public Object getVariable(Identifier id) {
-      String name = id.name();
+    public Object getVariable(String name) {
       if (this != globals && globalVarNames != null && globalVarNames.contains(name)) {
-        return globals.getVariable(id);
+        return globals.getVariable(name);
       }
-      var value = vars.getOrDefault(id.name(), NOT_FOUND);
+      var value = vars.getOrDefault(name, NOT_FOUND);
       if (value != NOT_FOUND) {
         return value;
       } else if (enclosingContext != null) {
-        return enclosingContext.getVariable(id);
+        return enclosingContext.getVariable(name);
       } else if (this != globals) {
-        return globals.getVariable(id);
+        return globals.getVariable(name);
       } else {
-        throw new IllegalArgumentException("Variable not found: " + id.name());
+        throw new IllegalArgumentException("Variable not found: " + name);
       }
     }
 

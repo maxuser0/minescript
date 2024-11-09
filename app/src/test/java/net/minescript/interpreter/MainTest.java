@@ -2753,7 +2753,7 @@ public class MainTest {
 
       def numeric_types():
         def t(x):
-          return type(x).getSimpleName()
+          return type(type(x)).getSimpleName()
 
         return [t(123), t(91234567890), t(123.), t(3.14159265359)]
   */
@@ -2815,8 +2815,22 @@ public class MainTest {
                           },
                           "args": [
                             {
-                              "type": "Name",
-                              "id": "x",
+                              "type": "Call",
+                              "func": {
+                                "type": "Name",
+                                "id": "type",
+                                "lineno": 3,
+                                "col_offset": 16
+                              },
+                              "args": [
+                                {
+                                  "type": "Name",
+                                  "id": "x",
+                                  "lineno": 3,
+                                  "col_offset": 21
+                                }
+                              ],
+                              "keywords": [],
                               "lineno": 3,
                               "col_offset": 16
                             }
