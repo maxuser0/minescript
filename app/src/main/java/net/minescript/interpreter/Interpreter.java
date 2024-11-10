@@ -250,6 +250,13 @@ public class Interpreter {
               Comparison.parse(getType(getAttr(element, "ops").getAsJsonArray().get(0))),
               parseExpression(getAttr(element, "comparators").getAsJsonArray().get(0)));
 
+        case "BoolOp":
+          return new BoolOp(
+              BoolOp.parse(getType(getAttr(element, "op"))),
+              StreamSupport.stream(getAttr(element, "values").getAsJsonArray().spliterator(), false)
+                  .map(elem -> parseExpression(elem))
+                  .collect(toList()));
+
         case "Name":
           {
             Identifier id = getId(element);
@@ -419,8 +426,8 @@ public class Interpreter {
       return false;
     } else if (value instanceof Boolean bool) {
       return bool;
-    } else if (value instanceof String string) {
-      return Boolean.parseBoolean(string);
+    } else if (value instanceof String str) {
+      return !str.isEmpty() && !str.equals("False");
     } else if (value instanceof Lengthable lengthable) {
       return lengthable.__len__() != 0;
     } else if (value instanceof Collection<?> collection) {
@@ -880,7 +887,8 @@ public class Interpreter {
       LT_EQ("<="),
       GT(">"),
       GT_EQ(">="),
-      NOT_EQ("!=");
+      NOT_EQ("!="),
+      IN("in");
 
       private final String symbol;
 
@@ -907,8 +915,10 @@ public class Interpreter {
           return Op.GT_EQ;
         case "NotEq":
           return Op.NOT_EQ;
+        case "In":
+          return Op.IN;
         default:
-          throw new UnsupportedOperationException("Unsupported binary op: " + opName);
+          throw new UnsupportedOperationException("Unsupported comparison op: " + opName);
       }
     }
 
@@ -961,9 +971,21 @@ public class Interpreter {
           } else {
             return !lhsValue.equals(rhsValue);
           }
+        case IN:
+          if (rhsValue instanceof Collection<?> collection) {
+            return collection.contains(lhsValue);
+          } else if (rhsValue instanceof PyList pyList) {
+            return pyList.__contains__(lhsValue);
+          } else if (rhsValue instanceof List list) {
+            return list.contains(lhsValue);
+          } else if (rhsValue instanceof Map map) {
+            return map.containsKey(lhsValue);
+          } else if (lhsValue instanceof String lhsStr && rhsValue instanceof String rhsStr) {
+            return rhsStr.contains(lhsStr);
+          }
       }
       throw new UnsupportedOperationException(
-          String.format("Comparison op not supported: %s %s %s", lhs, op, rhs));
+          String.format("Comparison op not supported: %s %s %s", lhs, op.symbol(), rhs));
     }
 
     @Override
@@ -972,7 +994,7 @@ public class Interpreter {
     }
   }
 
-  public record BoolOp(Expression lhs, Op op, Expression rhs) implements Expression {
+  public record BoolOp(Op op, List<Expression> values) implements Expression {
     public enum Op {
       AND("and"),
       OR("or");
@@ -988,24 +1010,50 @@ public class Interpreter {
       }
     }
 
+    public static Op parse(String opName) {
+      switch (opName) {
+        case "And":
+          return Op.AND;
+        case "Or":
+          return Op.OR;
+        default:
+          throw new UnsupportedOperationException("Unsupported bool op: " + opName);
+      }
+    }
+
     @Override
     public Object eval(Context context) {
-      boolean lhsBool = convertToBool(lhs.eval(context));
       switch (op) {
         case AND:
-          return lhsBool && convertToBool(rhs.eval(context));
+          {
+            Object result = null;
+            for (var expr : values) {
+              result = expr.eval(context);
+              if (!convertToBool(result)) {
+                break;
+              }
+            }
+            return result;
+          }
+
         case OR:
-          return lhsBool || convertToBool(rhs.eval(context));
+          {
+            Object result = null;
+            for (var expr : values) {
+              result = expr.eval(context);
+              if (convertToBool(result)) {
+                break;
+              }
+            }
+            return result;
+          }
       }
-      throw new UnsupportedOperationException(
-          String.format("Boolean op not supported: %s %s %s", lhs, op, rhs));
+      throw new UnsupportedOperationException("Boolean op not supported: " + toString());
     }
 
     @Override
     public String toString() {
-      // TODO(maxuser): Fix output for proper order of operations that may need parentheses.
-      // E.g. `(1 + 2) * 3` evaluates correctly but gets output to String as `1 + 2 * 3`.
-      return String.format("%s %s %s", lhs, op.symbol(), rhs);
+      return values.stream().map(Object::toString).collect(joining(" " + op.symbol() + " "));
     }
   }
 

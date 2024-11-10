@@ -3267,6 +3267,453 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+      def in_operator():
+        x = 3 in [1, 3, 5]
+        y = "oo" in "food"
+        z = True in [1, 2, 3]
+        return [x, y, z]
+  */
+  private static final String inOperatorJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "in_operator",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "x",
+                    "lineno": 2,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "Compare",
+                  "left": {
+                    "type": "Constant",
+                    "value": 3,
+                    "lineno": 2,
+                    "col_offset": 6,
+                    "typename": "int"
+                  },
+                  "ops": [
+                    {
+                      "type": "In"
+                    }
+                  ],
+                  "comparators": [
+                    {
+                      "type": "List",
+                      "elts": [
+                        {
+                          "type": "Constant",
+                          "value": 1,
+                          "lineno": 2,
+                          "col_offset": 12,
+                          "typename": "int"
+                        },
+                        {
+                          "type": "Constant",
+                          "value": 3,
+                          "lineno": 2,
+                          "col_offset": 15,
+                          "typename": "int"
+                        },
+                        {
+                          "type": "Constant",
+                          "value": 5,
+                          "lineno": 2,
+                          "col_offset": 18,
+                          "typename": "int"
+                        }
+                      ],
+                      "lineno": 2,
+                      "col_offset": 11
+                    }
+                  ],
+                  "lineno": 2,
+                  "col_offset": 6
+                },
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
+              },
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "y",
+                    "lineno": 3,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "Compare",
+                  "left": {
+                    "type": "Constant",
+                    "value": "oo",
+                    "lineno": 3,
+                    "col_offset": 6,
+                    "typename": "str"
+                  },
+                  "ops": [
+                    {
+                      "type": "In"
+                    }
+                  ],
+                  "comparators": [
+                    {
+                      "type": "Constant",
+                      "value": "food",
+                      "lineno": 3,
+                      "col_offset": 14,
+                      "typename": "str"
+                    }
+                  ],
+                  "lineno": 3,
+                  "col_offset": 6
+                },
+                "type_comment": null,
+                "lineno": 3,
+                "col_offset": 2
+              },
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "z",
+                    "lineno": 4,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "Compare",
+                  "left": {
+                    "type": "Constant",
+                    "value": true,
+                    "lineno": 4,
+                    "col_offset": 6,
+                    "typename": "bool"
+                  },
+                  "ops": [
+                    {
+                      "type": "In"
+                    }
+                  ],
+                  "comparators": [
+                    {
+                      "type": "List",
+                      "elts": [
+                        {
+                          "type": "Constant",
+                          "value": 1,
+                          "lineno": 4,
+                          "col_offset": 15,
+                          "typename": "int"
+                        },
+                        {
+                          "type": "Constant",
+                          "value": 2,
+                          "lineno": 4,
+                          "col_offset": 18,
+                          "typename": "int"
+                        },
+                        {
+                          "type": "Constant",
+                          "value": 3,
+                          "lineno": 4,
+                          "col_offset": 21,
+                          "typename": "int"
+                        }
+                      ],
+                      "lineno": 4,
+                      "col_offset": 14
+                    }
+                  ],
+                  "lineno": 4,
+                  "col_offset": 6
+                },
+                "type_comment": null,
+                "lineno": 4,
+                "col_offset": 2
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "List",
+                  "elts": [
+                    {
+                      "type": "Name",
+                      "id": "x",
+                      "lineno": 5,
+                      "col_offset": 10
+                    },
+                    {
+                      "type": "Name",
+                      "id": "y",
+                      "lineno": 5,
+                      "col_offset": 13
+                    },
+                    {
+                      "type": "Name",
+                      "id": "z",
+                      "lineno": 5,
+                      "col_offset": 16
+                    }
+                  ],
+                  "lineno": 5,
+                  "col_offset": 9
+                },
+                "lineno": 5,
+                "col_offset": 2
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
+  /* Generated from Python code:
+
+      def bool_operators():
+        x = 3 in [1, 3, 5]
+        y = "oo" in "food"
+        z = True in [1, 2, 3]
+        return [x, y, z]
+  */
+  private static final String boolOperatorsJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "bool_operators",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "x",
+                    "lineno": 2,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "BoolOp",
+                  "op": {
+                    "type": "And"
+                  },
+                  "values": [
+                    {
+                      "type": "Constant",
+                      "value": 5,
+                      "lineno": 2,
+                      "col_offset": 6,
+                      "typename": "int"
+                    },
+                    {
+                      "type": "Constant",
+                      "value": 7,
+                      "lineno": 2,
+                      "col_offset": 12,
+                      "typename": "int"
+                    },
+                    {
+                      "type": "Constant",
+                      "value": "hello",
+                      "lineno": 2,
+                      "col_offset": 18,
+                      "typename": "str"
+                    }
+                  ],
+                  "lineno": 2,
+                  "col_offset": 6
+                },
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
+              },
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "y",
+                    "lineno": 3,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "BoolOp",
+                  "op": {
+                    "type": "Or"
+                  },
+                  "values": [
+                    {
+                      "type": "Constant",
+                      "value": 0,
+                      "lineno": 3,
+                      "col_offset": 6,
+                      "typename": "int"
+                    },
+                    {
+                      "type": "Constant",
+                      "value": "",
+                      "lineno": 3,
+                      "col_offset": 11,
+                      "typename": "str"
+                    },
+                    {
+                      "type": "List",
+                      "elts": [],
+                      "lineno": 3,
+                      "col_offset": 17
+                    },
+                    {
+                      "type": "Constant",
+                      "value": "False",
+                      "lineno": 3,
+                      "col_offset": 23,
+                      "typename": "str"
+                    },
+                    {
+                      "type": "Constant",
+                      "value": "world",
+                      "lineno": 3,
+                      "col_offset": 34,
+                      "typename": "str"
+                    },
+                    {
+                      "type": "Constant",
+                      "value": 5,
+                      "lineno": 3,
+                      "col_offset": 45,
+                      "typename": "int"
+                    }
+                  ],
+                  "lineno": 3,
+                  "col_offset": 6
+                },
+                "type_comment": null,
+                "lineno": 3,
+                "col_offset": 2
+              },
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "z",
+                    "lineno": 4,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "BoolOp",
+                  "op": {
+                    "type": "Or"
+                  },
+                  "values": [
+                    {
+                      "type": "Constant",
+                      "value": "!",
+                      "lineno": 4,
+                      "col_offset": 6,
+                      "typename": "str"
+                    },
+                    {
+                      "type": "Name",
+                      "id": "undefined_name_short_circuited",
+                      "lineno": 4,
+                      "col_offset": 13
+                    }
+                  ],
+                  "lineno": 4,
+                  "col_offset": 6
+                },
+                "type_comment": null,
+                "lineno": 4,
+                "col_offset": 2
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "List",
+                  "elts": [
+                    {
+                      "type": "Name",
+                      "id": "x",
+                      "lineno": 5,
+                      "col_offset": 10
+                    },
+                    {
+                      "type": "Name",
+                      "id": "y",
+                      "lineno": 5,
+                      "col_offset": 13
+                    },
+                    {
+                      "type": "Name",
+                      "id": "z",
+                      "lineno": 5,
+                      "col_offset": 16
+                    }
+                  ],
+                  "lineno": 5,
+                  "col_offset": 9
+                },
+                "lineno": 5,
+                "col_offset": 2
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
   @Test
   public void timesTwo() {
     double x = Math.PI;
@@ -3477,5 +3924,27 @@ public class MainTest {
 
     var output = interpreter.invoke(func);
     assertEquals(new Interpreter.PyList(List.of(1)), output);
+  }
+
+  @Test
+  public void inOperator() {
+    var jsonAst = JsonParser.parseString(inOperatorJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("in_operator");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals(new Interpreter.PyList(List.of(true, true, false)), output);
+  }
+
+  @Test
+  public void boolOperators() {
+    var jsonAst = JsonParser.parseString(boolOperatorsJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("bool_operators");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals(new Interpreter.PyList(List.of("hello", "world", "!")), output);
   }
 }
