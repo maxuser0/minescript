@@ -3,6 +3,7 @@
 
 package net.minescript.common.mixin;
 
+import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
@@ -114,7 +115,8 @@ public abstract class ClientPacketListenerMixin {
     if (!minecraft.isSameThread()) {
       return;
     }
-    Minescript.onExplosionEvent(packet.getX(), packet.getY(), packet.getZ(), packet.getToBlow());
+    // 1.21.2+ dropped support for packet.getToBlow() in ClientboundExplodePacket.
+    Minescript.onExplosionEvent(packet.center().x, packet.center().y, packet.center().z, List.of());
   }
 
   // TODO(maxuser): How to trigger this event?

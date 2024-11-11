@@ -1068,11 +1068,11 @@ public class Minescript {
     int playerZ = (int) player.getZ();
 
     int xMin = Math.min(x0, x1);
-    int yMin = Math.max(Math.min(y0, y1), level.getMinBuildHeight());
+    int yMin = Math.max(Math.min(y0, y1), level.getMinY());
     int zMin = Math.min(z0, z1);
 
     int xMax = Math.max(x0, x1);
-    int yMax = Math.min(Math.max(y0, y1), level.getMaxBuildHeight());
+    int yMax = Math.min(Math.max(y0, y1), level.getMaxY());
     int zMax = Math.max(z0, z1);
 
     if (safetyLimit) {
