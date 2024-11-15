@@ -31,6 +31,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import net.minescript.common.Numbers;
 
@@ -92,7 +93,7 @@ public class Interpreter {
         return new StatementBlock(
             StreamSupport.stream(block.spliterator(), false)
                 .map(elem -> parseStatements(elem))
-                .collect(toList()));
+                .toList());
       }
     }
 
@@ -163,13 +164,19 @@ public class Interpreter {
             }
           }
 
+        case "Delete":
+          return new Deletion(
+              StreamSupport.stream(getTargets(element).spliterator(), false)
+                  .map(this::parseExpression)
+                  .toList());
+
         case "Global":
           {
             return new GlobalVarDecl(
                 StreamSupport.stream(
                         getAttr(element, "names").getAsJsonArray().spliterator(), false)
                     .map(name -> new Identifier(name.getAsString()))
-                    .collect(toList()));
+                    .toList());
           }
 
         case "Expr":
@@ -215,7 +222,7 @@ public class Interpreter {
               arg ->
                   new FunctionArg(
                       new Identifier(getAttr(arg.getAsJsonObject(), "arg").getAsString())))
-          .collect(toList());
+          .toList();
     }
 
     private enum ParseContext {
@@ -255,7 +262,7 @@ public class Interpreter {
               BoolOp.parse(getType(getAttr(element, "op"))),
               StreamSupport.stream(getAttr(element, "values").getAsJsonArray().spliterator(), false)
                   .map(elem -> parseExpression(elem))
-                  .collect(toList()));
+                  .toList());
 
         case "Name":
           {
@@ -299,7 +306,7 @@ public class Interpreter {
                   func,
                   StreamSupport.stream(args.spliterator(), false)
                       .map(elem -> parseExpression(elem))
-                      .collect(toList()),
+                      .toList(),
                   executableCache);
             }
           }
@@ -320,11 +327,26 @@ public class Interpreter {
               parseExpression(getAttr(element, "value")),
               parseExpression(getAttr(element, "slice")));
 
+        case "Tuple":
+          return new NewTuple(
+              StreamSupport.stream(getAttr(element, "elts").getAsJsonArray().spliterator(), false)
+                  .map(elem -> parseExpression(elem))
+                  .toList());
+
         case "List":
           return new NewList(
               StreamSupport.stream(getAttr(element, "elts").getAsJsonArray().spliterator(), false)
                   .map(elem -> parseExpression(elem))
-                  .collect(toList()));
+                  .toList());
+
+        case "Dict":
+          return new NewDict(
+              StreamSupport.stream(getAttr(element, "keys").getAsJsonArray().spliterator(), false)
+                  .map(elem -> parseExpression(elem))
+                  .toList(),
+              StreamSupport.stream(getAttr(element, "values").getAsJsonArray().spliterator(), false)
+                  .map(elem -> parseExpression(elem))
+                  .toList());
       }
       throw new IllegalArgumentException("Unknown expression type: " + element.toString());
     }
@@ -528,12 +550,39 @@ public class Interpreter {
       // TODO(maxuser): Support arrays and other iterable values that don't implement Iterable<>.
       var iterValue = iter.eval(context);
       var iterableValue = (Iterable<?>) iterValue;
-      // TODO(maxuser): Support unpacked values like `for k, v in map: ...`
-      var varId = (Identifier) vars;
+      if (vars instanceof NewTuple newTuple) {
+        System.out.println(newTuple.elements().get(0).getClass());
+      }
+      final Identifier loopVar;
+      final List<Identifier> loopVars;
+      if (vars instanceof Identifier id) {
+        loopVar = id;
+        loopVars = null;
+      } else if (vars instanceof NewTuple tuple) {
+        loopVar = null;
+        loopVars = tuple.elements().stream().map(Identifier.class::cast).toList();
+      } else {
+        throw new IllegalArgumentException("Unexpected loop variable type: " + vars.toString());
+      }
       try {
         context.enterLoop();
         for (var value : iterableValue) {
-          context.setVariable(varId.name(), value);
+          if (loopVar != null) {
+            context.setVariable(loopVar.name(), value);
+          } else if (value instanceof ItemGetter getter && value instanceof Lengthable lengthable) {
+            int lengthToUnpack = lengthable.__len__();
+            if (lengthToUnpack != loopVars.size()) {
+              throw new IllegalArgumentException(
+                  String.format(
+                      "Cannot unpack %d values into %d loop variables: %s",
+                      lengthToUnpack, loopVars.size(), value));
+            }
+            for (int i = 0; i < lengthToUnpack; ++i) {
+              context.setVariable(loopVars.get(i).name(), getter.__getitem__(i));
+            }
+          } else {
+            throw new IllegalArgumentException("Cannot unpack value to tuple: " + value.toString());
+          }
           body.exec(context);
           if (context.shouldBreak()) {
             break;
@@ -654,8 +703,8 @@ public class Interpreter {
         if (array.getClass().isArray()) {
           Array.set(array, ((Number) index).intValue(), rhsValue);
           return;
-        } else if (array instanceof PyList pyList) {
-          pyList.__setitem__(index, rhsValue);
+        } else if (array instanceof ItemSetter itemSetter) {
+          itemSetter.__setitem__(index, rhsValue);
           return;
         } else if (array instanceof List list) {
           list.set(((Number) index).intValue(), rhsValue);
@@ -763,9 +812,10 @@ public class Interpreter {
           var oldValue = Array.get(array, intKey);
           Array.set(array, intKey, op.apply(oldValue, rhsValue));
           return;
-        } else if (array instanceof PyList pyList) {
-          var oldValue = pyList.__getitem__(index);
-          pyList.__setitem__(index, op.apply(oldValue, rhsValue));
+        } else if (array instanceof ItemGetter itemGetter
+            && array instanceof ItemSetter itemSetter) {
+          var oldValue = itemGetter.__getitem__(index);
+          itemSetter.__setitem__(index, op.apply(oldValue, rhsValue));
           return;
         } else if (array instanceof List list) {
           int intKey = ((Number) index).intValue();
@@ -788,6 +838,38 @@ public class Interpreter {
     @Override
     public String toString() {
       return String.format("%s %s %s;", lhs, op.symbol(), rhs);
+    }
+  }
+
+  public record Deletion(List<Expression> targets) implements Statement {
+    @Override
+    public void exec(Context context) {
+      for (var target : targets) {
+        if (target instanceof Identifier id) {
+          context.deleteVariable(id.name());
+        } else if (target instanceof ArrayIndex arrayIndex) {
+          var array = arrayIndex.array().eval(context);
+          var index = arrayIndex.index().eval(context);
+          if (array instanceof ItemDeleter deleter) {
+            deleter.__delitem__(index);
+          } else if (array instanceof List list) {
+            list.remove((int) (Integer) index);
+          } else if (array instanceof Map map) {
+            map.remove(index);
+          } else {
+            throw new IllegalArgumentException(
+                "Object does not support subscript deletion: " + array.getClass().getName());
+          }
+        } else {
+          throw new IllegalArgumentException("Cannot delete value: " + target.toString());
+        }
+      }
+    }
+
+    @Override
+    public String toString() {
+      return String.format(
+          "del %s;", targets.stream().map(Object::toString).collect(joining(", ")));
     }
   }
 
@@ -974,8 +1056,8 @@ public class Interpreter {
         case IN:
           if (rhsValue instanceof Collection<?> collection) {
             return collection.contains(lhsValue);
-          } else if (rhsValue instanceof PyList pyList) {
-            return pyList.__contains__(lhsValue);
+          } else if (rhsValue instanceof ItemContainer container) {
+            return container.__contains__(lhsValue);
           } else if (rhsValue instanceof List list) {
             return list.contains(lhsValue);
           } else if (rhsValue instanceof Map map) {
@@ -1198,8 +1280,8 @@ public class Interpreter {
             String.format("%s=%s, %s=%s in %s", array, arrayValue, index, indexValue, this));
       }
 
-      if (arrayValue instanceof PyList list) {
-        return list.__getitem__(indexValue);
+      if (arrayValue instanceof ItemGetter itemGetter) {
+        return itemGetter.__getitem__(indexValue);
       } else if (arrayValue.getClass().isArray()) {
         int intKey = ((Number) indexValue).intValue();
         return Array.get(arrayValue, intKey);
@@ -1352,15 +1434,30 @@ public class Interpreter {
     }
   }
 
+  public record NewTuple(List<Expression> elements) implements Expression {
+    @Override
+    public Object eval(Context context) {
+      return new PyTuple(elements.stream().map(e -> e.eval(context)).toArray());
+    }
+
+    @Override
+    public String toString() {
+      return elements.size() == 1
+          ? String.format("(%s,)", elements.get(0))
+          : elements.stream().map(Object::toString).collect(joining(", ", "(", ")"));
+    }
+  }
+
   public record NewList(List<Expression> elements) implements Expression {
     @Override
     public Object eval(Context context) {
+      // Stream.toList() returns immutable list, so using Stream.collect(toList()) for mutable List.
       return new PyList(elements.stream().map(e -> e.eval(context)).collect(toList()));
     }
 
     @Override
     public String toString() {
-      return elements.stream().map(Interpreter::pyToString).collect(joining(", ", "[", "]"));
+      return elements.stream().map(Object::toString).collect(joining(", ", "[", "]"));
     }
   }
 
@@ -1368,7 +1465,24 @@ public class Interpreter {
     int __len__();
   }
 
-  public static class PyList implements Iterable<Object>, Lengthable {
+  public interface ItemGetter {
+    Object __getitem__(Object key);
+  }
+
+  public interface ItemSetter {
+    void __setitem__(Object key, Object value);
+  }
+
+  public interface ItemContainer {
+    boolean __contains__(Object item);
+  }
+
+  public interface ItemDeleter {
+    void __delitem__(Object key);
+  }
+
+  public static class PyList
+      implements Iterable<Object>, Lengthable, ItemGetter, ItemSetter, ItemContainer, ItemDeleter {
     private final List<Object> list;
 
     public PyList() {
@@ -1413,12 +1527,14 @@ public class Interpreter {
       return newList;
     }
 
+    @Override
     public boolean __contains__(Object key) {
       return list.contains(key);
     }
 
+    @Override
     public void __delitem__(Object key) {
-      remove(key);
+      list.remove((int) (Integer) key);
     }
 
     public boolean __eq__(Object value) {
@@ -1448,6 +1564,7 @@ public class Interpreter {
     }
 
     // TODO(maxuser): Support slice notation.
+    @Override
     public Object __getitem__(Object key) {
       if (key instanceof Integer i) {
         return list.get(i);
@@ -1459,9 +1576,11 @@ public class Interpreter {
     }
 
     // TODO(maxuser): Support slice notation.
-    public Object __setitem__(Object key, Object value) {
+    @Override
+    public void __setitem__(Object key, Object value) {
       if (key instanceof Integer i) {
-        return list.set(i, value);
+        list.set(i, value);
+        return;
       }
       throw new IllegalArgumentException(
           String.format(
@@ -1521,6 +1640,202 @@ public class Interpreter {
 
     public void sort() {
       list.sort(null);
+    }
+  }
+
+  public static class PyTuple implements Iterable<Object>, Lengthable, ItemGetter, ItemContainer {
+    private final Object[] array;
+
+    public PyTuple(Object[] array) {
+      this.array = array;
+    }
+
+    public Object[] getJavaArray() {
+      return array;
+    }
+
+    @Override
+    public boolean equals(Object value) {
+      return value instanceof PyTuple pyTuple && Arrays.equals(this.array, pyTuple.array);
+    }
+
+    @Override
+    public Iterator<Object> iterator() {
+      return Arrays.stream(array).iterator();
+    }
+
+    @Override
+    public String toString() {
+      return array.length == 1
+          ? String.format("(%s,)", pyToString(array[0]))
+          : Arrays.stream(array).map(Interpreter::pyToString).collect(joining(", ", "(", ")"));
+    }
+
+    public PyTuple __add__(Object value) {
+      if (value instanceof PyTuple tuple) {
+        return new PyTuple(
+            Stream.concat(Arrays.stream(array), Arrays.stream(tuple.array)).toArray());
+      }
+      throw new IllegalArgumentException(
+          String.format(
+              "Can only concatenate tuple (not \"%s\") to tuple", value.getClass().getName()));
+    }
+
+    @Override
+    public boolean __contains__(Object key) {
+      return Arrays.asList(array).contains(key);
+    }
+
+    public boolean __eq__(Object value) {
+      return this.equals(value);
+    }
+
+    public boolean __ne__(Object value) {
+      return !this.equals(value);
+    }
+
+    @Override
+    public int __len__() {
+      return array.length;
+    }
+
+    // TODO(maxuser): Support slice notation.
+    @Override
+    public Object __getitem__(Object key) {
+      if (key instanceof Integer i) {
+        return array[i];
+      }
+      throw new IllegalArgumentException(
+          String.format(
+              "Tuple indices must be integers or slices, not %s (%s)",
+              key.getClass().getName(), key));
+    }
+
+    public long count(Object value) {
+      return Arrays.stream(array).filter(o -> o.equals(value)).count();
+    }
+
+    public int index(Object value) {
+      for (int i = 0; i < array.length; ++i) {
+        if (array[i].equals(value)) {
+          return i;
+        }
+      }
+      throw new IllegalArgumentException(
+          String.format("tuple.index(%s): value not in tuple", value));
+    }
+  }
+
+  public record NewDict(List<Expression> keys, List<Expression> values) implements Expression {
+    public NewDict {
+      if (keys.size() != values.size()) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Size mismatch between keys and values: %d and %d", keys.size(), values.size()));
+      }
+    }
+
+    @Override
+    public Object eval(Context context) {
+      var map = new HashMap<Object, Object>();
+      for (int i = 0; i < keys.size(); ++i) {
+        map.put(keys.get(i).eval(context), values.get(i).eval(context));
+      }
+      return new PyDict(map);
+    }
+
+    @Override
+    public String toString() {
+      var out = new StringBuilder("{");
+      for (int i = 0; i < keys.size(); ++i) {
+        if (i > 0) {
+          out.append(", ");
+        }
+        out.append(keys.get(i));
+        out.append(": ");
+        out.append(values.get(i));
+      }
+      out.append("}");
+      return out.toString();
+    }
+  }
+
+  public static class PyDict
+      implements Iterable<Object>, Lengthable, ItemGetter, ItemSetter, ItemContainer, ItemDeleter {
+    private static final Object NOT_FOUND = new Object();
+    private final Map<Object, Object> map;
+
+    public PyDict() {
+      map = new HashMap<>();
+    }
+
+    public PyDict(Map<Object, Object> map) {
+      this.map = map;
+    }
+
+    public Map<Object, Object> getJavaMap() {
+      return map;
+    }
+
+    @Override
+    public boolean equals(Object value) {
+      return value instanceof PyDict pyDict && this.map.equals(pyDict.map);
+    }
+
+    @Override
+    public Iterator<Object> iterator() {
+      return map.keySet().iterator();
+    }
+
+    public Iterable<PyTuple> items() {
+      return map.entrySet().stream().map(e -> new PyTuple(new Object[] {e.getKey(), e.getValue()}))
+          ::iterator;
+    }
+
+    @Override
+    public int __len__() {
+      return map.size();
+    }
+
+    @Override
+    public Object __getitem__(Object key) {
+      var value = map.getOrDefault(key, NOT_FOUND);
+      if (value == NOT_FOUND) {
+        throw new NoSuchElementException("Key not found: " + key.toString());
+      }
+      return value;
+    }
+
+    @Override
+    public void __setitem__(Object key, Object value) {
+      map.put(key, value);
+    }
+
+    @Override
+    public boolean __contains__(Object key) {
+      return map.containsKey(key);
+    }
+
+    @Override
+    public void __delitem__(Object key) {
+      map.remove(key);
+    }
+
+    @Override
+    public String toString() {
+      var out = new StringBuilder("{");
+      boolean firstEntry = true;
+      for (var entry : map.entrySet()) {
+        if (!firstEntry) {
+          out.append(", ");
+        }
+        out.append(pyToString(entry.getKey()));
+        out.append(": ");
+        out.append(pyToString(entry.getValue()));
+        firstEntry = false;
+      }
+      out.append("}");
+      return out.toString();
     }
   }
 
@@ -1952,6 +2267,17 @@ public class Interpreter {
       } else {
         throw new IllegalArgumentException("Variable not found: " + name);
       }
+    }
+
+    public void deleteVariable(String name) {
+      if (this != globals && globalVarNames != null && globalVarNames.contains(name)) {
+        globals.deleteVariable(name);
+        return;
+      }
+      if (!vars.containsKey(name)) {
+        throw new IllegalArgumentException(String.format("Name '%s' is not defined", name));
+      }
+      vars.remove(name);
     }
 
     public void enterLoop() {

@@ -4,6 +4,7 @@ import static org.junit.Assert.*;
 
 import com.google.gson.JsonParser;
 import java.util.List;
+import java.util.Map;
 import org.junit.Test;
 
 public class MainTest {
@@ -3714,6 +3715,332 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+      def iterate_dict():
+        d1 = {1: "one", 2: "two"}
+        d2 = {}
+        for k, v in d1.items():
+          d2[k] = v
+        return d2
+  */
+  private static final String iterateDictJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "iterate_dict",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "d1"
+                  }
+                ],
+                "value": {
+                  "type": "Dict",
+                  "keys": [
+                    {
+                      "type": "Constant",
+                      "value": 1,
+                      "typename": "int"
+                    },
+                    {
+                      "type": "Constant",
+                      "value": 2,
+                      "typename": "int"
+                    }
+                  ],
+                  "values": [
+                    {
+                      "type": "Constant",
+                      "value": "one",
+                      "typename": "str"
+                    },
+                    {
+                      "type": "Constant",
+                      "value": "two",
+                      "typename": "str"
+                    }
+                  ]
+                },
+                "type_comment": null
+              },
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "d2"
+                  }
+                ],
+                "value": {
+                  "type": "Dict",
+                  "keys": [],
+                  "values": []
+                },
+                "type_comment": null
+              },
+              {
+                "type": "For",
+                "target": {
+                  "type": "Tuple",
+                  "elts": [
+                    {
+                      "type": "Name",
+                      "id": "k"
+                    },
+                    {
+                      "type": "Name",
+                      "id": "v"
+                    }
+                  ]
+                },
+                "iter": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Attribute",
+                    "value": {
+                      "type": "Name",
+                      "id": "d1"
+                    },
+                    "attr": "items"
+                  },
+                  "args": [],
+                  "keywords": []
+                },
+                "body": [
+                  {
+                    "type": "Assign",
+                    "targets": [
+                      {
+                        "type": "Subscript",
+                        "value": {
+                          "type": "Name",
+                          "id": "d2"
+                        },
+                        "slice": {
+                          "type": "Name",
+                          "id": "k"
+                        }
+                      }
+                    ],
+                    "value": {
+                      "type": "Name",
+                      "id": "v"
+                    },
+                    "type_comment": null
+                  }
+                ],
+                "orelse": [],
+                "type_comment": null
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Name",
+                  "id": "d2"
+                }
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
+  /* Generated from Python code:
+
+      def delete_items():
+        l = [1, 2, 3]
+        d = {1: "one", 2: "two"}
+        del l[0]
+        del d[2]
+        return len(l), len(d)
+  */
+  private static final String deleteItemsJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "delete_items",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "l"
+                  }
+                ],
+                "value": {
+                  "type": "List",
+                  "elts": [
+                    {
+                      "type": "Constant",
+                      "value": 1,
+                      "typename": "int"
+                    },
+                    {
+                      "type": "Constant",
+                      "value": 2,
+                      "typename": "int"
+                    },
+                    {
+                      "type": "Constant",
+                      "value": 3,
+                      "typename": "int"
+                    }
+                  ]
+                },
+                "type_comment": null
+              },
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "d"
+                  }
+                ],
+                "value": {
+                  "type": "Dict",
+                  "keys": [
+                    {
+                      "type": "Constant",
+                      "value": 1,
+                      "typename": "int"
+                    },
+                    {
+                      "type": "Constant",
+                      "value": 2,
+                      "typename": "int"
+                    }
+                  ],
+                  "values": [
+                    {
+                      "type": "Constant",
+                      "value": "one",
+                      "typename": "str"
+                    },
+                    {
+                      "type": "Constant",
+                      "value": "two",
+                      "typename": "str"
+                    }
+                  ]
+                },
+                "type_comment": null
+              },
+              {
+                "type": "Delete",
+                "targets": [
+                  {
+                    "type": "Subscript",
+                    "value": {
+                      "type": "Name",
+                      "id": "l"
+                    },
+                    "slice": {
+                      "type": "Constant",
+                      "value": 0,
+                      "typename": "int"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "Delete",
+                "targets": [
+                  {
+                    "type": "Subscript",
+                    "value": {
+                      "type": "Name",
+                      "id": "d"
+                    },
+                    "slice": {
+                      "type": "Constant",
+                      "value": 2,
+                      "typename": "int"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Tuple",
+                  "elts": [
+                    {
+                      "type": "Call",
+                      "func": {
+                        "type": "Name",
+                        "id": "len"
+                      },
+                      "args": [
+                        {
+                          "type": "Name",
+                          "id": "l"
+                        }
+                      ],
+                      "keywords": []
+                    },
+                    {
+                      "type": "Call",
+                      "func": {
+                        "type": "Name",
+                        "id": "len"
+                      },
+                      "args": [
+                        {
+                          "type": "Name",
+                          "id": "d"
+                        }
+                      ],
+                      "keywords": []
+                    }
+                  ]
+                }
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
   @Test
   public void timesTwo() {
     double x = Math.PI;
@@ -3946,5 +4273,27 @@ public class MainTest {
 
     var output = interpreter.invoke(func);
     assertEquals(new Interpreter.PyList(List.of("hello", "world", "!")), output);
+  }
+
+  @Test
+  public void iterateDict() {
+    var jsonAst = JsonParser.parseString(iterateDictJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("iterate_dict");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals(new Interpreter.PyDict(Map.of(1, "one", 2, "two")), output);
+  }
+
+  @Test
+  public void deleteItems() {
+    var jsonAst = JsonParser.parseString(deleteItemsJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("delete_items");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals(new Interpreter.PyTuple(new Object[] {2, 1}), output);
   }
 }
