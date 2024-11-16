@@ -117,16 +117,7 @@ public class Interpreter {
           {
             Expression lhs = parseExpression(getTargets(element).get(0));
             Expression rhs = parseExpression(getAttr(element, "value"));
-            if (lhs instanceof Identifier lhsId) {
-              return new Assignment(lhs, rhs);
-            } else if (lhs instanceof ArrayIndex) {
-              return new Assignment(lhs, rhs);
-            } else {
-              throw new IllegalArgumentException(
-                  String.format(
-                      "Unsupported expression type for lhs of assignment: `%s` (%s)",
-                      lhs, lhs.getClass().getSimpleName()));
-            }
+            return new Assignment(lhs, rhs);
           }
 
         case "AugAssign":
@@ -550,17 +541,14 @@ public class Interpreter {
       // TODO(maxuser): Support arrays and other iterable values that don't implement Iterable<>.
       var iterValue = iter.eval(context);
       var iterableValue = (Iterable<?>) iterValue;
-      if (vars instanceof TupleLiteral tuple) {
-        System.out.println(tuple.elements().get(0).getClass());
-      }
       final Identifier loopVar;
-      final List<Identifier> loopVars;
+      final TupleLiteral loopVars;
       if (vars instanceof Identifier id) {
         loopVar = id;
         loopVars = null;
       } else if (vars instanceof TupleLiteral tuple) {
         loopVar = null;
-        loopVars = tuple.elements().stream().map(Identifier.class::cast).toList();
+        loopVars = tuple;
       } else {
         throw new IllegalArgumentException("Unexpected loop variable type: " + vars.toString());
       }
@@ -569,19 +557,8 @@ public class Interpreter {
         for (var value : iterableValue) {
           if (loopVar != null) {
             context.setVariable(loopVar.name(), value);
-          } else if (value instanceof ItemGetter getter && value instanceof Lengthable lengthable) {
-            int lengthToUnpack = lengthable.__len__();
-            if (lengthToUnpack != loopVars.size()) {
-              throw new IllegalArgumentException(
-                  String.format(
-                      "Cannot unpack %d values into %d loop variables: %s",
-                      lengthToUnpack, loopVars.size(), value));
-            }
-            for (int i = 0; i < lengthToUnpack; ++i) {
-              context.setVariable(loopVars.get(i).name(), getter.__getitem__(i));
-            }
           } else {
-            throw new IllegalArgumentException("Cannot unpack value to tuple: " + value.toString());
+            Assignment.assignTuple(context, loopVars, value);
           }
           body.exec(context);
           if (context.shouldBreak()) {
@@ -688,6 +665,37 @@ public class Interpreter {
   }
 
   public record Assignment(Expression lhs, Expression rhs) implements Statement {
+    public Assignment {
+      // TODO(maxuser): Support destructuring assignment more than one level of identifiers deep.
+      if (!(lhs instanceof Identifier
+          || lhs instanceof ArrayIndex
+          || (lhs instanceof TupleLiteral tuple
+              && tuple.elements().stream().allMatch(Identifier.class::isInstance)))) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Unsupported expression type for lhs of assignment: `%s` (%s)",
+                lhs, lhs.getClass().getSimpleName()));
+      }
+    }
+
+    public static void assignTuple(Context context, TupleLiteral lhsTuple, Object rhsValue) {
+      List<Identifier> lhsVars = lhsTuple.elements().stream().map(Identifier.class::cast).toList();
+      if (rhsValue instanceof ItemGetter getter && rhsValue instanceof Lengthable lengthable) {
+        int lengthToUnpack = lengthable.__len__();
+        if (lengthToUnpack != lhsVars.size()) {
+          throw new IllegalArgumentException(
+              String.format(
+                  "Cannot unpack %d values into %d loop variables: %s",
+                  lengthToUnpack, lhsVars.size(), rhsValue));
+        }
+        for (int i = 0; i < lengthToUnpack; ++i) {
+          context.setVariable(lhsVars.get(i).name(), getter.__getitem__(i));
+        }
+      } else {
+        throw new IllegalArgumentException("Cannot unpack value to tuple: " + rhsValue.toString());
+      }
+    }
+
     @Override
     public void exec(Context context) {
       if (context.skipStatement()) {
@@ -696,6 +704,9 @@ public class Interpreter {
       Object rhsValue = rhs.eval(context);
       if (lhs instanceof Identifier lhsId) {
         context.setVariable(lhsId, rhsValue);
+        return;
+      } else if (lhs instanceof TupleLiteral lhsTuple) {
+        assignTuple(context, lhsTuple, rhsValue);
         return;
       } else if (lhs instanceof ArrayIndex lhsArrayIndex) {
         var array = lhsArrayIndex.array().eval(context);

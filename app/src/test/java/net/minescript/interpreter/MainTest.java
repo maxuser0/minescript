@@ -4041,6 +4041,115 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+      def assign_tuple():
+        x, y = 1, 2
+        return x, y
+  */
+  private static final String assignTupleJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "assign_tuple",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Tuple",
+                    "elts": [
+                      {
+                        "type": "Name",
+                        "id": "x",
+                        "lineno": 2,
+                        "col_offset": 2
+                      },
+                      {
+                        "type": "Name",
+                        "id": "y",
+                        "lineno": 2,
+                        "col_offset": 5
+                      }
+                    ],
+                    "lineno": 2,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "Tuple",
+                  "elts": [
+                    {
+                      "type": "Constant",
+                      "value": 1,
+                      "lineno": 2,
+                      "col_offset": 9,
+                      "typename": "int"
+                    },
+                    {
+                      "type": "Constant",
+                      "value": 2,
+                      "lineno": 2,
+                      "col_offset": 12,
+                      "typename": "int"
+                    }
+                  ],
+                  "lineno": 2,
+                  "col_offset": 9
+                },
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Tuple",
+                  "elts": [
+                    {
+                      "type": "Name",
+                      "id": "x",
+                      "lineno": 3,
+                      "col_offset": 9
+                    },
+                    {
+                      "type": "Name",
+                      "id": "y",
+                      "lineno": 3,
+                      "col_offset": 12
+                    }
+                  ],
+                  "lineno": 3,
+                  "col_offset": 9
+                },
+                "lineno": 3,
+                "col_offset": 2
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
   @Test
   public void timesTwo() {
     double x = Math.PI;
@@ -4295,5 +4404,16 @@ public class MainTest {
 
     var output = interpreter.invoke(func);
     assertEquals(new Interpreter.PyTuple(new Object[] {2, 1}), output);
+  }
+
+  @Test
+  public void assignTuple() {
+    var jsonAst = JsonParser.parseString(assignTupleJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("assign_tuple");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals(new Interpreter.PyTuple(new Object[] {1, 2}), output);
   }
 }
