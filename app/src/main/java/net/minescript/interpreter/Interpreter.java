@@ -328,19 +328,19 @@ public class Interpreter {
               parseExpression(getAttr(element, "slice")));
 
         case "Tuple":
-          return new NewTuple(
+          return new TupleLiteral(
               StreamSupport.stream(getAttr(element, "elts").getAsJsonArray().spliterator(), false)
                   .map(elem -> parseExpression(elem))
                   .toList());
 
         case "List":
-          return new NewList(
+          return new ListLiteral(
               StreamSupport.stream(getAttr(element, "elts").getAsJsonArray().spliterator(), false)
                   .map(elem -> parseExpression(elem))
                   .toList());
 
         case "Dict":
-          return new NewDict(
+          return new DictLiteral(
               StreamSupport.stream(getAttr(element, "keys").getAsJsonArray().spliterator(), false)
                   .map(elem -> parseExpression(elem))
                   .toList(),
@@ -550,15 +550,15 @@ public class Interpreter {
       // TODO(maxuser): Support arrays and other iterable values that don't implement Iterable<>.
       var iterValue = iter.eval(context);
       var iterableValue = (Iterable<?>) iterValue;
-      if (vars instanceof NewTuple newTuple) {
-        System.out.println(newTuple.elements().get(0).getClass());
+      if (vars instanceof TupleLiteral tuple) {
+        System.out.println(tuple.elements().get(0).getClass());
       }
       final Identifier loopVar;
       final List<Identifier> loopVars;
       if (vars instanceof Identifier id) {
         loopVar = id;
         loopVars = null;
-      } else if (vars instanceof NewTuple tuple) {
+      } else if (vars instanceof TupleLiteral tuple) {
         loopVar = null;
         loopVars = tuple.elements().stream().map(Identifier.class::cast).toList();
       } else {
@@ -1434,7 +1434,7 @@ public class Interpreter {
     }
   }
 
-  public record NewTuple(List<Expression> elements) implements Expression {
+  public record TupleLiteral(List<Expression> elements) implements Expression {
     @Override
     public Object eval(Context context) {
       return new PyTuple(elements.stream().map(e -> e.eval(context)).toArray());
@@ -1448,7 +1448,7 @@ public class Interpreter {
     }
   }
 
-  public record NewList(List<Expression> elements) implements Expression {
+  public record ListLiteral(List<Expression> elements) implements Expression {
     @Override
     public Object eval(Context context) {
       // Stream.toList() returns immutable list, so using Stream.collect(toList()) for mutable List.
@@ -1726,8 +1726,8 @@ public class Interpreter {
     }
   }
 
-  public record NewDict(List<Expression> keys, List<Expression> values) implements Expression {
-    public NewDict {
+  public record DictLiteral(List<Expression> keys, List<Expression> values) implements Expression {
+    public DictLiteral {
       if (keys.size() != values.size()) {
         throw new IllegalArgumentException(
             String.format(
