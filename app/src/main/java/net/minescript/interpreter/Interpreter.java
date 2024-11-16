@@ -58,7 +58,7 @@ public class Interpreter {
   }
 
   public Object invoke(FunctionDef function, Object... args) {
-    return function.invoke(globals, globals, args);
+    return function.invoke(globals, args);
   }
 
   public static class JsonAstParser {
@@ -252,7 +252,7 @@ public class Interpreter {
           return new BoolOp(
               BoolOp.parse(getType(getAttr(element, "op"))),
               StreamSupport.stream(getAttr(element, "values").getAsJsonArray().spliterator(), false)
-                  .map(elem -> parseExpression(elem))
+                  .map(this::parseExpression)
                   .toList());
 
         case "Name":
@@ -296,7 +296,7 @@ public class Interpreter {
               return new FunctionCall(
                   func,
                   StreamSupport.stream(args.spliterator(), false)
-                      .map(elem -> parseExpression(elem))
+                      .map(this::parseExpression)
                       .toList(),
                   executableCache);
             }
@@ -318,25 +318,43 @@ public class Interpreter {
               parseExpression(getAttr(element, "value")),
               parseExpression(getAttr(element, "slice")));
 
+        case "ListComp":
+          {
+            var generator = getAttr(element, "generators").getAsJsonArray().get(0);
+            var generatorType = getType(generator);
+            if (!generatorType.equals("comprehension")) {
+              throw new UnsupportedOperationException(
+                  "Unsupported expression type in list comprehension: " + generatorType);
+            }
+            return new ListComprehension(
+                parseExpression(getAttr(element, "elt")),
+                parseExpression(getAttr(generator, "target")),
+                parseExpression(getAttr(generator, "iter")),
+                StreamSupport.stream(
+                        getAttr(generator, "ifs").getAsJsonArray().spliterator(), false)
+                    .map(this::parseExpression)
+                    .toList());
+          }
+
         case "Tuple":
           return new TupleLiteral(
               StreamSupport.stream(getAttr(element, "elts").getAsJsonArray().spliterator(), false)
-                  .map(elem -> parseExpression(elem))
+                  .map(this::parseExpression)
                   .toList());
 
         case "List":
           return new ListLiteral(
               StreamSupport.stream(getAttr(element, "elts").getAsJsonArray().spliterator(), false)
-                  .map(elem -> parseExpression(elem))
+                  .map(this::parseExpression)
                   .toList());
 
         case "Dict":
           return new DictLiteral(
               StreamSupport.stream(getAttr(element, "keys").getAsJsonArray().spliterator(), false)
-                  .map(elem -> parseExpression(elem))
+                  .map(this::parseExpression)
                   .toList(),
               StreamSupport.stream(getAttr(element, "values").getAsJsonArray().spliterator(), false)
-                  .map(elem -> parseExpression(elem))
+                  .map(this::parseExpression)
                   .toList());
       }
       throw new IllegalArgumentException("Unknown expression type: " + element.toString());
@@ -463,7 +481,7 @@ public class Interpreter {
                 "Expected %d params but got %d for function: %s",
                 function.args().size(), params.length, function));
       }
-      return function.invoke(context, enclosingContext, params);
+      return function.invoke(enclosingContext, params);
     }
   }
 
@@ -478,12 +496,11 @@ public class Interpreter {
     /**
      * Invoke this function.
      *
-     * @param callerContext Context from which this function was invoked.
      * @param enclosingContext Context enclosing the definition of this function.
      * @param argValues Values to pass to this function's body.
      * @return Return value from invoking this function.
      */
-    public Object invoke(Context callerContext, Context enclosingContext, Object[] argValues) {
+    public Object invoke(Context enclosingContext, Object[] argValues) {
       if (args.size() != argValues.length) {
         throw new IllegalArgumentException(
             String.format(
@@ -491,7 +508,7 @@ public class Interpreter {
                 identifier, argValues.length, args.size()));
       }
 
-      var localContext = callerContext.createLocalContext(enclosingContext);
+      var localContext = enclosingContext.createLocalContext();
       for (int i = 0; i < args.size(); ++i) {
         var arg = args.get(i);
         var argValue = argValues[i];
@@ -1445,6 +1462,59 @@ public class Interpreter {
     }
   }
 
+  public record ListComprehension(
+      Expression transform, Expression target, Expression iter, List<Expression> ifs)
+      implements Expression {
+    @Override
+    public Object eval(Context context) {
+      var localContext = context.createLocalContext();
+      var list = new PyList();
+      // TODO(maxuser): Share portions of impl with ForBlock::exec.
+      // TODO(maxuser): Support arrays and other iterable values that don't implement Iterable<>.
+      var iterValue = iter.eval(localContext);
+      var iterableValue = (Iterable<?>) iterValue;
+      final Identifier loopVar;
+      final TupleLiteral loopVars;
+      if (target instanceof Identifier id) {
+        loopVar = id;
+        loopVars = null;
+      } else if (target instanceof TupleLiteral tuple) {
+        loopVar = null;
+        loopVars = tuple;
+      } else {
+        throw new IllegalArgumentException("Unexpected loop variable type: " + target.toString());
+      }
+      outerLoop:
+      for (var value : iterableValue) {
+        if (loopVar != null) {
+          localContext.setVariable(loopVar.name(), value);
+        } else {
+          Assignment.assignTuple(localContext, loopVars, value);
+        }
+        for (var ifExpr : ifs) {
+          if (!convertToBool(ifExpr.eval(localContext))) {
+            continue outerLoop;
+          }
+        }
+        list.append(transform.eval(localContext));
+      }
+      return list;
+    }
+
+    @Override
+    public String toString() {
+      var out = new StringBuilder("[");
+      out.append(transform.toString());
+      out.append(" for ");
+      out.append(target.toString());
+      out.append(" in ");
+      out.append(iter.toString());
+      out.append(ifs.stream().map(i -> " if " + i.toString()).collect(joining()));
+      out.append("]");
+      return out.toString();
+    }
+  }
+
   public record TupleLiteral(List<Expression> elements) implements Expression {
     @Override
     public Object eval(Context context) {
@@ -2212,8 +2282,8 @@ public class Interpreter {
       return context;
     }
 
-    public Context createLocalContext(Context enclosingContext) {
-      return new Context(globals, enclosingContext);
+    public Context createLocalContext() {
+      return new Context(globals, this);
     }
 
     public void declareGlobalVar(String name) {

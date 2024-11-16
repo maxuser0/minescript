@@ -4150,6 +4150,168 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+      def list_comprehension():
+        return [x * 10 for x in range(4) if x > 0 and x < 3]
+  */
+  private static final String listComprehensionJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "list_comprehension",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Return",
+                "value": {
+                  "type": "ListComp",
+                  "elt": {
+                    "type": "BinOp",
+                    "left": {
+                      "type": "Name",
+                      "id": "x",
+                      "lineno": 2,
+                      "col_offset": 10
+                    },
+                    "op": {
+                      "type": "Mult"
+                    },
+                    "right": {
+                      "type": "Constant",
+                      "value": 10,
+                      "lineno": 2,
+                      "col_offset": 14,
+                      "typename": "int"
+                    },
+                    "lineno": 2,
+                    "col_offset": 10
+                  },
+                  "generators": [
+                    {
+                      "type": "comprehension",
+                      "target": {
+                        "type": "Name",
+                        "id": "x",
+                        "lineno": 2,
+                        "col_offset": 21
+                      },
+                      "iter": {
+                        "type": "Call",
+                        "func": {
+                          "type": "Name",
+                          "id": "range",
+                          "lineno": 2,
+                          "col_offset": 26
+                        },
+                        "args": [
+                          {
+                            "type": "Constant",
+                            "value": 4,
+                            "lineno": 2,
+                            "col_offset": 32,
+                            "typename": "int"
+                          }
+                        ],
+                        "keywords": [],
+                        "lineno": 2,
+                        "col_offset": 26
+                      },
+                      "ifs": [
+                        {
+                          "type": "BoolOp",
+                          "op": {
+                            "type": "And"
+                          },
+                          "values": [
+                            {
+                              "type": "Compare",
+                              "left": {
+                                "type": "Name",
+                                "id": "x",
+                                "lineno": 2,
+                                "col_offset": 38
+                              },
+                              "ops": [
+                                {
+                                  "type": "Gt"
+                                }
+                              ],
+                              "comparators": [
+                                {
+                                  "type": "Constant",
+                                  "value": 0,
+                                  "lineno": 2,
+                                  "col_offset": 42,
+                                  "typename": "int"
+                                }
+                              ],
+                              "lineno": 2,
+                              "col_offset": 38
+                            },
+                            {
+                              "type": "Compare",
+                              "left": {
+                                "type": "Name",
+                                "id": "x",
+                                "lineno": 2,
+                                "col_offset": 48
+                              },
+                              "ops": [
+                                {
+                                  "type": "Lt"
+                                }
+                              ],
+                              "comparators": [
+                                {
+                                  "type": "Constant",
+                                  "value": 3,
+                                  "lineno": 2,
+                                  "col_offset": 52,
+                                  "typename": "int"
+                                }
+                              ],
+                              "lineno": 2,
+                              "col_offset": 48
+                            }
+                          ],
+                          "lineno": 2,
+                          "col_offset": 38
+                        }
+                      ],
+                      "is_async": 0
+                    }
+                  ],
+                  "lineno": 2,
+                  "col_offset": 9
+                },
+                "lineno": 2,
+                "col_offset": 2
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
   @Test
   public void timesTwo() {
     double x = Math.PI;
@@ -4415,5 +4577,16 @@ public class MainTest {
 
     var output = interpreter.invoke(func);
     assertEquals(new Interpreter.PyTuple(new Object[] {1, 2}), output);
+  }
+
+  @Test
+  public void listComprehension() {
+    var jsonAst = JsonParser.parseString(listComprehensionJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("list_comprehension");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals(new Interpreter.PyList(List.of(10, 20)), output);
   }
 }
