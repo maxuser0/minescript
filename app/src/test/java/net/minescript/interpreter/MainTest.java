@@ -4598,6 +4598,328 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+      def binary_ops():
+        results = []
+        results.append(22 / 7)
+        results.append(2 ** 8)
+        results.append(22 % 7)
+        results.append("This is a %s." % "test")
+        results.append("This is %d %s." % (1, "test"))
+        return results
+  */
+  private static final String binaryOpsJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "binary_ops",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "results",
+                    "lineno": 2,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "List",
+                  "elts": [],
+                  "lineno": 2,
+                  "col_offset": 12
+                },
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
+              },
+              {
+                "type": "Expr",
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Attribute",
+                    "value": {
+                      "type": "Name",
+                      "id": "results",
+                      "lineno": 3,
+                      "col_offset": 2
+                    },
+                    "attr": "append",
+                    "lineno": 3,
+                    "col_offset": 2
+                  },
+                  "args": [
+                    {
+                      "type": "BinOp",
+                      "left": {
+                        "type": "Constant",
+                        "value": 22,
+                        "lineno": 3,
+                        "col_offset": 17,
+                        "typename": "int"
+                      },
+                      "op": {
+                        "type": "Div"
+                      },
+                      "right": {
+                        "type": "Constant",
+                        "value": 7,
+                        "lineno": 3,
+                        "col_offset": 22,
+                        "typename": "int"
+                      },
+                      "lineno": 3,
+                      "col_offset": 17
+                    }
+                  ],
+                  "keywords": [],
+                  "lineno": 3,
+                  "col_offset": 2
+                },
+                "lineno": 3,
+                "col_offset": 2
+              },
+              {
+                "type": "Expr",
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Attribute",
+                    "value": {
+                      "type": "Name",
+                      "id": "results",
+                      "lineno": 4,
+                      "col_offset": 2
+                    },
+                    "attr": "append",
+                    "lineno": 4,
+                    "col_offset": 2
+                  },
+                  "args": [
+                    {
+                      "type": "BinOp",
+                      "left": {
+                        "type": "Constant",
+                        "value": 2,
+                        "lineno": 4,
+                        "col_offset": 17,
+                        "typename": "int"
+                      },
+                      "op": {
+                        "type": "Pow"
+                      },
+                      "right": {
+                        "type": "Constant",
+                        "value": 8,
+                        "lineno": 4,
+                        "col_offset": 22,
+                        "typename": "int"
+                      },
+                      "lineno": 4,
+                      "col_offset": 17
+                    }
+                  ],
+                  "keywords": [],
+                  "lineno": 4,
+                  "col_offset": 2
+                },
+                "lineno": 4,
+                "col_offset": 2
+              },
+              {
+                "type": "Expr",
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Attribute",
+                    "value": {
+                      "type": "Name",
+                      "id": "results",
+                      "lineno": 5,
+                      "col_offset": 2
+                    },
+                    "attr": "append",
+                    "lineno": 5,
+                    "col_offset": 2
+                  },
+                  "args": [
+                    {
+                      "type": "BinOp",
+                      "left": {
+                        "type": "Constant",
+                        "value": 22,
+                        "lineno": 5,
+                        "col_offset": 17,
+                        "typename": "int"
+                      },
+                      "op": {
+                        "type": "Mod"
+                      },
+                      "right": {
+                        "type": "Constant",
+                        "value": 7,
+                        "lineno": 5,
+                        "col_offset": 22,
+                        "typename": "int"
+                      },
+                      "lineno": 5,
+                      "col_offset": 17
+                    }
+                  ],
+                  "keywords": [],
+                  "lineno": 5,
+                  "col_offset": 2
+                },
+                "lineno": 5,
+                "col_offset": 2
+              },
+              {
+                "type": "Expr",
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Attribute",
+                    "value": {
+                      "type": "Name",
+                      "id": "results",
+                      "lineno": 6,
+                      "col_offset": 2
+                    },
+                    "attr": "append",
+                    "lineno": 6,
+                    "col_offset": 2
+                  },
+                  "args": [
+                    {
+                      "type": "BinOp",
+                      "left": {
+                        "type": "Constant",
+                        "value": "This is a %s.",
+                        "lineno": 6,
+                        "col_offset": 17,
+                        "typename": "str"
+                      },
+                      "op": {
+                        "type": "Mod"
+                      },
+                      "right": {
+                        "type": "Constant",
+                        "value": "test",
+                        "lineno": 6,
+                        "col_offset": 35,
+                        "typename": "str"
+                      },
+                      "lineno": 6,
+                      "col_offset": 17
+                    }
+                  ],
+                  "keywords": [],
+                  "lineno": 6,
+                  "col_offset": 2
+                },
+                "lineno": 6,
+                "col_offset": 2
+              },
+              {
+                "type": "Expr",
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Attribute",
+                    "value": {
+                      "type": "Name",
+                      "id": "results",
+                      "lineno": 7,
+                      "col_offset": 2
+                    },
+                    "attr": "append",
+                    "lineno": 7,
+                    "col_offset": 2
+                  },
+                  "args": [
+                    {
+                      "type": "BinOp",
+                      "left": {
+                        "type": "Constant",
+                        "value": "This is %d %s.",
+                        "lineno": 7,
+                        "col_offset": 17,
+                        "typename": "str"
+                      },
+                      "op": {
+                        "type": "Mod"
+                      },
+                      "right": {
+                        "type": "Tuple",
+                        "elts": [
+                          {
+                            "type": "Constant",
+                            "value": 1,
+                            "lineno": 7,
+                            "col_offset": 37,
+                            "typename": "int"
+                          },
+                          {
+                            "type": "Constant",
+                            "value": "test",
+                            "lineno": 7,
+                            "col_offset": 40,
+                            "typename": "str"
+                          }
+                        ],
+                        "lineno": 7,
+                        "col_offset": 36
+                      },
+                      "lineno": 7,
+                      "col_offset": 17
+                    }
+                  ],
+                  "keywords": [],
+                  "lineno": 7,
+                  "col_offset": 2
+                },
+                "lineno": 7,
+                "col_offset": 2
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Name",
+                  "id": "results",
+                  "lineno": 8,
+                  "col_offset": 9
+                },
+                "lineno": 8,
+                "col_offset": 2
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
   @Test
   public void timesTwo() {
     double x = Math.PI;
@@ -4896,5 +5218,23 @@ public class MainTest {
 
     var output = interpreter.invoke(func);
     assertEquals(90, output);
+  }
+
+  @Test
+  public void binaryOps() {
+    var jsonAst = JsonParser.parseString(binaryOpsJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("binary_ops");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertTrue(output instanceof Interpreter.PyList);
+    var list = ((Interpreter.PyList) output).getJavaList();
+    assertEquals(5, list.size());
+    assertEquals(22. / 7., ((Number) list.get(0)).doubleValue(), 0.000000001);
+    assertEquals(256, list.get(1));
+    assertEquals(1, list.get(2));
+    assertEquals("This is a test.", list.get(3));
+    assertEquals("This is 1 test.", list.get(4));
   }
 }

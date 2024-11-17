@@ -1238,9 +1238,8 @@ public class Interpreter {
       SUB("-"),
       MUL("*"),
       DIV("/"),
-      MOD("%"),
-      OR("||"),
-      AND("&&");
+      POW("**"),
+      MOD("%");
 
       private final String symbol;
 
@@ -1261,6 +1260,12 @@ public class Interpreter {
           return Op.SUB;
         case "Mult":
           return Op.MUL;
+        case "Div":
+          return Op.DIV;
+        case "Pow":
+          return Op.POW;
+        case "Mod":
+          return Op.MOD;
         default:
           throw new UnsupportedOperationException("Unsupported binary op: " + opName);
       }
@@ -1269,7 +1274,7 @@ public class Interpreter {
     @Override
     public Object eval(Context context) {
       var lhsValue = lhs.eval(context);
-      var rhsValue = (op == Op.OR || op == Op.AND) ? null : rhs.eval(context);
+      var rhsValue = rhs.eval(context);
       switch (op) {
         case ADD:
           if (lhsValue instanceof Number lhsNum && rhsValue instanceof Number rhsNum) {
@@ -1293,7 +1298,37 @@ public class Interpreter {
           return Numbers.subtract((Number) lhsValue, (Number) rhsValue);
         case MUL:
           return Numbers.multiply((Number) lhsValue, (Number) rhsValue);
-          // TODO(maxuser): impl ops...
+        case DIV:
+          if (lhsValue instanceof Number lhsNum && rhsValue instanceof Number rhsNum) {
+            double d = lhsNum.doubleValue() / rhsNum.doubleValue();
+            int i = (int) d;
+            return i == d ? (Number) i : (Number) d;
+          }
+          break;
+        case POW:
+          if (lhsValue instanceof Number lhsNum && rhsValue instanceof Number rhsNum) {
+            double d = Math.pow(lhsNum.doubleValue(), rhsNum.doubleValue());
+            int i = (int) d;
+            return i == d ? (Number) i : (Number) d;
+          }
+          break;
+        case MOD:
+          {
+            if (lhsValue instanceof String lhsString) {
+              if (rhsValue instanceof PyTuple tuple) {
+                return String.format(
+                    lhsString, StreamSupport.stream(tuple.spliterator(), false).toArray());
+              } else {
+                return String.format(lhsString, rhsValue);
+              }
+            } else {
+              var lhsNum = (Number) lhsValue;
+              var rhsNum = (Number) rhsValue;
+              var div = Numbers.divide(lhsNum, rhsNum);
+              var mult = Numbers.multiply(div, rhsNum);
+              return Numbers.subtract(lhsNum, mult);
+            }
+          }
       }
       throw new UnsupportedOperationException(
           String.format(
