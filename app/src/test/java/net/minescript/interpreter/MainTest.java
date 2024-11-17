@@ -4312,6 +4312,149 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+      def if_else_expr():
+        x = "foo" if 1 else "bar"
+        y = "foo" if 0 else "bar"
+        return x + y
+  */
+  private static final String ifElseExprJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "if_else_expr",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "x",
+                    "lineno": 2,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "IfExp",
+                  "test": {
+                    "type": "Constant",
+                    "value": 1,
+                    "lineno": 2,
+                    "col_offset": 15,
+                    "typename": "int"
+                  },
+                  "body": {
+                    "type": "Constant",
+                    "value": "foo",
+                    "lineno": 2,
+                    "col_offset": 6,
+                    "typename": "str"
+                  },
+                  "orelse": {
+                    "type": "Constant",
+                    "value": "bar",
+                    "lineno": 2,
+                    "col_offset": 22,
+                    "typename": "str"
+                  },
+                  "lineno": 2,
+                  "col_offset": 6
+                },
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
+              },
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "y",
+                    "lineno": 3,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "IfExp",
+                  "test": {
+                    "type": "Constant",
+                    "value": 0,
+                    "lineno": 3,
+                    "col_offset": 15,
+                    "typename": "int"
+                  },
+                  "body": {
+                    "type": "Constant",
+                    "value": "foo",
+                    "lineno": 3,
+                    "col_offset": 6,
+                    "typename": "str"
+                  },
+                  "orelse": {
+                    "type": "Constant",
+                    "value": "bar",
+                    "lineno": 3,
+                    "col_offset": 22,
+                    "typename": "str"
+                  },
+                  "lineno": 3,
+                  "col_offset": 6
+                },
+                "type_comment": null,
+                "lineno": 3,
+                "col_offset": 2
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "BinOp",
+                  "left": {
+                    "type": "Name",
+                    "id": "x",
+                    "lineno": 4,
+                    "col_offset": 9
+                  },
+                  "op": {
+                    "type": "Add"
+                  },
+                  "right": {
+                    "type": "Name",
+                    "id": "y",
+                    "lineno": 4,
+                    "col_offset": 13
+                  },
+                  "lineno": 4,
+                  "col_offset": 9
+                },
+                "lineno": 4,
+                "col_offset": 2
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
   @Test
   public void timesTwo() {
     double x = Math.PI;
@@ -4588,5 +4731,16 @@ public class MainTest {
 
     var output = interpreter.invoke(func);
     assertEquals(new Interpreter.PyList(List.of(10, 20)), output);
+  }
+
+  @Test
+  public void ifElseExpr() {
+    var jsonAst = JsonParser.parseString(ifElseExprJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("if_else_expr");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals("foobar", output);
   }
 }

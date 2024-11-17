@@ -318,6 +318,12 @@ public class Interpreter {
               parseExpression(getAttr(element, "value")),
               parseExpression(getAttr(element, "slice")));
 
+        case "IfExp":
+          return new IfExpression(
+              parseExpression(getAttr(element, "test")),
+              parseExpression(getAttr(element, "body")),
+              parseExpression(getAttr(element, "orelse")));
+
         case "ListComp":
           {
             var generator = getAttr(element, "generators").getAsJsonArray().get(0);
@@ -1330,6 +1336,19 @@ public class Interpreter {
     @Override
     public String toString() {
       return String.format("%s[%s]", array, index);
+    }
+  }
+
+  public record IfExpression(Expression test, Expression body, Expression orElse)
+      implements Expression {
+    @Override
+    public Object eval(Context context) {
+      return convertToBool(test.eval(context)) ? body.eval(context) : orElse.eval(context);
+    }
+
+    @Override
+    public String toString() {
+      return String.format("%s if %s else %s", body, test, orElse);
     }
   }
 
