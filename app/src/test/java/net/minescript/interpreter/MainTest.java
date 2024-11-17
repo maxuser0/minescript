@@ -4455,6 +4455,149 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+      def lambda_test():
+        n = 10
+        x = lambda y: n * y
+        return x(9)
+  */
+  private static final String lambdaTestJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "lambda_test",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "n",
+                    "lineno": 2,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "Constant",
+                  "value": 10,
+                  "lineno": 2,
+                  "col_offset": 6,
+                  "typename": "int"
+                },
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
+              },
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "x",
+                    "lineno": 3,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "Lambda",
+                  "args": {
+                    "type": "arguments",
+                    "posonlyargs": [],
+                    "args": [
+                      {
+                        "type": "arg",
+                        "arg": "y",
+                        "annotation": null,
+                        "type_comment": null,
+                        "lineno": 3,
+                        "col_offset": 13
+                      }
+                    ],
+                    "vararg": null,
+                    "kwonlyargs": [],
+                    "kw_defaults": [],
+                    "kwarg": null,
+                    "defaults": []
+                  },
+                  "body": {
+                    "type": "BinOp",
+                    "left": {
+                      "type": "Name",
+                      "id": "n",
+                      "lineno": 3,
+                      "col_offset": 16
+                    },
+                    "op": {
+                      "type": "Mult"
+                    },
+                    "right": {
+                      "type": "Name",
+                      "id": "y",
+                      "lineno": 3,
+                      "col_offset": 20
+                    },
+                    "lineno": 3,
+                    "col_offset": 16
+                  },
+                  "lineno": 3,
+                  "col_offset": 6
+                },
+                "type_comment": null,
+                "lineno": 3,
+                "col_offset": 2
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Name",
+                    "id": "x",
+                    "lineno": 4,
+                    "col_offset": 9
+                  },
+                  "args": [
+                    {
+                      "type": "Constant",
+                      "value": 9,
+                      "lineno": 4,
+                      "col_offset": 11,
+                      "typename": "int"
+                    }
+                  ],
+                  "keywords": [],
+                  "lineno": 4,
+                  "col_offset": 9
+                },
+                "lineno": 4,
+                "col_offset": 2
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
   @Test
   public void timesTwo() {
     double x = Math.PI;
@@ -4742,5 +4885,16 @@ public class MainTest {
 
     var output = interpreter.invoke(func);
     assertEquals("foobar", output);
+  }
+
+  @Test
+  public void lambdaTest() {
+    var jsonAst = JsonParser.parseString(lambdaTestJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("lambda_test");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals(90, output);
   }
 }

@@ -362,6 +362,14 @@ public class Interpreter {
               StreamSupport.stream(getAttr(element, "values").getAsJsonArray().spliterator(), false)
                   .map(this::parseExpression)
                   .toList());
+
+        case "Lambda":
+          {
+            return new Lambda(
+                parseFunctionArgs(
+                    getAttr(getAttr(element, "args").getAsJsonObject(), "args").getAsJsonArray()),
+                parseExpression(getAttr(element, "body")));
+          }
       }
       throw new IllegalArgumentException("Unknown expression type: " + element.toString());
     }
@@ -1857,6 +1865,38 @@ public class Interpreter {
       }
       out.append("}");
       return out.toString();
+    }
+  }
+
+  public record Lambda(List<FunctionArg> args, Expression body) implements Expression {
+    @Override
+    public Object eval(Context context) {
+      return createFunction(context);
+    }
+
+    private Function createFunction(Context enclosingContext) {
+      return (context, params) -> {
+        if (args.size() != params.length) {
+          throw new IllegalArgumentException(
+              String.format(
+                  "Invoking lambda with %d args but %d required", params.length, args.size()));
+        }
+
+        var localContext = enclosingContext.createLocalContext();
+        for (int i = 0; i < args.size(); ++i) {
+          var arg = args.get(i);
+          var argValue = params[i];
+          localContext.setVariable(arg.identifier().name(), argValue);
+        }
+        return body.eval(localContext);
+      };
+    }
+
+    @Override
+    public String toString() {
+      return String.format(
+          "lambda(%s): %s",
+          args.stream().map(a -> a.identifier().name()).collect(joining(", ")), body);
     }
   }
 
