@@ -33,6 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import javax.naming.Context;
 import net.minescript.common.Numbers;
 
 public class Interpreter {
@@ -192,6 +193,23 @@ public class Interpreter {
         case "Break":
           return new Break();
 
+        case "Try":
+          {
+            JsonArray finalBody = getAttr(element, "finalbody").getAsJsonArray();
+            return new TryBlock(
+                parseStatementBlock(getBody(element)),
+                StreamSupport.stream(
+                        getAttr(element, "handlers").getAsJsonArray().spliterator(), false)
+                    .map(this::parseExceptionHandler)
+                    .toList(),
+                finalBody.isEmpty()
+                    ? Optional.empty()
+                    : Optional.of(parseStatementBlock(finalBody)));
+          }
+
+        case "Raise":
+          return new RaiseStatement(parseExpression(getAttr(element, "exc")));
+
         case "Return":
           {
             var returnValue = getAttr(element, "value");
@@ -205,6 +223,13 @@ public class Interpreter {
           }
       }
       throw new IllegalArgumentException("Unknown statement type: " + element.toString());
+    }
+
+    private ExceptionHandler parseExceptionHandler(JsonElement element) {
+      return new ExceptionHandler(
+          new Identifier(getAttr(getAttr(element, "type"), "id").getAsString()),
+          new Identifier(getAttr(element, "name").getAsString()),
+          parseStatementBlock(getBody(element)));
     }
 
     private List<FunctionArg> parseFunctionArgs(JsonArray args) {
@@ -651,13 +676,86 @@ public class Interpreter {
     }
   }
 
-  public record ExceptionHandler(Identifier exceptionType, Identifier exceptionVariable) {}
+  public record ExceptionHandler(
+      Identifier exceptionType, Identifier exceptionVariable, Statement body) {}
 
   public record TryBlock(
-      Statement tryBody, List<ExceptionHandler> exceptionHandlers, Statement finallyBlock)
-      implements Statement {}
+      Statement tryBody, List<ExceptionHandler> exceptionHandlers, Optional<Statement> finallyBlock)
+      implements Statement {
+    @Override
+    public void exec(Context context) {
+      if (context.skipStatement()) {
+        return;
+      }
+      try {
+        tryBody.exec(context);
+      } catch (Exception e) {
+        // PyException exists only to prevent all eval/exec/invoke methods from declaring that they
+        // throw Exception.  Unwrap the underlying exception here.
+        if (e instanceof PyException pyException) {
+          e = (Exception) pyException.getCause();
+        }
+        boolean handled = false;
+        for (var handler : exceptionHandlers) {
+          if (context.getVariable(handler.exceptionType().name()) instanceof JavaClassId javaClassId
+              && javaClassId.clss().isAssignableFrom(e.getClass())) {
+            context.setVariable(handler.exceptionVariable().name(), e);
+            handler.body.exec(context);
+            handled = true;
+            break;
+          }
+        }
+        if (!handled) {
+          throw new PyException(e);
+        }
+      } finally {
+        finallyBlock.ifPresent(fb -> fb.exec(context));
+      }
+    }
 
-  public record ResourceBlock(Expression resource, Statement body) implements Statement {}
+    @Override
+    public String toString() {
+      var out = new StringBuilder("try\n");
+      out.append("  " + tryBody.toString().replaceAll("\n", "\n  ") + "\n");
+      for (var handler : exceptionHandlers) {
+        out.append(
+            String.format(
+                " catch (%s %s)\n", handler.exceptionType(), handler.exceptionVariable()));
+        out.append("  " + handler.body().toString().replaceAll("\n", "\n  ") + "\n");
+      }
+      finallyBlock.ifPresent(
+          fb -> {
+            out.append(" finally\n");
+            out.append("  " + fb.toString().replaceAll("\n", "\n  ") + "\n");
+          });
+      return out.toString();
+    }
+  }
+
+  /**
+   * RuntimeException subclass that allows arbitrary Exception types to be thrown without requiring
+   * all eval/exec/invoke methods to declare that they throw Exception.
+   */
+  public static class PyException extends RuntimeException {
+    public PyException(Exception e) {
+      super(e);
+    }
+  }
+
+  public record RaiseStatement(Expression exception) implements Statement {
+    @Override
+    public void exec(Context context) {
+      if (context.skipStatement()) {
+        return;
+      }
+      throw new PyException((Exception) exception.eval(context));
+    }
+
+    @Override
+    public String toString() {
+      return String.format("throw %s;", exception);
+    }
+  }
 
   public interface Expression extends Statement {
     @Override

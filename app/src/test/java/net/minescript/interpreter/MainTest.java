@@ -5032,6 +5032,404 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+      def exceptions():
+        Exception = JavaClass("java.lang.Exception")
+        IllegalStateException = JavaClass("java.lang.IllegalStateException")
+        IllegalArgumentException = JavaClass("java.lang.IllegalArgumentException")
+        output = []
+        try:
+          raise IllegalArgumentException("Thrown from Python.")
+          output.append("This code is unreachable.")
+        except IllegalStateException as e:
+          output.append("Mismatched exception")
+        except Exception as e:
+          output.append(f"Handled exception: {e}")
+        finally:
+          output.append("Finally!")
+        return output
+  */
+  private static final String exceptionsJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "exceptions",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "Exception",
+                    "lineno": 2,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Name",
+                    "id": "JavaClass",
+                    "lineno": 2,
+                    "col_offset": 14
+                  },
+                  "args": [
+                    {
+                      "type": "Constant",
+                      "value": "java.lang.Exception",
+                      "lineno": 2,
+                      "col_offset": 24,
+                      "typename": "str"
+                    }
+                  ],
+                  "keywords": [],
+                  "lineno": 2,
+                  "col_offset": 14
+                },
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
+              },
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "IllegalStateException",
+                    "lineno": 3,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Name",
+                    "id": "JavaClass",
+                    "lineno": 3,
+                    "col_offset": 26
+                  },
+                  "args": [
+                    {
+                      "type": "Constant",
+                      "value": "java.lang.IllegalStateException",
+                      "lineno": 3,
+                      "col_offset": 36,
+                      "typename": "str"
+                    }
+                  ],
+                  "keywords": [],
+                  "lineno": 3,
+                  "col_offset": 26
+                },
+                "type_comment": null,
+                "lineno": 3,
+                "col_offset": 2
+              },
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "IllegalArgumentException",
+                    "lineno": 4,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "Call",
+                  "func": {
+                    "type": "Name",
+                    "id": "JavaClass",
+                    "lineno": 4,
+                    "col_offset": 29
+                  },
+                  "args": [
+                    {
+                      "type": "Constant",
+                      "value": "java.lang.IllegalArgumentException",
+                      "lineno": 4,
+                      "col_offset": 39,
+                      "typename": "str"
+                    }
+                  ],
+                  "keywords": [],
+                  "lineno": 4,
+                  "col_offset": 29
+                },
+                "type_comment": null,
+                "lineno": 4,
+                "col_offset": 2
+              },
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "output",
+                    "lineno": 5,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "List",
+                  "elts": [],
+                  "lineno": 5,
+                  "col_offset": 11
+                },
+                "type_comment": null,
+                "lineno": 5,
+                "col_offset": 2
+              },
+              {
+                "type": "Try",
+                "body": [
+                  {
+                    "type": "Raise",
+                    "exc": {
+                      "type": "Call",
+                      "func": {
+                        "type": "Name",
+                        "id": "IllegalArgumentException",
+                        "lineno": 7,
+                        "col_offset": 10
+                      },
+                      "args": [
+                        {
+                          "type": "Constant",
+                          "value": "Thrown from Python.",
+                          "lineno": 7,
+                          "col_offset": 35,
+                          "typename": "str"
+                        }
+                      ],
+                      "keywords": [],
+                      "lineno": 7,
+                      "col_offset": 10
+                    },
+                    "cause": null,
+                    "lineno": 7,
+                    "col_offset": 4
+                  },
+                  {
+                    "type": "Expr",
+                    "value": {
+                      "type": "Call",
+                      "func": {
+                        "type": "Attribute",
+                        "value": {
+                          "type": "Name",
+                          "id": "output",
+                          "lineno": 8,
+                          "col_offset": 4
+                        },
+                        "attr": "append",
+                        "lineno": 8,
+                        "col_offset": 4
+                      },
+                      "args": [
+                        {
+                          "type": "Constant",
+                          "value": "This code is unreachable.",
+                          "lineno": 8,
+                          "col_offset": 18,
+                          "typename": "str"
+                        }
+                      ],
+                      "keywords": [],
+                      "lineno": 8,
+                      "col_offset": 4
+                    },
+                    "lineno": 8,
+                    "col_offset": 4
+                  }
+                ],
+                "handlers": [
+                  {
+                    "type": {
+                      "type": "Name",
+                      "id": "IllegalStateException",
+                      "lineno": 9,
+                      "col_offset": 9
+                    },
+                    "name": "e",
+                    "body": [
+                      {
+                        "type": "Expr",
+                        "value": {
+                          "type": "Call",
+                          "func": {
+                            "type": "Attribute",
+                            "value": {
+                              "type": "Name",
+                              "id": "output",
+                              "lineno": 10,
+                              "col_offset": 4
+                            },
+                            "attr": "append",
+                            "lineno": 10,
+                            "col_offset": 4
+                          },
+                          "args": [
+                            {
+                              "type": "Constant",
+                              "value": "Mismatched exception",
+                              "lineno": 10,
+                              "col_offset": 18,
+                              "typename": "str"
+                            }
+                          ],
+                          "keywords": [],
+                          "lineno": 10,
+                          "col_offset": 4
+                        },
+                        "lineno": 10,
+                        "col_offset": 4
+                      }
+                    ],
+                    "lineno": 9,
+                    "col_offset": 2
+                  },
+                  {
+                    "type": {
+                      "type": "Name",
+                      "id": "Exception",
+                      "lineno": 11,
+                      "col_offset": 9
+                    },
+                    "name": "e",
+                    "body": [
+                      {
+                        "type": "Expr",
+                        "value": {
+                          "type": "Call",
+                          "func": {
+                            "type": "Attribute",
+                            "value": {
+                              "type": "Name",
+                              "id": "output",
+                              "lineno": 12,
+                              "col_offset": 4
+                            },
+                            "attr": "append",
+                            "lineno": 12,
+                            "col_offset": 4
+                          },
+                          "args": [
+                            {
+                              "type": "JoinedStr",
+                              "values": [
+                                {
+                                  "type": "Constant",
+                                  "value": "Handled exception: ",
+                                  "lineno": 12,
+                                  "col_offset": 18,
+                                  "typename": "str"
+                                },
+                                {
+                                  "type": "FormattedValue",
+                                  "value": {
+                                    "type": "Name",
+                                    "id": "e",
+                                    "lineno": 12,
+                                    "col_offset": 40
+                                  },
+                                  "conversion": -1,
+                                  "format_spec": null,
+                                  "lineno": 12,
+                                  "col_offset": 18
+                                }
+                              ],
+                              "lineno": 12,
+                              "col_offset": 18
+                            }
+                          ],
+                          "keywords": [],
+                          "lineno": 12,
+                          "col_offset": 4
+                        },
+                        "lineno": 12,
+                        "col_offset": 4
+                      }
+                    ],
+                    "lineno": 11,
+                    "col_offset": 2
+                  }
+                ],
+                "orelse": [],
+                "finalbody": [
+                  {
+                    "type": "Expr",
+                    "value": {
+                      "type": "Call",
+                      "func": {
+                        "type": "Attribute",
+                        "value": {
+                          "type": "Name",
+                          "id": "output",
+                          "lineno": 14,
+                          "col_offset": 4
+                        },
+                        "attr": "append",
+                        "lineno": 14,
+                        "col_offset": 4
+                      },
+                      "args": [
+                        {
+                          "type": "Constant",
+                          "value": "Finally!",
+                          "lineno": 14,
+                          "col_offset": 18,
+                          "typename": "str"
+                        }
+                      ],
+                      "keywords": [],
+                      "lineno": 14,
+                      "col_offset": 4
+                    },
+                    "lineno": 14,
+                    "col_offset": 4
+                  }
+                ],
+                "lineno": 6,
+                "col_offset": 2
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "Name",
+                  "id": "output",
+                  "lineno": 15,
+                  "col_offset": 9
+                },
+                "lineno": 15,
+                "col_offset": 2
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
   @Test
   public void timesTwo() {
     double x = Math.PI;
@@ -5359,5 +5757,21 @@ public class MainTest {
 
     var output = interpreter.invoke(func);
     assertEquals("start100end", output);
+  }
+
+  @Test
+  public void exceptions() {
+    var jsonAst = JsonParser.parseString(exceptionsJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("exceptions");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals(
+        new Interpreter.PyList(
+            List.of(
+                "Handled exception: java.lang.IllegalArgumentException: Thrown from Python.",
+                "Finally!")),
+        output);
   }
 }
