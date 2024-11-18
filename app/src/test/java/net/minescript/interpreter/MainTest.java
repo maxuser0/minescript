@@ -4920,6 +4920,118 @@ public class MainTest {
       }
       """;
 
+  /* Generated from Python code:
+
+      def formatted_string():
+        x = 99
+        return f"start{x + 1}end"
+  */
+  private static final String formattedStringJsonAst =
+      """
+      {
+        "type": "Module",
+        "body": [
+          {
+            "type": "FunctionDef",
+            "name": "formatted_string",
+            "args": {
+              "type": "arguments",
+              "posonlyargs": [],
+              "args": [],
+              "vararg": null,
+              "kwonlyargs": [],
+              "kw_defaults": [],
+              "kwarg": null,
+              "defaults": []
+            },
+            "body": [
+              {
+                "type": "Assign",
+                "targets": [
+                  {
+                    "type": "Name",
+                    "id": "x",
+                    "lineno": 2,
+                    "col_offset": 2
+                  }
+                ],
+                "value": {
+                  "type": "Constant",
+                  "value": 99,
+                  "lineno": 2,
+                  "col_offset": 6,
+                  "typename": "int"
+                },
+                "type_comment": null,
+                "lineno": 2,
+                "col_offset": 2
+              },
+              {
+                "type": "Return",
+                "value": {
+                  "type": "JoinedStr",
+                  "values": [
+                    {
+                      "type": "Constant",
+                      "value": "start",
+                      "lineno": 3,
+                      "col_offset": 9,
+                      "typename": "str"
+                    },
+                    {
+                      "type": "FormattedValue",
+                      "value": {
+                        "type": "BinOp",
+                        "left": {
+                          "type": "Name",
+                          "id": "x",
+                          "lineno": 3,
+                          "col_offset": 17
+                        },
+                        "op": {
+                          "type": "Add"
+                        },
+                        "right": {
+                          "type": "Constant",
+                          "value": 1,
+                          "lineno": 3,
+                          "col_offset": 21,
+                          "typename": "int"
+                        },
+                        "lineno": 3,
+                        "col_offset": 17
+                      },
+                      "conversion": -1,
+                      "format_spec": null,
+                      "lineno": 3,
+                      "col_offset": 9
+                    },
+                    {
+                      "type": "Constant",
+                      "value": "end",
+                      "lineno": 3,
+                      "col_offset": 9,
+                      "typename": "str"
+                    }
+                  ],
+                  "lineno": 3,
+                  "col_offset": 9
+                },
+                "lineno": 3,
+                "col_offset": 2
+              }
+            ],
+            "decorator_list": [],
+            "returns": null,
+            "type_comment": null,
+            "lineno": 1,
+            "col_offset": 0
+          }
+        ],
+        "type_ignores": []
+      }
+      """;
+
   @Test
   public void timesTwo() {
     double x = Math.PI;
@@ -5236,5 +5348,16 @@ public class MainTest {
     assertEquals(1, list.get(2));
     assertEquals("This is a test.", list.get(3));
     assertEquals("This is 1 test.", list.get(4));
+  }
+
+  @Test
+  public void formattedString() {
+    var jsonAst = JsonParser.parseString(formattedStringJsonAst);
+    var interpreter = new Interpreter();
+    var func = interpreter.parse(jsonAst).exec().getFunction("formatted_string");
+    System.out.println(func);
+
+    var output = interpreter.invoke(func);
+    assertEquals("start100end", output);
   }
 }

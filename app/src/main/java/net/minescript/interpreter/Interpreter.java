@@ -370,6 +370,16 @@ public class Interpreter {
                     getAttr(getAttr(element, "args").getAsJsonObject(), "args").getAsJsonArray()),
                 parseExpression(getAttr(element, "body")));
           }
+
+        case "JoinedStr":
+          return new FormattedString(
+              StreamSupport.stream(getAttr(element, "values").getAsJsonArray().spliterator(), false)
+                  .map(
+                      v ->
+                          getType(v).equals("FormattedValue")
+                              ? parseExpression(getAttr(v, "value"))
+                              : parseExpression(v))
+                  .toList());
       }
       throw new IllegalArgumentException("Unknown expression type: " + element.toString());
     }
@@ -1932,6 +1942,27 @@ public class Interpreter {
       return String.format(
           "lambda(%s): %s",
           args.stream().map(a -> a.identifier().name()).collect(joining(", ")), body);
+    }
+  }
+
+  public record FormattedString(List<Expression> values) implements Expression {
+    @Override
+    public Object eval(Context context) {
+      return values.stream().map(v -> v.eval(context).toString()).collect(joining());
+    }
+
+    @Override
+    public String toString() {
+      return String.format(
+          "f\"%s\"",
+          values.stream()
+              .map(
+                  v ->
+                      v instanceof ConstantExpression constExpr
+                              && constExpr.value() instanceof String strValue
+                          ? strValue
+                          : String.format("{%s}", v))
+              .collect(joining()));
     }
   }
 
