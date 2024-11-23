@@ -12,7 +12,7 @@ base {
 }
 mixin {
     config("${mod_id}.mixins.json")
-    // NOTE(maxuser): Unused by Minescript: config("${mod_id}.forge.mixins.json")
+    config("${mod_id}.forge.mixins.json")
 }
 
 minecraft {
@@ -95,7 +95,7 @@ sourceSets.each {
 jar {
     manifest {
         attributes([
-            'MixinConfigs': "${mod_id}.mixins.json",
+            'MixinConfigs': "${mod_id}.mixins.json,${mod_id}.forge.mixins.json",
         ])
     }
 }
