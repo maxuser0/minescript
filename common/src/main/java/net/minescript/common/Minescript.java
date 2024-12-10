@@ -71,7 +71,6 @@ import net.minecraft.client.renderer.debug.DebugRenderer;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.game.ServerboundPickItemPacket;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
@@ -2599,12 +2598,9 @@ public class Minescript {
 
       case "player_inventory_slot_to_hotbar":
         {
-          args.expectSize(1);
-          int slot = args.getStrictInt(0);
-          var inventory = player.getInventory();
-          var connection = minecraft.getConnection();
-          connection.send(new ServerboundPickItemPacket(slot));
-          return Optional.of(new JsonPrimitive(inventory.selected));
+          throw new UnsupportedOperationException(
+              "player_inventory_slot_to_hotbar: support for ServerboundPickItemPacket removed in"
+                  + " Minecraft 1.21.4");
         }
 
       case "player_inventory_select_slot":

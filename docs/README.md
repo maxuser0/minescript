@@ -651,6 +651,9 @@ Swaps an inventory item into the hotbar.
 
 - hotbar slot (0-8) into which the inventory item was swapped
 
+Update in mc1.21.4:
+  No longer supported because ServerboundPickItemPacket was removed in Minecraft 1.21.4.
+
 Update in v4.0:
   Removed `done_callback` arg. Use `async_player_inventory_slot_to_hotbar(...)
   for async execution.
