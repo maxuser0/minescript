@@ -2291,27 +2291,11 @@ public class Interpreter {
     }
   }
 
-  public abstract static class FunctionObject implements Function {
-    private Context context;
-
-    public FunctionObject(Context context) {
-      this.context = context;
-    }
-
-    public Context context() {
-      return context;
-    }
-  }
-
-  public static class PrintFunction extends FunctionObject {
-    public PrintFunction(Context context) {
-      super(context);
-    }
-
+  public record PrintFunction(Context context) implements Function {
     @Override
     public Object invoke(Object... params) {
       @SuppressWarnings("unchecked")
-      var out = (Consumer<String>) context().getVariable("__stdout__");
+      var out = (Consumer<String>) context.getVariable("__stdout__");
       out.accept(Arrays.stream(params).map(Interpreter::pyToString).collect(joining(" ")));
       return null;
     }
