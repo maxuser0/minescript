@@ -30,10 +30,10 @@ import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
-import javax.naming.Context;
 import net.minescript.common.Numbers;
 
 public class Interpreter {
@@ -51,6 +51,11 @@ public class Interpreter {
 
   public Interpreter exec() {
     globals.execGlobalStatements();
+    return this;
+  }
+
+  public Interpreter redirectStdout(Consumer<String> out) {
+    globals.setVariable("__stdout__", out);
     return this;
   }
 
@@ -144,7 +149,7 @@ public class Interpreter {
                 throw new IllegalArgumentException(
                     "Unsupported type of augmented assignment: " + opName);
             }
-            if (lhs instanceof Identifier lhsId) {
+            if (lhs instanceof Identifier) {
               return new AugmentedAssignment(lhs, op, rhs);
             } else if (lhs instanceof ArrayIndex) {
               return new AugmentedAssignment(lhs, op, rhs);
@@ -332,7 +337,7 @@ public class Interpreter {
             var object = parseExpression(getAttr(element, "value"));
             var attr = new Identifier(getAttr(element, "attr").getAsString());
             if (parseContext == ParseContext.CALLER) {
-              return new BoundMethod(object, attr, executableCache);
+              return new BoundMethodExpression(object, attr, executableCache);
             } else {
               return new FieldAccess(object, attr);
             }
@@ -523,7 +528,7 @@ public class Interpreter {
 
   public record BoundFunction(FunctionDef function, Context enclosingContext) implements Function {
     @Override
-    public Object invoke(Context context, Object[] params) {
+    public Object invoke(Object... params) {
       if (params.length != function.args().size()) {
         throw new IllegalArgumentException(
             String.format(
@@ -549,7 +554,7 @@ public class Interpreter {
      * @param argValues Values to pass to this function's body.
      * @return Return value from invoking this function.
      */
-    public Object invoke(Context enclosingContext, Object[] argValues) {
+    public Object invoke(Context enclosingContext, Object... argValues) {
       if (args.size() != argValues.length) {
         throw new IllegalArgumentException(
             String.format(
@@ -835,6 +840,7 @@ public class Interpreter {
       }
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public void exec(Context context) {
       if (context.skipStatement()) {
@@ -941,6 +947,7 @@ public class Interpreter {
       }
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public void exec(Context context) {
       if (context.skipStatement()) {
@@ -1154,6 +1161,7 @@ public class Interpreter {
       }
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public Object eval(Context context) {
       var lhsValue = lhs.eval(context);
@@ -1397,6 +1405,7 @@ public class Interpreter {
             rhsValue = pyList.getJavaList();
           }
           if (lhsValue instanceof List lhsList && rhsValue instanceof List rhsList) {
+            @SuppressWarnings("unchecked")
             var newList = new PyList(new ArrayList<Object>(lhsList));
             newList.__iadd__(rhsList);
             return newList;
@@ -1405,7 +1414,13 @@ public class Interpreter {
         case SUB:
           return Numbers.subtract((Number) lhsValue, (Number) rhsValue);
         case MUL:
-          return Numbers.multiply((Number) lhsValue, (Number) rhsValue);
+          if (lhsValue instanceof String lhsString && rhsValue instanceof Integer rhsInt) {
+            return lhsString.repeat(rhsInt);
+          } else if (lhsValue instanceof Integer lhsInt && rhsValue instanceof String rhsString) {
+            return rhsString.repeat(lhsInt);
+          } else {
+            return Numbers.multiply((Number) lhsValue, (Number) rhsValue);
+          }
         case DIV:
           if (lhsValue instanceof Number lhsNum && rhsValue instanceof Number rhsNum) {
             double d = lhsNum.doubleValue() / rhsNum.doubleValue();
@@ -2018,7 +2033,7 @@ public class Interpreter {
     }
 
     private Function createFunction(Context enclosingContext) {
-      return (context, params) -> {
+      return params -> {
         if (args.size() != params.length) {
           throw new IllegalArgumentException(
               String.format(
@@ -2169,7 +2184,7 @@ public class Interpreter {
     }
 
     @Override
-    public Object invoke(Context context, Object[] params) {
+    public Object invoke(Object... params) {
       var cacheKey = ExecutableCacheKey.forConstructor(clss, params);
       Optional<Constructor<?>> matchedCtor =
           executableCache
@@ -2202,7 +2217,7 @@ public class Interpreter {
   }
 
   public interface Function {
-    Object invoke(Context context, Object[] params);
+    Object invoke(Object... params);
 
     default void expectNumParams(Object[] params, int n) {
       if (params.length != n) {
@@ -2215,7 +2230,7 @@ public class Interpreter {
 
   public static class IntFunction implements Function {
     @Override
-    public Object invoke(Context context, Object[] params) {
+    public Object invoke(Object... params) {
       expectNumParams(params, 1);
       var value = params[0];
       if (value instanceof String string) {
@@ -2228,7 +2243,7 @@ public class Interpreter {
 
   public static class FloatFunction implements Function {
     @Override
-    public Object invoke(Context context, Object[] params) {
+    public Object invoke(Object... params) {
       expectNumParams(params, 1);
       var value = params[0];
       if (value instanceof String string) {
@@ -2241,7 +2256,7 @@ public class Interpreter {
 
   public static class StrFunction implements Function {
     @Override
-    public Object invoke(Context context, Object[] params) {
+    public Object invoke(Object... params) {
       expectNumParams(params, 1);
       return pyToString(params[0]);
     }
@@ -2249,7 +2264,7 @@ public class Interpreter {
 
   public static class BoolFunction implements Function {
     @Override
-    public Object invoke(Context context, Object[] params) {
+    public Object invoke(Object... params) {
       expectNumParams(params, 1);
       return convertToBool(params[0]);
     }
@@ -2257,7 +2272,7 @@ public class Interpreter {
 
   public static class LenFunction implements Function {
     @Override
-    public Object invoke(Context context, Object[] params) {
+    public Object invoke(Object... params) {
       expectNumParams(params, 1);
       var value = params[0];
       if (value.getClass().isArray()) {
@@ -2276,10 +2291,28 @@ public class Interpreter {
     }
   }
 
-  public static class PrintFunction implements Function {
+  public abstract static class FunctionObject implements Function {
+    private Context context;
+
+    public FunctionObject(Context context) {
+      this.context = context;
+    }
+
+    public Context context() {
+      return context;
+    }
+  }
+
+  public static class PrintFunction extends FunctionObject {
+    public PrintFunction(Context context) {
+      super(context);
+    }
+
     @Override
-    public Object invoke(Context context, Object[] params) {
-      System.out.println(Arrays.stream(params).map(Interpreter::pyToString).collect(joining(" ")));
+    public Object invoke(Object... params) {
+      @SuppressWarnings("unchecked")
+      var out = (Consumer<String>) context().getVariable("__stdout__");
+      out.accept(Arrays.stream(params).map(Interpreter::pyToString).collect(joining(" ")));
       return null;
     }
   }
@@ -2287,7 +2320,7 @@ public class Interpreter {
   public record TypeFunction(Map<ExecutableCacheKey, Optional<Executable>> executableCache)
       implements Function {
     @Override
-    public Object invoke(Context context, Object[] params) {
+    public Object invoke(Object... params) {
       expectNumParams(params, 1);
       var value = params[0];
       if (value instanceof JavaClassId classId) {
@@ -2300,7 +2333,7 @@ public class Interpreter {
 
   public static class RangeFunction implements Function {
     @Override
-    public Object invoke(Context context, Object[] params) {
+    public Object invoke(Object... params) {
       return new RangeIterable(params);
     }
   }
@@ -2315,7 +2348,7 @@ public class Interpreter {
       var caller = method.eval(context);
       Object[] paramValues = params.stream().map(p -> p.eval(context)).toArray(Object[]::new);
       if (caller instanceof Function function) {
-        return function.invoke(context, paramValues);
+        return function.invoke(paramValues);
       }
 
       throw new IllegalArgumentException(
@@ -2378,34 +2411,37 @@ public class Interpreter {
     }
   }
 
-  public record BoundMethod(
+  public record BoundMethodExpression(
       Expression object,
-      Identifier method,
+      Identifier methodId,
       Map<ExecutableCacheKey, Optional<Executable>> executableCache)
-      implements Expression, Function {
+      implements Expression {
     @Override
     public Object eval(Context context) {
-      return this;
+      return new BoundMethod(object.eval(context), methodId.name(), executableCache);
     }
 
     @Override
     public String toString() {
-      return String.format("%s.%s", object, method);
+      return String.format("%s.%s", object, methodId);
     }
+  }
 
+  public record BoundMethod(
+      Object object,
+      String methodName,
+      Map<ExecutableCacheKey, Optional<Executable>> executableCache)
+      implements Function {
     @Override
-    public Object invoke(Context context, Object[] params) {
-      String methodName = method.name();
-      var objectValue = object.eval(context);
-
+    public Object invoke(Object... params) {
       final boolean isStaticMethod;
       final Class<?> clss;
-      if (objectValue instanceof JavaClassId classId) {
+      if (object instanceof JavaClassId classId) {
         isStaticMethod = true;
         clss = classId.clss();
       } else {
         isStaticMethod = false;
-        clss = objectValue.getClass();
+        clss = object.getClass();
       }
 
       var cacheKey = ExecutableCacheKey.forMethod(clss, isStaticMethod, methodName, params);
@@ -2423,7 +2459,7 @@ public class Interpreter {
               .map(Method.class::cast);
       if (matchedMethod.isPresent()) {
         try {
-          return matchedMethod.get().invoke(isStaticMethod ? null : objectValue, params);
+          return matchedMethod.get().invoke(isStaticMethod ? null : object, params);
         } catch (IllegalAccessException | InvocationTargetException e) {
           throw new RuntimeException(e);
         }
@@ -2448,6 +2484,7 @@ public class Interpreter {
   public record FieldAccess(Expression object, Identifier field) implements Expression {
     @Override
     public Object eval(Context context) {
+      // TODO(maxuser): Support references to static inner classes and enum values.
       var objectValue = object.eval(context);
       var objectClass =
           objectValue instanceof Class<?> ? (Class<?>) objectValue : objectValue.getClass();
@@ -2493,13 +2530,14 @@ public class Interpreter {
     public static Context createGlobals(
         Map<ExecutableCacheKey, Optional<Executable>> executableCache) {
       var context = new Context();
+      context.setVariable("__stdout__", (Consumer<String>) System.out::println);
       context.setVariable("math", new JavaClassId(math.class, executableCache));
       context.setVariable("int", new IntFunction());
       context.setVariable("float", new FloatFunction());
       context.setVariable("str", new StrFunction());
       context.setVariable("bool", new BoolFunction());
       context.setVariable("len", new LenFunction());
-      context.setVariable("print", new PrintFunction());
+      context.setVariable("print", new PrintFunction(context));
       context.setVariable("type", new TypeFunction(executableCache));
       context.setVariable("range", new RangeFunction());
       return context;
