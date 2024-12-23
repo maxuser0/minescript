@@ -528,7 +528,7 @@ public class Interpreter {
 
   public record BoundFunction(FunctionDef function, Context enclosingContext) implements Function {
     @Override
-    public Object invoke(Object... params) {
+    public Object call(Object... params) {
       if (params.length != function.args().size()) {
         throw new IllegalArgumentException(
             String.format(
@@ -2184,7 +2184,7 @@ public class Interpreter {
     }
 
     @Override
-    public Object invoke(Object... params) {
+    public Object call(Object... params) {
       var cacheKey = ExecutableCacheKey.forConstructor(clss, params);
       Optional<Constructor<?>> matchedCtor =
           executableCache
@@ -2217,7 +2217,7 @@ public class Interpreter {
   }
 
   public interface Function {
-    Object invoke(Object... params);
+    Object call(Object... params);
 
     default void expectNumParams(Object[] params, int n) {
       if (params.length != n) {
@@ -2230,7 +2230,7 @@ public class Interpreter {
 
   public static class IntFunction implements Function {
     @Override
-    public Object invoke(Object... params) {
+    public Object call(Object... params) {
       expectNumParams(params, 1);
       var value = params[0];
       if (value instanceof String string) {
@@ -2243,7 +2243,7 @@ public class Interpreter {
 
   public static class FloatFunction implements Function {
     @Override
-    public Object invoke(Object... params) {
+    public Object call(Object... params) {
       expectNumParams(params, 1);
       var value = params[0];
       if (value instanceof String string) {
@@ -2256,7 +2256,7 @@ public class Interpreter {
 
   public static class StrFunction implements Function {
     @Override
-    public Object invoke(Object... params) {
+    public Object call(Object... params) {
       expectNumParams(params, 1);
       return pyToString(params[0]);
     }
@@ -2264,7 +2264,7 @@ public class Interpreter {
 
   public static class BoolFunction implements Function {
     @Override
-    public Object invoke(Object... params) {
+    public Object call(Object... params) {
       expectNumParams(params, 1);
       return convertToBool(params[0]);
     }
@@ -2272,7 +2272,7 @@ public class Interpreter {
 
   public static class LenFunction implements Function {
     @Override
-    public Object invoke(Object... params) {
+    public Object call(Object... params) {
       expectNumParams(params, 1);
       var value = params[0];
       if (value.getClass().isArray()) {
@@ -2293,7 +2293,7 @@ public class Interpreter {
 
   public record PrintFunction(Context context) implements Function {
     @Override
-    public Object invoke(Object... params) {
+    public Object call(Object... params) {
       @SuppressWarnings("unchecked")
       var out = (Consumer<String>) context.getVariable("__stdout__");
       out.accept(Arrays.stream(params).map(Interpreter::pyToString).collect(joining(" ")));
@@ -2304,7 +2304,7 @@ public class Interpreter {
   public record TypeFunction(Map<ExecutableCacheKey, Optional<Executable>> executableCache)
       implements Function {
     @Override
-    public Object invoke(Object... params) {
+    public Object call(Object... params) {
       expectNumParams(params, 1);
       var value = params[0];
       if (value instanceof JavaClassId classId) {
@@ -2317,7 +2317,7 @@ public class Interpreter {
 
   public static class RangeFunction implements Function {
     @Override
-    public Object invoke(Object... params) {
+    public Object call(Object... params) {
       return new RangeIterable(params);
     }
   }
@@ -2332,7 +2332,7 @@ public class Interpreter {
       var caller = method.eval(context);
       Object[] paramValues = params.stream().map(p -> p.eval(context)).toArray(Object[]::new);
       if (caller instanceof Function function) {
-        return function.invoke(paramValues);
+        return function.call(paramValues);
       }
 
       throw new IllegalArgumentException(
@@ -2417,7 +2417,7 @@ public class Interpreter {
       Map<ExecutableCacheKey, Optional<Executable>> executableCache)
       implements Function {
     @Override
-    public Object invoke(Object... params) {
+    public Object call(Object... params) {
       final boolean isStaticMethod;
       final Class<?> clss;
       if (object instanceof JavaClassId classId) {
