@@ -17,14 +17,14 @@ public class Main {
                 .lines()
                 .collect(Collectors.joining("\n")));
 
-    var interpreter = new Interpreter();
-    interpreter.parse(jsonAst);
-    interpreter.exec();
+    var script = new Script();
+    script.parse(jsonAst);
+    script.exec();
 
     if (args.length == 1) {
-      var func = interpreter.getFunction(args[0]);
+      var func = script.getFunction(args[0]);
       System.out.println(func);
-      var returnValue = interpreter.invoke(func);
+      var returnValue = script.invoke(func);
       System.out.println(returnValue);
     }
   }

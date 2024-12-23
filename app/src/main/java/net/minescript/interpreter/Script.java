@@ -36,25 +36,25 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import net.minescript.common.Numbers;
 
-public class Interpreter {
+public class Script {
 
   private final ConcurrentHashMap<ExecutableCacheKey, Optional<Executable>> executableCache =
       new ConcurrentHashMap<>();
 
   private Context globals = Context.createGlobals(executableCache);
 
-  public Interpreter parse(JsonElement element) {
+  public Script parse(JsonElement element) {
     var parser = new JsonAstParser(executableCache);
     parser.parseGlobals(element, globals);
     return this;
   }
 
-  public Interpreter exec() {
+  public Script exec() {
     globals.execGlobalStatements();
     return this;
   }
 
-  public Interpreter redirectStdout(Consumer<String> out) {
+  public Script redirectStdout(Consumer<String> out) {
     globals.setVariable("__stdout__", out);
     return this;
   }
@@ -1620,13 +1620,11 @@ public class Interpreter {
       return "None";
     } else if (value instanceof Object[] array) {
       // TODO(maxuser): Support for primitive array types too.
-      return Arrays.stream(array).map(Interpreter::pyRepr).collect(joining(", ", "[", "]"));
+      return Arrays.stream(array).map(Script::pyRepr).collect(joining(", ", "[", "]"));
     } else if (value instanceof PyList pyList) {
-      return pyList.getJavaList().stream()
-          .map(Interpreter::pyRepr)
-          .collect(joining(", ", "[", "]"));
+      return pyList.getJavaList().stream().map(Script::pyRepr).collect(joining(", ", "[", "]"));
     } else if (value instanceof List<?> list) {
-      return list.stream().map(Interpreter::pyRepr).collect(joining(", ", "[", "]"));
+      return list.stream().map(Script::pyRepr).collect(joining(", ", "[", "]"));
     } else if (value instanceof Boolean bool) {
       return bool ? "True" : "False";
     } else {
@@ -1775,7 +1773,7 @@ public class Interpreter {
 
     @Override
     public String toString() {
-      return list.stream().map(Interpreter::pyToString).collect(joining(", ", "[", "]"));
+      return list.stream().map(Script::pyToString).collect(joining(", ", "[", "]"));
     }
 
     public PyList __add__(Object value) {
@@ -1934,7 +1932,7 @@ public class Interpreter {
     public String toString() {
       return array.length == 1
           ? String.format("(%s,)", pyToString(array[0]))
-          : Arrays.stream(array).map(Interpreter::pyToString).collect(joining(", ", "(", ")"));
+          : Arrays.stream(array).map(Script::pyToString).collect(joining(", ", "(", ")"));
     }
 
     public PyTuple __add__(Object value) {
@@ -2296,7 +2294,7 @@ public class Interpreter {
     public Object call(Object... params) {
       @SuppressWarnings("unchecked")
       var out = (Consumer<String>) context.getVariable("__stdout__");
-      out.accept(Arrays.stream(params).map(Interpreter::pyToString).collect(joining(" ")));
+      out.accept(Arrays.stream(params).map(Script::pyToString).collect(joining(" ")));
       return null;
     }
   }
