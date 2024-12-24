@@ -2468,11 +2468,11 @@ public class Script {
     public Object eval(Context context) {
       // TODO(maxuser): Support references to static inner classes and enum values.
       var objectValue = object.eval(context);
-      var objectClass =
-          objectValue instanceof Class<?> ? (Class<?>) objectValue : objectValue.getClass();
+      boolean isClass = objectValue instanceof JavaClassId;
+      var objectClass = isClass ? ((JavaClassId) objectValue).clss() : objectValue.getClass();
       try {
         var fieldAccess = objectClass.getField(field.name());
-        return fieldAccess.get(objectValue);
+        return fieldAccess.get(isClass ? null : objectValue);
       } catch (NoSuchFieldException | IllegalAccessException e) {
         throw new IllegalArgumentException(e);
       }

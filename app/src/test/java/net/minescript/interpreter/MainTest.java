@@ -5435,11 +5435,11 @@ public class MainTest {
     double x = Math.PI;
 
     var jsonAst = JsonParser.parseString(timesTwoJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("times_two");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("times_two");
     System.out.println(func);
 
-    var output = interpreter.invoke(func, x);
+    var output = script.invoke(func, x);
     assertEquals(2 * Math.PI, ((Number) output).doubleValue(), 0.000000001);
   }
 
@@ -5448,11 +5448,11 @@ public class MainTest {
     int x1 = 100, y1 = 100, x2 = 103, y2 = 104;
 
     var jsonAst = JsonParser.parseString(distanceScalar2JsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("distance_scalar2");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("distance_scalar2");
     System.out.println(func);
 
-    var output = interpreter.invoke(func, x1, y1, x2, y2);
+    var output = script.invoke(func, x1, y1, x2, y2);
     assertEquals(5., ((Number) output).doubleValue(), 0.00000001);
   }
 
@@ -5462,11 +5462,11 @@ public class MainTest {
     int[] p2 = new int[] {1, 5, 1};
 
     var jsonAst = JsonParser.parseString(distanceVec3JsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("distance_vec3");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("distance_vec3");
     System.out.println(func);
 
-    var output = interpreter.invoke(func, p1, p2);
+    var output = script.invoke(func, p1, p2);
     assertEquals(2 * Math.sqrt(2), ((Number) output).doubleValue(), 0.000000001);
   }
 
@@ -5477,267 +5477,267 @@ public class MainTest {
     String value = "first";
 
     var jsonAst = JsonParser.parseString(populateArrayJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("populate_array");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("populate_array");
     System.out.println(func);
 
-    var output = interpreter.invoke(func, array, index, value);
+    var output = script.invoke(func, array, index, value);
     assertArrayEquals(new String[] {"first", null, null}, (String[]) output);
   }
 
   @Test
   public void typeConversions() {
     var jsonAst = JsonParser.parseString(typeConversionsJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("type_conversions");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("type_conversions");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals("False2.3", (String) output);
   }
 
   @Test
   public void incrementGlobal() {
     var jsonAst = JsonParser.parseString(incrementGlobalJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("increment_global");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("increment_global");
     System.out.println(func);
 
     // Execute global statement to define global var: `x = 0`
-    interpreter.exec();
+    script.exec();
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals(Integer.valueOf(2), (Integer) output);
   }
 
   @Test
   public void factorial() {
     var jsonAst = JsonParser.parseString(factorialJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("factorial");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("factorial");
     System.out.println(func);
 
-    var output = interpreter.invoke(func, 5);
+    var output = script.invoke(func, 5);
     assertEquals(Integer.valueOf(120), (Integer) output);
   }
 
   @Test
   public void sqrt9() {
     var jsonAst = JsonParser.parseString(sqrt9JsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("sqrt9");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("sqrt9");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals(3., ((Number) output).doubleValue(), 0.000000001);
   }
 
   @Test
   public void nestedFuncVars() {
     var jsonAst = JsonParser.parseString(nestedFuncVarsJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("nested_func_vars");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("nested_func_vars");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals("baz(xyz), bar(xy), foo(x)", (String) output);
   }
 
   @Test
   public void callSiblingNestedFunc() {
     var jsonAst = JsonParser.parseString(callSiblingNestedFuncJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("call_sibling_nested_func");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("call_sibling_nested_func");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals("bar", (String) output);
   }
 
   @Test
   public void listOps() {
     var jsonAst = JsonParser.parseString(listOpsJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("list_ops");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("list_ops");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals(new Script.PyList(List.of(101, 2, 3, "bar")), output);
   }
 
   @Test
   public void ctorAndMethodOverloads() {
     var jsonAst = JsonParser.parseString(ctorAndMethodOverloadsJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("ctor_and_method_overloads");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("ctor_and_method_overloads");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals("This is 1 test.", (String) output);
   }
 
   @Test
   public void rangeStop() {
     var jsonAst = JsonParser.parseString(rangeStopJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("range_stop");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("range_stop");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals(new Script.PyList(List.of(0, 1, 2)), output);
   }
 
   @Test
   public void rangeStartStopStep() {
     var jsonAst = JsonParser.parseString(rangeStartStopStepJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("range_start_stop_step");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("range_start_stop_step");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals(new Script.PyList(List.of(4, 6, 8)), output);
   }
 
   @Test
   public void breakForLoop() {
     var jsonAst = JsonParser.parseString(breakForLoopJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("break_for_loop");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("break_for_loop");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals(new Script.PyList(List.of(0, 1)), output);
   }
 
   @Test
   public void numericTypes() {
     var jsonAst = JsonParser.parseString(numericTypesJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("numeric_types");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("numeric_types");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals(new Script.PyList(List.of("Integer", "Long", "Float", "Double")), output);
   }
 
   @Test
   public void whileLoop() {
     var jsonAst = JsonParser.parseString(whileLoopJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("while_loop");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("while_loop");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals(new Script.PyList(List.of(0, 1, 2)), output);
   }
 
   @Test
   public void breakWhileLoop() {
     var jsonAst = JsonParser.parseString(breakWhileLoopJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("break_while_loop");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("break_while_loop");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals(new Script.PyList(List.of(1)), output);
   }
 
   @Test
   public void inOperator() {
     var jsonAst = JsonParser.parseString(inOperatorJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("in_operator");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("in_operator");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals(new Script.PyList(List.of(true, true, false)), output);
   }
 
   @Test
   public void boolOperators() {
     var jsonAst = JsonParser.parseString(boolOperatorsJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("bool_operators");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("bool_operators");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals(new Script.PyList(List.of("hello", "world", "!")), output);
   }
 
   @Test
   public void iterateDict() {
     var jsonAst = JsonParser.parseString(iterateDictJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("iterate_dict");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("iterate_dict");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals(new Script.PyDict(Map.of(1, "one", 2, "two")), output);
   }
 
   @Test
   public void deleteItems() {
     var jsonAst = JsonParser.parseString(deleteItemsJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("delete_items");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("delete_items");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals(new Script.PyTuple(new Object[] {2, 1}), output);
   }
 
   @Test
   public void assignTuple() {
     var jsonAst = JsonParser.parseString(assignTupleJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("assign_tuple");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("assign_tuple");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals(new Script.PyTuple(new Object[] {1, 2}), output);
   }
 
   @Test
   public void listComprehension() {
     var jsonAst = JsonParser.parseString(listComprehensionJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("list_comprehension");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("list_comprehension");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals(new Script.PyList(List.of(10, 20)), output);
   }
 
   @Test
   public void ifElseExpr() {
     var jsonAst = JsonParser.parseString(ifElseExprJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("if_else_expr");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("if_else_expr");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals("foobar", output);
   }
 
   @Test
   public void lambdaTest() {
     var jsonAst = JsonParser.parseString(lambdaTestJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("lambda_test");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("lambda_test");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals(90, output);
   }
 
   @Test
   public void binaryOps() {
     var jsonAst = JsonParser.parseString(binaryOpsJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("binary_ops");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("binary_ops");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertTrue(output instanceof Script.PyList);
     var list = ((Script.PyList) output).getJavaList();
     assertEquals(5, list.size());
@@ -5751,22 +5751,22 @@ public class MainTest {
   @Test
   public void formattedString() {
     var jsonAst = JsonParser.parseString(formattedStringJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("formatted_string");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("formatted_string");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals("start100end", output);
   }
 
   @Test
   public void exceptions() {
     var jsonAst = JsonParser.parseString(exceptionsJsonAst);
-    var interpreter = new Script();
-    var func = interpreter.parse(jsonAst).exec().getFunction("exceptions");
+    var script = new Script();
+    var func = script.parse(jsonAst).exec().getFunction("exceptions");
     System.out.println(func);
 
-    var output = interpreter.invoke(func);
+    var output = script.invoke(func);
     assertEquals(
         new Script.PyList(
             List.of(
