@@ -5774,4 +5774,16 @@ public class MainTest {
                 "Finally!")),
         output);
   }
+
+  // TODO(maxuser): Add tests for:
+  // - classes
+  // - dataclasses (@dataclass)
+  // - classes with custom __init__ method
+  // - assignment to class instance fields
+  // - assignment to class-level fields
+  // - calling instance methods
+  // - calling static methods
+  // - calling class methods
+  // - indexing string, e.g. "foo"[0] == "f"
+  // - new built-in functions: abs, max, ord, chr
 }

@@ -103,19 +103,67 @@ public class Script {
       }
     }
 
+    private ClassDef parseClassDef(JsonElement element) {
+      var identifier = new Identifier(getAttr(element, "name").getAsString());
+      var fields = new ArrayList<ClassFieldDef>();
+      var methodDefs = new ArrayList<FunctionDef>();
+      StreamSupport.stream(getBody(element).spliterator(), false)
+          .forEach(
+              elem -> {
+                var type = getType(elem);
+                switch (type) {
+                  case "FunctionDef":
+                    methodDefs.add(parseFunctionDef(elem));
+                    break;
+                  case "Assign":
+                    fields.add(parseClassFieldDef(elem, true));
+                    break;
+                  case "AnnAssign":
+                    fields.add(parseClassFieldDef(elem, false));
+                    break;
+                }
+              });
+      return new ClassDef(identifier, getDecorators(element), fields, methodDefs);
+    }
+
+    private ClassFieldDef parseClassFieldDef(JsonElement element, boolean multipleTargets) {
+      var target =
+          multipleTargets
+              ? getAttr(element, "targets").getAsJsonArray().get(0).getAsJsonObject()
+              : getAttr(element, "target").getAsJsonObject();
+      var value = getAttr(element, "value");
+      return new ClassFieldDef(
+          new Identifier(target.get("id").getAsString()),
+          value == null || value.isJsonNull()
+              ? Optional.empty()
+              : Optional.of(parseExpression(value)));
+    }
+
+    private List<String> getDecorators(JsonElement element) {
+      return StreamSupport.stream(
+              getAttr(element, "decorator_list").getAsJsonArray().spliterator(), false)
+          .filter(e -> getType(e).equals("Name"))
+          .map(e -> e.getAsJsonObject().get("id").getAsString())
+          .toList();
+    }
+
     private FunctionDef parseFunctionDef(JsonElement element) {
       var identifier = new Identifier(getAttr(element, "name").getAsString());
+      var decorators = getDecorators(element);
       List<FunctionArg> args =
           parseFunctionArgs(
               getAttr(getAttr(element, "args").getAsJsonObject(), "args").getAsJsonArray());
       Statement body = parseStatementBlock(getBody(element));
-      var func = new FunctionDef(identifier, args, body);
+      var func = new FunctionDef(identifier, decorators, args, body);
       return func;
     }
 
     public Statement parseStatements(JsonElement element) {
       String type = getType(element);
       switch (type) {
+        case "ClassDef":
+          return parseClassDef(element);
+
         case "FunctionDef":
           return parseFunctionDef(element);
 
@@ -539,7 +587,208 @@ public class Script {
     }
   }
 
-  public record FunctionDef(Identifier identifier, List<FunctionArg> args, Statement body)
+  // `type` is an array of length 1 because CtorFunction needs to be instantiated before the
+  // surrounding class is fully defined. (Alternatively, PyClass could be mutable so that it's
+  // instantiated before CtorFunction.)
+  public record CtorFunction(
+      PyClass[] type, String className, FunctionDef function, Context enclosingContext)
+      implements Function {
+    @Override
+    public Object call(Object... params) {
+      Object[] ctorParams = new Object[params.length + 1];
+      var self = new PyObject(type[0]);
+      ctorParams[0] = self;
+      System.arraycopy(params, 0, ctorParams, 1, params.length);
+      if (ctorParams.length != function.args().size()) {
+        throw new IllegalArgumentException(
+            "Expected %d params but got %d for %s constructor: %s"
+                .formatted(function.args().size() - 1, params.length, className, function));
+      }
+      function.invoke(enclosingContext, ctorParams);
+      return self;
+    }
+  }
+
+  public record ClassFieldDef(Identifier identifier, Optional<Expression> value) {}
+
+  public record ClassDef(
+      Identifier identifier,
+      List<String> decorators,
+      List<ClassFieldDef> fields,
+      List<FunctionDef> methodDefs)
+      implements Statement {
+    /** Adds this class definition to the specified {@code context}. */
+    @Override
+    public void exec(Context context) {
+      var type = new PyClass[1]; // Using array to circumvent immutability constraint for record.
+      Function ctor;
+      final boolean isDataclass = decorators.contains("dataclass");
+      if (isDataclass) {
+        var initializedFields = fields.stream().filter(f -> f.value().isPresent()).toList();
+        var uninitializedFieldNames =
+            fields.stream()
+                .filter(f -> f.value().isEmpty())
+                .map(ClassFieldDef::identifier)
+                .map(Identifier::name)
+                .toList();
+        ctor =
+            params -> {
+              Function.expectNumParams(
+                  params, uninitializedFieldNames.size(), identifier.name() + ".__init__");
+              var object = new PyObject(type[0]);
+              for (var field : initializedFields) {
+                object.__dict__.__setitem__(
+                    field.identifier().name(), field.value().get().eval(context));
+              }
+              for (int i = 0; i < params.length; ++i) {
+                object.__dict__.__setitem__(uninitializedFieldNames.get(i), params[i]);
+              }
+              return object;
+            };
+      } else {
+        ctor =
+            params -> {
+              Function.expectNumParams(params, 0, identifier.name() + ".__init__");
+              return new PyObject(type[0]);
+            };
+      }
+
+      var instanceMethods = new HashMap<String, Function>();
+      var classLevelMethods = new HashMap<String, ClassLevelMethod>();
+      for (var methodDef : methodDefs) {
+        String methodName = methodDef.identifier().name();
+        // TODO(maxuser): Support __str__/__rep__ methods for custom string output.
+        if ("__init__".equals(methodName)) {
+          ctor = new CtorFunction(type, identifier.name(), methodDef, context);
+          instanceMethods.put(methodName, ctor);
+        } else if (methodDef.decorators().contains("classmethod")) {
+          classLevelMethods.put(
+              methodName, new ClassLevelMethod(true, new BoundFunction(methodDef, context)));
+        } else if (methodDef.decorators().contains("staticmethod")) {
+          classLevelMethods.put(
+              methodName, new ClassLevelMethod(false, new BoundFunction(methodDef, context)));
+        } else {
+          instanceMethods.put(methodName, new BoundFunction(methodDef, context));
+        }
+      }
+      type[0] =
+          new PyClass(
+              identifier.name(),
+              ctor,
+              instanceMethods,
+              classLevelMethods,
+              isDataclass ? Optional.of(dataclassToString(fields)) : Optional.empty());
+      context.setVariable(identifier.name(), type[0]);
+      if (!isDataclass) {
+        for (var field : fields) {
+          field
+              .value()
+              .ifPresent(
+                  v -> type[0].__dict__.__setitem__(field.identifier().name(), v.eval(context)));
+        }
+      }
+    }
+
+    private static java.util.function.Function<PyObject, String> dataclassToString(
+        List<ClassFieldDef> fields) {
+      return dataObject ->
+          fields.stream()
+              .map(
+                  field -> {
+                    var fieldName = field.identifier().name();
+                    return "%s=%s".formatted(fieldName, dataObject.__dict__.__getitem__(fieldName));
+                  })
+              .collect(joining(", ", dataObject.type.name + "(", ")"));
+    }
+  }
+
+  public static class PyObject {
+    public final PyClass type;
+    public PyDict __dict__ = new PyDict();
+
+    public PyObject(PyClass type) {
+      this.type = type;
+    }
+
+    public Object callMethod(String methodName, Object... params) {
+      Object[] methodParams = new Object[params.length + 1];
+      methodParams[0] = this;
+      System.arraycopy(params, 0, methodParams, 1, params.length);
+      var method = type.instanceMethods.get(methodName);
+      if (method == null) {
+        throw new IllegalArgumentException(
+            "Python class %s has no instance method named %s".formatted(type.name, methodName));
+      }
+      return method.call(methodParams);
+    }
+
+    @Override
+    public String toString() {
+      if (type.strMethod.isPresent()) {
+        return type.strMethod.get().apply(this);
+      } else {
+        return "<%s object at 0x%x>".formatted(type.name, System.identityHashCode(this));
+      }
+    }
+  }
+
+  public record ClassLevelMethod(boolean isClassmethod, Function function) {}
+
+  public static class PyClass extends PyObject implements Function {
+    public final String name;
+    public final Function ctor;
+    public final Map<String, Function> instanceMethods;
+    public final Map<String, ClassLevelMethod> classLevelMethods;
+    public final Optional<java.util.function.Function<PyObject, String>> strMethod;
+
+    private static PyClass CLASS_TYPE =
+        new PyClass("type", params -> null, Map.of(), Map.of(), Optional.empty());
+
+    public PyClass(
+        String name,
+        Function ctor,
+        Map<String, Function> instanceMethods,
+        Map<String, ClassLevelMethod> classLevelMethods,
+        Optional<java.util.function.Function<PyObject, String>> strMethod) {
+      super(CLASS_TYPE);
+      this.name = name;
+      this.ctor = ctor;
+      this.instanceMethods = instanceMethods;
+      this.classLevelMethods = classLevelMethods;
+      this.strMethod = strMethod;
+    }
+
+    @Override
+    public Object call(Object... params) {
+      return ctor.call(params);
+    }
+
+    @Override
+    public Object callMethod(String methodName, Object... params) {
+      var method = classLevelMethods.get(methodName);
+      if (method == null) {
+        throw new IllegalArgumentException(
+            "Python class %s has no class-level method named %s".formatted(name, methodName));
+      }
+      final Object[] methodParams;
+      if (method.isClassmethod()) {
+        methodParams = new Object[params.length + 1];
+        methodParams[0] = this;
+        System.arraycopy(params, 0, methodParams, 1, params.length);
+      } else {
+        methodParams = params;
+      }
+      return method.function().call(methodParams);
+    }
+
+    @Override
+    public String toString() {
+      return "<class '%s'>".formatted(name);
+    }
+  }
+
+  public record FunctionDef(
+      Identifier identifier, List<String> decorators, List<FunctionArg> args, Statement body)
       implements Statement {
     /** Adds this function to the specified {@code context}. */
     @Override
@@ -812,13 +1061,13 @@ public class Script {
     public Assignment {
       // TODO(maxuser): Support destructuring assignment more than one level of identifiers deep.
       if (!(lhs instanceof Identifier
+          || lhs instanceof FieldAccess
           || lhs instanceof ArrayIndex
           || (lhs instanceof TupleLiteral tuple
               && tuple.elements().stream().allMatch(Identifier.class::isInstance)))) {
         throw new IllegalArgumentException(
-            String.format(
-                "Unsupported expression type for lhs of assignment: `%s` (%s)",
-                lhs, lhs.getClass().getSimpleName()));
+            "Unsupported expression type for lhs of assignment: `%s` (%s)"
+                .formatted(lhs, lhs.getClass().getSimpleName()));
       }
     }
 
@@ -850,6 +1099,11 @@ public class Script {
       if (lhs instanceof Identifier lhsId) {
         context.setVariable(lhsId, rhsValue);
         return;
+      } else if (lhs instanceof FieldAccess lhsFieldAccess) {
+        var lhsObject = lhsFieldAccess.object().eval(context);
+        if (lhsObject instanceof PyObject pyObject) {
+          pyObject.__dict__.__setitem__(lhsFieldAccess.field().name(), rhsValue);
+        }
       } else if (lhs instanceof TupleLiteral lhsTuple) {
         assignTuple(context, lhsTuple, rhsValue);
         return;
@@ -871,9 +1125,8 @@ public class Script {
         }
       } else {
         throw new IllegalArgumentException(
-            String.format(
-                "Unsupported expression type for lhs of assignment: `%s` (%s)",
-                lhs, lhs.getClass().getSimpleName()));
+            "Unsupported expression type for lhs of assignment: `%s` (%s)"
+                .formatted(lhs, lhs.getClass().getSimpleName()));
       }
     }
 
@@ -1490,6 +1743,8 @@ public class Script {
         return list.get(intKey);
       } else if (arrayValue instanceof Map map) {
         return map.get(indexValue);
+      } else if (arrayValue instanceof String string) {
+        return String.valueOf(string.charAt((Integer) indexValue));
       }
 
       throw new IllegalArgumentException(
@@ -2217,6 +2472,14 @@ public class Script {
   public interface Function {
     Object call(Object... params);
 
+    static void expectNumParams(Object[] params, int n, Object message) {
+      if (params.length != n) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Expected %d params but got %d for function: %s", n, params.length, message));
+      }
+    }
+
     default void expectNumParams(Object[] params, int n) {
       if (params.length != n) {
         throw new IllegalArgumentException(
@@ -2320,6 +2583,67 @@ public class Script {
     }
   }
 
+  public static class AbsFunction implements Function {
+    @Override
+    public Object call(Object... params) {
+      expectNumParams(params, 1);
+      var num = (Number) params[0];
+      return num.doubleValue() > 0. ? num : Numbers.negate(num);
+    }
+  }
+
+  public static class MaxFunction implements Function {
+    @Override
+    public Object call(Object... params) {
+      if (params.length == 0) {
+        throw new IllegalArgumentException("max expected at least 1 argument, got 0");
+      }
+      var currentMax = (Number) params[0];
+      for (var value : params) {
+        var num = (Number) value;
+        if (Numbers.greaterThan(num, currentMax)) {
+          currentMax = num;
+        }
+      }
+      return currentMax;
+    }
+  }
+
+  public static class OrdFunction implements Function {
+    @Override
+    public Object call(Object... params) {
+      expectNumParams(params, 1);
+      if (params[0] instanceof String string && string.length() == 1) {
+        return (int) string.charAt(0);
+      } else {
+        throw new IllegalArgumentException(
+            "ord() expected string of length 1, but got %s".formatted(params[0]));
+      }
+    }
+  }
+
+  public static class ChrFunction implements Function {
+    @Override
+    public Object call(Object... params) {
+      expectNumParams(params, 1);
+      if (params[0] instanceof Integer codePointInteger) {
+        int codePoint = codePointInteger;
+        if (codePoint < 0 || codePoint > Character.MAX_CODE_POINT) {
+          throw new IllegalArgumentException("chr(): Invalid code point: " + codePoint);
+        }
+
+        if (Character.isBmpCodePoint(codePoint)) {
+          return String.valueOf((char) codePoint);
+        } else {
+          return String.valueOf(Character.toChars(codePoint));
+        }
+      } else {
+        throw new IllegalArgumentException(
+            "chr() requires an integer but got %s".formatted(params[0]));
+      }
+    }
+  }
+
   public record FunctionCall(
       Expression method,
       List<Expression> params,
@@ -2418,7 +2742,9 @@ public class Script {
     public Object call(Object... params) {
       final boolean isStaticMethod;
       final Class<?> clss;
-      if (object instanceof JavaClassId classId) {
+      if (object instanceof PyObject pyObject) {
+        return pyObject.callMethod(methodName, params);
+      } else if (object instanceof JavaClassId classId) {
         isStaticMethod = true;
         clss = classId.clss();
       } else {
@@ -2468,6 +2794,11 @@ public class Script {
     public Object eval(Context context) {
       // TODO(maxuser): Support references to static inner classes and enum values.
       var objectValue = object.eval(context);
+      if (objectValue instanceof PyObject pyObject) {
+        return pyObject.__dict__.__contains__(field.name())
+            ? pyObject.__dict__.__getitem__(field.name())
+            : pyObject.type.__dict__.__getitem__(field.name());
+      }
       boolean isClass = objectValue instanceof JavaClassId;
       var objectClass = isClass ? ((JavaClassId) objectValue).clss() : objectValue.getClass();
       try {
@@ -2522,6 +2853,10 @@ public class Script {
       context.setVariable("print", new PrintFunction(context));
       context.setVariable("type", new TypeFunction(executableCache));
       context.setVariable("range", new RangeFunction());
+      context.setVariable("abs", new AbsFunction());
+      context.setVariable("max", new MaxFunction());
+      context.setVariable("ord", new OrdFunction());
+      context.setVariable("chr", new ChrFunction());
       return context;
     }
 
