@@ -5785,5 +5785,9 @@ public class MainTest {
   // - calling static methods
   // - calling class methods
   // - indexing string, e.g. "foo"[0] == "f"
-  // - new built-in functions: abs, max, ord, chr
+  // - new built-in functions: abs, max, ord, chr, enumerate
+  // - raising Python-defined exception types
+  // - catching exceptions without a declared type or variable name
+  // - __getitem__ operator with slices: items[lower:upper:step] (step not implemented)
+  // - `is`, `is not`, and `not in` binary in-fix operators
 }

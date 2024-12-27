@@ -10,6 +10,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
@@ -159,129 +160,154 @@ public class Script {
     }
 
     public Statement parseStatements(JsonElement element) {
-      String type = getType(element);
-      switch (type) {
-        case "ClassDef":
-          return parseClassDef(element);
+      try {
+        String type = getType(element);
+        switch (type) {
+          case "ClassDef":
+            return parseClassDef(element);
 
-        case "FunctionDef":
-          return parseFunctionDef(element);
+          case "FunctionDef":
+            return parseFunctionDef(element);
 
-        case "Assign":
-          {
-            Expression lhs = parseExpression(getTargets(element).get(0));
-            Expression rhs = parseExpression(getAttr(element, "value"));
-            return new Assignment(lhs, rhs);
-          }
+          case "AnnAssign":
+            {
+              Expression lhs = parseExpression(element.getAsJsonObject().get("target"));
+              Expression rhs = parseExpression(getAttr(element, "value"));
+              return new Assignment(lhs, rhs);
+            }
 
-        case "AugAssign":
-          {
-            Expression lhs = parseExpression(getTarget(element));
-            Expression rhs = parseExpression(getAttr(element, "value"));
-            String opName = getType(getAttr(element, "op"));
-            final AugmentedAssignment.Op op;
-            switch (opName) {
-              case "Add":
-                op = AugmentedAssignment.Op.ADD_EQ;
-                break;
-              case "Sub":
-                op = AugmentedAssignment.Op.SUB_EQ;
-                break;
-              case "Mult":
-                op = AugmentedAssignment.Op.MULT_EQ;
-                break;
-              case "Div":
-                op = AugmentedAssignment.Op.DIV_EQ;
-                break;
-              default:
+          case "Assign":
+            {
+              Expression lhs = parseExpression(getTargets(element).get(0));
+              Expression rhs = parseExpression(getAttr(element, "value"));
+              return new Assignment(lhs, rhs);
+            }
+
+          case "AugAssign":
+            {
+              Expression lhs = parseExpression(getTarget(element));
+              Expression rhs = parseExpression(getAttr(element, "value"));
+              String opName = getType(getAttr(element, "op"));
+              final AugmentedAssignment.Op op;
+              switch (opName) {
+                case "Add":
+                  op = AugmentedAssignment.Op.ADD_EQ;
+                  break;
+                case "Sub":
+                  op = AugmentedAssignment.Op.SUB_EQ;
+                  break;
+                case "Mult":
+                  op = AugmentedAssignment.Op.MULT_EQ;
+                  break;
+                case "Div":
+                  op = AugmentedAssignment.Op.DIV_EQ;
+                  break;
+                default:
+                  throw new IllegalArgumentException(
+                      "Unsupported type of augmented assignment: " + opName);
+              }
+              if (lhs instanceof Identifier) {
+                return new AugmentedAssignment(lhs, op, rhs);
+              } else if (lhs instanceof ArrayIndex) {
+                return new AugmentedAssignment(lhs, op, rhs);
+              } else {
                 throw new IllegalArgumentException(
-                    "Unsupported type of augmented assignment: " + opName);
+                    String.format(
+                        "Unsupported expression type for lhs of assignment: `%s` (%s)",
+                        lhs, lhs.getClass().getSimpleName()));
+              }
             }
-            if (lhs instanceof Identifier) {
-              return new AugmentedAssignment(lhs, op, rhs);
-            } else if (lhs instanceof ArrayIndex) {
-              return new AugmentedAssignment(lhs, op, rhs);
-            } else {
-              throw new IllegalArgumentException(
-                  String.format(
-                      "Unsupported expression type for lhs of assignment: `%s` (%s)",
-                      lhs, lhs.getClass().getSimpleName()));
-            }
-          }
 
-        case "Delete":
-          return new Deletion(
-              StreamSupport.stream(getTargets(element).spliterator(), false)
-                  .map(this::parseExpression)
-                  .toList());
-
-        case "Global":
-          {
-            return new GlobalVarDecl(
-                StreamSupport.stream(
-                        getAttr(element, "names").getAsJsonArray().spliterator(), false)
-                    .map(name -> new Identifier(name.getAsString()))
+          case "Delete":
+            return new Deletion(
+                StreamSupport.stream(getTargets(element).spliterator(), false)
+                    .map(this::parseExpression)
                     .toList());
-          }
 
-        case "Expr":
-          return parseExpression(getAttr(element, "value"));
-
-        case "If":
-          return new IfBlock(
-              parseExpression(getAttr(element, "test")),
-              parseStatementBlock(getBody(element)),
-              parseStatementBlock(getAttr(element, "orelse").getAsJsonArray()));
-
-        case "For":
-          return new ForBlock(
-              parseExpression(getAttr(element, "target")),
-              parseExpression(getAttr(element, "iter")),
-              parseStatementBlock(getBody(element)));
-
-        case "While":
-          return new WhileBlock(
-              parseExpression(getAttr(element, "test")), parseStatementBlock(getBody(element)));
-
-        case "Break":
-          return new Break();
-
-        case "Try":
-          {
-            JsonArray finalBody = getAttr(element, "finalbody").getAsJsonArray();
-            return new TryBlock(
-                parseStatementBlock(getBody(element)),
-                StreamSupport.stream(
-                        getAttr(element, "handlers").getAsJsonArray().spliterator(), false)
-                    .map(this::parseExceptionHandler)
-                    .toList(),
-                finalBody.isEmpty()
-                    ? Optional.empty()
-                    : Optional.of(parseStatementBlock(finalBody)));
-          }
-
-        case "Raise":
-          return new RaiseStatement(parseExpression(getAttr(element, "exc")));
-
-        case "Return":
-          {
-            var returnValue = getAttr(element, "value");
-            if (returnValue.isJsonNull()) {
-              // No return value. This differs from `return None` in terms of the AST, but the two
-              // evaluate the same.
-              return new ReturnStatement(null);
-            } else {
-              return new ReturnStatement(parseExpression(returnValue));
+          case "Global":
+            {
+              return new GlobalVarDecl(
+                  StreamSupport.stream(
+                          getAttr(element, "names").getAsJsonArray().spliterator(), false)
+                      .map(name -> new Identifier(name.getAsString()))
+                      .toList());
             }
-          }
+
+          case "Expr":
+            return parseExpression(getAttr(element, "value"));
+
+          case "If":
+            return new IfBlock(
+                parseExpression(getAttr(element, "test")),
+                parseStatementBlock(getBody(element)),
+                parseStatementBlock(getAttr(element, "orelse").getAsJsonArray()));
+
+          case "For":
+            return new ForBlock(
+                parseExpression(getAttr(element, "target")),
+                parseExpression(getAttr(element, "iter")),
+                parseStatementBlock(getBody(element)));
+
+          case "While":
+            return new WhileBlock(
+                parseExpression(getAttr(element, "test")), parseStatementBlock(getBody(element)));
+
+          case "Break":
+            return new Break();
+
+          case "Try":
+            {
+              JsonArray finalBody = getAttr(element, "finalbody").getAsJsonArray();
+              return new TryBlock(
+                  parseStatementBlock(getBody(element)),
+                  StreamSupport.stream(
+                          getAttr(element, "handlers").getAsJsonArray().spliterator(), false)
+                      .map(this::parseExceptionHandler)
+                      .toList(),
+                  finalBody.isEmpty()
+                      ? Optional.empty()
+                      : Optional.of(parseStatementBlock(finalBody)));
+            }
+
+          case "Raise":
+            return new RaiseStatement(parseExpression(getAttr(element, "exc")));
+
+          case "Return":
+            {
+              var returnValue = getAttr(element, "value");
+              if (returnValue.isJsonNull()) {
+                // No return value. This differs from `return None` in terms of the AST, but the two
+                // evaluate the same.
+                return new ReturnStatement(null);
+              } else {
+                return new ReturnStatement(parseExpression(returnValue));
+              }
+            }
+        }
+      } catch (ParseException e) {
+        throw e;
+      } catch (Exception e) {
+        throw new ParseException("Exception while parsing statement: %s".formatted(element), e);
       }
       throw new IllegalArgumentException("Unknown statement type: " + element.toString());
     }
 
+    class ParseException extends RuntimeException {
+      public ParseException(String message, Throwable cause) {
+        super(message, cause);
+      }
+    }
+
     private ExceptionHandler parseExceptionHandler(JsonElement element) {
+      var type = getAttr(element, "type");
+      var name = getAttr(element, "name");
       return new ExceptionHandler(
-          new Identifier(getAttr(getAttr(element, "type"), "id").getAsString()),
-          new Identifier(getAttr(element, "name").getAsString()),
+          type.isJsonNull()
+              ? Optional.empty()
+              : Optional.of(new Identifier(getAttr(getAttr(element, "type"), "id").getAsString())),
+          name.isJsonNull()
+              ? Optional.empty()
+              : Optional.of(new Identifier(getAttr(element, "name").getAsString())),
           parseStatementBlock(getBody(element)));
     }
 
@@ -394,7 +420,7 @@ public class Script {
         case "Subscript":
           return new ArrayIndex(
               parseExpression(getAttr(element, "value")),
-              parseExpression(getAttr(element, "slice")));
+              parseSliceExpression(getAttr(element, "slice")));
 
         case "IfExp":
           return new IfExpression(
@@ -460,6 +486,20 @@ public class Script {
                   .toList());
       }
       throw new IllegalArgumentException("Unknown expression type: " + element.toString());
+    }
+
+    private Expression parseSliceExpression(JsonElement element) {
+      if ("Slice".equals(getType(element))) {
+        var lower = getAttr(element, "lower");
+        var upper = getAttr(element, "upper");
+        var step = getAttr(element, "step");
+        return new SliceExpression(
+            lower.isJsonNull() ? Optional.empty() : Optional.of(parseExpression(lower)),
+            upper.isJsonNull() ? Optional.empty() : Optional.of(parseExpression(upper)),
+            step.isJsonNull() ? Optional.empty() : Optional.of(parseExpression(step)));
+      } else {
+        return parseExpression(element);
+      }
     }
 
     private static String getType(JsonElement element) {
@@ -931,7 +971,7 @@ public class Script {
   }
 
   public record ExceptionHandler(
-      Identifier exceptionType, Identifier exceptionVariable, Statement body) {}
+      Optional<Identifier> exceptionType, Optional<Identifier> exceptionVariable, Statement body) {}
 
   public record TryBlock(
       Statement tryBody, List<ExceptionHandler> exceptionHandlers, Optional<Statement> finallyBlock)
@@ -946,14 +986,27 @@ public class Script {
       } catch (Exception e) {
         // PyException exists only to prevent all eval/exec/invoke methods from declaring that they
         // throw Exception.  Unwrap the underlying exception here.
+        final Object exception;
         if (e instanceof PyException pyException) {
-          e = (Exception) pyException.getCause();
+          exception = pyException.thrown;
+        } else {
+          exception = e;
         }
         boolean handled = false;
         for (var handler : exceptionHandlers) {
-          if (context.getVariable(handler.exceptionType().name()) instanceof JavaClassId javaClassId
-              && javaClassId.clss().isAssignableFrom(e.getClass())) {
-            context.setVariable(handler.exceptionVariable().name(), e);
+          var exceptionType = handler.exceptionType().map(t -> context.getVariable(t.name()));
+          if (exceptionType.isEmpty()
+              || (exceptionType.get() instanceof PyClass declaredType
+                  && exception instanceof PyObject thrownObject
+                  && thrownObject.type == declaredType)
+              || (exceptionType.get() instanceof JavaClassId javaClassId
+                  && javaClassId.clss().isAssignableFrom(exception.getClass()))) {
+            handler
+                .exceptionVariable()
+                .ifPresent(
+                    name -> {
+                      context.setVariable(name, exception);
+                    });
             handler.body.exec(context);
             handled = true;
             break;
@@ -991,8 +1044,11 @@ public class Script {
    * all eval/exec/invoke methods to declare that they throw Exception.
    */
   public static class PyException extends RuntimeException {
-    public PyException(Exception e) {
-      super(e);
+    public final Object thrown;
+
+    public PyException(Object thrown) {
+      super(thrown.toString());
+      this.thrown = thrown;
     }
   }
 
@@ -1002,7 +1058,7 @@ public class Script {
       if (context.skipStatement()) {
         return;
       }
-      throw new PyException((Exception) exception.eval(context));
+      throw new PyException(exception.eval(context));
     }
 
     @Override
@@ -1018,6 +1074,10 @@ public class Script {
         return;
       }
       eval(context);
+    }
+
+    default JsonElement astNode() {
+      return JsonNull.INSTANCE;
     }
 
     default Object eval(Context context) {
@@ -1374,13 +1434,16 @@ public class Script {
 
   public record Comparison(Expression lhs, Op op, Expression rhs) implements Expression {
     public enum Op {
+      IS("is"),
+      IS_NOT("is not"),
       EQ("=="),
       LT("<"),
       LT_EQ("<="),
       GT(">"),
       GT_EQ(">="),
       NOT_EQ("!="),
-      IN("in");
+      IN("in"),
+      NOT_IN("not in");
 
       private final String symbol;
 
@@ -1395,6 +1458,10 @@ public class Script {
 
     public static Op parse(String opName) {
       switch (opName) {
+        case "Is":
+          return Op.IS;
+        case "IsNot":
+          return Op.IS_NOT;
         case "Eq":
           return Op.EQ;
         case "Lt":
@@ -1409,6 +1476,8 @@ public class Script {
           return Op.NOT_EQ;
         case "In":
           return Op.IN;
+        case "NotIn":
+          return Op.NOT_IN;
         default:
           throw new UnsupportedOperationException("Unsupported comparison op: " + opName);
       }
@@ -1420,6 +1489,10 @@ public class Script {
       var lhsValue = lhs.eval(context);
       var rhsValue = rhs.eval(context);
       switch (op) {
+        case IS:
+          return lhsValue == rhsValue;
+        case IS_NOT:
+          return lhsValue != rhsValue;
         case EQ:
           if (lhsValue instanceof Number lhsNumber && rhsValue instanceof Number rhsNumber) {
             return Numbers.equals(lhsNumber, rhsNumber);
@@ -1465,20 +1538,37 @@ public class Script {
             return !lhsValue.equals(rhsValue);
           }
         case IN:
-          if (rhsValue instanceof Collection<?> collection) {
-            return collection.contains(lhsValue);
-          } else if (rhsValue instanceof ItemContainer container) {
-            return container.__contains__(lhsValue);
-          } else if (rhsValue instanceof List list) {
-            return list.contains(lhsValue);
-          } else if (rhsValue instanceof Map map) {
-            return map.containsKey(lhsValue);
-          } else if (lhsValue instanceof String lhsStr && rhsValue instanceof String rhsStr) {
-            return rhsStr.contains(lhsStr);
+          {
+            var result = isIn(lhsValue, rhsValue);
+            if (result.isPresent()) {
+              return result.get();
+            }
+          }
+        case NOT_IN:
+          {
+            var result = isIn(lhsValue, rhsValue);
+            if (result.isPresent()) {
+              return !result.get();
+            }
           }
       }
       throw new UnsupportedOperationException(
           String.format("Comparison op not supported: %s %s %s", lhs, op.symbol(), rhs));
+    }
+
+    private static final Optional<Boolean> isIn(Object lhsValue, Object rhsValue) {
+      if (rhsValue instanceof Collection<?> collection) {
+        return Optional.of(collection.contains(lhsValue));
+      } else if (rhsValue instanceof ItemContainer container) {
+        return Optional.of(container.__contains__(lhsValue));
+      } else if (rhsValue instanceof List list) {
+        return Optional.of(list.contains(lhsValue));
+      } else if (rhsValue instanceof Map map) {
+        return Optional.of(map.containsKey(lhsValue));
+      } else if (lhsValue instanceof String lhsStr && rhsValue instanceof String rhsStr) {
+        return Optional.of(rhsStr.contains(lhsStr));
+      }
+      return Optional.empty();
     }
 
     @Override
@@ -1722,6 +1812,38 @@ public class Script {
       return String.format("%s %s %s", lhs, op.symbol(), rhs);
     }
   }
+
+  public record SliceExpression(
+      Optional<Expression> lower, Optional<Expression> upper, Optional<Expression> step)
+      implements Expression {
+    @Override
+    public Object eval(Context context) {
+      try {
+        return new SliceValue(
+            lower.map(s -> (Integer) s.eval(context)),
+            upper.map(s -> (Integer) s.eval(context)),
+            step.map(s -> (Integer) s.eval(context)));
+      } catch (ClassCastException e) {
+        var string =
+            Stream.of(lower, upper, step)
+                .map(x -> x.map(Object::toString).orElse(""))
+                .collect(joining(":", "[", "]"));
+        throw new RuntimeException("Slice indices must be integers but got: %s".formatted(string));
+      }
+    }
+  }
+
+  public record SliceValue(
+      Optional<Integer> lower, Optional<Integer> upper, Optional<Integer> step) {
+    public ResolvedSliceIndices resolveIndices(int sequenceLength) {
+      int normLower = lower.map(n -> n < 0 ? sequenceLength + n : n).orElse(0);
+      int normUpper = upper.map(n -> n < 0 ? sequenceLength + n + 1 : n).orElse(sequenceLength);
+      return new ResolvedSliceIndices(normLower, normUpper, step.orElse(1));
+    }
+  }
+
+  /** Slice indices resolved for a particular length sequence to avoid negative or empty values. */
+  public record ResolvedSliceIndices(int lower, int upper, int step) {}
 
   public record ArrayIndex(Expression array, Expression index) implements Expression {
     @Override
@@ -2082,15 +2204,18 @@ public class Script {
       return list.size();
     }
 
-    // TODO(maxuser): Support slice notation.
     @Override
     public Object __getitem__(Object key) {
       if (key instanceof Integer i) {
         return list.get(i);
+      } else if (key instanceof SliceValue sliceValue) {
+        var slice = sliceValue.resolveIndices(list.size());
+        // TODO(maxuser): SliceValue.step not supported.
+        return new PyList(list.subList(slice.lower(), slice.upper()));
       }
       throw new IllegalArgumentException(
           String.format(
-              "list indices must be integers or slices, not %s (%s)",
+              "list indices must be integers or slices of integers, not %s (%s)",
               key.getClass().getName(), key));
     }
 
@@ -2218,11 +2343,14 @@ public class Script {
       return array.length;
     }
 
-    // TODO(maxuser): Support slice notation.
     @Override
     public Object __getitem__(Object key) {
       if (key instanceof Integer i) {
         return array[i];
+      } else if (key instanceof SliceValue sliceValue) {
+        var slice = sliceValue.resolveIndices(array.length);
+        // TODO(maxuser): SliceValue.step not supported.
+        return new PyTuple(Arrays.copyOfRange(array, slice.lower(), slice.upper()));
       }
       throw new IllegalArgumentException(
           String.format(
@@ -2583,6 +2711,18 @@ public class Script {
     }
   }
 
+  public static class EnumerateFunction implements Function {
+    @Override
+    public Object call(Object... params) {
+      if (params.length == 0 || params.length > 2) {
+        throw new IllegalArgumentException(
+            "Expected 1 or 2 params but got %d for function: enumerate".formatted(params.length));
+      }
+      int start = params.length > 1 ? (Integer) params[1] : 0;
+      return new EnumerateIterable((Iterable<?>) params[0], start);
+    }
+  }
+
   public static class AbsFunction implements Function {
     @Override
     public Object call(Object... params) {
@@ -2712,6 +2852,34 @@ public class Script {
           int n = pos;
           pos += step;
           return n;
+        }
+      };
+    }
+  }
+
+  public static class EnumerateIterable implements Iterable<PyTuple> {
+    private final Iterable<?> iterable;
+    private final int start;
+
+    public EnumerateIterable(Iterable<?> iterable, int start) {
+      this.iterable = iterable;
+      this.start = start;
+    }
+
+    public Iterator<PyTuple> iterator() {
+      var iter = iterable.iterator();
+      return new Iterator<PyTuple>() {
+        private int pos = start;
+
+        @Override
+        public boolean hasNext() {
+          return iter.hasNext();
+        }
+
+        @Override
+        public PyTuple next() {
+          var next = iter.next();
+          return new PyTuple(new Object[] {pos++, next});
         }
       };
     }
@@ -2853,6 +3021,7 @@ public class Script {
       context.setVariable("print", new PrintFunction(context));
       context.setVariable("type", new TypeFunction(executableCache));
       context.setVariable("range", new RangeFunction());
+      context.setVariable("enumerate", new EnumerateFunction());
       context.setVariable("abs", new AbsFunction());
       context.setVariable("max", new MaxFunction());
       context.setVariable("ord", new OrdFunction());
