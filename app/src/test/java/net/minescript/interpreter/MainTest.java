@@ -5777,7 +5777,7 @@ public class MainTest {
 
   // TODO(maxuser): Add tests for:
   // - classes
-  // - dataclasses (@dataclass)
+  // - dataclasses (mutable @dataclass, immutable @dataclass(Frozen=True))
   // - classes with custom __init__ method
   // - assignment to class instance fields
   // - assignment to class-level fields
@@ -5785,9 +5785,19 @@ public class MainTest {
   // - calling static methods
   // - calling class methods
   // - indexing string, e.g. "foo"[0] == "f"
-  // - new built-in functions: abs, max, ord, chr, enumerate
+  // - dict methods: keys(), values(), setdefault(key, default=None)
+  // - iterability of strings with for/list()/tuple()/enumerate()
+  // - new built-in functions: abs, round, min, max, ord, chr, enumerate
   // - raising Python-defined exception types
   // - catching exceptions without a declared type or variable name
   // - __getitem__ operator with slices: items[lower:upper:step] (step not implemented)
   // - `is`, `is not`, and `not in` binary in-fix operators
+  // - tuple and list constructors which take no params or an Iterable<?> param
+  // - enforce immutability of tuples (unless Java array is explicitly accessed)
+  // - fix bug where -= was behaving like +=
+
+  // TODO(maxuser): Implement parity for most common str methods:
+  // - split() (no params)
+  // - startswith(s)
+  // - endswith(s)
 }

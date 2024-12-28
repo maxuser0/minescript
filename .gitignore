@@ -7,3 +7,5 @@ app/bin
 
 # Ignore macOS desktop files
 .DS_Store
+
+.vscode
