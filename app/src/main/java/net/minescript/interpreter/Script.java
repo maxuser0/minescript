@@ -257,10 +257,15 @@ public class Script {
             return parseExpression(getAttr(element, "value"));
 
           case "If":
-            return new IfBlock(
-                parseExpression(getAttr(element, "test")),
-                parseStatementBlock(getBody(element)),
-                parseStatementBlock(getAttr(element, "orelse").getAsJsonArray()));
+            {
+              var elseElement = getAttr(element, "orelse").getAsJsonArray();
+              return new IfBlock(
+                  parseExpression(getAttr(element, "test")),
+                  parseStatementBlock(getBody(element)),
+                  elseElement.isEmpty()
+                      ? Optional.empty()
+                      : Optional.of(parseStatementBlock(elseElement)));
+            }
 
           case "For":
             return new ForBlock(
@@ -828,7 +833,7 @@ public class Script {
 
       var methodsString =
           methodDefs.stream()
-              .map(m -> "\n" + m.toString().replaceAll("^", "  ").replaceAll("\n", "\n  "))
+              .map(m -> "\n  " + m.toString().replaceAll("\n", "\n  "))
               .collect(joining());
 
       return "%sclass %s:%s%s"
@@ -1036,7 +1041,7 @@ public class Script {
     public String toString() {
       String decoratorString =
           decorators.stream().map(d -> "@%s\n".formatted(d.name())).collect(joining());
-      String bodyString = body.toString().replaceAll("^", "  ");
+      String bodyString = "  " + body.toString().replaceAll("\n", "\n  ");
       return "%sdef %s(%s):\n%s"
           .formatted(
               decoratorString,
@@ -1048,7 +1053,7 @@ public class Script {
 
   public record FunctionArg(Identifier identifier) {}
 
-  public record IfBlock(Expression condition, Statement thenBody, Statement elseBody)
+  public record IfBlock(Expression condition, Statement thenBody, Optional<Statement> elseBody)
       implements Statement {
     @Override
     public void exec(Context context) {
@@ -1058,8 +1063,22 @@ public class Script {
       if (convertToBool(condition.eval(context))) {
         thenBody.exec(context);
       } else {
-        elseBody.exec(context);
+        elseBody.ifPresent(e -> e.exec(context));
       }
+    }
+
+    @Override
+    public String toString() {
+      var out = new StringBuilder("if ");
+      out.append(condition.toString());
+      out.append(":\n  ");
+      out.append(thenBody.toString().replaceAll("\n", "\n  "));
+      elseBody.ifPresent(
+          e -> {
+            out.append("\nelse:\n  ");
+            out.append(e.toString().replaceAll("\n", "\n  "));
+          });
+      return out.toString();
     }
   }
 
@@ -1283,10 +1302,7 @@ public class Script {
 
     @Override
     public String toString() {
-      return statements.stream()
-          .map(Object::toString)
-          .map(s -> s.replaceAll("\n", "\n  "))
-          .collect(joining("\n  "));
+      return statements.stream().map(Object::toString).collect(joining("\n"));
     }
   }
 
