@@ -1338,12 +1338,13 @@ public class Script {
 
     public static void assignTuple(Context context, TupleLiteral lhsTuple, Object rhsValue) {
       List<Identifier> lhsVars = lhsTuple.elements().stream().map(Identifier.class::cast).toList();
+      rhsValue = promoteArrayToTuple(rhsValue);
       if (rhsValue instanceof ItemGetter getter && rhsValue instanceof Lengthable lengthable) {
         int lengthToUnpack = lengthable.__len__();
         if (lengthToUnpack != lhsVars.size()) {
           throw new IllegalArgumentException(
               String.format(
-                  "Cannot unpack %d values into %d loop variables: %s",
+                  "Cannot unpack %d values into %d variables: %s",
                   lengthToUnpack, lhsVars.size(), rhsValue));
         }
         for (int i = 0; i < lengthToUnpack; ++i) {
@@ -2971,9 +2972,19 @@ public class Script {
   }
 
   public static Iterable<?> getIterable(Object object) {
+    object = promoteArrayToTuple(object);
     if (object instanceof String string) {
       return new IterableString(string);
-    } else if (object.getClass().isArray()) {
+    } else {
+      return (Iterable<?>) object;
+    }
+  }
+
+  /**
+   * Promotes {@code object} to {@code PyTuple} if it's an array, or else returns {@code object}.
+   */
+  public static Object promoteArrayToTuple(Object object) {
+    if (object.getClass().isArray()) {
       if (object instanceof Object[] objectArray) {
         return new PyTuple(objectArray);
       } else {
@@ -2985,7 +2996,7 @@ public class Script {
         return new PyTuple(array);
       }
     } else {
-      return (Iterable<?>) object;
+      return object;
     }
   }
 
