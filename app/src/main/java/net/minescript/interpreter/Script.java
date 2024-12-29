@@ -791,6 +791,49 @@ public class Script {
                   })
               .collect(joining(", ", dataObject.type.name + "(", ")"));
     }
+
+    @Override
+    public String toString() {
+      // TODO(maxuser): Parse Decorator.keywords from JsonElement to list of record (name, value).
+      String decoratorString =
+          decorators.stream()
+              .map(
+                  d ->
+                      "@"
+                          + d.name()
+                          + d.keywords().stream()
+                              .map(
+                                  k ->
+                                      JsonAstParser.getType(k).equals("keyword")
+                                              && JsonAstParser.getAttr(k, "arg")
+                                                  .getAsString()
+                                                  .equals("frozen")
+                                              && JsonAstParser.getAttr(
+                                                      JsonAstParser.getAttr(k, "value"), "value")
+                                                  .getAsBoolean()
+                                          ? "frozen=True"
+                                          : "")
+                              .collect(joining(", ", "(", ")"))
+                          + "\n")
+              .collect(joining("\n"));
+
+      var fieldsString =
+          fields.stream()
+              .map(
+                  f ->
+                      "\n  %s: any%s"
+                          .formatted(
+                              f.identifier(), f.value().map(v -> " = " + v.toString()).orElse("")))
+              .collect(joining());
+
+      var methodsString =
+          methodDefs.stream()
+              .map(m -> "\n" + m.toString().replaceAll("^", "  ").replaceAll("\n", "\n  "))
+              .collect(joining());
+
+      return "%sclass %s:%s%s"
+          .formatted(decoratorString, identifier.name(), fieldsString, methodsString);
+    }
   }
 
   public static class PyObject {
@@ -848,6 +891,48 @@ public class Script {
         return type.strMethod.get().apply(this);
       } else {
         return "<%s object at 0x%x>".formatted(type.name, System.identityHashCode(this));
+      }
+    }
+  }
+
+  public static class PyObjects {
+    public static String toString(Object value) {
+      if (value == null) {
+        return "None";
+      } else if (value.getClass().isArray()) {
+        var out = new StringBuilder("[");
+        int length = Array.getLength(value);
+        for (int i = 0; i < length; i++) {
+          if (i != 0) {
+            out.append(", ");
+          }
+          out.append(toRepr(Array.get(value, i)));
+        }
+        out.append("]");
+        return out.toString();
+      } else if (value instanceof PyList pyList) {
+        return pyList.getJavaList().stream()
+            .map(PyObjects::toRepr)
+            .collect(joining(", ", "[", "]"));
+      } else if (value instanceof List<?> list) {
+        return list.stream().map(PyObjects::toRepr).collect(joining(", ", "[", "]"));
+      } else if (value instanceof Boolean bool) {
+        return bool ? "True" : "False";
+      } else {
+        return value.toString();
+      }
+    }
+
+    public static String toRepr(Object value) {
+      if (value instanceof String string) {
+        Gson gson =
+            new GsonBuilder()
+                .setPrettyPrinting() // Optional: for pretty printing
+                .disableHtmlEscaping() // Important: to prevent double escaping
+                .create();
+        return gson.toJson(string);
+      } else {
+        return PyObjects.toString(value);
       }
     }
   }
@@ -949,15 +1034,15 @@ public class Script {
 
     @Override
     public String toString() {
-      String bodyString = body.toString();
-      if (!bodyString.startsWith("{")) {
-        bodyString = "{\n  " + bodyString.replaceAll("\n", "\n  ") + "\n}";
-      }
-      return String.format(
-          "function %s(%s)\n%s",
-          identifier.name(),
-          args.stream().map(a -> a.identifier().name()).collect(joining(", ")),
-          bodyString);
+      String decoratorString =
+          decorators.stream().map(d -> "@%s\n".formatted(d.name())).collect(joining());
+      String bodyString = body.toString().replaceAll("^", "  ");
+      return "%sdef %s(%s):\n%s"
+          .formatted(
+              decoratorString,
+              identifier.name(),
+              args.stream().map(a -> a.identifier().name()).collect(joining(", ")),
+              bodyString);
     }
   }
 
@@ -984,8 +1069,6 @@ public class Script {
       if (context.skipStatement()) {
         return;
       }
-      // TODO(maxuser): Support arrays and other iterable values that don't implement Iterable<>.
-      var iterableValue = getIterable(iter.eval(context));
       final Identifier loopVar;
       final TupleLiteral loopVars;
       if (vars instanceof Identifier id) {
@@ -999,7 +1082,7 @@ public class Script {
       }
       try {
         context.enterLoop();
-        for (var value : iterableValue) {
+        for (var value : getIterable(iter.eval(context))) {
           if (loopVar != null) {
             context.setVariable(loopVar.name(), value);
           } else {
@@ -1013,6 +1096,12 @@ public class Script {
       } finally {
         context.exitLoop();
       }
+    }
+
+    @Override
+    public String toString() {
+      return "for %s in %s:\n%s"
+          .formatted(vars, iter, body.toString().replaceAll("^", "  ").replaceAll("\n", "\n  "));
     }
   }
 
@@ -1107,12 +1196,21 @@ public class Script {
 
     @Override
     public String toString() {
-      var out = new StringBuilder("try\n");
+      var out = new StringBuilder("try:\n");
       out.append("  " + tryBody.toString().replaceAll("\n", "\n  ") + "\n");
       for (var handler : exceptionHandlers) {
-        out.append(
-            String.format(
-                " catch (%s %s)\n", handler.exceptionType(), handler.exceptionVariable()));
+        out.append("except");
+        boolean hasExceptionType = handler.exceptionType().isPresent();
+        boolean hasExceptionVariable = handler.exceptionVariable().isPresent();
+        if (hasExceptionType && hasExceptionVariable) {
+          out.append(
+              " %s as %s".formatted(handler.exceptionType.get(), handler.exceptionVariable.get()));
+        } else if (!hasExceptionType && hasExceptionVariable) {
+          out.append(" " + handler.exceptionVariable.get());
+        } else if (hasExceptionType && !hasExceptionVariable) {
+          out.append(" " + handler.exceptionType.get());
+        }
+        out.append(":\n");
         out.append("  " + handler.body().toString().replaceAll("\n", "\n  ") + "\n");
       }
       finallyBlock.ifPresent(
@@ -1132,7 +1230,7 @@ public class Script {
     public final Object thrown;
 
     public PyException(Object thrown) {
-      super(thrown.toString());
+      super(PyObjects.toString(thrown));
       this.thrown = thrown;
     }
   }
@@ -1148,7 +1246,7 @@ public class Script {
 
     @Override
     public String toString() {
-      return String.format("throw %s;", exception);
+      return String.format("throw %s", exception);
     }
   }
 
@@ -1187,8 +1285,8 @@ public class Script {
     public String toString() {
       return statements.stream()
           .map(Object::toString)
-          .map(s -> "  " + s)
-          .collect(joining("\n", "{\n", "\n}"));
+          .map(s -> s.replaceAll("\n", "\n  "))
+          .collect(joining("\n  "));
     }
   }
 
@@ -1198,7 +1296,7 @@ public class Script {
 
     @Override
     public String toString() {
-      return String.format("import %s as %s;", clss.getName(), identifier);
+      return String.format("import %s as %s", clss.getName(), identifier);
     }
   }
 
@@ -1236,7 +1334,8 @@ public class Script {
           context.setVariable(lhsVars.get(i).name(), getter.__getitem__(i));
         }
       } else {
-        throw new IllegalArgumentException("Cannot unpack value to tuple: " + rhsValue.toString());
+        throw new IllegalArgumentException(
+            "Cannot unpack value to tuple: " + PyObjects.toString(rhsValue));
       }
     }
 
@@ -1293,11 +1392,11 @@ public class Script {
     @Override
     public String toString() {
       if (lhs instanceof Identifier lhsId) {
-        return String.format("%s = %s;", lhsId.name(), rhs);
+        return String.format("%s = %s", lhsId.name(), rhs);
       } else if (lhs instanceof ArrayIndex arrayIndex) {
-        return String.format("%s[%s] = %s;", arrayIndex.array(), arrayIndex.index(), rhs);
+        return String.format("%s[%s] = %s", arrayIndex.array(), arrayIndex.index(), rhs);
       } else {
-        return String.format("%s = %s;", lhs, rhs);
+        return String.format("%s = %s", lhs, rhs);
       }
     }
   }
@@ -1407,7 +1506,7 @@ public class Script {
 
     @Override
     public String toString() {
-      return String.format("%s %s %s;", lhs, op.symbol(), rhs);
+      return String.format("%s %s %s", lhs, op.symbol(), rhs);
     }
   }
 
@@ -1438,8 +1537,7 @@ public class Script {
 
     @Override
     public String toString() {
-      return String.format(
-          "del %s;", targets.stream().map(Object::toString).collect(joining(", ")));
+      return String.format("del %s", targets.stream().map(Object::toString).collect(joining(", ")));
     }
   }
 
@@ -1454,7 +1552,7 @@ public class Script {
     @Override
     public String toString() {
       return String.format(
-          "global %s;", globalVars.stream().map(Object::toString).collect(joining(", ")));
+          "global %s", globalVars.stream().map(Object::toString).collect(joining(", ")));
     }
   }
 
@@ -1470,9 +1568,9 @@ public class Script {
     @Override
     public String toString() {
       if (returnValue == null) {
-        return "return;";
+        return "return";
       } else {
-        return String.format("return %s;", returnValue);
+        return String.format("return %s", returnValue);
       }
     }
   }
@@ -1522,13 +1620,7 @@ public class Script {
 
     @Override
     public String toString() {
-      if (value == null) {
-        return "null";
-      } else if (value instanceof String) {
-        return String.format("\"%s\"", value);
-      } else {
-        return value.toString();
-      }
+      return PyObjects.toRepr(value);
     }
   }
 
@@ -1838,8 +1930,8 @@ public class Script {
         case ADD:
           if (lhsValue instanceof Number lhsNum && rhsValue instanceof Number rhsNum) {
             return Numbers.add(lhsNum, rhsNum);
-          } else if (lhsValue instanceof String && rhsValue instanceof String) {
-            return lhsValue.toString() + rhsValue.toString();
+          } else if (lhsValue instanceof String lhsString && rhsValue instanceof String rhsString) {
+            return lhsString + rhsString;
           }
           if (lhsValue instanceof PyList pyList) {
             lhsValue = pyList.getJavaList();
@@ -1907,9 +1999,7 @@ public class Script {
 
     @Override
     public String toString() {
-      // TODO(maxuser): Fix output for proper order of operations that may need parentheses.
-      // E.g. `(1 + 2) * 3` evaluates correctly but gets output to String as `1 + 2 * 3`.
-      return String.format("%s %s %s", lhs, op.symbol(), rhs);
+      return String.format("(%s %s %s)", lhs, op.symbol(), rhs);
     }
   }
 
@@ -2092,36 +2182,6 @@ public class Script {
     }
   }
 
-  public static String pyToString(Object value) {
-    if (value == null) {
-      return "None";
-    } else if (value instanceof Object[] array) {
-      // TODO(maxuser): Support for primitive array types too.
-      return Arrays.stream(array).map(Script::pyRepr).collect(joining(", ", "[", "]"));
-    } else if (value instanceof PyList pyList) {
-      return pyList.getJavaList().stream().map(Script::pyRepr).collect(joining(", ", "[", "]"));
-    } else if (value instanceof List<?> list) {
-      return list.stream().map(Script::pyRepr).collect(joining(", ", "[", "]"));
-    } else if (value instanceof Boolean bool) {
-      return bool ? "True" : "False";
-    } else {
-      return value.toString();
-    }
-  }
-
-  public static String pyRepr(Object value) {
-    if (value instanceof String string) {
-      Gson gson =
-          new GsonBuilder()
-              .setPrettyPrinting() // Optional: for pretty printing
-              .disableHtmlEscaping() // Important: to prevent double escaping
-              .create();
-      return gson.toJson(string);
-    } else {
-      return pyToString(value);
-    }
-  }
-
   public record ListComprehension(
       Expression transform, Expression target, Expression iter, List<Expression> ifs)
       implements Expression {
@@ -2130,8 +2190,6 @@ public class Script {
       var localContext = context.createLocalContext();
       var list = new PyList();
       // TODO(maxuser): Share portions of impl with ForBlock::exec.
-      // TODO(maxuser): Support arrays and other iterable values that don't implement Iterable<>.
-      var iterableValue = getIterable(iter.eval(localContext));
       final Identifier loopVar;
       final TupleLiteral loopVars;
       if (target instanceof Identifier id) {
@@ -2144,7 +2202,7 @@ public class Script {
         throw new IllegalArgumentException("Unexpected loop variable type: " + target.toString());
       }
       outerLoop:
-      for (var value : iterableValue) {
+      for (var value : getIterable(iter.eval(localContext))) {
         if (loopVar != null) {
           localContext.setVariable(loopVar.name(), value);
         } else {
@@ -2249,7 +2307,7 @@ public class Script {
 
     @Override
     public String toString() {
-      return list.stream().map(Script::pyToString).collect(joining(", ", "[", "]"));
+      return list.stream().map(PyObjects::toString).collect(joining(", ", "[", "]"));
     }
 
     public PyList __add__(Object value) {
@@ -2411,8 +2469,8 @@ public class Script {
     @Override
     public String toString() {
       return array.length == 1
-          ? String.format("(%s,)", pyToString(array[0]))
-          : Arrays.stream(array).map(Script::pyToString).collect(joining(", ", "(", ")"));
+          ? String.format("(%s,)", PyObjects.toString(array[0]))
+          : Arrays.stream(array).map(PyObjects::toString).collect(joining(", ", "(", ")"));
     }
 
     public PyTuple __add__(Object value) {
@@ -2542,7 +2600,7 @@ public class Script {
   public record FormattedString(List<Expression> values) implements Expression {
     @Override
     public Object eval(Context context) {
-      return values.stream().map(v -> v.eval(context).toString()).collect(joining());
+      return values.stream().map(v -> PyObjects.toString(v.eval(context))).collect(joining());
     }
 
     @Override
@@ -2626,7 +2684,7 @@ public class Script {
     public Object __getitem__(Object key) {
       var value = map.getOrDefault(key, NOT_FOUND);
       if (value == NOT_FOUND) {
-        throw new NoSuchElementException("Key not found: " + key.toString());
+        throw new NoSuchElementException("Key not found: " + PyObjects.toString(key));
       }
       return value;
     }
@@ -2654,9 +2712,9 @@ public class Script {
         if (!firstEntry) {
           out.append(", ");
         }
-        out.append(pyToString(entry.getKey()));
+        out.append(PyObjects.toString(entry.getKey()));
         out.append(": ");
-        out.append(pyToString(entry.getValue()));
+        out.append(PyObjects.toString(entry.getValue()));
         firstEntry = false;
       }
       out.append("}");
@@ -2716,7 +2774,8 @@ public class Script {
                         v ->
                             v == null
                                 ? "null"
-                                : String.format("(%s) %s", v.getClass().getName(), pyRepr(v)))
+                                : String.format(
+                                    "(%s) %s", v.getClass().getName(), PyObjects.toRepr(v)))
                     .collect(joining(", "))));
       }
     }
@@ -2790,7 +2849,7 @@ public class Script {
     @Override
     public Object call(Object... params) {
       expectNumParams(params, 1);
-      return pyToString(params[0]);
+      return PyObjects.toString(params[0]);
     }
   }
 
@@ -2857,7 +2916,7 @@ public class Script {
     public Object call(Object... params) {
       @SuppressWarnings("unchecked")
       var out = (Consumer<String>) context.getVariable("__stdout__");
-      out.accept(Arrays.stream(params).map(Script::pyToString).collect(joining(" ")));
+      out.accept(Arrays.stream(params).map(PyObjects::toString).collect(joining(" ")));
       return null;
     }
   }
@@ -3185,7 +3244,7 @@ public class Script {
                         v ->
                             v == null
                                 ? "null"
-                                : String.format("(%s) %s", v.getClass().getName(), pyRepr(v)))
+                                : "(%s) %s".formatted(v.getClass().getName(), PyObjects.toRepr(v)))
                     .collect(joining(", "))));
       }
     }
