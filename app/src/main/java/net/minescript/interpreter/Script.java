@@ -2898,6 +2898,17 @@ public class Script {
   public static Iterable<?> getIterable(Object object) {
     if (object instanceof String string) {
       return new IterableString(string);
+    } else if (object.getClass().isArray()) {
+      if (object instanceof Object[] objectArray) {
+        return new PyTuple(objectArray);
+      } else {
+        int length = Array.getLength(object);
+        Object[] array = new Object[length];
+        for (int i = 0; i < length; i++) {
+          array[i] = Array.get(object, i);
+        }
+        return new PyTuple(array);
+      }
     } else {
       return (Iterable<?>) object;
     }
@@ -3141,7 +3152,9 @@ public class Script {
         clss = object.getClass();
       }
 
-      var cacheKey = ExecutableCacheKey.forMethod(clss, isStaticMethod, methodName, params);
+      Object[] mappedParams = mapMethodParams(clss, isStaticMethod, methodName, params);
+      String mappedMethodName = mapMethodName(clss, isStaticMethod, methodName);
+      var cacheKey = ExecutableCacheKey.forMethod(clss, isStaticMethod, methodName, mappedParams);
       Optional<Method> matchedMethod =
           executableCache
               .computeIfAbsent(
@@ -3151,12 +3164,12 @@ public class Script {
                           clss.getMethods(),
                           m ->
                               Modifier.isStatic(m.getModifiers()) == isStaticMethod
-                                  && m.getName().equals(methodName),
-                          params))
+                                  && m.getName().equals(mappedMethodName),
+                          mappedParams))
               .map(Method.class::cast);
       if (matchedMethod.isPresent()) {
         try {
-          return matchedMethod.get().invoke(isStaticMethod ? null : object, params);
+          return matchedMethod.get().invoke(isStaticMethod ? null : object, mappedParams);
         } catch (IllegalAccessException | InvocationTargetException e) {
           throw new RuntimeException(e);
         }
@@ -3176,6 +3189,27 @@ public class Script {
                     .collect(joining(", "))));
       }
     }
+  }
+
+  private static Object[] mapMethodParams(
+      Class<?> clss, boolean isStaticMethod, String methodName, Object[] params) {
+    if (clss == String.class && !isStaticMethod) {
+      if (methodName.equals("split") && params.length == 0) {
+        return new Object[] {"\\s+"};
+      }
+    }
+    return params;
+  }
+
+  private static String mapMethodName(Class<?> clss, boolean isStaticMethod, String methodName) {
+    if (clss == String.class && !isStaticMethod) {
+      if (methodName.equals("startswith")) {
+        return "startsWith";
+      } else if (methodName.equals("endswith")) {
+        return "endsWith";
+      }
+    }
+    return methodName;
   }
 
   public record FieldAccess(Expression object, Identifier field) implements Expression {

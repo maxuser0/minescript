@@ -5792,12 +5792,12 @@ public class MainTest {
   // - catching exceptions without a declared type or variable name
   // - __getitem__ operator with slices: items[lower:upper:step] (step not implemented)
   // - `is`, `is not`, and `not in` binary in-fix operators
-  // - tuple and list constructors which take no params or an Iterable<?> param
+  // - tuple and list constructors which take no params or String, array, or Iterable<?>
   // - enforce immutability of tuples (unless Java array is explicitly accessed)
   // - fix bug where -= was behaving like +=
+  // - map str.split() to str.split("\\s+")
+  // - map str.startswith(s) to str.startsWith(s)
+  // - map str.endswith(s) to str.endsWith(s)
 
   // TODO(maxuser): Implement parity for most common str methods:
-  // - split() (no params)
-  // - startswith(s)
-  // - endswith(s)
 }
