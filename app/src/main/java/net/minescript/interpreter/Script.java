@@ -2090,13 +2090,17 @@ public class Script {
       Optional<Integer> lower, Optional<Integer> upper, Optional<Integer> step) {
     public ResolvedSliceIndices resolveIndices(int sequenceLength) {
       int normLower = lower.map(n -> n < 0 ? sequenceLength + n : n).orElse(0);
-      int normUpper = upper.map(n -> n < 0 ? sequenceLength + n + 1 : n).orElse(sequenceLength);
+      int normUpper = upper.map(n -> n < 0 ? sequenceLength + n : n).orElse(sequenceLength);
       return new ResolvedSliceIndices(normLower, normUpper, step.orElse(1));
     }
   }
 
   /** Slice indices resolved for a particular length sequence to avoid negative or empty values. */
-  public record ResolvedSliceIndices(int lower, int upper, int step) {}
+  public record ResolvedSliceIndices(int lower, int upper, int step) {
+    public int length() {
+      return upper - lower;
+    }
+  }
 
   public record ArrayIndex(Expression array, Expression index) implements Expression {
     @Override
@@ -2111,15 +2115,33 @@ public class Script {
       if (arrayValue instanceof ItemGetter itemGetter) {
         return itemGetter.__getitem__(indexValue);
       } else if (arrayValue.getClass().isArray()) {
-        int intKey = ((Number) indexValue).intValue();
-        return Array.get(arrayValue, intKey);
+        if (indexValue instanceof SliceValue sliceValue) {
+          var slice = sliceValue.resolveIndices(Array.getLength(arrayValue));
+          Object copiedArray =
+              Array.newInstance(arrayValue.getClass().getComponentType(), slice.length());
+          System.arraycopy(arrayValue, slice.lower(), copiedArray, 0, slice.length());
+          return copiedArray;
+        } else {
+          int intKey = ((Number) indexValue).intValue();
+          return Array.get(arrayValue, intKey);
+        }
       } else if (arrayValue instanceof List list) {
-        int intKey = ((Number) indexValue).intValue();
-        return list.get(intKey);
+        if (indexValue instanceof SliceValue sliceValue) {
+          var slice = sliceValue.resolveIndices(list.size());
+          return list.subList(slice.lower(), slice.upper());
+        } else {
+          int intKey = ((Number) indexValue).intValue();
+          return list.get(intKey);
+        }
       } else if (arrayValue instanceof Map map) {
         return map.get(indexValue);
       } else if (arrayValue instanceof String string) {
-        return String.valueOf(string.charAt((Integer) indexValue));
+        if (indexValue instanceof SliceValue sliceValue) {
+          var slice = sliceValue.resolveIndices(string.length());
+          return string.substring(slice.lower(), slice.upper());
+        } else {
+          return String.valueOf(string.charAt((Integer) indexValue));
+        }
       }
 
       throw new IllegalArgumentException(
@@ -3254,7 +3276,7 @@ public class Script {
       implements Expression {
     @Override
     public Object eval(Context context) {
-      return new BoundMethod(object.eval(context), methodId.name(), executableCache);
+      return new BoundMethod(object.eval(context), methodId.name(), executableCache, object);
     }
 
     @Override
@@ -3266,7 +3288,8 @@ public class Script {
   public record BoundMethod(
       Object object,
       String methodName,
-      Map<ExecutableCacheKey, Optional<Executable>> executableCache)
+      Map<ExecutableCacheKey, Optional<Executable>> executableCache,
+      Expression objectExpression)
       implements Function {
     @Override
     public Object call(Object... params) {
@@ -3282,6 +3305,11 @@ public class Script {
         isStaticMethod = true;
         clss = classId.clss();
       } else {
+        if (object == null) {
+          throw new NullPointerException(
+              "Cannot invoke method \"%s.%s()\" because \"%s\" is null"
+                  .formatted(objectExpression, methodName, objectExpression));
+        }
         isStaticMethod = false;
         clss = object.getClass();
       }
@@ -3356,8 +3384,21 @@ public class Script {
             ? pyObject.__dict__.__getitem__(field.name())
             : pyObject.type.__dict__.__getitem__(field.name());
       }
-      boolean isClass = objectValue instanceof JavaClassId;
-      var objectClass = isClass ? ((JavaClassId) objectValue).clss() : objectValue.getClass();
+
+      final boolean isClass;
+      final Class<?> objectClass;
+      if (objectValue instanceof JavaClassId javaClassId) {
+        isClass = true;
+        objectClass = javaClassId.clss();
+      } else {
+        if (objectValue == null) {
+          throw new NullPointerException(
+              "Cannot get field \"%s.%s\" because \"%s\" is null".formatted(object, field, object));
+        }
+        isClass = false;
+        objectClass = objectValue.getClass();
+      }
+
       try {
         var fieldAccess = objectClass.getField(field.name());
         return fieldAccess.get(isClass ? null : objectValue);

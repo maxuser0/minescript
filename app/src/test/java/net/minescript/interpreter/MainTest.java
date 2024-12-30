@@ -5791,6 +5791,7 @@ public class MainTest {
   // - raising Python-defined exception types
   // - catching exceptions without a declared type or variable name
   // - __getitem__ operator with slices: items[lower:upper:step] (step not implemented)
+  // - slice notation for Java List, String, and array types
   // - `is`, `is not`, and `not in` binary in-fix operators
   // - tuple and list constructors which take no params or String, array, or Iterable<?>
   // - tuple assignment from Java array
