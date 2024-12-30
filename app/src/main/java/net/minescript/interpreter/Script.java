@@ -18,10 +18,12 @@ import java.lang.reflect.Executable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -50,6 +52,11 @@ public class Script {
   }
 
   public Script parse(JsonElement element) {
+    return parse(element, "<stdin>");
+  }
+
+  public Script parse(JsonElement element, String scriptFilename) {
+    globals.setScriptFilename(scriptFilename);
     var parser = new JsonAstParser(executableCache);
     parser.parseGlobals(element, globals);
     return this;
@@ -103,6 +110,7 @@ public class Script {
         return parseStatements(block.get(0));
       } else {
         return new StatementBlock(
+            getLineno(block),
             StreamSupport.stream(block.spliterator(), false)
                 .map(elem -> parseStatements(elem))
                 .toList());
@@ -119,7 +127,7 @@ public class Script {
                 var type = getType(elem);
                 switch (type) {
                   case "FunctionDef":
-                    methodDefs.add(parseFunctionDef(elem));
+                    methodDefs.add(parseFunctionDef(identifier.name(), elem));
                     break;
                   case "Assign":
                     fields.add(parseClassFieldDef(elem, true));
@@ -129,7 +137,8 @@ public class Script {
                     break;
                 }
               });
-      return new ClassDef(identifier, getDecorators(element), fields, methodDefs);
+      return new ClassDef(
+          getLineno(element), identifier, getDecorators(element), fields, methodDefs);
     }
 
     private ClassFieldDef parseClassFieldDef(JsonElement element, boolean multipleTargets) {
@@ -168,14 +177,16 @@ public class Script {
           .toList();
     }
 
-    private FunctionDef parseFunctionDef(JsonElement element) {
+    private FunctionDef parseFunctionDef(String enclosingClassName, JsonElement element) {
       var identifier = new Identifier(getAttr(element, "name").getAsString());
       var decorators = getDecorators(element);
       List<FunctionArg> args =
           parseFunctionArgs(
               getAttr(getAttr(element, "args").getAsJsonObject(), "args").getAsJsonArray());
       Statement body = parseStatementBlock(getBody(element));
-      var func = new FunctionDef(identifier, decorators, args, body);
+      var func =
+          new FunctionDef(
+              getLineno(element), enclosingClassName, identifier, decorators, args, body);
       return func;
     }
 
@@ -187,20 +198,20 @@ public class Script {
             return parseClassDef(element);
 
           case "FunctionDef":
-            return parseFunctionDef(element);
+            return parseFunctionDef("<>", element);
 
           case "AnnAssign":
             {
               Expression lhs = parseExpression(element.getAsJsonObject().get("target"));
               Expression rhs = parseExpression(getAttr(element, "value"));
-              return new Assignment(lhs, rhs);
+              return new Assignment(getLineno(element), lhs, rhs);
             }
 
           case "Assign":
             {
               Expression lhs = parseExpression(getTargets(element).get(0));
               Expression rhs = parseExpression(getAttr(element, "value"));
-              return new Assignment(lhs, rhs);
+              return new Assignment(getLineno(element), lhs, rhs);
             }
 
           case "AugAssign":
@@ -227,9 +238,9 @@ public class Script {
                       "Unsupported type of augmented assignment: " + opName);
               }
               if (lhs instanceof Identifier) {
-                return new AugmentedAssignment(lhs, op, rhs);
+                return new AugmentedAssignment(getLineno(element), lhs, op, rhs);
               } else if (lhs instanceof ArrayIndex) {
-                return new AugmentedAssignment(lhs, op, rhs);
+                return new AugmentedAssignment(getLineno(element), lhs, op, rhs);
               } else {
                 throw new IllegalArgumentException(
                     String.format(
@@ -240,6 +251,7 @@ public class Script {
 
           case "Delete":
             return new Deletion(
+                getLineno(element),
                 StreamSupport.stream(getTargets(element).spliterator(), false)
                     .map(this::parseExpression)
                     .toList());
@@ -247,6 +259,7 @@ public class Script {
           case "Global":
             {
               return new GlobalVarDecl(
+                  getLineno(element),
                   StreamSupport.stream(
                           getAttr(element, "names").getAsJsonArray().spliterator(), false)
                       .map(name -> new Identifier(name.getAsString()))
@@ -260,6 +273,7 @@ public class Script {
             {
               var elseElement = getAttr(element, "orelse").getAsJsonArray();
               return new IfBlock(
+                  getLineno(element),
                   parseExpression(getAttr(element, "test")),
                   parseStatementBlock(getBody(element)),
                   elseElement.isEmpty()
@@ -269,13 +283,16 @@ public class Script {
 
           case "For":
             return new ForBlock(
+                getLineno(element),
                 parseExpression(getAttr(element, "target")),
                 parseExpression(getAttr(element, "iter")),
                 parseStatementBlock(getBody(element)));
 
           case "While":
             return new WhileBlock(
-                parseExpression(getAttr(element, "test")), parseStatementBlock(getBody(element)));
+                getLineno(element),
+                parseExpression(getAttr(element, "test")),
+                parseStatementBlock(getBody(element)));
 
           case "Break":
             return new Break();
@@ -284,6 +301,7 @@ public class Script {
             {
               JsonArray finalBody = getAttr(element, "finalbody").getAsJsonArray();
               return new TryBlock(
+                  getLineno(element),
                   parseStatementBlock(getBody(element)),
                   StreamSupport.stream(
                           getAttr(element, "handlers").getAsJsonArray().spliterator(), false)
@@ -295,7 +313,7 @@ public class Script {
             }
 
           case "Raise":
-            return new RaiseStatement(parseExpression(getAttr(element, "exc")));
+            return new RaiseStatement(getLineno(element), parseExpression(getAttr(element, "exc")));
 
           case "Return":
             {
@@ -303,9 +321,9 @@ public class Script {
               if (returnValue.isJsonNull()) {
                 // No return value. This differs from `return None` in terms of the AST, but the two
                 // evaluate the same.
-                return new ReturnStatement(null);
+                return new ReturnStatement(getLineno(element), null);
               } else {
-                return new ReturnStatement(parseExpression(returnValue));
+                return new ReturnStatement(getLineno(element), parseExpression(returnValue));
               }
             }
         }
@@ -315,6 +333,17 @@ public class Script {
         throw new ParseException("Exception while parsing statement: %s".formatted(element), e);
       }
       throw new IllegalArgumentException("Unknown statement type: " + element.toString());
+    }
+
+    private int getLineno(JsonElement element) {
+      if (element.isJsonObject()) {
+        var obj = element.getAsJsonObject();
+        final String LINENO = "lineno";
+        if (obj.has(LINENO)) {
+          return obj.get(LINENO).getAsNumber().intValue();
+        }
+      }
+      return -1;
     }
 
     class ParseException extends RuntimeException {
@@ -423,11 +452,11 @@ public class Script {
               }
             } else {
               return new FunctionCall(
+                  getLineno(element),
                   func,
                   StreamSupport.stream(args.spliterator(), false)
                       .map(this::parseExpression)
-                      .toList(),
-                  executableCache);
+                      .toList());
             }
           }
 
@@ -617,6 +646,10 @@ public class Script {
       throw new UnsupportedOperationException(
           "Execution of statement type not implemented: " + getClass().getSimpleName());
     }
+
+    default int lineno() {
+      return -1;
+    }
   }
 
   public static boolean convertToBool(Object value) {
@@ -657,8 +690,7 @@ public class Script {
   // `type` is an array of length 1 because CtorFunction needs to be instantiated before the
   // surrounding class is fully defined. (Alternatively, PyClass could be mutable so that it's
   // instantiated before CtorFunction.)
-  public record CtorFunction(
-      PyClass[] type, String className, FunctionDef function, Context enclosingContext)
+  public record CtorFunction(PyClass[] type, FunctionDef function, Context enclosingContext)
       implements Function {
     @Override
     public Object call(Object... params) {
@@ -669,7 +701,7 @@ public class Script {
       if (ctorParams.length != function.args().size()) {
         throw new IllegalArgumentException(
             "Expected %d params but got %d for %s constructor: %s"
-                .formatted(function.args().size() - 1, params.length, className, function));
+                .formatted(function.args().size() - 1, params.length, type[0].name, function));
       }
       function.invoke(enclosingContext, ctorParams);
       return self;
@@ -679,6 +711,7 @@ public class Script {
   public record ClassFieldDef(Identifier identifier, Optional<Expression> value) {}
 
   public record ClassDef(
+      int lineno,
       Identifier identifier,
       List<Decorator> decorators,
       List<ClassFieldDef> fields,
@@ -727,7 +760,7 @@ public class Script {
         String methodName = methodDef.identifier().name();
         // TODO(maxuser): Support __str__/__rep__ methods for custom string output.
         if ("__init__".equals(methodName)) {
-          ctor = new CtorFunction(type, identifier.name(), methodDef, context);
+          ctor = new CtorFunction(type, methodDef, context);
           instanceMethods.put(methodName, ctor);
         } else if (methodDef.decorators().stream().anyMatch(d -> d.name().equals("classmethod"))) {
           classLevelMethods.put(
@@ -1004,7 +1037,12 @@ public class Script {
   }
 
   public record FunctionDef(
-      Identifier identifier, List<Decorator> decorators, List<FunctionArg> args, Statement body)
+      int lineno,
+      String enclosingClassName,
+      Identifier identifier,
+      List<Decorator> decorators,
+      List<FunctionArg> args,
+      Statement body)
       implements Statement {
     /** Adds this function to the specified {@code context}. */
     @Override
@@ -1027,13 +1065,13 @@ public class Script {
                 identifier, argValues.length, args.size()));
       }
 
-      var localContext = enclosingContext.createLocalContext();
+      var localContext = enclosingContext.createLocalContext(enclosingClassName, identifier.name());
       for (int i = 0; i < args.size(); ++i) {
         var arg = args.get(i);
         var argValue = argValues[i];
         localContext.setVariable(arg.identifier().name(), argValue);
       }
-      body.exec(localContext);
+      localContext.exec(body);
       return localContext.returnValue();
     }
 
@@ -1053,7 +1091,8 @@ public class Script {
 
   public record FunctionArg(Identifier identifier) {}
 
-  public record IfBlock(Expression condition, Statement thenBody, Optional<Statement> elseBody)
+  public record IfBlock(
+      int lineno, Expression condition, Statement thenBody, Optional<Statement> elseBody)
       implements Statement {
     @Override
     public void exec(Context context) {
@@ -1061,9 +1100,9 @@ public class Script {
         return;
       }
       if (convertToBool(condition.eval(context))) {
-        thenBody.exec(context);
+        context.exec(thenBody);
       } else {
-        elseBody.ifPresent(e -> e.exec(context));
+        elseBody.ifPresent(e -> context.exec(e));
       }
     }
 
@@ -1082,7 +1121,8 @@ public class Script {
     }
   }
 
-  public record ForBlock(Expression vars, Expression iter, Statement body) implements Statement {
+  public record ForBlock(int lineno, Expression vars, Expression iter, Statement body)
+      implements Statement {
     @Override
     public void exec(Context context) {
       if (context.skipStatement()) {
@@ -1107,7 +1147,7 @@ public class Script {
           } else {
             Assignment.assignTuple(context, loopVars, value);
           }
-          body.exec(context);
+          context.exec(body);
           if (context.shouldBreak()) {
             break;
           }
@@ -1124,7 +1164,7 @@ public class Script {
     }
   }
 
-  public record WhileBlock(Expression condition, Statement body) implements Statement {
+  public record WhileBlock(int lineno, Expression condition, Statement body) implements Statement {
     @Override
     public void exec(Context context) {
       if (context.skipStatement()) {
@@ -1133,7 +1173,7 @@ public class Script {
       try {
         context.enterLoop();
         while (convertToBool(condition.eval(context))) {
-          body.exec(context);
+          context.exec(body);
           if (context.shouldBreak()) {
             break;
           }
@@ -1167,7 +1207,10 @@ public class Script {
       Optional<Identifier> exceptionType, Optional<Identifier> exceptionVariable, Statement body) {}
 
   public record TryBlock(
-      Statement tryBody, List<ExceptionHandler> exceptionHandlers, Optional<Statement> finallyBlock)
+      int lineno,
+      Statement tryBody,
+      List<ExceptionHandler> exceptionHandlers,
+      Optional<Statement> finallyBlock)
       implements Statement {
     @Override
     public void exec(Context context) {
@@ -1175,7 +1218,7 @@ public class Script {
         return;
       }
       try {
-        tryBody.exec(context);
+        context.exec(tryBody);
       } catch (Exception e) {
         // PyException exists only to prevent all eval/exec/invoke methods from declaring that they
         // throw Exception.  Unwrap the underlying exception here.
@@ -1200,7 +1243,7 @@ public class Script {
                     name -> {
                       context.setVariable(name, exception);
                     });
-            handler.body.exec(context);
+            context.exec(handler.body);
             handled = true;
             break;
           }
@@ -1209,7 +1252,7 @@ public class Script {
           throw new PyException(e);
         }
       } finally {
-        finallyBlock.ifPresent(fb -> fb.exec(context));
+        finallyBlock.ifPresent(fb -> context.exec(fb));
       }
     }
 
@@ -1254,7 +1297,7 @@ public class Script {
     }
   }
 
-  public record RaiseStatement(Expression exception) implements Statement {
+  public record RaiseStatement(int lineno, Expression exception) implements Statement {
     @Override
     public void exec(Context context) {
       if (context.skipStatement()) {
@@ -1289,14 +1332,14 @@ public class Script {
     }
   }
 
-  public record StatementBlock(List<Statement> statements) implements Statement {
+  public record StatementBlock(int lineno, List<Statement> statements) implements Statement {
     @Override
     public void exec(Context context) {
       for (var statement : statements) {
         if (context.skipStatement()) {
           break;
         }
-        statement.exec(context);
+        context.exec(statement);
       }
     }
 
@@ -1306,12 +1349,14 @@ public class Script {
     }
   }
 
-  public record ClassAliasAssignment(Identifier identifier, Class<?> clss) implements Statement {
+  public record ClassAliasAssignment(int lineno, Identifier identifier, Class<?> clss)
+      implements Statement {
     @Override
     public void exec(Context context) {}
 
     @Override
     public String toString() {
+      // TODO(maxuser): Format as Python assignment.
       return String.format("import %s as %s", clss.getName(), identifier);
     }
   }
@@ -1322,7 +1367,7 @@ public class Script {
     }
   }
 
-  public record Assignment(Expression lhs, Expression rhs) implements Statement {
+  public record Assignment(int lineno, Expression lhs, Expression rhs) implements Statement {
     public Assignment {
       // TODO(maxuser): Support destructuring assignment more than one level of identifiers deep.
       if (!(lhs instanceof Identifier
@@ -1418,7 +1463,8 @@ public class Script {
     }
   }
 
-  public record AugmentedAssignment(Expression lhs, Op op, Expression rhs) implements Statement {
+  public record AugmentedAssignment(int lineno, Expression lhs, Op op, Expression rhs)
+      implements Statement {
     public enum Op {
       ADD_EQ("+="),
       SUB_EQ("-="),
@@ -1527,7 +1573,7 @@ public class Script {
     }
   }
 
-  public record Deletion(List<Expression> targets) implements Statement {
+  public record Deletion(int lineno, List<Expression> targets) implements Statement {
     @Override
     public void exec(Context context) {
       for (var target : targets) {
@@ -1558,7 +1604,7 @@ public class Script {
     }
   }
 
-  public record GlobalVarDecl(List<Identifier> globalVars) implements Statement {
+  public record GlobalVarDecl(int lineno, List<Identifier> globalVars) implements Statement {
     @Override
     public void exec(Context context) {
       for (var identifier : globalVars) {
@@ -1573,7 +1619,7 @@ public class Script {
     }
   }
 
-  public record ReturnStatement(Expression returnValue) implements Statement {
+  public record ReturnStatement(int lineno, Expression returnValue) implements Statement {
     @Override
     public void exec(Context context) {
       if (context.skipStatement()) {
@@ -3098,17 +3144,19 @@ public class Script {
     }
   }
 
-  public record FunctionCall(
-      Expression method,
-      List<Expression> params,
-      Map<ExecutableCacheKey, Optional<Executable>> executableCache)
+  public record FunctionCall(int lineno, Expression method, List<Expression> params)
       implements Expression {
     @Override
     public Object eval(Context context) {
       var caller = method.eval(context);
       Object[] paramValues = params.stream().map(p -> p.eval(context)).toArray(Object[]::new);
       if (caller instanceof Function function) {
-        return function.call(paramValues);
+        try {
+          context.enterFunction(lineno);
+          return function.call(paramValues);
+        } finally {
+          context.leaveFunction();
+        }
       }
 
       throw new IllegalArgumentException(
@@ -3327,9 +3375,15 @@ public class Script {
   public static class Context {
     private static final Object NOT_FOUND = new Object();
 
+    // TODO(maxuser): Organize the global contextual state into a separate object shared by all the
+    // contexts.
     private final Context globals;
     private final Context enclosingContext;
-    private final List<Statement> globalStatements;
+    private final ClassMethodName classMethodName;
+    private final List<Statement> globalStatements; // set only for global context
+    // NOTE: globalCallStack does not support multithreaded scripts.
+    private final Deque<CallSite> globalCallStack; // set only for global context
+    private String globalScriptFilename; // set only for global context
     private Set<String> globalVarNames = null;
     private final Map<String, Object> vars = new HashMap<>();
     private Object returnValue;
@@ -3337,16 +3391,37 @@ public class Script {
     private int loopDepth = 0;
     private boolean breakingLoop = false;
 
+    private record ClassMethodName(String type, String method) {}
+
+    private record CallSite(ClassMethodName classMethodName, int lineno) {}
+
     private Context() {
       globals = this;
       enclosingContext = null;
+      classMethodName = new ClassMethodName("<>", "<>");
       globalStatements = new ArrayList<>();
+      globalScriptFilename = "<stdin>";
+      globalCallStack = new ArrayDeque<>();
     }
 
     private Context(Context globals, Context enclosingContext) {
+      this(globals, enclosingContext, enclosingContext.classMethodName);
+    }
+
+    private Context(Context globals, Context enclosingContext, ClassMethodName classMethodName) {
       this.globals = globals;
       this.enclosingContext = enclosingContext == globals ? null : enclosingContext;
+      this.classMethodName = classMethodName;
       this.globalStatements = null; // Defined only for global context.
+      this.globalScriptFilename = null; // Defined only for global context.
+      this.globalCallStack = null; // Defined only for global context.
+    }
+
+    public void setScriptFilename(String filename) {
+      if (this != globals) {
+        throw new IllegalArgumentException("Cannot set script filename for non-global context");
+      }
+      globalScriptFilename = filename;
     }
 
     public static Context createGlobals(
@@ -3372,6 +3447,19 @@ public class Script {
       context.setVariable("ord", new OrdFunction());
       context.setVariable("chr", new ChrFunction());
       return context;
+    }
+
+    public void enterFunction(int lineno) {
+      globals.globalCallStack.push(new CallSite(classMethodName, lineno));
+    }
+
+    public void leaveFunction() {
+      globals.globalCallStack.pop();
+    }
+
+    public Context createLocalContext(String enclosingClassName, String enclosingMethodName) {
+      return new Context(
+          globals, this, new ClassMethodName(enclosingClassName, enclosingMethodName));
     }
 
     public Context createLocalContext() {
@@ -3401,9 +3489,37 @@ public class Script {
         throw new IllegalStateException("Cannot execute global statements in local context");
       }
       for (var statement : globalStatements) {
-        statement.exec(globals);
+        globals.exec(statement);
       }
       globalStatements.clear();
+    }
+
+    /** Call this instead of Statement.exec directly for proper attribution with exceptions. */
+    public void exec(Statement statement) {
+      try {
+        statement.exec(this);
+      } catch (Exception e) {
+        var stackTrace = e.getStackTrace();
+        if (stackTrace.length > 0
+            && !stackTrace[0].getFileName().equals(globals.globalScriptFilename)) {
+          var scriptStack = new ArrayList<CallSite>();
+          scriptStack.add(new CallSite(classMethodName, statement.lineno()));
+          scriptStack.addAll(globals.globalCallStack);
+
+          var newStackTrace = new StackTraceElement[stackTrace.length + scriptStack.size()];
+          for (int i = 0; i < scriptStack.size(); ++i) {
+            newStackTrace[i] =
+                new StackTraceElement(
+                    scriptStack.get(i).classMethodName().type,
+                    scriptStack.get(i).classMethodName().method,
+                    globals.globalScriptFilename,
+                    scriptStack.get(i).lineno());
+          }
+          System.arraycopy(stackTrace, 0, newStackTrace, scriptStack.size(), stackTrace.length);
+          e.setStackTrace(newStackTrace);
+        }
+        throw e;
+      }
     }
 
     public void setBoundFunction(BoundFunction boundFunction) {
