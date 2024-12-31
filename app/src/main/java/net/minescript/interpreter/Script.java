@@ -15,9 +15,11 @@ import com.google.gson.JsonObject;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
+import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Proxy;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -2230,6 +2232,11 @@ public class Script {
           score += 1;
           continue;
         }
+        // Allow implementations of Function to be passed to params expecting an interface, but
+        // don't boost the score for this iffy conversion.
+        if (Function.class.isAssignableFrom(valueType) && type.isInterface()) {
+          continue;
+        }
         if (!type.isAssignableFrom(value.getClass())) {
           return 0;
         }
@@ -3311,7 +3318,7 @@ public class Script {
                   .formatted(objectExpression, methodName, objectExpression));
         }
         isStaticMethod = false;
-        clss = object.getClass();
+        clss = findAccessibleClass(object.getClass());
       }
 
       Object[] mappedParams = mapMethodParams(clss, isStaticMethod, methodName, params);
@@ -3330,6 +3337,7 @@ public class Script {
                           mappedParams))
               .map(Method.class::cast);
       if (matchedMethod.isPresent()) {
+        FunctionalParamProxy.promoteFunctionalParams(matchedMethod.get(), mappedParams);
         try {
           return matchedMethod.get().invoke(isStaticMethod ? null : object, mappedParams);
         } catch (IllegalAccessException | InvocationTargetException e) {
@@ -3353,6 +3361,27 @@ public class Script {
     }
   }
 
+  /**
+   * Find a superclass or interface that's accesible if the given class is not.
+   *
+   * <p>Some classes in the JDK are internal only and throw IllegalAccessException when invoking
+   * methods on those classes. In those cases, return an interface or superclass.
+   */
+  private static Class<?> findAccessibleClass(Class<?> clss) {
+    // TODO(maxuser): Is there a more generic way than manually maintaining a list of class name
+    // patterns? Maybe allow Script users to pass regexp(s) for superclass promotion.
+    String className = clss.getName();
+    if (className.startsWith("java.util.HashMap$Node")) {
+      return clss.getInterfaces()[0];
+    } else if (className.startsWith("java.util.stream.")) {
+      if (className.contains("Pipeline")) {
+        var interfaces = clss.getInterfaces();
+        return findAccessibleClass(interfaces.length > 0 ? interfaces[0] : clss.getSuperclass());
+      }
+    }
+    return clss;
+  }
+
   private static Object[] mapMethodParams(
       Class<?> clss, boolean isStaticMethod, String methodName, Object[] params) {
     if (clss == String.class && !isStaticMethod) {
@@ -3372,6 +3401,48 @@ public class Script {
       }
     }
     return methodName;
+  }
+
+  public static class FunctionalParamProxy implements InvocationHandler {
+
+    private final Function function;
+
+    public FunctionalParamProxy(Function function) {
+      this.function = function;
+    }
+
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+      return function.call(args);
+    }
+
+    public static void promoteFunctionalParams(Executable executable, Object[] params) {
+      for (int i = 0; i < params.length; ++i) {
+        var param = params[i];
+        Class<?> functionalParamType;
+        if (param instanceof Function function
+            && isFunctionalInterface(functionalParamType = executable.getParameterTypes()[i])) {
+          params[i] =
+              Proxy.newProxyInstance(
+                  functionalParamType.getClassLoader(),
+                  new Class<?>[] {functionalParamType},
+                  new FunctionalParamProxy(function));
+        }
+      }
+    }
+  }
+
+  private static boolean isFunctionalInterface(Class<?> clss) {
+    if (!clss.isInterface()) {
+      return false;
+    }
+    long abstractMethodCount =
+        Arrays.stream(clss.getMethods())
+            .filter(m -> java.lang.reflect.Modifier.isAbstract(m.getModifiers()))
+            .filter(m -> !m.isDefault())
+            .count();
+
+    return abstractMethodCount == 1;
   }
 
   public record FieldAccess(Expression object, Identifier field) implements Expression {

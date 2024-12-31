@@ -5800,6 +5800,7 @@ public class MainTest {
   // - map str.split() to str.split("\\s+")
   // - map str.startswith(s) to str.startsWith(s)
   // - map str.endswith(s) to str.endsWith(s)
+  // - passing script functions to Java methods taking functional params like Predicate<T>
 
   // TODO(maxuser): Implement parity for most common str methods:
 }
