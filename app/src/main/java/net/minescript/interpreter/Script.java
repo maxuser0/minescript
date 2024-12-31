@@ -3361,25 +3361,19 @@ public class Script {
     }
   }
 
-  /**
-   * Find a superclass or interface that's accesible if the given class is not.
-   *
-   * <p>Some classes in the JDK are internal only and throw IllegalAccessException when invoking
-   * methods on those classes. In those cases, return an interface or superclass.
-   */
+  /** Find a superclass or interface that's publicly accesible if the given class is not. */
   private static Class<?> findAccessibleClass(Class<?> clss) {
-    // TODO(maxuser): Is there a more generic way than manually maintaining a list of class name
-    // patterns? Maybe allow Script users to pass regexp(s) for superclass promotion.
-    String className = clss.getName();
-    if (className.startsWith("java.util.HashMap$Node")) {
-      return clss.getInterfaces()[0];
-    } else if (className.startsWith("java.util.stream.")) {
-      if (className.contains("Pipeline")) {
-        var interfaces = clss.getInterfaces();
-        return findAccessibleClass(interfaces.length > 0 ? interfaces[0] : clss.getSuperclass());
-      }
+    // See defintion of modifiers in the JVM spec:
+    // https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.1-200-E.1
+    final int PUBLIC = 0x1;
+    int modifiers = clss.getModifiers();
+    if ((modifiers & PUBLIC) != 0) {
+      return clss;
+    } else {
+      // TODO(maxuser): Handle cases where the first interface isn't the most viable.
+      var interfaces = clss.getInterfaces();
+      return findAccessibleClass(interfaces.length > 0 ? interfaces[0] : clss.getSuperclass());
     }
-    return clss;
   }
 
   private static Object[] mapMethodParams(
