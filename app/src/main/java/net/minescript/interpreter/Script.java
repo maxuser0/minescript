@@ -2588,6 +2588,11 @@ public class Script {
     }
 
     @Override
+    public int hashCode() {
+      return Arrays.hashCode(array);
+    }
+
+    @Override
     public Iterator<Object> iterator() {
       return Arrays.stream(array).iterator();
     }
