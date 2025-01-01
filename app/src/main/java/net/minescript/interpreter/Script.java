@@ -2095,6 +2095,10 @@ public class Script {
       int normUpper = upper.map(n -> n < 0 ? sequenceLength + n : n).orElse(sequenceLength);
       return new ResolvedSliceIndices(normLower, normUpper, step.orElse(1));
     }
+
+    public static int resolveIndex(int i, int length) {
+      return i < 0 ? length + i : i;
+    }
   }
 
   /** Slice indices resolved for a particular length sequence to avoid negative or empty values. */
@@ -2124,7 +2128,9 @@ public class Script {
           System.arraycopy(arrayValue, slice.lower(), copiedArray, 0, slice.length());
           return copiedArray;
         } else {
-          int intKey = ((Number) indexValue).intValue();
+          int intKey =
+              SliceValue.resolveIndex(
+                  ((Number) indexValue).intValue(), Array.getLength(arrayValue));
           return Array.get(arrayValue, intKey);
         }
       } else if (arrayValue instanceof List list) {
@@ -2132,7 +2138,7 @@ public class Script {
           var slice = sliceValue.resolveIndices(list.size());
           return list.subList(slice.lower(), slice.upper());
         } else {
-          int intKey = ((Number) indexValue).intValue();
+          int intKey = SliceValue.resolveIndex(((Number) indexValue).intValue(), list.size());
           return list.get(intKey);
         }
       } else if (arrayValue instanceof Map map) {
@@ -2142,7 +2148,8 @@ public class Script {
           var slice = sliceValue.resolveIndices(string.length());
           return string.substring(slice.lower(), slice.upper());
         } else {
-          return String.valueOf(string.charAt((Integer) indexValue));
+          return String.valueOf(
+              string.charAt(SliceValue.resolveIndex((Integer) indexValue, string.length())));
         }
       }
 
@@ -2355,8 +2362,12 @@ public class Script {
     int __len__();
   }
 
-  public interface ItemGetter {
+  public interface ItemGetter extends Lengthable {
     Object __getitem__(Object key);
+
+    default int resolveIndex(int i) {
+      return SliceValue.resolveIndex(i, __len__());
+    }
   }
 
   public interface ItemSetter {
@@ -2372,7 +2383,7 @@ public class Script {
   }
 
   public static class PyList
-      implements Iterable<Object>, Lengthable, ItemGetter, ItemSetter, ItemContainer, ItemDeleter {
+      implements Iterable<Object>, ItemGetter, ItemSetter, ItemContainer, ItemDeleter {
     private final List<Object> list;
 
     public PyList() {
@@ -2537,7 +2548,7 @@ public class Script {
   }
 
   // TODO(maxuser): Enforce immutability of tuples so that `t[0] = 0` is illegal.
-  public static class PyTuple implements Iterable<Object>, Lengthable, ItemGetter, ItemContainer {
+  public static class PyTuple implements Iterable<Object>, ItemGetter, ItemContainer {
     private final Object[] array;
 
     public PyTuple(Object[] array) {
@@ -2711,7 +2722,7 @@ public class Script {
   }
 
   public static class PyDict
-      implements Iterable<Object>, Lengthable, ItemGetter, ItemSetter, ItemContainer, ItemDeleter {
+      implements Iterable<Object>, ItemGetter, ItemSetter, ItemContainer, ItemDeleter {
     private static final Object NOT_FOUND = new Object();
     private final Map<Object, Object> map;
 
