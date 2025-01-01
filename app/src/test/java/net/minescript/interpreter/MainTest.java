@@ -5801,7 +5801,7 @@ public class MainTest {
   // - map str.startswith(s) to str.startsWith(s)
   // - map str.endswith(s) to str.endsWith(s)
   // - passing script functions to Java methods taking functional params like Predicate<T>
-  // - when checking methods of an object's class, use the nearest public superclass or interface
+  // - when checking methods of a non-public class, search for a public interface or superclass
 
   // TODO(maxuser): Implement parity for most common str methods:
 }

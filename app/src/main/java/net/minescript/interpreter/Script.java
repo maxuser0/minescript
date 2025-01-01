@@ -2181,11 +2181,26 @@ public class Script {
 
   public static class TypeChecker {
     public static <T extends Executable> Optional<T> findBestMatchingExecutable(
-        T[] executables, Predicate<T> filter, Object[] paramValues) {
-      int bestScore = 0;
-      Optional<T> bestExecutable = Optional.empty();
+        Class<?> clss,
+        java.util.function.Function<Class<?>, T[]> executableGetter,
+        Predicate<T> filter,
+        Object[] paramValues,
+        boolean traverseSuperclasses) {
+      if (traverseSuperclasses && !isPublic(clss)) {
+        for (var iface : clss.getInterfaces()) {
+          var viableExecutable =
+              findBestMatchingExecutable(iface, executableGetter, filter, paramValues, true);
+          if (viableExecutable.isPresent()) {
+            return viableExecutable;
+          }
+        }
+        return findBestMatchingExecutable(
+            clss.getSuperclass(), executableGetter, filter, paramValues, true);
+      }
 
-      for (T executable : executables) {
+      Optional<T> bestExecutable = Optional.empty();
+      int bestScore = 0; // Zero means that no viable executable has been found.
+      for (T executable : executableGetter.apply(clss)) {
         if (filter.test(executable)) {
           int score = getTypeCheckScore(executable.getParameterTypes(), paramValues);
           if (score > bestScore) {
@@ -2194,12 +2209,20 @@ public class Script {
           }
         }
       }
+      if (bestScore == 0) {}
       return bestExecutable;
     }
 
+    private static final int PUBLIC_MODIFIER = 0x1;
+
+    private static boolean isPublic(Class<?> clss) {
+      // See defintion of modifiers in the JVM spec:
+      // https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.1-200-E.1
+      return (clss.getModifiers() & PUBLIC_MODIFIER) != 0;
+    }
+
     /**
-     * Computes a score reflecting how well {@code paramValues} matches the {@code
-     * formalParamTypes}.
+     * Computes a score for how well {@code paramValues} matches the {@code formalParamTypes}.
      *
      * <p>Add 1 point for a param requiring conversion, 2 points for a param that's an exact match.
      * Return value of 0 indicates that {@code paramValues} are incompatible with {@code
@@ -2859,7 +2882,11 @@ public class Script {
                   cacheKey,
                   ignoreKey ->
                       TypeChecker.findBestMatchingExecutable(
-                          clss.getConstructors(), c -> true, params))
+                          clss,
+                          Class<?>::getConstructors,
+                          c -> true,
+                          params,
+                          /* traverseSuperclasses= */ false))
               .map(Constructor.class::cast);
       if (matchedCtor.isPresent()) {
         try {
@@ -3329,7 +3356,7 @@ public class Script {
                   .formatted(objectExpression, methodName, objectExpression));
         }
         isStaticMethod = false;
-        clss = findAccessibleClass(object.getClass());
+        clss = object.getClass();
       }
 
       Object[] mappedParams = mapMethodParams(clss, isStaticMethod, methodName, params);
@@ -3341,11 +3368,13 @@ public class Script {
                   cacheKey,
                   ignoreKey ->
                       TypeChecker.findBestMatchingExecutable(
-                          clss.getMethods(),
+                          clss,
+                          Class<?>::getMethods,
                           m ->
                               Modifier.isStatic(m.getModifiers()) == isStaticMethod
                                   && m.getName().equals(mappedMethodName),
-                          mappedParams))
+                          mappedParams,
+                          /* traverseSuperclasses= */ true))
               .map(Method.class::cast);
       if (matchedMethod.isPresent()) {
         FunctionalParamProxy.promoteFunctionalParams(matchedMethod.get(), mappedParams);
@@ -3369,21 +3398,6 @@ public class Script {
                                 : "(%s) %s".formatted(v.getClass().getName(), PyObjects.toRepr(v)))
                     .collect(joining(", "))));
       }
-    }
-  }
-
-  /** Find a superclass or interface that's publicly accesible if the given class is not. */
-  private static Class<?> findAccessibleClass(Class<?> clss) {
-    // See defintion of modifiers in the JVM spec:
-    // https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.1-200-E.1
-    final int PUBLIC = 0x1;
-    int modifiers = clss.getModifiers();
-    if ((modifiers & PUBLIC) != 0) {
-      return clss;
-    } else {
-      // TODO(maxuser): Handle cases where the first interface isn't the most viable.
-      var interfaces = clss.getInterfaces();
-      return findAccessibleClass(interfaces.length > 0 ? interfaces[0] : clss.getSuperclass());
     }
   }
 
