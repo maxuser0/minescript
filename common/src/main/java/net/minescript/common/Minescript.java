@@ -762,7 +762,7 @@ public class Minescript {
           new Job(
               allocateJobId(),
               command,
-              new SubprocessTask(config),
+              new SubprocessTask(config.scriptConfig()),
               config,
               systemMessageQueue,
               Minescript::processScriptFunction,

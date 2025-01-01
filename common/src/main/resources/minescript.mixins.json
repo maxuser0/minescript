@@ -4,7 +4,8 @@
   "package": "net.minescript.common.mixin",
   "refmap": "${mod_id}.refmap.json",
   "compatibilityLevel": "JAVA_18",
-  "mixins": [
+  "mixins": [],
+  "client": [
     "ChatComponentMixin",
     "ChatScreenMixin",
     "ClientPacketListenerMixin",
@@ -12,7 +13,9 @@
     "KeyMappingMixin",
     "MouseHandlerMixin"
   ],
-  "client": [
+  "server": [
+    "MinecraftServerMixin",
+    "ServerGamePacketListenerImplMixin"
   ],
   "injectors": {
     "defaultRequire": 1

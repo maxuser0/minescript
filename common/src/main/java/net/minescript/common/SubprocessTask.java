@@ -20,13 +20,13 @@ public class SubprocessTask implements Task {
   private static final Logger LOGGER = LogManager.getLogger();
   private static final Gson GSON = new GsonBuilder().serializeNulls().create();
 
-  private final Config config;
+  private final ScriptConfig scriptConfig;
   private JobControl jobControl;
   private Process process;
   private BufferedWriter stdinWriter;
 
-  public SubprocessTask(Config config) {
-    this.config = config;
+  public SubprocessTask(ScriptConfig scriptConfig) {
+    this.scriptConfig = scriptConfig;
   }
 
   @Override
@@ -37,7 +37,7 @@ public class SubprocessTask implements Task {
 
     this.jobControl = jobControl;
 
-    var exec = config.scriptConfig().getExecutableCommand(command);
+    var exec = scriptConfig.getExecutableCommand(command);
     if (exec == null) {
       jobControl.log(
           "Cannot run \"{}\" because execution is not configured for \"{}\" files.",
