@@ -5802,6 +5802,7 @@ public class MainTest {
   // - map str.endswith(s) to str.endsWith(s)
   // - passing script functions to Java methods taking functional params like Predicate<T>
   // - when checking methods of a non-public class, search for a public interface or superclass
+  // - bound Python methods, e.g. `f = obj.func` where obj.func(...) is invoked by f(...)
 
   // TODO(maxuser): Implement parity for most common str methods:
 }

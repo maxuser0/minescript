@@ -469,7 +469,7 @@ public class Script {
             if (parseContext == ParseContext.CALLER) {
               return new BoundMethodExpression(object, attr, executableCache);
             } else {
-              return new FieldAccess(object, attr);
+              return new FieldAccess(object, attr, executableCache);
             }
           }
 
@@ -3382,7 +3382,7 @@ public class Script {
                           /* traverseSuperclasses= */ true))
               .map(Method.class::cast);
       if (matchedMethod.isPresent()) {
-        FunctionalParamProxy.promoteFunctionalParams(matchedMethod.get(), mappedParams);
+        InterfaceProxy.promoteFunctionalParams(matchedMethod.get(), mappedParams);
         try {
           return matchedMethod.get().invoke(isStaticMethod ? null : object, mappedParams);
         } catch (IllegalAccessException | InvocationTargetException e) {
@@ -3427,17 +3427,40 @@ public class Script {
     return methodName;
   }
 
-  public static class FunctionalParamProxy implements InvocationHandler {
+  public static class InterfaceProxy implements InvocationHandler {
 
+    private static final Object[] EMPTY_ARGS = new Object[0];
     private final Function function;
+    private final boolean multipleMethods;
 
-    public FunctionalParamProxy(Function function) {
+    private InterfaceProxy(Function function, boolean multipleMethods) {
       this.function = function;
+      this.multipleMethods = multipleMethods;
+    }
+
+    /**
+     * Create a proxy for {@code iface} interface that proxies to {@code function}.
+     *
+     * @param iface
+     * @param function
+     */
+    public static Object implement(Class<?> iface, Function function) {
+      return Proxy.newProxyInstance(
+          iface.getClassLoader(),
+          new Class<?>[] {iface},
+          new InterfaceProxy(function, numAbstractMethods(iface) > 1));
     }
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-      return function.call(args);
+      if (args == null) {
+        args = EMPTY_ARGS;
+      }
+      if (multipleMethods) {
+        return function.call(method, args);
+      } else {
+        return function.call(args);
+      }
     }
 
     public static void promoteFunctionalParams(Executable executable, Object[] params) {
@@ -3445,39 +3468,41 @@ public class Script {
         var param = params[i];
         Class<?> functionalParamType;
         if (param instanceof Function function
-            && isFunctionalInterface(functionalParamType = executable.getParameterTypes()[i])) {
-          params[i] =
-              Proxy.newProxyInstance(
-                  functionalParamType.getClassLoader(),
-                  new Class<?>[] {functionalParamType},
-                  new FunctionalParamProxy(function));
+            && (functionalParamType = executable.getParameterTypes()[i]).isInterface()
+            && functionalParamType != Function.class) {
+          params[i] = implement(functionalParamType, function);
         }
       }
     }
-  }
 
-  private static boolean isFunctionalInterface(Class<?> clss) {
-    if (!clss.isInterface()) {
-      return false;
+    private static long numAbstractMethods(Class<?> clss) {
+      return Arrays.stream(clss.getMethods())
+          .filter(m -> java.lang.reflect.Modifier.isAbstract(m.getModifiers()))
+          .filter(m -> !m.isDefault())
+          .count();
     }
-    long abstractMethodCount =
-        Arrays.stream(clss.getMethods())
-            .filter(m -> java.lang.reflect.Modifier.isAbstract(m.getModifiers()))
-            .filter(m -> !m.isDefault())
-            .count();
-
-    return abstractMethodCount == 1;
   }
 
-  public record FieldAccess(Expression object, Identifier field) implements Expression {
+  public record FieldAccess(
+      Expression object,
+      Identifier field,
+      Map<ExecutableCacheKey, Optional<Executable>> executableCache)
+      implements Expression {
     @Override
     public Object eval(Context context) {
       // TODO(maxuser): Support references to static inner classes and enum values.
       var objectValue = object.eval(context);
       if (objectValue instanceof PyObject pyObject) {
-        return pyObject.__dict__.__contains__(field.name())
-            ? pyObject.__dict__.__getitem__(field.name())
-            : pyObject.type.__dict__.__getitem__(field.name());
+        if (pyObject.__dict__.__contains__(field.name())) {
+          return pyObject.__dict__.__getitem__(field.name());
+        } else if (pyObject.type.__dict__.__contains__(field.name())) {
+          return pyObject.type.__dict__.__getitem__(field.name());
+        } else if (pyObject.type.instanceMethods.containsKey(field.name())) {
+          return new BoundMethod(pyObject, field.name(), executableCache, object);
+        } else {
+          throw new NoSuchElementException(
+              "Type %s has no field or method named `%s`".formatted(pyObject.type.name, field));
+        }
       }
 
       final boolean isClass;
