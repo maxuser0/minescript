@@ -2575,9 +2575,8 @@ public class Minescript {
         {
           args.expectSize(0);
           var result = new JsonArray();
-          for (var itemStack : player.getHandSlots()) {
-            result.add(itemStackToJsonElement(itemStack, OptionalInt.empty(), false));
-          }
+          result.add(itemStackToJsonElement(player.getMainHandItem(), OptionalInt.empty(), false));
+          result.add(itemStackToJsonElement(player.getOffhandItem(), OptionalInt.empty(), false));
           return Optional.of(result);
         }
 
@@ -2586,7 +2585,7 @@ public class Minescript {
           args.expectSize(0);
           var inventory = player.getInventory();
           var result = new JsonArray();
-          int selectedSlot = inventory.selected;
+          int selectedSlot = inventory.getSelectedSlot();
           for (int i = 0; i < inventory.getContainerSize(); i++) {
             var itemStack = inventory.getItem(i);
             if (itemStack.getCount() > 0) {
@@ -2608,8 +2607,8 @@ public class Minescript {
           args.expectSize(1);
           int slot = args.getStrictInt(0);
           var inventory = player.getInventory();
-          var previouslySelectedSlot = inventory.selected;
-          inventory.selected = slot;
+          var previouslySelectedSlot = inventory.getSelectedSlot();
+          inventory.setSelectedSlot(slot);
           return Optional.of(new JsonPrimitive(previouslySelectedSlot));
         }
 
