@@ -205,7 +205,7 @@ def player_position() -> List[float]:
     player's position as [x: float, y: float, z: float]
 
   Update in v4.0:
-    Removed `done_callback` arg. Use `async_player_position()` for async execution.
+    Removed `done_callback` arg. Use `player_position().as_async()` for async execution.
   """
   return ()
 
@@ -234,7 +234,7 @@ def player_hand_items() -> HandItems:
 
   Update in v4.0:
     Return `HandItems` instead of `List[Dict[str, Any]]` by default.
-    Removed `done_callback` arg. Use `async_player_hand_items()` for async execution.
+    Removed `done_callback` arg. Use `player_hand_items.as_async()` for async execution.
 
   Since: v2.0
   """
@@ -262,7 +262,7 @@ def player_inventory() -> List[ItemStack]:
 
   Update in v4.0:
     Return `List[ItemStack]` instead of `List[Dict[str, Any]]` by default.
-    Removed `done_callback` arg. Use `async_player_inventory()` for async execution.
+    Removed `done_callback` arg. Use `player_inventory.as_async()` for async execution.
 
   Update in v3.0:
     Introduced `"slot"` and `"selected"` attributes in the returned
@@ -297,7 +297,7 @@ def player_inventory_slot_to_hotbar(slot: int) -> int:
     No longer supported because ServerboundPickItemPacket was removed in Minecraft 1.21.4.
 
   Update in v4.0:
-    Removed `done_callback` arg. Use `async_player_inventory_slot_to_hotbar(...)
+    Removed `done_callback` arg. Use `player_inventory_slot_to_hotbar.as_async(...)`
     for async execution.
   
   Since: v3.0
@@ -318,7 +318,7 @@ def player_inventory_select_slot(slot: int) -> int:
     previously selected hotbar slot
 
   Update in v4.0:
-    Removed `done_callback` arg. Use `async_player_inventory_select_slot(...)` for async execution.
+    Removed `done_callback` arg. Use `player_inventory_select_slot.as_async(...)` for async execution.
 
   Since: v3.0
   """
@@ -836,7 +836,7 @@ def getblocklist(positions: List[List[int]]) -> List[str]:
     block types at given positions as list of strings
 
   Update in v4.0:
-    Removed `done_callback` arg. Use `async_getblocklist(...)` for async execution.
+    Removed `done_callback` arg. Use `getblocklist.as_async(...)` for async execution.
 
   Since: v2.1
   """
