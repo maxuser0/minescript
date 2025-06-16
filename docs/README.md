@@ -242,74 +242,156 @@ Config variable names:
 
 ### Script input
 
-Parameters can be passed from Minecraft as input to a Python script. For
-example, consider this Python script located at
-`minecraft/minescript/build_fortress.py`:
+Parameters can be passed from Minecraft as input to a Python script as `sys.argv`.
+For example, this Python script prints the result of rolling dice to the chat,
+visible only to the local user
+(copy code to `minecraft/minescript/roll_dice.py`):
 
 ```
+import random
 import sys
 
-def BuildFortress(width, height, length):
-  ...
+def print_dice_roll(num_dice: int, num_sides: int):
+    results = []
+    for _ in range(num_dice):
+        results.append(random.randint(1, num_sides))
+    die_or_dice = "die" if num_dice == 1 else "dice"
+    print(f"Rolled {num_dice} {num_sides}-sided {die_or_dice}: {results}")
 
-width = sys.argv[1]
-height = sys.argv[2]
-length = sys.argv[3]
-# Or more succinctly:
-# width, height, length = sys.argv[1:]
-BuildFortress(width, height, length)
+# Read arguments from `sys.argv` list.
+# First arg for the number of dice is required.
+# Second arg for the number of sides on the dice is optional,
+# defaulting to 6.
+num_dice = int(sys.argv[1])
+num_sides = int(sys.argv[2]) if len(sys.argv) > 2 else 6
+print_dice_roll(num_dice, num_sides)
 ```
 
-The above script can be run from the Minecraft in-game chat as:
+The above script can be run from the Minecraft in-game chat to
+output the result of rolling two 6-sided dice:
 
 ```
-\build_fortress 100 50 200
+\roll_dice 2 6
 ```
 
-That command passes parameters that set `width` to `100`, `height` to `50`, and
-`length` to `200`.
+That command passes arguments that set `num_dice` to `2` and `num_sides` to `6`.
 
 ### Script output
 
-Minescript Python scripts can write outputs using `sys.stdout` and
-`sys.stderr`, or they can use functions defined in `minescript.py` (see
-[`echo`](#echo), [`chat`](#chat), and [`execute`](#execute)).  The
-`minescript.py` functions are recommended going forward, but output via
-`sys.stdout` and `sys.stderr` are provided for backward compatibility with
-earlier versions of Minescript.
-
-Printing to standard output (`sys.stdout`) outputs text to the Minecraft chat
-as if entered by the user:
+Minescript Python scripts can process outputs using `sys.stdout` and
+`sys.stderr` (e.g. using Python's built-in `print` function),
+or using functions defined in `minescript.py`:
+[`echo`](#echo), [`echo_json`](#echo_json), [`chat`](#chat), and [`log`](#log).
 
 ```
-# Sends a chat message that's visible to
-# all players in the world:
-print("hi, friends!")
+# Prints a plain-text message to the in-game chat that's
+# visible only to you (displayed as white text):
+print("Note to self...")
 
-# Since Minescript v2.0 this can be written as:
+# Same as the previous print(...) statement, except
+# that the output to stdout is explicit:
+print("Note to self...", file=sys.stdout)
+
+# Same output as the previous print(...) statements,
+# but using a Minescript function (behavior can be
+# different from above print(...) statements when
+# using "Script output redirection"; see below):
 import minescript
-minescript.chat("hi, friends!")
+minescript.echo("Note to self...")
 
-# Runs a command to set the block under the
-# current player to yellow concrete (assuming
-# you have permission to run commands):
-print("/setblock ~ ~-1 ~ yellow_concrete")
+# Echo JSON-formatted text (for styled and colored text)
+# as a JSON string to the in-game chat only to yourself:
+minescript.echo_json('{"text":"hello!", "color":"green"}')
 
-# Since Minescript v2.1 this can be written as:
-minescript.execute("/setblock ~ ~-1 ~ yellow_concrete")
-```
+# Or as a Python dict or list converted to JSON:
+minescript.echo_json({"text":"hello!", "color":"green"})
 
-When a script prints to standard error (`sys.stderr`), the output text is
-printed to the Minecraft chat, but is visible only to you:
-
-```
-# Prints a message to the in-game chat that's
-# visible only to you:
+# Prints a plain-text message to the in-game chat that's
+# visible only to you, displayed as yellow text so that
+# it's visually distinguishable from text written to stdout:
 print("Note to self...", file=sys.stderr)
 
-# Since Minescript v2.0 this can be written as:
-minescript.echo("Note to self...")
+# Send a chat message that's visible to all players
+# in the world:
+minescript.chat("hi, friends!")
+
+# Log a message to Minecrafts log file
+# (in minecraft/logs/latest.log):
+minescript.log("This is a debug message that does not appear in-game.")
 ```
+
+#### Script output redirection
+
+By default, output to a script's stdout (typically as `print("...")`)
+and stderr (e.g. `print("...", file=sys.stderr)`) appears as plain
+white (stdout) or yellow (stderr) text, visible only to you. But this
+behavior can be overridden for a script job by using redirection operators
+at the end of the Minescript command that's entered into the chat.
+
+Here's an example script which can be copied to
+`minecraft/minescript/output_example.py`:
+
+```
+import sys
+print("Output to stdout")
+print("Output to stderr", file=sys.stderr)
+```
+
+The script can be run from the in-game chat as:
+
+```
+\output_example
+```
+
+The text `Output to stdout` should appear in white in the chat, and
+the text `Output to stderr` should appear in yellow, both visible only
+to you.
+
+But if you add `> chat` to the command like this:
+
+```
+\output_example > chat
+```
+
+then the output to stdout is redirected to the multiple-player chat.
+
+Similarly, output can be redirected to the Minecraft log file
+(`minecraft/logs/latest.log`) so that it doesn't appear in the in-game
+chat, not even for you:
+
+```
+\output_example > log
+```
+
+Output to stdout can be disabled entirely for a script job by redirecting
+with `> null`:
+
+```
+\output_example > null
+```
+
+Output to stderr can similarly be redirected with `2>`:
+
+```
+\output_example 2> chat
+\output_example 2> log
+\output_example 2> null
+```
+
+Both stdout and stderr can be redirected separately for the same script job,
+e.g. redirect stdout to the multiple-player chat and stderr to the Minecraft
+log file without displaying it in the chat, not even to yourself:
+
+```
+\output_example > chat 2> log
+```
+
+The space after `>` is optional:
+
+```
+\output_example >chat 2>log
+```
+
 
 ### Script functions
 
