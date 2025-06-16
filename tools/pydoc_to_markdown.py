@@ -12,7 +12,9 @@ from enum import Enum
 from typing import Any, List, Set, Dict, Tuple, Optional, Callable
 
 FUNCTION_RE = re.compile(r"^def ([a-zA-Z_0-9]+)(.*)")
+DATACLASS_RE = re.compile(r"^@dataclass")
 CLASS_RE = re.compile(r"^class ([a-zA-Z_0-9]+)")
+DATACLASS_FIELD_RE = re.compile(r"^ +([a-zA-Z_0-9]+) *: *([a-zA-Z_0-9.]+)")
 METHOD_RE = re.compile(r"^  def ([a-zA-Z_0-9]+)(.*)")
 METHOD_DECORATION_RE = re.compile(r"^  (@(static|class)method)$")
 GLOBAL_ASSIGNMENT_RE = re.compile(r"^([a-zA-Z_0-9]+)(: ([a-zA-Z_0-9.]+))? = ")
@@ -44,11 +46,26 @@ class CodeEntity:
 
 
 @dataclass
+class ModuleEntity(CodeEntity):
+  name: str = "__module__"
+  kind: type = None
+  decoration: str = None
+  func_decl: str = None
+  pydoc: str = None
+
+  def fullname(self):
+    return None
+
+
+@dataclass
 class GlobalEntity(CodeEntity):
   name: str
   kind: GlobalEntityType
   func_decl: str = None
   decoration: str = None
+  is_dataclass: bool = False
+  dataclass_fields: List[str] = None
+  pydoc: str = None
 
   def fullname(self):
     return self.name
@@ -61,6 +78,7 @@ class ClassMember(CodeEntity):
   kind: ClassMemberType
   func_decl: str = None
   decoration: str = None
+  pydoc: str = None
 
   def fullname(self):
     return f"{self.classname}.{self.name}"
@@ -105,8 +123,15 @@ def linkify_func_decl(func_decl: str, anchors: Dict[str, str]) -> str:
 
 LEADING_SINGLE_UNDERSCORE_RE = re.compile("^_[^_]")
 
-def process_pydoc(code_entity: CodeEntity, pydoc: str, anchors: Dict[str, str]):
-  if "(__internal__)" in pydoc:
+def process_pydoc(code_entity: CodeEntity, anchors: Dict[str, str]):
+  if not code_entity:
+    return
+
+  pydoc = code_entity.pydoc or ""
+  if not pydoc and not code_entity.is_dataclass:
+    return
+
+  if pydoc and "(__internal__)" in pydoc:
     return
 
   if code_entity and LEADING_SINGLE_UNDERSCORE_RE.match(code_entity.name):
@@ -144,7 +169,7 @@ def process_pydoc(code_entity: CodeEntity, pydoc: str, anchors: Dict[str, str]):
   for start, end, replacement in anchor_rewrites:
     pydoc = pydoc[:start] + replacement + pydoc[end + 1:]
 
-  if not code_entity:
+  if type(code_entity) is ModuleEntity:
     # This is the module itself. Get the name from pydoc.
     module_name, version = pydoc.split()[0:2]
     if module_name == "minescript":
@@ -205,7 +230,9 @@ def process_pydoc(code_entity: CodeEntity, pydoc: str, anchors: Dict[str, str]):
   # Replace args with their backtick-quoted names.
   pydoc = re.sub("\n  ([a-z0-9_, ]+): ", r"\n- `\1`: ", pydoc)
 
-  if code_entity:
+  if type(code_entity) is ModuleEntity:
+    print(f"module:\n{pydoc}")
+  else:
     decoration = f"{code_entity.decoration} " if code_entity.decoration else ""
     if code_entity.func_decl:
       func_decl = escape_for_markdown(
@@ -219,27 +246,42 @@ def process_pydoc(code_entity: CodeEntity, pydoc: str, anchors: Dict[str, str]):
       print(f"{heading} {name}\n*Usage:* <code>{decoration}{func_decl}</code>\n\n{pydoc}")
     else:
       print(f"{heading} {name}\n{pydoc}")
-  else:
-    print(f"module:\n{pydoc}")
+      if code_entity.kind is GlobalEntityType.CLASS and code_entity.is_dataclass and code_entity.dataclass_fields:
+        print("```")
+        for field in code_entity.dataclass_fields:
+          print(f"  {field.strip()}")
+        print("```")
 
   print()
 
 
-def parse_code_entities() -> List[Tuple[CodeEntity, str]]:
+def parse_code_entities() -> List[CodeEntity]:
+  module_entity = ModuleEntity()
   global_entity = None
+  is_dataclass = False
   class_member = None
   method_decoration = None
   pydoc = None
 
   # List of pairs of code entity and its pydoc string.
-  entities: List[Tuple[CodeEntity, str]] = []
+  entities: List[CodeEntity] = []
 
+  line_num = 0
   for line in sys.stdin.readlines():
+    line_num += 1
     if pydoc is not None:
       m = END_TRIPLE_QUOTE.match(line)
       if m:
         pydoc += m.group(1)
-        entities.append((class_member or global_entity, pydoc))
+        entity = class_member or global_entity or module_entity
+        entity.pydoc = pydoc
+
+        # Classes are added to the list of entities as soon as the `class` line is parsed,
+        # so skip adding them here.
+        # TODO(maxuser): Change non-class entities to be added upfront as well.
+        if entity.kind is not GlobalEntityType.CLASS:
+          entities.append(entity)
+
         pydoc = None
       else:
         pydoc += line
@@ -250,7 +292,15 @@ def parse_code_entities() -> List[Tuple[CodeEntity, str]]:
       pydoc = m.group(1)
       if pydoc.endswith('"""'):
         pydoc = pydoc[:-3]
-        entities.append((class_member or global_entity, pydoc))
+        entity = class_member or global_entity or module_entity
+        entity.pydoc = pydoc
+
+        # Classes are added to the list of entities as soon as the `class` line is parsed,
+        # so skip adding them here.
+        # TODO(maxuser): Change non-class entities to be added upfront as well.
+        if entity.kind is not GlobalEntityType.CLASS:
+          entities.append(entity)
+
         pydoc = None
       else:
         pydoc += "\n"
@@ -278,10 +328,16 @@ def parse_code_entities() -> List[Tuple[CodeEntity, str]]:
       func.func_decl = m.group(1) + m.group(2).replace(", _as_task=False", "")
       continue
 
+    m = DATACLASS_RE.match(line)
+    if m:
+      is_dataclass = True
+
     m = CLASS_RE.match(line)
     if m:
       class_member = None
-      global_entity = GlobalEntity(name=m.group(1), kind=GlobalEntityType.CLASS)
+      global_entity = GlobalEntity(name=m.group(1), kind=GlobalEntityType.CLASS, is_dataclass=is_dataclass)
+      entities.append(global_entity)
+      is_dataclass = False
 
     m = METHOD_DECORATION_RE.match(line)
     if m:
@@ -308,6 +364,12 @@ def parse_code_entities() -> List[Tuple[CodeEntity, str]]:
       global_entity = GlobalEntity(name=m.group(1), kind=GlobalEntityType.ASSIGNMENT)
 
     if global_entity is not None and global_entity.kind == GlobalEntityType.CLASS:
+      if global_entity.is_dataclass:
+        m = DATACLASS_FIELD_RE.match(line)
+        if m:
+          global_entity.dataclass_fields = global_entity.dataclass_fields or []
+          global_entity.dataclass_fields.append(line.strip())
+
       m = CLASS_ASSIGNMENT_RE.match(line)
       if m:
         class_member = ClassMember(
@@ -316,15 +378,16 @@ def parse_code_entities() -> List[Tuple[CodeEntity, str]]:
   return entities
 
 
-def print_markdown(entities: List[Tuple[CodeEntity, str]]):
+def print_markdown(entities: List[CodeEntity]):
   anchors: Dict[str, str] = {}
-  for entity, _ in entities:
+  for entity in entities:
     if entity:
       name = entity.fullname()
-      anchors[name] = name.replace(".", "").lower()
+      if name is not None:
+        anchors[name] = name.replace(".", "").lower()
 
-  for entity, pydoc in entities:
-    process_pydoc(entity, pydoc, anchors)
+  for entity in entities:
+    process_pydoc(entity, anchors)
 
 
 if __name__ == "__main__":

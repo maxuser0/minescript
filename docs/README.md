@@ -545,6 +545,7 @@ while True:
 ```
 
 ### minescript module
+
 *Usage:* `import minescript  # from Python script`
 
 User-friendly API for scripts to make function calls into the
@@ -556,6 +557,12 @@ Tuple representing `(x: int, y: int, z: int)` position in block space.
 
 #### Vector3f
 Tuple representing `(x: float, y: float, z: float)` position or offset in 3D space.
+
+#### MinescriptRuntimeOptions
+
+```
+  legacy_dict_return_values: bool = False  # set to `True` to emulate behavior before v4.0
+```
 
 #### execute
 *Usage:* <code>execute(command: str)</code>
@@ -639,6 +646,16 @@ Takes a screenshot, similar to pressing the F2 key.
 Since: v2.1
 
 
+#### JobInfo
+
+```
+  job_id: int
+  command: List[str]
+  source: str
+  status: str
+  self: bool = False
+```
+
 #### job_info
 *Usage:* <code>job_info() -> List[JobInfo]</code>
 
@@ -646,7 +663,7 @@ Return info about active Minescript jobs.
 
 *Returns:*
 
-- `JobInfo`.  For the  enclosing job, `JobInfo.self` is `True`.
+- [`JobInfo`](#jobinfo).  For the  enclosing job, `JobInfo.self` is `True`.
 
 Since: v4.0
 
@@ -677,11 +694,28 @@ Gets the local player's position.
 - player's position as [x: float, y: float, z: float]
 
 Update in v4.0:
-  Removed `done_callback` arg. Use `async_player_position()` for async execution.
+  Removed `done_callback` arg. Use [`player_position().as_async()`](#player_position) for async execution.
 
+
+#### ItemStack
+
+```
+  item: str
+  count: int
+  nbt: str = None
+  slot: int = None
+  selected: bool = None
+```
+
+#### HandItems
+
+```
+  main_hand: ItemStack
+  off_hand: ItemStack
+```
 
 #### player_hand_items
-*Usage:* <code>player_hand_items() -> HandItems</code>
+*Usage:* <code>player_hand_items() -> [HandItems](#handitems)</code>
 
 Gets the items in the local player's hands.
 
@@ -691,8 +725,8 @@ Gets the items in the local player's hands.
   (Legacy-style return value can be restored with `options.legacy_dict_return_values = True`)
 
 Update in v4.0:
-  Return `HandItems` instead of `List[Dict[str, Any]]` by default.
-  Removed `done_callback` arg. Use `async_player_hand_items()` for async execution.
+  Return [`HandItems`](#handitems) instead of `List[Dict[str, Any]]` by default.
+  Removed `done_callback` arg. Use `player_hand_items.as_async()` for async execution.
 
 Since: v2.0
 
@@ -709,7 +743,7 @@ Gets the items in the local player's inventory.
 
 Update in v4.0:
   Return `List[ItemStack]` instead of `List[Dict[str, Any]]` by default.
-  Removed `done_callback` arg. Use `async_player_inventory()` for async execution.
+  Removed `done_callback` arg. Use `player_inventory.as_async()` for async execution.
 
 Update in v3.0:
   Introduced `"slot"` and `"selected"` attributes in the returned
@@ -737,7 +771,7 @@ Update in mc1.21.4:
   No longer supported because ServerboundPickItemPacket was removed in Minecraft 1.21.4.
 
 Update in v4.0:
-  Removed `done_callback` arg. Use `async_player_inventory_slot_to_hotbar(...)
+  Removed `done_callback` arg. Use `player_inventory_slot_to_hotbar.as_async(...)`
   for async execution.
 
 Since: v3.0
@@ -757,7 +791,7 @@ Selects the given slot within the player's hotbar.
 - previously selected hotbar slot
 
 Update in v4.0:
-  Removed `done_callback` arg. Use `async_player_inventory_select_slot(...)` for async execution.
+  Removed `done_callback` arg. Use `player_inventory_select_slot.as_async(...)` for async execution.
 
 Since: v3.0
 
@@ -957,6 +991,15 @@ Sets the local player's orientation.
 Since: v2.1
 
 
+#### TargetedBlock
+
+```
+  position: BlockPos
+  distance: float
+  side: str
+  type: str
+```
+
 #### player_get_targeted_block
 *Usage:* <code>player_get_targeted_block(max_distance: float = 20)</code>
 
@@ -968,16 +1011,34 @@ Gets info about the nearest block, if any, in the local player's crosshairs.
 
 *Returns:*
 
-- `TargetedBlock` for the block targeted by the player, or `None` if no block is targeted.
+- [`TargetedBlock`](#targetedblock) for the block targeted by the player, or `None` if no block is targeted.
 
 Update in v4.0:
-  Return value changed from `list` to `TargetedBlock`.
+  Return value changed from `list` to [`TargetedBlock`](#targetedblock).
 
 Since: v3.0
 
 
+#### EntityData
+
+```
+  name: str
+  type: str
+  uuid: str
+  id: int
+  position: Vector3f
+  yaw: float
+  pitch: float
+  velocity: Vector3f
+  lerp_position: Vector3f = None
+  health: float = None
+  local: bool = None  # `True` if this the local player
+  passengers: List[str] = None  # UUIDs of passengers as strings
+  nbt: Dict[str, Any] = None
+```
+
 #### player_get_targeted_entity
-*Usage:* <code>player_get_targeted_entity(max_distance: float = 20, nbt: bool = False) -> EntityData</code>
+*Usage:* <code>player_get_targeted_entity(max_distance: float = 20, nbt: bool = False) -> [EntityData](#entitydata)</code>
 
 Gets the entity targeted in the local player's crosshairs, if any.
 
@@ -988,7 +1049,7 @@ Gets the entity targeted in the local player's crosshairs, if any.
 
 *Returns:*
 
-- `EntityData` for the entity targeted by the player, or `None` if no entity is targeted.
+- [`EntityData`](#entitydata) for the entity targeted by the player, or `None` if no entity is targeted.
   (Legacy-style returned dict can be restored with `options.legacy_dict_return_values = True`)
 
 Since: v4.0
@@ -1013,7 +1074,7 @@ Gets attributes for the local player.
 
 *Returns:*
 
-- `EntityData` representing a snapshot of values for the local player.
+- [`EntityData`](#entitydata) representing a snapshot of values for the local player.
   (Legacy-style returned dict can be restored with `options.legacy_dict_return_values = True`)
 
 Since: v4.0
@@ -1090,8 +1151,20 @@ Update in v3.1:
 Since: v2.1
 
 
+#### VersionInfo
+
+```
+  minecraft: str
+  minescript: str
+  mod_loader: str
+  launcher: str
+  os_name: str
+  os_version: str
+  minecraft_class_name: str
+```
+
 #### version_info
-*Usage:* <code>version_info() -> VersionInfo</code>
+*Usage:* <code>version_info() -> [VersionInfo](#versioninfo)</code>
 
 Gets version info for Minecraft, Minescript, mod loader, launcher, and OS.
 
@@ -1100,13 +1173,27 @@ obfuscated.
 
 *Returns:*
 
-- `VersionInfo`
+- [`VersionInfo`](#versioninfo)
 
 Since: v4.0
 
 
+#### WorldInfo
+
+```
+  game_ticks: int
+  day_ticks: int
+  raining: bool
+  thundering: bool
+  spawn: BlockPos
+  hardcore: bool
+  difficulty: str
+  name: str
+  address: str
+```
+
 #### world_info
-*Usage:* <code>world_info() -> WorldInfo</code>
+*Usage:* <code>world_info() -> [WorldInfo](#worldinfo)</code>
 
 Gets world properties.
 
@@ -1121,7 +1208,7 @@ Renamed from `world_properties()` from v3.1.
 
 *Returns:*
 
-- `WorldInfo`
+- [`WorldInfo`](#worldinfo)
 
 Since: v4.0
 
@@ -1154,7 +1241,7 @@ Gets the types of block at the specified [x, y, z] positions.
 - block types at given positions as list of strings
 
 Update in v4.0:
-  Removed `done_callback` arg. Use `async_getblocklist(...)` for async execution.
+  Removed `done_callback` arg. Use `getblocklist.as_async(...)` for async execution.
 
 Since: v2.1
 
@@ -1281,12 +1368,98 @@ Key event data.
 For a list of key codes, see: https://www.glfw.org/docs/3.4/group__keys.html
 `action` is 0 for key up, 1 for key down, and 2 for key repeat.
 
+```
+  type: str
+  time: float
+  key: int
+  scan_code: int
+  action: int
+  modifiers: int
+  screen: str
+```
 
 #### MouseEvent
 Mouse event data.
 
 `action` is 0 for mouse up and 1 for mouse down.
 
+```
+  type: str
+  time: float
+  button: int
+  action: int
+  modifiers: int
+  x: float
+  y: float
+  screen: str = None
+```
+
+#### ChatEvent
+
+```
+  type: str
+  time: float
+  message: str
+```
+
+#### AddEntityEvent
+
+```
+  type: str
+  time: float
+  entity: EntityData
+```
+
+#### BlockUpdateEvent
+
+```
+  type: str
+  time: float
+  position: BlockPos
+  old_state: str
+  new_state: str
+```
+
+#### TakeItemEvent
+
+```
+  type: str
+  time: float
+  player_uuid: str
+  item: EntityData
+  amount: int
+```
+
+#### DamageEvent
+
+```
+  type: str
+  time: float
+  entity_uuid: str
+  cause_uuid: str
+  source: str
+```
+
+#### ExplosionEvent
+
+```
+  type: str
+  time: float
+  position: Vector3f
+  blockpack_base64: str
+```
+
+#### ChunkEvent
+
+```
+  type: str
+  time: float
+  loaded: bool
+  x_min: int
+  z_min: int
+  x_max: int
+  z_max: int
+```
 
 #### EventQueue
 Queue for managing events.
@@ -1354,7 +1527,7 @@ with EventQueue() as event_queue:
 #### EventQueue.register_chat_listener
 *Usage:* <code>EventQueue.register_chat_listener()</code>
 
-Registers listener for `EventType.CHAT` events as `ChatEvent`.
+Registers listener for `EventType.CHAT` events as [`ChatEvent`](#chatevent).
 
 *Example:*
 
@@ -1372,7 +1545,7 @@ with EventQueue() as event_queue:
 #### EventQueue.register_outgoing_chat_interceptor
 *Usage:* <code>EventQueue.register_outgoing_chat_interceptor(\*, prefix: str = None, pattern: str = None)</code>
 
-Registers listener for `EventType.OUTGOING_CHAT_INTERCEPT` events as `ChatEvent`.
+Registers listener for `EventType.OUTGOING_CHAT_INTERCEPT` events as [`ChatEvent`](#chatevent).
 
 Intercepts outgoing chat messages from the local player. Interception can be restricted to
 messages matching `prefix` or `pattern`. Intercepted messages can be chatted with [`chat()`](#chat).
@@ -1401,7 +1574,7 @@ with EventQueue() as event_queue:
 #### EventQueue.register_add_entity_listener
 *Usage:* <code>EventQueue.register_add_entity_listener()</code>
 
-Registers listener for `EventType.ADD_ENTITY` events as `AddEntityEvent`.
+Registers listener for `EventType.ADD_ENTITY` events as [`AddEntityEvent`](#addentityevent).
 
 *Example:*
 
@@ -1418,7 +1591,7 @@ with EventQueue() as event_queue:
 #### EventQueue.register_block_update_listener
 *Usage:* <code>EventQueue.register_block_update_listener()</code>
 
-Registers listener for `EventType.BLOCK_UPDATE` events as `BlockUpdateEvent`.
+Registers listener for `EventType.BLOCK_UPDATE` events as [`BlockUpdateEvent`](#blockupdateevent).
 
 *Example:*
 
@@ -1435,7 +1608,7 @@ with EventQueue() as event_queue:
 #### EventQueue.register_take_item_listener
 *Usage:* <code>EventQueue.register_take_item_listener()</code>
 
-Registers listener for `EventType.TAKE_ITEM` events as `TakeItemEvent`.
+Registers listener for `EventType.TAKE_ITEM` events as [`TakeItemEvent`](#takeitemevent).
 
 *Example:*
 
@@ -1452,7 +1625,7 @@ with EventQueue() as event_queue:
 #### EventQueue.register_damage_listener
 *Usage:* <code>EventQueue.register_damage_listener()</code>
 
-Registers listener for `EventType.DAMAGE` events as `DamageEvent`.
+Registers listener for `EventType.DAMAGE` events as [`DamageEvent`](#damageevent).
 
 *Example:*
 
@@ -1469,7 +1642,7 @@ with EventQueue() as event_queue:
 #### EventQueue.register_explosion_listener
 *Usage:* <code>EventQueue.register_explosion_listener()</code>
 
-Registers listener for `EventType.EXPLOSION` events as `ExplosionEvent`.
+Registers listener for `EventType.EXPLOSION` events as [`ExplosionEvent`](#explosionevent).
 
 *Example:*
 
@@ -1486,7 +1659,7 @@ with EventQueue() as event_queue:
 #### EventQueue.register_chunk_listener
 *Usage:* <code>EventQueue.register_chunk_listener()</code>
 
-Registers listener for `EventType.CHUNK` events as `ChunkEvent`.
+Registers listener for `EventType.CHUNK` events as [`ChunkEvent`](#chunkevent).
 
 *Example:*
 
@@ -1832,7 +2005,7 @@ Sets a block within this BlockPacker.
 
 *Raises:*
 
-  `BlockPackerException` if blockpacker operation fails
+  [`BlockPackerException`](#blockpackerexception) if blockpacker operation fails
 
 
 #### BlockPacker.fill
@@ -1847,7 +2020,7 @@ Fills blocks within this BlockPacker.
 
 *Raises:*
 
-  `BlockPackerException` if blockpacker operation fails
+  [`BlockPackerException`](#blockpackerexception) if blockpacker operation fails
 
 
 #### BlockPacker.add_blockpack
