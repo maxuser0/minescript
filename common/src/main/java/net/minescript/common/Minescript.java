@@ -3,7 +3,6 @@
 
 package net.minescript.common;
 
-import static net.minescript.common.CommandSyntax.Token;
 import static net.minescript.common.CommandSyntax.parseCommand;
 import static net.minescript.common.CommandSyntax.quoteCommand;
 import static net.minescript.common.CommandSyntax.quoteString;
@@ -17,8 +16,10 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.serialization.JsonOps;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -70,7 +71,11 @@ import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.client.renderer.debug.DebugRenderer;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentSerialization;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
@@ -79,9 +84,11 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minescript.common.CommandSyntax.Token;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1670,9 +1677,9 @@ public class Minescript {
               return cancel;
             }
             if (commandSuggestions.size() > 1) {
-              chatEditBox.setTextColor(0x5ee8e8); // cyan for partial completion
+              chatEditBox.setTextColor(0xff5ee8e8); // cyan for partial completion
             } else {
-              chatEditBox.setTextColor(0x5ee85e); // green for full completion
+              chatEditBox.setTextColor(0xff5ee85e); // green for full completion
             }
             commandSuggestions = new ArrayList<>();
             return cancel;
@@ -1680,7 +1687,7 @@ public class Minescript {
         }
         var completions = getCommandCompletions(command);
         if (completions.contains(command)) {
-          chatEditBox.setTextColor(0x5ee85e); // green
+          chatEditBox.setTextColor(0xff5ee85e); // green
           commandSuggestions = new ArrayList<>();
         } else {
           List<String> newCommandSuggestions = new ArrayList<>();
@@ -1699,9 +1706,9 @@ public class Minescript {
               }
               commandSuggestions = newCommandSuggestions;
             }
-            chatEditBox.setTextColor(0x5ee8e8); // cyan
+            chatEditBox.setTextColor(0xff5ee8e8); // cyan
           } else {
-            chatEditBox.setTextColor(0xe85e5e); // red
+            chatEditBox.setTextColor(0xffe85e5e); // red
             commandSuggestions = new ArrayList<>();
           }
         }
@@ -2082,7 +2089,7 @@ public class Minescript {
       LOGGER.info("Minecraft command blocked for server: /{}", command);
       return;
     }
-    connection.sendUnsignedCommand(command);
+    connection.sendCommand(command);
   }
 
   private static void processChatMessage(String message) {
@@ -2100,7 +2107,18 @@ public class Minescript {
   private static void processJsonFormattedText(String text) {
     var minecraft = Minecraft.getInstance();
     var chat = minecraft.gui.getChat();
-    chat.addMessage(Component.Serializer.fromJson(text, minecraft.level.registryAccess()));
+
+    JsonElement jsonElement = JsonParser.parseString(text);
+    var component =
+        (Component)
+            ComponentSerialization.CODEC
+                .parse(
+                    RegistryAccess.EMPTY.createSerializationContext(JsonOps.INSTANCE), jsonElement)
+                .resultOrPartial(
+                    string ->
+                        LOGGER.warn("Failed to parse JSON-formatted text '{}': {}", text, string))
+                .orElse(null);
+    chat.addMessage(component);
   }
 
   private static void processMessage(Message message) {
@@ -2139,8 +2157,11 @@ public class Minescript {
     if (itemStack.getCount() == 0) {
       return JsonNull.INSTANCE;
     } else {
-      var minecraft = Minecraft.getInstance();
-      var nbt = itemStack.save(minecraft.level.registryAccess());
+      var reporter = new ProblemReporter.Collector();
+      var nbtOutput = TagValueOutput.createWithoutContext(reporter);
+      nbtOutput.store("minescript_item_wrapper", ItemStack.CODEC, itemStack);
+      Tag nbt = nbtOutput.buildResult().get("minescript_item_wrapper");
+
       var out = new JsonObject();
       out.addProperty("item", itemStack.getItem().toString());
       out.addProperty("count", itemStack.getCount());
@@ -2822,7 +2843,7 @@ public class Minescript {
           args.expectSize(0);
 
           var result = new JsonObject();
-          result.addProperty("minecraft", SharedConstants.getCurrentVersion().getName());
+          result.addProperty("minecraft", SharedConstants.getCurrentVersion().name());
           result.addProperty("minescript", Minescript.version);
           result.addProperty("mod_loader", platform.modLoaderName());
           result.addProperty("launcher", minecraft.getLaunchedVersion());
@@ -2973,6 +2994,7 @@ public class Minescript {
               minecraft.gameDirectory,
               filename,
               minecraft.getMainRenderTarget(),
+              /* downScale= */ 1,
               message -> job.log(message.getString()));
           return OPTIONAL_JSON_TRUE;
         }
@@ -3419,7 +3441,16 @@ public class Minescript {
           args.expectSize(3);
           args.getOptionalString(0).ifPresent(chatEditBox::setValue);
           args.getOptionalStrictInt(1).ifPresent(chatEditBox::setCursorPosition);
-          args.getOptionalStrictInt(2).ifPresent(chatEditBox::setTextColor);
+          args.getOptionalStrictInt(2)
+              .ifPresent(
+                  i -> {
+                    // If the high byte (alpha) is zero, promote to 0xFF so it's fully opaque
+                    // instead of fully invsible.
+                    if ((i & 0xFF000000) == 0) {
+                      i |= 0xFF000000;
+                    }
+                    chatEditBox.setTextColor(i);
+                  });
           return OPTIONAL_JSON_NULL;
         }
 
