@@ -26,10 +26,7 @@ public class MinescriptNeoForgeClientMod {
 
   public MinescriptNeoForgeClientMod() {}
 
-  @EventBusSubscriber(
-      modid = Constants.MODID,
-      bus = EventBusSubscriber.Bus.MOD,
-      value = Dist.CLIENT)
+  @EventBusSubscriber(modid = Constants.MODID, value = Dist.CLIENT)
   public static class ClientModEvents {
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
@@ -41,10 +38,7 @@ public class MinescriptNeoForgeClientMod {
   @EventBusSubscriber(Dist.CLIENT)
   public static class ClientEvents {
     @SubscribeEvent
-    public static void onRender(RenderLevelStageEvent event) {
-      if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_LEVEL) {
-        return;
-      }
+    public static void onRender(RenderLevelStageEvent.AfterLevel event) {
       Minescript.onRenderWorld();
     }
 
