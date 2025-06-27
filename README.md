@@ -65,10 +65,10 @@ To run the mod in dev mode, clone this repo (and the Pyjinn repo for Minescript 
 
 ```
 $ cd path/to/minescript
-$ git clone https://github.com/maxuser0/pyjinn.git
+$ git clone https://github.com/maxuser0/minescript.git
 
 $ cd path/to/pyjinn
-$ git clone https://github.com/maxuser0/minescript.git
+$ git clone https://github.com/maxuser0/pyjinn.git
 ```
 
 For Minescript 5.0 and later, build the Pyjinn interpreter and publish it to your local Maven
