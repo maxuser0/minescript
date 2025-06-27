@@ -9,6 +9,10 @@ Python and other scripting languages. It is implemented as mod for [Fabric](http
 
 The examples below require Minescript 4.0 or higher.
 
+## Terms of Service
+
+Before using Minescript, please review the [Terms of Service](https://github.com/maxuser0/minescript/blob/main/TERMS_OF_SERVICE.md).
+
 ## How it works
 
 Place Python scripts (`.py` files) in the `minescript` folder (located inside the `minecraft`
