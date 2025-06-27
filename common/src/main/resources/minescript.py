@@ -139,7 +139,7 @@ def log(*messages, _as_task=False):
 log = NoReturnScriptFunction("log", log, conditional_task_arg=True)
 
 
-def screenshot(filename=None):
+def screenshot(filename: str=None):
   """Takes a screenshot, similar to pressing the F2 key.
 
   Args:
@@ -507,11 +507,11 @@ def player_press_drop(pressed: bool):
 player_press_drop = ScriptFunction("player_press_drop", player_press_drop)
 
 
-def player_orientation():
+def player_orientation() -> List[float]:
   """Gets the local player's orientation.
 
   Returns:
-    (yaw: float, pitch: float) as angles in degrees
+    [yaw: float, pitch: float] as angles in degrees
 
   Since: v2.1
   """
@@ -520,7 +520,7 @@ def player_orientation():
 player_orientation = ScriptFunction("player_orientation", player_orientation)
 
 
-def player_set_orientation(yaw: float, pitch: float):
+def player_set_orientation(yaw: float, pitch: float) -> bool:
   """Sets the local player's orientation.
 
   Args:
@@ -557,7 +557,7 @@ class TargetedBlock:
     else:
       raise ValueError("Expected integer from 0 to 3 but got " + repr(i))
 
-def player_get_targeted_block(max_distance: float = 20):
+def player_get_targeted_block(max_distance: float = 20) -> Union[TargetedBlock, None]:
   """Gets info about the nearest block, if any, in the local player's crosshairs.
 
   Args:
@@ -598,7 +598,7 @@ class EntityData:
   nbt: Dict[str, Any] = None
 
 
-def player_get_targeted_entity(max_distance: float = 20, nbt: bool = False) -> EntityData:
+def player_get_targeted_entity(max_distance: float = 20, nbt: bool = False) -> Union[EntityData, None]:
   """Gets the entity targeted in the local player's crosshairs, if any.
 
   Args:
@@ -633,7 +633,7 @@ def player_health() -> float:
 player_health = ScriptFunction("player_health", player_health)
 
 
-def player(*, nbt: bool = False):
+def player(*, nbt: bool = False) -> EntityData:
   """Gets attributes for the local player.
 
   Args:
@@ -659,7 +659,7 @@ get_player = player  # Alias for scripts with `player` variables.
 def players(
     *, nbt: bool = False, uuid: str = None, name: str = None,
     position: Vector3f = None, offset: Vector3f = None, min_distance: float = None,
-    max_distance: float = None, sort: str = None, limit: int = None):
+    max_distance: float = None, sort: str = None, limit: int = None) -> List[EntityData]:
   """Gets a list of nearby players and their attributes.
 
   Args:
@@ -703,7 +703,7 @@ get_players = players  # Alias for scripts with `players` variables.
 def entities(
     *, nbt: bool = False, uuid: str = None, name: str = None, type: str = None,
     position: Vector3f = None, offset: Vector3f = None, min_distance: float = None,
-    max_distance: float = None, sort: str = None, limit: int = None):
+    max_distance: float = None, sort: str = None, limit: int = None) -> List[EntityData]:
   """Gets a list of nearby entities and their attributes.
 
   Args:
@@ -1075,7 +1075,7 @@ def register_chunk_listener(
   return handler_id
 
 
-def unregister_event_handler(handler_id: int):
+def unregister_event_handler(handler_id: int) -> bool:
   """Unregisters an event handler, if any, for the currently running job. (__internal__)
 
   Args:
@@ -1224,7 +1224,7 @@ def schedule_render_tasks(tasks: List[Task]) -> int:
   return await_script_function("schedule_render_tasks", serialized_tasks)
 
 
-def cancel_scheduled_tasks(task_list_id: int):
+def cancel_scheduled_tasks(task_list_id: int) -> bool:
   """Cancels a scheduled task list for the currently running job.
 
   Args:
@@ -1646,7 +1646,7 @@ def ChatEventListener():
   return event_queue
 
 
-def screen_name() -> str:
+def screen_name() -> Union[str, None]:
   """Gets the current GUI screen name, if there is one.
 
   Returns:
@@ -1659,7 +1659,7 @@ def screen_name() -> str:
 screen_name = ScriptFunction("screen_name", screen_name)
 
 
-def show_chat_screen(show: bool, prompt: str = None) -> str:
+def show_chat_screen(show: bool, prompt: str = None) -> bool:
   """Shows or hides the chat screen.
 
   Args:
@@ -1686,7 +1686,7 @@ def append_chat_history(message: str):
 append_chat_history = ScriptFunction("append_chat_history", append_chat_history)
 
 
-def chat_input():
+def chat_input() -> List[Union[str, int]]:
   """Gets state of chat input text.
 
   Returns:
@@ -2442,7 +2442,7 @@ def java_member(clss: JavaHandle, name: str) -> JavaHandle:
 
 java_member = ScriptFunction("java_member", java_member)
 
-def java_access_field(target: JavaHandle, field: JavaHandle) -> JavaHandle:
+def java_access_field(target: JavaHandle, field: JavaHandle) -> Union[JavaHandle, None]:
   """Accesses a field on a target Java object.
 
   Args:
@@ -2458,7 +2458,7 @@ def java_access_field(target: JavaHandle, field: JavaHandle) -> JavaHandle:
 
 java_access_field = ScriptFunction("java_access_field", java_access_field)
 
-def java_call_method(target: JavaHandle, method: JavaHandle, *args: List[JavaHandle]) -> JavaHandle:
+def java_call_method(target: JavaHandle, method: JavaHandle, *args: List[JavaHandle]) -> Union[JavaHandle, None]:
   """Invokes a method on a target Java object.
 
   Args:
@@ -2500,7 +2500,7 @@ def java_array_length(array: JavaHandle) -> int:
 
 java_array_length = ScriptFunction("java_array_length", java_array_length)
 
-def java_array_index(array: JavaHandle, i: int) -> JavaHandle:
+def java_array_index(array: JavaHandle, i: int) -> Union[JavaHandle, None]:
   """Gets indexed element of Java array handle.
 
   Args:
