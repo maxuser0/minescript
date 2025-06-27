@@ -1428,8 +1428,28 @@ public class Minescript {
       // Reassign command based on potentially updated tokenStrings.
       command = substituteMinecraftVars(tokenStrings.toArray(EMPTY_STRING_ARRAY));
 
-      jobs.createSubprocess(
-          new ScriptConfig.BoundCommand(commandPath, command, redirects), nextCommand);
+      var boundCommand = new ScriptConfig.BoundCommand(commandPath, command, redirects);
+
+      if (commandPath.getFileName().toString().toLowerCase().endsWith(".pyj")) {
+        try {
+          final var next = nextCommand;
+          var execCommand = config.scriptConfig().getExecutableCommand(boundCommand);
+          var script =
+              PyjinnScript.create(
+                  execCommand,
+                  out -> systemMessageQueue.add(Message.fromPlainText(out)),
+                  platform.modLoaderName(),
+                  () -> runParsedMinescriptCommand(next));
+          script.start();
+          // TODO(maxuser): Manage the returned PyjinnScript as a script job that can be suspended,
+          // resumed, and killed.
+        } catch (Exception e) {
+          systemMessageQueue.logException(e);
+        }
+        return;
+      }
+
+      jobs.createSubprocess(boundCommand, nextCommand);
 
     } catch (RuntimeException e) {
       systemMessageQueue.logException(e);
