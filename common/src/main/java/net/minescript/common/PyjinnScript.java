@@ -3,6 +3,7 @@
 
 package net.minescript.common;
 
+import com.google.common.collect.HashMultimap;
 import com.google.gson.JsonElement;
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -12,6 +13,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
@@ -40,18 +42,20 @@ public class PyjinnScript {
       return prettyClassName;
     }
 
-    String getRuntimeMemberName(Class<?> clazz, String prettyMemberName) {
-      return prettyMemberName;
+    Set<String> getRuntimeMemberNames(Class<?> clazz, String prettyMemberName) {
+      return Set.of(prettyMemberName);
     }
   }
 
+  private record ClassMemberKey(String runtimeClassName, String prettyMemberName) {}
+
   public static class ObfuscatedNameMappings extends NameMappings {
     private final Map<String, String> classMappings;
-    private final Map<String, Map<String, String>>
-        memberMappings; // Map: runtimeClassName -> (prettyMemberName -> runtimeMemberName)
+    private final HashMultimap<ClassMemberKey, String>
+        memberMappings; // Map: runtimeClassName -> (prettyMemberName -> runtimeMemberNames)
 
     public ObfuscatedNameMappings(
-        Map<String, String> classMappings, Map<String, Map<String, String>> memberMappings) {
+        Map<String, String> classMappings, HashMultimap<ClassMemberKey, String> memberMappings) {
       this.classMappings = classMappings;
       this.memberMappings = memberMappings;
     }
@@ -62,55 +66,92 @@ public class PyjinnScript {
     }
 
     @Override
-    public String getRuntimeMemberName(Class<?> clazz, String prettyMemberName) {
+    public Set<String> getRuntimeMemberNames(Class<?> clazz, String prettyMemberName) {
       String runtimeClassName = clazz.getName();
-      Map<String, String> classMemberMappings = memberMappings.get(runtimeClassName);
-      if (classMemberMappings != null) {
-        return classMemberMappings.getOrDefault(prettyMemberName, prettyMemberName);
+      var memberKey = new ClassMemberKey(runtimeClassName, prettyMemberName);
+      Set<String> runtimeMemberNames = memberMappings.get(memberKey);
+      if (!runtimeMemberNames.isEmpty()) {
+        return runtimeMemberNames;
       }
-      return prettyMemberName; // No mapping found for the class or member.
+
+      // No mapping found for the class member, so fall back to the pretty name.
+      return Set.of(prettyMemberName);
     }
   }
 
-  public static ObfuscatedNameMappings loadMappingFiles(String modLoaderName, String mcVersion)
+  /**
+   * Returns mappings loaded from a file based on the mod loader and MC version.
+   *
+   * <p>Loads mappings from a file named like "fabric-1.21.6-mappings.txt" in the minescript dir.
+   * Reads the mappings file only if the Minecraft class name is obfuscated.
+   *
+   * <p>The file format is:
+   *
+   * <ul>
+   *   <li>comments start with "#" and run until the end of the line
+   *   <li>blank lines are ignored
+   *   <li>non-indented lines indicate a class entry mapping pretty name to runtime name:
+   *       <p>"com.foo.PrettyName runtimeName"
+   *   <li>indented lines indicate a member within the most recent earlier class line, e.g.
+   *       <p>" prettyName runtimeName"
+   * </ul>
+   */
+  public static ObfuscatedNameMappings loadMappingsFile(String modLoaderName, String mcVersion)
       throws IOException {
-    String classesFileName = String.format("%s-%s-classes.txt", modLoaderName, mcVersion);
-    String membersFileName = String.format("%s-%s-members.txt", modLoaderName, mcVersion);
+    String mappingsFileName = String.format("%s-%s-mappings.txt", modLoaderName, mcVersion);
 
-    Path classesPath = Paths.get("minescript", classesFileName);
-    Path membersPath = Paths.get("minescript", membersFileName);
+    Path mappingsPath = Paths.get("minescript", mappingsFileName);
 
     Map<String, String> classMappings = new HashMap<>();
-    Map<String, Map<String, String>> memberMappings = new HashMap<>();
+    HashMultimap<ClassMemberKey, String> memberMappings = HashMultimap.create();
 
-    // Load class mappings
-    try (BufferedReader reader = new BufferedReader(new FileReader(classesPath.toFile()))) {
+    String runtimeClassName = null;
+    try (BufferedReader reader = new BufferedReader(new FileReader(mappingsPath.toFile()))) {
       String line;
+      int lineNumber = 0;
       while ((line = reader.readLine()) != null) {
-        String[] parts = line.trim().split(" ");
-        if (parts.length == 2) {
-          classMappings.put(parts[0], parts[1]);
-        } else {
-          LOGGER.warn("Malformed line in " + classesFileName + ": " + line);
+        lineNumber++;
+        line = line.split("#")[0].stripTrailing(); // Remove comments.
+        if (line.trim().isEmpty()) {
+          continue;
         }
-      }
-    }
-
-    // Load member mappings
-    try (BufferedReader reader = new BufferedReader(new FileReader(membersPath.toFile()))) {
-      String line;
-      while ((line = reader.readLine()) != null) {
-        String[] parts = line.trim().split(" ");
-        if (parts.length == 3) {
-          String runtimeClassName = parts[0];
-          String prettyMemberName = parts[1];
-          String runtimeMemberName = parts[2];
-
-          memberMappings
-              .computeIfAbsent(runtimeClassName, k -> new HashMap<>())
-              .put(prettyMemberName, runtimeMemberName);
+        if (!line.startsWith(" ")) {
+          // Parse class line which has no leading whitespace.
+          String[] parts = line.split("\\s+");
+          if (parts.length == 2) {
+            String prettyClassName = parts[0];
+            runtimeClassName = parts[1];
+            classMappings.put(prettyClassName, runtimeClassName);
+          } else {
+            LOGGER.warn(
+                "Malformed line in {}:{}: expected 2 words on class line but got {}:\n{}",
+                mappingsFileName,
+                lineNumber,
+                parts.length,
+                line);
+          }
+        } else if (runtimeClassName != null) {
+          // Parse member line which is indented within the current class.
+          String[] parts = line.stripLeading().split("\\s+");
+          if (parts.length == 2) {
+            String prettyMemberName = parts[0];
+            String runtimeMemberName = parts[1];
+            memberMappings.put(
+                new ClassMemberKey(runtimeClassName, prettyMemberName), runtimeMemberName);
+          } else {
+            LOGGER.warn(
+                "Malformed line in {}:{}: expected 2 words on member line but got {}:\n{}",
+                mappingsFileName,
+                lineNumber,
+                parts.length,
+                line);
+          }
         } else {
-          LOGGER.warn("Malformed line in " + membersFileName + ": " + line);
+          LOGGER.warn(
+              "Malformed line in {}:{}: unexpected indented line outside of a class section:\n{}",
+              mappingsFileName,
+              lineNumber,
+              line);
         }
       }
     }
@@ -130,7 +171,7 @@ public class PyjinnScript {
       if (!Minecraft.class.getName().equals("net.minecraft.client.Minecraft")) {
         String mcVersion = SharedConstants.getCurrentVersion().name();
         // TODO(maxuser): Cache the name mappings if they haven't changed on disk.
-        nameMappings = loadMappingFiles(modLoaderName.toLowerCase(), mcVersion);
+        nameMappings = loadMappingsFile(modLoaderName.toLowerCase(), mcVersion);
       } else {
         nameMappings = new NameMappings();
       }
@@ -142,7 +183,7 @@ public class PyjinnScript {
           new Script(
               PyjinnScript.class.getClassLoader(),
               nameMappings::getRuntimeClassName,
-              nameMappings::getRuntimeMemberName);
+              nameMappings::getRuntimeMemberNames);
 
       // TODO(maxuser): Support stderr redirection, too.
       script.redirectStdout(stdoutConsumer);
