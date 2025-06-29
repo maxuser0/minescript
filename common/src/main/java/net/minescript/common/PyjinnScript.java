@@ -102,27 +102,44 @@ public class PyjinnScript {
     // Map: [fabricClassName, officialMethodName] -> Set(fabricMethodNames)]
     private final HashMultimap<ClassMemberKey, String> runtimeMethodMap = HashMultimap.create();
 
+    private final Optional<Long> dumpActiveMappingsTimestamp;
+
     private record ClassMemberKey(String runtimeClassName, String prettyMemberName) {}
 
-    private ObfuscatedNameMappings() {}
+    private ObfuscatedNameMappings(
+        String modLoaderName, String mcVersion, boolean dumpActiveMappings) {
+      this.dumpActiveMappingsTimestamp =
+          Optional.ofNullable(dumpActiveMappings ? System.currentTimeMillis() : null);
+
+      dumpActiveMappingsTimestamp.ifPresent(
+          timestamp ->
+              LOGGER.info("mapgen.{}: # <mappings {} {}>", timestamp, modLoaderName, mcVersion));
+    }
 
     @Override
     public String getRuntimeClassName(String prettyClassName) {
       return runtimeClassMap.computeIfAbsent(
           prettyClassName,
-          prettyName -> {
-            String obfuscatedName = officialToObfuscatedClassMap.get(prettyName);
-            if (obfuscatedName == null) {
-              return prettyName;
-            }
-            String fabricName = obfuscatedToFabricClassMap.get(obfuscatedName);
-            if (fabricName == null) {
-              return prettyName;
-            }
-            LOGGER.info(
-                "Mapped official class name `{}` to Fabric name `{}`", prettyName, fabricName);
-            return fabricName;
+          pcn -> {
+            String rcn = computeRuntimeClassName(pcn);
+            dumpActiveMappingsTimestamp.ifPresent(
+                timestamp -> LOGGER.info("mapgen.{}: #   class {} {}", timestamp, pcn, rcn));
+            return rcn;
           });
+    }
+
+    private String computeRuntimeClassName(String prettyClassName) {
+      String obfuscatedName = officialToObfuscatedClassMap.get(prettyClassName);
+      if (obfuscatedName == null) {
+        return prettyClassName;
+      }
+      String fabricName = obfuscatedToFabricClassMap.get(obfuscatedName);
+      if (fabricName == null) {
+        return prettyClassName;
+      }
+      LOGGER.info(
+          "Mapped official class name `{}` to Fabric name `{}`", prettyClassName, fabricName);
+      return fabricName;
     }
 
     @Override
@@ -157,6 +174,15 @@ public class PyjinnScript {
 
       runtimeFieldMap.put(cacheKey, fabricFieldName);
 
+      dumpActiveMappingsTimestamp.ifPresent(
+          timestamp ->
+              LOGGER.info(
+                  "mapgen.{}[class {}]: #     field {} {}",
+                  timestamp,
+                  cacheKey.runtimeClassName(),
+                  cacheKey.prettyMemberName(),
+                  fabricFieldName));
+
       return fabricFieldName;
     }
 
@@ -167,17 +193,17 @@ public class PyjinnScript {
         return runtimeMethodMap.get(cacheKey);
       }
 
-      Set<String> fabricMemberNames = getFabricMemberNamesUncached(clazz, prettyMethodName, "");
+      Set<String> fabricMethodNames = getFabricMethodNamesUncached(clazz, prettyMethodName, "");
 
-      if (fabricMemberNames.isEmpty()) {
+      if (fabricMethodNames.isEmpty()) {
         LOGGER.warn(
             "Failed to map Fabric.official member name `{}/{}.{}`, falling back to `{}`",
             obfuscatedToOfficialClassMap.getOrDefault(
                 fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
             clazz.getName(),
             prettyMethodName,
-            fabricMemberNames);
-        fabricMemberNames = Set.of(prettyMethodName);
+            fabricMethodNames);
+        fabricMethodNames = Set.of(prettyMethodName);
       } else {
         LOGGER.info(
             "Mapped Fabric.official member name `{}/{}.{}` to `{}`",
@@ -185,12 +211,25 @@ public class PyjinnScript {
                 fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
             clazz.getName(),
             prettyMethodName,
-            fabricMemberNames);
+            fabricMethodNames);
       }
 
-      runtimeMethodMap.putAll(cacheKey, fabricMemberNames);
+      runtimeMethodMap.putAll(cacheKey, fabricMethodNames);
 
-      return fabricMemberNames;
+      final var names = fabricMethodNames; // capture for lambda
+      dumpActiveMappingsTimestamp.ifPresent(
+          timestamp -> {
+            for (String name : names) {
+              LOGGER.info(
+                  "mapgen.{}[class {}]: #     method {} {}",
+                  timestamp,
+                  cacheKey.runtimeClassName(),
+                  cacheKey.prettyMemberName(),
+                  name);
+            }
+          });
+
+      return fabricMethodNames;
     }
 
     private Optional<String> getFabricFieldNameUncached(
@@ -268,7 +307,7 @@ public class PyjinnScript {
       return Optional.of(fabricFieldName);
     }
 
-    private Set<String> getFabricMemberNamesUncached(
+    private Set<String> getFabricMethodNamesUncached(
         Class<?> clazz, String officialMemberName, String indent) {
       String obfuscatedClassName = fabricToObfuscatedClassMap.get(clazz.getName());
       if (obfuscatedClassName == null) {
@@ -303,7 +342,7 @@ public class PyjinnScript {
                   fabricToObfuscatedClassMap.get(superclass.getName()), "?"),
               superclass.getName());
 
-          var names = getFabricMemberNamesUncached(superclass, officialMemberName, indent + "  ");
+          var names = getFabricMethodNamesUncached(superclass, officialMemberName, indent + "  ");
           if (!names.isEmpty()) {
             return names;
           }
@@ -326,7 +365,7 @@ public class PyjinnScript {
               obfuscatedToOfficialClassMap.getOrDefault(
                   fabricToObfuscatedClassMap.get(iface.getName()), "?"),
               iface.getName());
-          var names = getFabricMemberNamesUncached(iface, officialMemberName, indent + "  ");
+          var names = getFabricMethodNamesUncached(iface, officialMemberName, indent + "  ");
           if (!names.isEmpty()) {
             return names;
           }
@@ -347,7 +386,7 @@ public class PyjinnScript {
     }
 
     public static Optional<ObfuscatedNameMappings> loadFromFiles(
-        String modLoaderName, String mcVersion) throws IOException {
+        String modLoaderName, String mcVersion, boolean dumpActiveMappings) throws IOException {
       Path mappingsVersionPath = Paths.get("minescript", "mappings", mcVersion);
       Files.createDirectories(mappingsVersionPath);
 
@@ -357,7 +396,7 @@ public class PyjinnScript {
         return Optional.empty();
       }
 
-      var mappings = new ObfuscatedNameMappings();
+      var mappings = new ObfuscatedNameMappings(modLoaderName, mcVersion, dumpActiveMappings);
       mappings.loadOfficalMappings(officialMappingsPath);
 
       Path fabricMappingsPath = mappingsVersionPath.resolve(mcVersion + ".tiny");
@@ -513,6 +552,14 @@ public class PyjinnScript {
       return Set.of(prettyMethodName);
     }
 
+    public record ScriptMetadata(
+        Optional<ScriptNameMappings> mappings, boolean dumpActiveMappings) {
+
+      public ScriptMetadata() {
+        this(Optional.empty(), false);
+      }
+    }
+
     /**
      * Returns inline mappings loaded from a script based on the mod loader and MC version.
      *
@@ -530,17 +577,18 @@ public class PyjinnScript {
      *       <p>formatted as "method prettyName runtimeName"
      * </ul>
      */
-    public static Optional<ScriptNameMappings> loadFromScript(
+    public static ScriptMetadata loadFromScript(
         String sourceFilename, String modLoaderName, String mcVersion) throws IOException {
       Path scriptPath = Paths.get(sourceFilename);
 
       if (!Files.exists(scriptPath)) {
-        return Optional.empty();
+        return new ScriptMetadata();
       }
 
       Map<String, String> classMappings = new HashMap<>();
       Map<ClassMemberKey, String> fieldMappings = new HashMap<>();
       HashMultimap<ClassMemberKey, String> methodMappings = HashMultimap.create();
+      boolean dumpActiveMappings = false;
 
       final String mappingsStartLine = "# <mappings %s %s>".formatted(modLoaderName, mcVersion);
       final String mappingsEndLine = "# </mappings>";
@@ -552,6 +600,11 @@ public class PyjinnScript {
         int lineNumber = 0;
         while ((line = reader.readLine()) != null) {
           lineNumber++;
+
+          if (line.trim().equals("# @dump_active_mappings")) {
+            dumpActiveMappings = true;
+            continue;
+          }
 
           if (!foundMappings) {
             if (line.startsWith(mappingsStartLine)) {
@@ -566,12 +619,12 @@ public class PyjinnScript {
           }
 
           line = line.startsWith("# ") ? line.substring(2) : line; // Remove leading "# "
-          line = line.split("#")[0].stripTrailing(); // Remove comments.
-          if (line.trim().isEmpty()) {
+          line = line.split("#")[0].trim(); // Remove comments.
+          if (line.isEmpty()) {
             continue;
           }
 
-          String[] parts = line.trim().split("\\s+");
+          String[] parts = line.split("\\s+");
           if (parts.length != 3) {
             LOGGER.warn(
                 "Malformed line in {}:{}: expected 3 words on line but got:\n{}",
@@ -621,10 +674,12 @@ public class PyjinnScript {
       }
 
       if (!foundMappings) {
-        return Optional.empty();
+        return new ScriptMetadata(Optional.empty(), dumpActiveMappings);
       }
 
-      return Optional.of(new ScriptNameMappings(classMappings, fieldMappings, methodMappings));
+      return new ScriptMetadata(
+          Optional.of(new ScriptNameMappings(classMappings, fieldMappings, methodMappings)),
+          dumpActiveMappings);
     }
   }
 
@@ -643,12 +698,14 @@ public class PyjinnScript {
       // Check for obfuscated names, and if needed, load a mappings file.
       if (isMinecraftClassObfuscated) {
         String mcVersion = SharedConstants.getCurrentVersion().name();
-        var scriptMappings =
+        var scriptMetadata =
             ScriptNameMappings.loadFromScript(sourceFilename, modLoaderName, mcVersion);
-        if (scriptMappings.isPresent()) {
-          nameMappings = scriptMappings.get();
+        if (scriptMetadata.mappings().isPresent()) {
+          nameMappings = scriptMetadata.mappings().get();
         } else {
-          var obfuscatedMappings = ObfuscatedNameMappings.loadFromFiles(modLoaderName, mcVersion);
+          var obfuscatedMappings =
+              ObfuscatedNameMappings.loadFromFiles(
+                  modLoaderName, mcVersion, scriptMetadata.dumpActiveMappings());
           if (obfuscatedMappings.isPresent()) {
             nameMappings = obfuscatedMappings.get();
           } else {
@@ -698,13 +755,14 @@ public class PyjinnScript {
   public class AddEventListener implements Script.Function {
     @Override
     public Object call(Object... params) {
-      expectNumParams(params, 1);
-      var value = params[0];
+      expectNumParams(params, 2);
+      String eventType = params[0].toString();
+      var value = params[1];
       if (value instanceof Script.Function eventListener) {
         // TODO(maxuser): Call the event listener only when an event fires.
         LOGGER.info(
             "(maxuser-debug) Adding fake event listener... triggering it once for testing...");
-        eventListener.call(new Event("fake"));
+        eventListener.call(new Event(eventType));
         LOGGER.info("(maxuser-debug) Done testing event listener");
       } else {
         throw new IllegalArgumentException("Expected addEventListener param to be callable");
