@@ -102,18 +102,26 @@ public class PyjinnScript {
     // Map: [fabricClassName, officialMethodName] -> Set(fabricMethodNames)]
     private final HashMultimap<ClassMemberKey, String> runtimeMethodMap = HashMultimap.create();
 
+    private final String scriptFilename;
     private final Optional<Long> dumpActiveMappingsTimestamp;
 
     private record ClassMemberKey(String runtimeClassName, String prettyMemberName) {}
 
     private ObfuscatedNameMappings(
-        String modLoaderName, String mcVersion, boolean dumpActiveMappings) {
+        String modLoaderName, String mcVersion, ScriptNameMappings.ScriptMetadata scriptMetadata) {
       this.dumpActiveMappingsTimestamp =
-          Optional.ofNullable(dumpActiveMappings ? System.currentTimeMillis() : null);
+          Optional.ofNullable(
+              scriptMetadata.dumpActiveMappings() ? System.currentTimeMillis() : null);
+      this.scriptFilename = scriptMetadata.scriptName();
 
       dumpActiveMappingsTimestamp.ifPresent(
           timestamp ->
-              LOGGER.info("mapgen.{}: # <mappings {} {}>", timestamp, modLoaderName, mcVersion));
+              LOGGER.info(
+                  "Dumping script mapping for {}:\n# <mappings {} {}>  # timestamp={}",
+                  scriptFilename,
+                  modLoaderName,
+                  mcVersion,
+                  timestamp));
     }
 
     @Override
@@ -123,7 +131,13 @@ public class PyjinnScript {
           pcn -> {
             String rcn = computeRuntimeClassName(pcn);
             dumpActiveMappingsTimestamp.ifPresent(
-                timestamp -> LOGGER.info("mapgen.{}: #   class {} {}", timestamp, pcn, rcn));
+                timestamp ->
+                    LOGGER.info(
+                        "Dumping script mapping for {}:\n#   class {} {}  # timestamp={}",
+                        scriptFilename,
+                        pcn,
+                        rcn,
+                        timestamp));
             return rcn;
           });
     }
@@ -177,11 +191,12 @@ public class PyjinnScript {
       dumpActiveMappingsTimestamp.ifPresent(
           timestamp ->
               LOGGER.info(
-                  "mapgen.{}[class {}]: #     field {} {}",
-                  timestamp,
+                  "Dumping script mapping for {}:\n#   field {} {} {}  # timestamp={}",
+                  scriptFilename,
                   cacheKey.runtimeClassName(),
                   cacheKey.prettyMemberName(),
-                  fabricFieldName));
+                  fabricFieldName,
+                  timestamp));
 
       return fabricFieldName;
     }
@@ -197,7 +212,7 @@ public class PyjinnScript {
 
       if (fabricMethodNames.isEmpty()) {
         LOGGER.warn(
-            "Failed to map Fabric.official member name `{}/{}.{}`, falling back to `{}`",
+            "Failed to map Fabric.official method name `{}/{}.{}`, falling back to {}",
             obfuscatedToOfficialClassMap.getOrDefault(
                 fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
             clazz.getName(),
@@ -206,7 +221,7 @@ public class PyjinnScript {
         fabricMethodNames = Set.of(prettyMethodName);
       } else {
         LOGGER.info(
-            "Mapped Fabric.official member name `{}/{}.{}` to `{}`",
+            "Mapped Fabric.official method name `{}/{}.{}` to {}",
             obfuscatedToOfficialClassMap.getOrDefault(
                 fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
             clazz.getName(),
@@ -221,11 +236,12 @@ public class PyjinnScript {
           timestamp -> {
             for (String name : names) {
               LOGGER.info(
-                  "mapgen.{}[class {}]: #     method {} {}",
-                  timestamp,
+                  "Dumping script mapping for {}:\n#   method {} {} {}  # timestamp={}",
+                  scriptFilename,
                   cacheKey.runtimeClassName(),
                   cacheKey.prettyMemberName(),
-                  name);
+                  name,
+                  timestamp);
             }
           });
 
@@ -386,7 +402,8 @@ public class PyjinnScript {
     }
 
     public static Optional<ObfuscatedNameMappings> loadFromFiles(
-        String modLoaderName, String mcVersion, boolean dumpActiveMappings) throws IOException {
+        String modLoaderName, String mcVersion, ScriptNameMappings.ScriptMetadata scriptMetadata)
+        throws IOException {
       Path mappingsVersionPath = Paths.get("minescript", "mappings", mcVersion);
       Files.createDirectories(mappingsVersionPath);
 
@@ -396,7 +413,7 @@ public class PyjinnScript {
         return Optional.empty();
       }
 
-      var mappings = new ObfuscatedNameMappings(modLoaderName, mcVersion, dumpActiveMappings);
+      var mappings = new ObfuscatedNameMappings(modLoaderName, mcVersion, scriptMetadata);
       mappings.loadOfficalMappings(officialMappingsPath);
 
       Path fabricMappingsPath = mappingsVersionPath.resolve(mcVersion + ".tiny");
@@ -553,10 +570,10 @@ public class PyjinnScript {
     }
 
     public record ScriptMetadata(
-        Optional<ScriptNameMappings> mappings, boolean dumpActiveMappings) {
+        String scriptName, Optional<ScriptNameMappings> mappings, boolean dumpActiveMappings) {
 
-      public ScriptMetadata() {
-        this(Optional.empty(), false);
+      public ScriptMetadata(String scriptName) {
+        this(scriptName, Optional.empty(), false);
       }
     }
 
@@ -570,19 +587,19 @@ public class PyjinnScript {
      *
      * <ul>
      *   <li>blank lines are ignored
-     *   <li>class mapping lines are formatted as "class com.foo.PrettyName runtimeName"
-     *   <li>field mapping lines are associated with the most recent earlier class line and are
-     *       <p>formatted as "field prettyName runtimeName"
+     *   <li>class mapping lines formatted as "class package.PrettyClassName pkg.RuntimeClassName"
+     *   <li>field mapping lines associated with the most recent earlier class line and are
+     *       <p>formatted as "field pkg.RuntimeClassName prettyName runtimeName"
      *   <li>method mapping lines are associated with the most recent earlier class line and are
-     *       <p>formatted as "method prettyName runtimeName"
+     *       <p>formatted as "method pkg.RuntimeClassName prettyName runtimeName"
      * </ul>
      */
-    public static ScriptMetadata loadFromScript(
+    public static ScriptMetadata loadScriptMetadata(
         String sourceFilename, String modLoaderName, String mcVersion) throws IOException {
       Path scriptPath = Paths.get(sourceFilename);
 
       if (!Files.exists(scriptPath)) {
-        return new ScriptMetadata();
+        return new ScriptMetadata(sourceFilename);
       }
 
       Map<String, String> classMappings = new HashMap<>();
@@ -594,7 +611,6 @@ public class PyjinnScript {
       final String mappingsEndLine = "# </mappings>";
 
       boolean foundMappings = false;
-      String runtimeClassName = null;
       try (BufferedReader reader = new BufferedReader(new FileReader(scriptPath.toFile()))) {
         String line;
         int lineNumber = 0;
@@ -625,23 +641,32 @@ public class PyjinnScript {
           }
 
           String[] parts = line.split("\\s+");
-          if (parts.length != 3) {
-            LOGGER.warn(
-                "Malformed line in {}:{}: expected 3 words on line but got:\n{}",
-                sourceFilename,
-                lineNumber,
-                line);
-            continue;
-          }
           if (parts[0].equals("class")) {
-            // Parse class mapping: "class package.PrettyName pkg.RuntimeName"
+            // Parse class mapping: "class package.PrettyClassName pkg.RuntimeClassName"
+            if (parts.length != 3) {
+              LOGGER.warn(
+                  "Malformed line at {}:{}: expected 3 words on `class` line but got:\n{}",
+                  sourceFilename,
+                  lineNumber,
+                  line);
+              continue;
+            }
             String prettyClassName = parts[1];
-            runtimeClassName = parts[2];
+            String runtimeClassName = parts[2];
             classMappings.put(prettyClassName, runtimeClassName);
-          } else if (runtimeClassName != null && parts[0].equals("field")) {
-            // Parse field mapping: "field prettyName runtimeName"
-            String prettyMemberName = parts[1];
-            String runtimeMemberName = parts[2];
+          } else if (parts[0].equals("field")) {
+            // Field mapping: "field pkg.RuntimeClassName prettyFieldName runtimeFieldName"
+            if (parts.length != 4) {
+              LOGGER.warn(
+                  "Malformed line at {}:{}: expected 4 words on line but got:\n{}",
+                  sourceFilename,
+                  lineNumber,
+                  line);
+              continue;
+            }
+            String runtimeClassName = parts[1];
+            String prettyMemberName = parts[2];
+            String runtimeMemberName = parts[3];
             String oldFieldName =
                 fieldMappings.put(
                     new ClassMemberKey(runtimeClassName, prettyMemberName), runtimeMemberName);
@@ -657,15 +682,24 @@ public class PyjinnScript {
                   runtimeMemberName,
                   line);
             }
-          } else if (runtimeClassName != null && parts[0].equals("method")) {
-            // Parse method mapping: "method prettyName runtimeName"
-            String prettyMemberName = parts[1];
-            String runtimeMemberName = parts[2];
+          } else if (parts[0].equals("method")) {
+            // Method mapping: "method pkg.RuntimeClassName prettyMethodName runtimeMethodName"
+            if (parts.length != 4) {
+              LOGGER.warn(
+                  "Malformed line at {}:{}: expected 4 words on `method` line but got:\n{}",
+                  sourceFilename,
+                  lineNumber,
+                  line);
+              continue;
+            }
+            String runtimeClassName = parts[1];
+            String prettyMemberName = parts[2];
+            String runtimeMemberName = parts[3];
             methodMappings.put(
                 new ClassMemberKey(runtimeClassName, prettyMemberName), runtimeMemberName);
           } else {
             LOGGER.warn(
-                "Malformed line in {}:{}: unexpected indented line outside of a class section:\n{}",
+                "Unexpected format at {}:{}: unrecognized mapping metadata:\n{}",
                 sourceFilename,
                 lineNumber,
                 line);
@@ -674,10 +708,11 @@ public class PyjinnScript {
       }
 
       if (!foundMappings) {
-        return new ScriptMetadata(Optional.empty(), dumpActiveMappings);
+        return new ScriptMetadata(sourceFilename, Optional.empty(), dumpActiveMappings);
       }
 
       return new ScriptMetadata(
+          sourceFilename,
           Optional.of(new ScriptNameMappings(classMappings, fieldMappings, methodMappings)),
           dumpActiveMappings);
     }
@@ -699,13 +734,12 @@ public class PyjinnScript {
       if (isMinecraftClassObfuscated) {
         String mcVersion = SharedConstants.getCurrentVersion().name();
         var scriptMetadata =
-            ScriptNameMappings.loadFromScript(sourceFilename, modLoaderName, mcVersion);
+            ScriptNameMappings.loadScriptMetadata(sourceFilename, modLoaderName, mcVersion);
         if (scriptMetadata.mappings().isPresent()) {
           nameMappings = scriptMetadata.mappings().get();
         } else {
           var obfuscatedMappings =
-              ObfuscatedNameMappings.loadFromFiles(
-                  modLoaderName, mcVersion, scriptMetadata.dumpActiveMappings());
+              ObfuscatedNameMappings.loadFromFiles(modLoaderName, mcVersion, scriptMetadata);
           if (obfuscatedMappings.isPresent()) {
             nameMappings = obfuscatedMappings.get();
           } else {
