@@ -6,7 +6,7 @@
 # make edits to this file, make sure to save a backup copy when upgrading to a
 # new version of Minescript.
 
-r"""copy_blocks v4.0 distributed via Minescript jar file
+r"""copy_blocks v5.0 distributed via Minescript jar file
 
 Requires:
   minescript v3.0

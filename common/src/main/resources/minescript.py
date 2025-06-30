@@ -6,7 +6,7 @@
 # make edits to this file, make sure to save a backup copy when upgrading to a
 # new version of Minescript.
 
-"""minescript v4.0 distributed via Minescript jar file
+"""minescript v5.0 distributed via Minescript jar file
 
 Usage: import minescript  # from Python script
 
