@@ -91,6 +91,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minescript.common.CommandSyntax.Token;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.pyjinn.interpreter.Script;
 
 public class Minescript {
   private static final Logger LOGGER = LogManager.getLogger();
@@ -165,6 +166,15 @@ public class Minescript {
     config =
         new Config(MINESCRIPT_DIR, "config.txt", BUILTIN_COMMANDS, IGNORE_DIRS_FOR_COMPLETIONS);
     config.load();
+  }
+
+  // TODO(maxuser): Allow this to be controlled via config.
+  public void enableDebugPyjinnLogging(boolean enable) {
+    if (enable) {
+      Script.setDebugLogger((str, args) -> LOGGER.info("Pyjinn debug output: " + str + "%n", args));
+    } else {
+      Script.setDebugLogger((str, args) -> {});
+    }
   }
 
   private static void deleteLegacyFiles() {
@@ -1434,10 +1444,14 @@ public class Minescript {
         try {
           final var next = nextCommand;
           var execCommand = config.scriptConfig().getExecutableCommand(boundCommand);
+          var scriptFilename = commandPath.getFileName().toString();
           var script =
               PyjinnScript.create(
                   execCommand,
-                  out -> systemMessageQueue.add(Message.fromPlainText(out)),
+                  out -> {
+                    LOGGER.info("{} stdout: {}", scriptFilename, out);
+                    systemMessageQueue.add(Message.fromPlainText(out));
+                  },
                   platform.modLoaderName(),
                   () -> runParsedMinescriptCommand(next));
           script.start();
