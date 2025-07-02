@@ -218,7 +218,7 @@ public class Minescript {
   }
 
   private static void cancelOrphanedOperations(
-      Map<JobOperationId, ? extends Job.Operation> operations) {
+      Map<JobOperationId, ? extends JobControl.Operation> operations) {
     if (!operations.isEmpty()) {
       LOGGER.info(
           "Cancelling orphaned operations when exiting world: {}",
@@ -228,7 +228,7 @@ public class Minescript {
 
       // Stash values in a new list so that the operations map isn't modified while being
       // iterated/streamed, because Job.Operation::cancel removes a listener from the map.
-      new ArrayList<>(operations.values()).stream().forEach(Job.Operation::cancel);
+      new ArrayList<>(operations.values()).stream().forEach(JobControl.Operation::cancel);
     }
   }
 
@@ -611,7 +611,7 @@ public class Minescript {
     }
   }
 
-  static class EventHandler implements Job.Operation {
+  static class EventHandler implements JobControl.Operation {
     private final JobControl job;
     private final String funcName;
     private OptionalLong funcCallId = OptionalLong.empty();
@@ -685,16 +685,16 @@ public class Minescript {
       doneCallback.run();
     }
 
-    public synchronized boolean respond(JsonElement returnValue, boolean finalReply) {
+    public synchronized boolean respond(JsonElement returnValue) {
       if (funcCallId.isPresent()) {
-        return job.respond(funcCallId.getAsLong(), returnValue, finalReply);
+        return job.respond(funcCallId.getAsLong(), returnValue, /* finalReply= */ false);
       } else {
         return false;
       }
     }
   }
 
-  static class ScheduledTaskList implements Job.Operation {
+  static class ScheduledTaskList implements JobControl.Operation {
     private final Job job;
     private final String name;
     private final List<?> tasks;
@@ -758,14 +758,14 @@ public class Minescript {
     }
 
     @Override
-    public int run(ScriptConfig.BoundCommand command, JobControl jobControl) {
-      undo.enqueueCommands(jobControl.tickQueue());
+    public int run(ScriptConfig.BoundCommand command, JobControl job) {
+      undo.enqueueCommands(job.tickQueue());
       return 0;
     }
   }
 
   static class JobManager {
-    private final Map<Integer, Job> jobMap = new ConcurrentHashMap<Integer, Job>();
+    private final Map<Integer, JobControl> jobMap = new ConcurrentHashMap<>();
     private int nextJobId = 1;
 
     // Map from ID of original job (not an undo) to its corresponding undo, if applicable.
@@ -791,7 +791,7 @@ public class Minescript {
       job.start();
     }
 
-    public Optional<UndoableAction> getUndoForJob(Job job) {
+    public Optional<UndoableAction> getUndoForJob(JobControl job) {
       var undo = jobUndoMap.get(job.jobId());
       if (undo == null) {
         return Optional.empty();
@@ -845,7 +845,7 @@ public class Minescript {
       runParsedMinescriptCommand(nextCommand);
     }
 
-    public Map<Integer, Job> getMap() {
+    public Map<Integer, JobControl> getMap() {
       return jobMap;
     }
   }
@@ -1538,7 +1538,7 @@ public class Minescript {
         if (config.debugOutput()) {
           LOGGER.info("Forwarding key event to listener {}: {}", entry.getKey(), json);
         }
-        listener.respond(json, false);
+        listener.respond(json);
       }
     }
   }
@@ -1564,7 +1564,7 @@ public class Minescript {
         if (config.debugOutput()) {
           LOGGER.info("Forwarding mouse event to listener {}: {}", entry.getKey(), json);
         }
-        listener.respond(json, false);
+        listener.respond(json);
       }
     }
   }
@@ -1778,7 +1778,7 @@ public class Minescript {
         if (config.debugOutput()) {
           LOGGER.info("Forwarding chat message to listener {}: {}", entry.getKey(), json);
         }
-        listener.respond(json, false);
+        listener.respond(json);
       }
     }
 
@@ -1818,7 +1818,7 @@ public class Minescript {
           json.addProperty("z_max", worldZ + 15);
           json.addProperty("time", System.currentTimeMillis() / 1000.);
         }
-        handler.respond(json, false);
+        handler.respond(json);
       }
     }
   }
@@ -1870,7 +1870,7 @@ public class Minescript {
         var json = new JsonObject();
         json.addProperty("message", message);
         json.addProperty("time", System.currentTimeMillis() / 1000.);
-        interceptor.respond(json, false);
+        interceptor.respond(json);
         return true;
       }
     }
@@ -2010,7 +2010,7 @@ public class Minescript {
               new EntityExporter(entityPositionInterpolation(), includeNbt).export(entity));
           json.addProperty("time", System.currentTimeMillis() / 1000.);
         }
-        handler.respond(json, false);
+        handler.respond(json);
       }
     }
   }
@@ -2037,7 +2037,7 @@ public class Minescript {
           json.addProperty("new_state", blockStateToString(newState).orElse(null));
           json.addProperty("time", System.currentTimeMillis() / 1000.);
         }
-        handler.respond(json, false);
+        handler.respond(json);
       }
     }
   }
@@ -2055,7 +2055,7 @@ public class Minescript {
           json.addProperty("amount", amount);
           json.addProperty("time", System.currentTimeMillis() / 1000.);
         }
-        handler.respond(json, false);
+        handler.respond(json);
       }
     }
   }
@@ -2071,7 +2071,7 @@ public class Minescript {
           json.addProperty("source", source);
           json.addProperty("time", System.currentTimeMillis() / 1000.);
         }
-        handler.respond(json, false);
+        handler.respond(json);
       }
     }
   }
@@ -2102,7 +2102,7 @@ public class Minescript {
           json.addProperty("blockpack_base64", encodedBlockpack);
           json.addProperty("time", System.currentTimeMillis() / 1000.);
         }
-        handler.respond(json, false);
+        handler.respond(json);
       }
     }
   }
@@ -2236,12 +2236,12 @@ public class Minescript {
     }
   }
 
-  private static Optional<JsonElement> doPlayerAction(
+  private static JsonElement doPlayerAction(
       String functionName, KeyMapping keyMapping, ScriptFunctionCall.ArgList args) {
     args.expectSize(1);
     boolean pressed = args.getBoolean(0);
     pressKeyBind(keyMapping.getName(), pressed);
-    return OPTIONAL_JSON_TRUE;
+    return JSON_TRUE;
   }
 
   public static String getWorldName() {
@@ -2280,14 +2280,11 @@ public class Minescript {
 
   private static final Optional<JsonElement> OPTIONAL_JSON_NULL = Optional.of(JsonNull.INSTANCE);
 
-  private static final Optional<JsonElement> OPTIONAL_JSON_TRUE =
-      Optional.of(new JsonPrimitive(true));
+  private static final JsonElement JSON_TRUE = new JsonPrimitive(true);
 
-  private static final Optional<JsonElement> OPTIONAL_JSON_FALSE =
-      Optional.of(new JsonPrimitive(false));
+  private static final JsonElement JSON_FALSE = new JsonPrimitive(false);
 
-  private static final Optional<JsonElement> OPTIONAL_JSON_ZERO =
-      Optional.of(new JsonPrimitive(0L));
+  private static final Optional<JsonElement> OPTIONAL_JSON_TRUE = Optional.of(JSON_TRUE);
 
   private static JsonElement jsonPrimitiveOrNull(Optional<String> s) {
     return s.map(str -> (JsonElement) new JsonPrimitive(str)).orElse(JsonNull.INSTANCE);
@@ -2300,7 +2297,7 @@ public class Minescript {
       Job job, String functionName, long funcCallId, List<?> parsedArgs) {
     var funcCall = new ScriptFunctionCall(functionName, parsedArgs);
     try {
-      Optional<JsonElement> response = runScriptFunction(job, funcCallId, funcCall);
+      Optional<JsonElement> response = runExternalScriptFunction(job, funcCallId, funcCall);
       if (response.isPresent()) {
         job.respond(funcCallId, response.get(), true);
       }
@@ -2328,8 +2325,8 @@ public class Minescript {
     }
   }
 
-  private static Optional<JsonElement> registerEventHandler(
-      Job job,
+  private static JsonElement registerEventHandler(
+      JobControl job,
       String functionName,
       long funcCallId,
       Map<JobOperationId, EventHandler> handlerMap,
@@ -2343,11 +2340,14 @@ public class Minescript {
     var handler = new EventHandler(job, functionName, () -> handlerMap.remove(jobOpId));
     filter.ifPresent(handler::setFilter);
     handlerMap.put(jobOpId, handler);
-    return Optional.of(new JsonPrimitive(funcCallId));
+    return new JsonPrimitive(funcCallId);
   }
 
   private static Optional<JsonElement> startEventHandler(
-      Job job, long funcCallId, Map<JobOperationId, EventHandler> handlerMap, long handlerId) {
+      JobControl job,
+      long funcCallId,
+      Map<JobOperationId, EventHandler> handlerMap,
+      long handlerId) {
     var jobOpId = new JobOperationId(job.jobId(), handlerId);
     var handler = handlerMap.get(jobOpId);
     if (handler == null) {
@@ -2359,9 +2359,21 @@ public class Minescript {
     return Optional.empty();
   }
 
-  /** Returns a JSON response if a script function is called. */
-  private static Optional<JsonElement> runScriptFunction(
-      Job job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
+  /** Call script function. Intended as a helper for external scripts. */
+  public static JsonElement call(String function, List<?> args) throws Exception {
+    var functionCall = new ScriptFunctionCall(function, args);
+    if (runNoReturnScriptFunction(functionCall)) {
+      return JsonNull.INSTANCE;
+    }
+
+    // TODO(maxuser): Pass real values for job and funcCallId.
+    JobControl nullJob = null;
+    long nullFuncCallId = 0;
+    return runScriptFunction(nullJob, nullFuncCallId, functionCall);
+  }
+
+  private static JsonElement runScriptFunction(
+      JobControl job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
     var minecraft = Minecraft.getInstance();
     var world = minecraft.level;
     var player = minecraft.player;
@@ -2377,12 +2389,12 @@ public class Minescript {
           result.add(player.getX());
           result.add(player.getY());
           result.add(player.getZ());
-          return Optional.of(result);
+          return result;
         }
 
       case "player_name":
         args.expectSize(0);
-        return Optional.of(new JsonPrimitive(player.getName().getString()));
+        return new JsonPrimitive(player.getName().getString());
 
       case "getblock":
         {
@@ -2393,7 +2405,7 @@ public class Minescript {
           int arg2 = args.getConvertibleInt(2);
           Optional<String> block =
               blockStateToString(level.getBlockState(new BlockPos(arg0, arg1, arg2)));
-          return Optional.of(jsonPrimitiveOrNull(block));
+          return jsonPrimitiveOrNull(block);
         }
 
       case "getblocklist":
@@ -2431,7 +2443,7 @@ public class Minescript {
             Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, y, z)));
             blocks.add(jsonPrimitiveOrNull(block));
           }
-          return Optional.of(blocks);
+          return blocks;
         }
 
       case "register_key_listener":
@@ -2440,32 +2452,17 @@ public class Minescript {
         return registerEventHandler(
             job, functionName, funcCallId, keyEventListeners, Optional.empty());
 
-      case "start_key_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, keyEventListeners, args.getStrictLong(0));
-
       case "register_mouse_listener":
         functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, mouseEventListeners, Optional.empty());
 
-      case "start_mouse_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, mouseEventListeners, args.getStrictLong(0));
-
       case "register_chat_message_listener":
         functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, chatEventListeners, Optional.empty());
-
-      case "start_chat_message_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, chatEventListeners, args.getStrictLong(0));
 
       case "register_chat_message_interceptor":
         {
@@ -2488,21 +2485,11 @@ public class Minescript {
           return registerEventHandler(job, functionName, funcCallId, chatInterceptors, filter);
         }
 
-      case "start_chat_message_interceptor":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, chatInterceptors, args.getStrictLong(0));
-
       case "register_add_entity_listener":
         functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, addEntityEventListeners, Optional.empty());
-
-      case "start_add_entity_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, addEntityEventListeners, args.getStrictLong(0));
 
       case "register_block_update_listener":
         functionCall.expectNotRunningAsTask();
@@ -2510,10 +2497,11 @@ public class Minescript {
         return registerEventHandler(
             job, functionName, funcCallId, blockUpdateEventListeners, Optional.empty());
 
-      case "start_block_update_listener":
+      case "register_explosion_listener":
         functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, blockUpdateEventListeners, args.getStrictLong(0));
+        args.expectSize(0);
+        return registerEventHandler(
+            job, functionName, funcCallId, explosionEventListeners, Optional.empty());
 
       case "register_take_item_listener":
         functionCall.expectNotRunningAsTask();
@@ -2521,32 +2509,11 @@ public class Minescript {
         return registerEventHandler(
             job, functionName, funcCallId, takeItemEventListeners, Optional.empty());
 
-      case "start_take_item_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, takeItemEventListeners, args.getStrictLong(0));
-
       case "register_damage_listener":
         functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, damageEventListeners, Optional.empty());
-
-      case "start_damage_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, damageEventListeners, args.getStrictLong(0));
-
-      case "register_explosion_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, explosionEventListeners, Optional.empty());
-
-      case "start_explosion_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, explosionEventListeners, args.getStrictLong(0));
 
       case "register_chunk_listener":
         functionCall.expectNotRunningAsTask();
@@ -2554,55 +2521,11 @@ public class Minescript {
         return registerEventHandler(
             job, functionName, funcCallId, chunkEventListeners, Optional.empty());
 
-      case "start_chunk_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, chunkEventListeners, args.getStrictLong(0));
-
       case "unregister_event_handler":
         {
           args.expectArgs("handler_id");
           long handlerId = args.getStrictLong(0);
-          return Optional.of(new JsonPrimitive(job.cancelOperation(handlerId)));
-        }
-
-      case "await_loaded_region":
-        {
-          functionCall.expectNotRunningAsTask();
-          args.expectSize(4);
-          int arg0 = args.getStrictInt(0);
-          int arg1 = args.getStrictInt(1);
-          int arg2 = args.getStrictInt(2);
-          int arg3 = args.getStrictInt(3);
-          var jobOpId = new JobOperationId(job.jobId(), funcCallId);
-          var listener =
-              new ChunkLoadEventListener(
-                  arg0,
-                  arg1,
-                  arg2,
-                  arg3,
-                  (boolean success, boolean removeFromListeners) -> {
-                    // TODO(maxuser): The calling convention should be respected within Job::respond
-                    // so that it's applied universally for all async script functions, not just for
-                    // this one.
-                    job.respond(
-                        funcCallId,
-                        functionCall.callingConvention()
-                                == ScriptFunctionCall.CallingConvention.JAVA
-                            ? new JsonPrimitive(job.objects.retain(success))
-                            : new JsonPrimitive(success),
-                        true);
-                    job.removeOperation(funcCallId);
-                    if (removeFromListeners) {
-                      chunkLoadEventListeners.remove(jobOpId);
-                    }
-                  });
-          listener.updateChunkStatuses();
-          if (!listener.checkFullyLoaded()) {
-            job.addOperation(funcCallId, listener);
-            chunkLoadEventListeners.put(jobOpId, listener);
-          }
-          return Optional.empty();
+          return new JsonPrimitive(job.cancelOperation(handlerId));
         }
 
       case "set_nickname":
@@ -2623,7 +2546,7 @@ public class Minescript {
             systemMessageQueue.logUserInfo("Chat nickname set to {}.", quoteString(arg));
             customNickname = arg;
           }
-          return OPTIONAL_JSON_TRUE;
+          return JSON_TRUE;
         }
 
       case "player_hand_items":
@@ -2632,7 +2555,7 @@ public class Minescript {
           var result = new JsonArray();
           result.add(itemStackToJsonElement(player.getMainHandItem(), OptionalInt.empty(), false));
           result.add(itemStackToJsonElement(player.getOffhandItem(), OptionalInt.empty(), false));
-          return Optional.of(result);
+          return result;
         }
 
       case "player_inventory":
@@ -2647,7 +2570,7 @@ public class Minescript {
               result.add(itemStackToJsonElement(itemStack, OptionalInt.of(i), i == selectedSlot));
             }
           }
-          return Optional.of(result);
+          return result;
         }
 
       case "player_inventory_slot_to_hotbar":
@@ -2664,13 +2587,13 @@ public class Minescript {
           var inventory = player.getInventory();
           var previouslySelectedSlot = inventory.getSelectedSlot();
           inventory.setSelectedSlot(slot);
-          return Optional.of(new JsonPrimitive(previouslySelectedSlot));
+          return new JsonPrimitive(previouslySelectedSlot);
         }
 
       case "press_key_bind":
         args.expectSize(2);
         pressKeyBind(args.getString(0), args.getBoolean(1));
-        return OPTIONAL_JSON_TRUE;
+        return JSON_TRUE;
 
       case "player_press_forward":
         return doPlayerAction(functionName, options.keyUp, args);
@@ -2714,7 +2637,7 @@ public class Minescript {
           var result = new JsonArray();
           result.add(player.getYRot());
           result.add(player.getXRot());
-          return Optional.of(result);
+          return result;
         }
 
       case "player_set_orientation":
@@ -2724,7 +2647,7 @@ public class Minescript {
           Double pitch = args.getDouble(1);
           player.setYRot(yaw.floatValue() % 360.0f);
           player.setXRot(pitch.floatValue() % 360.0f);
-          return OPTIONAL_JSON_TRUE;
+          return JSON_TRUE;
         }
 
       case "player_get_targeted_block":
@@ -2756,9 +2679,9 @@ public class Minescript {
             result.add(playerDistance);
             result.add(hitResult.getDirection().toString());
             result.add(jsonPrimitiveOrNull(block));
-            return Optional.of(result);
+            return result;
           } else {
-            return OPTIONAL_JSON_NULL;
+            return JsonNull.INSTANCE;
           }
         }
 
@@ -2767,26 +2690,24 @@ public class Minescript {
           args.expectArgs("max_distance", "nbt");
           double maxDistance = args.getDouble(0);
           boolean includeNbt = args.getBoolean(1);
-          return Optional.of(
-              DebugRenderer.getTargetedEntity(player, (int) maxDistance)
-                  .map(e -> new EntityExporter(entityPositionInterpolation(), includeNbt).export(e))
-                  .map(
-                      obj -> {
-                        JsonElement element = obj; // implicit cast
-                        return element;
-                      })
-                  .orElse(JsonNull.INSTANCE));
+          return DebugRenderer.getTargetedEntity(player, (int) maxDistance)
+              .map(e -> new EntityExporter(entityPositionInterpolation(), includeNbt).export(e))
+              .map(
+                  obj -> {
+                    JsonElement element = obj; // implicit cast
+                    return element;
+                  })
+              .orElse(JsonNull.INSTANCE);
         }
 
       case "player_health":
-        return Optional.of(new JsonPrimitive(player.getHealth()));
+        return new JsonPrimitive(player.getHealth());
 
       case "player":
         {
           args.expectArgs("nbt");
           boolean includeNbt = args.getBoolean(0);
-          return Optional.of(
-              new EntityExporter(entityPositionInterpolation(), includeNbt).export(player));
+          return new EntityExporter(entityPositionInterpolation(), includeNbt).export(player);
         }
 
       case "players":
@@ -2814,20 +2735,11 @@ public class Minescript {
                   .map(String::toUpperCase)
                   .map(EntitySelection.SortType::valueOf);
           OptionalInt limit = args.getOptionalStrictInt(8);
-          return Optional.of(
-              new EntityExporter(entityPositionInterpolation(), includeNbt)
-                  .export(
-                      new EntitySelection(
-                              uuid,
-                              name,
-                              type,
-                              position,
-                              offset,
-                              minDistance,
-                              maxDistance,
-                              sort,
-                              limit)
-                          .selectFrom(world.players())));
+          return new EntityExporter(entityPositionInterpolation(), includeNbt)
+              .export(
+                  new EntitySelection(
+                          uuid, name, type, position, offset, minDistance, maxDistance, sort, limit)
+                      .selectFrom(world.players()));
         }
 
       case "entities":
@@ -2856,20 +2768,11 @@ public class Minescript {
                   .map(String::toUpperCase)
                   .map(EntitySelection.SortType::valueOf);
           OptionalInt limit = args.getOptionalStrictInt(9);
-          return Optional.of(
-              new EntityExporter(entityPositionInterpolation(), includeNbt)
-                  .export(
-                      new EntitySelection(
-                              uuid,
-                              name,
-                              type,
-                              position,
-                              offset,
-                              minDistance,
-                              maxDistance,
-                              sort,
-                              limit)
-                          .selectFrom(world.entitiesForRendering())));
+          return new EntityExporter(entityPositionInterpolation(), includeNbt)
+              .export(
+                  new EntitySelection(
+                          uuid, name, type, position, offset, minDistance, maxDistance, sort, limit)
+                      .selectFrom(world.entitiesForRendering()));
         }
 
       case "version_info":
@@ -2884,7 +2787,7 @@ public class Minescript {
           result.addProperty("os_name", System.getProperty("os.name"));
           result.addProperty("os_version", System.getProperty("os.version"));
           result.addProperty("minecraft_class_name", Minecraft.class.getName());
-          return Optional.of(result);
+          return result;
         }
 
       case "world_info":
@@ -2911,9 +2814,176 @@ public class Minescript {
           result.addProperty("difficulty", difficulty.getSerializedName());
           result.addProperty("name", getWorldName());
           result.addProperty("address", serverAddress);
-          return Optional.of(result);
+          return result;
         }
 
+      case "screenshot":
+        {
+          args.expectArgs("filename");
+          String filename = args.get(0) == null ? null : args.getString(0);
+
+          if (filename != null) {
+            if (filename.contains(File.separator)) {
+              throw new IllegalArgumentException(
+                  String.format(
+                      "`screenshot` does not support filenames with `%s` character.",
+                      File.separator));
+            }
+            int length = filename.length();
+            if (length > 4 && !filename.substring(length - 4).toLowerCase().equals(".png")) {
+              filename += ".png";
+            }
+          }
+
+          Screenshot.grab(
+              minecraft.gameDirectory,
+              filename,
+              minecraft.getMainRenderTarget(),
+              /* downScale= */ 1,
+              message -> job.log(message.getString()));
+          return JSON_TRUE;
+        }
+
+      case "screen_name":
+        if (!args.isEmpty()) {
+          throw new IllegalArgumentException("Expected no params but got: " + args.toString());
+        }
+        return jsonPrimitiveOrNull(getScreenName());
+
+      case "container_get_items": // List of Items in Chest
+        {
+          if (!args.isEmpty()) {
+            throw new IllegalArgumentException("Expected no params but got: " + args.toString());
+          }
+          Screen screen = minecraft.screen;
+          if (screen instanceof AbstractContainerScreen<?> handledScreen) {
+            AbstractContainerMenu screenHandler = handledScreen.getMenu();
+            Slot[] slots = screenHandler.slots.toArray(new Slot[0]);
+            var result = new JsonArray();
+            for (Slot slot : slots) {
+              ItemStack itemStack = slot.getItem();
+              if (itemStack.isEmpty()) {
+                continue;
+              }
+              result.add(itemStackToJsonElement(itemStack, OptionalInt.of(slot.index), false));
+            }
+            return result;
+          } else {
+            return JsonNull.INSTANCE;
+          }
+        }
+
+      case "player_look_at": // Look at x, y, z
+        {
+          args.expectSize(3);
+          double x = args.getDouble(0);
+          double y = args.getDouble(1);
+          double z = args.getDouble(2);
+          player.lookAt(EntityAnchorArgument.Anchor.EYES, new Vec3(x, y, z));
+          return JSON_TRUE;
+        }
+
+      case "show_chat_screen":
+        {
+          args.expectSize(2);
+          boolean show = args.getBoolean(0);
+          var screen = minecraft.screen;
+          final JsonElement result;
+          if (show) {
+            if (screen == null) {
+              minecraft.setScreen(new ChatScreen(""));
+            }
+            var prompt = args.get(1);
+            if (prompt != null && checkChatScreenInput()) {
+              chatEditBox.setValue(prompt.toString());
+            }
+            result = JSON_TRUE;
+          } else {
+            if (screen != null && screen instanceof ChatScreen) {
+              screen.onClose();
+              result = JSON_TRUE;
+            } else {
+              result = JSON_FALSE;
+            }
+          }
+          return result;
+        }
+
+      case "job_info":
+        {
+          args.expectSize(0);
+          var result = new ArrayList<JobInfo>();
+          jobs.getMap().entrySet().stream()
+              .sorted(Map.Entry.comparingByKey())
+              .map(Map.Entry::getValue)
+              .forEach(
+                  j -> {
+                    Path path = j.boundCommand().scriptPath();
+                    result.add(
+                        new JobInfo(
+                            j.jobId(),
+                            j.boundCommand().command(),
+                            path == null ? null : path.toString(),
+                            j.state().name(),
+                            j == job ? Boolean.valueOf(true) : null));
+                  });
+          // Use default-constructed Gson (instead of GSON) so that nulls are not serialized.
+          return new Gson().toJsonTree(result);
+        }
+
+      case "append_chat_history":
+        args.expectSize(1);
+        minecraft.gui.getChat().addRecentChat(args.getString(0));
+        return JsonNull.INSTANCE;
+
+      case "chat_input":
+        {
+          args.expectSize(0);
+          var result = new JsonArray();
+          result.add(chatEditBox.getValue());
+          result.add(chatEditBox.getCursorPosition());
+          return result;
+        }
+
+      case "set_chat_input":
+        {
+          args.expectSize(3);
+          args.getOptionalString(0).ifPresent(chatEditBox::setValue);
+          args.getOptionalStrictInt(1).ifPresent(chatEditBox::setCursorPosition);
+          args.getOptionalStrictInt(2)
+              .ifPresent(
+                  i -> {
+                    // If the high byte (alpha) is zero, promote to 0xFF so it's fully opaque
+                    // instead of fully invsible.
+                    if ((i & 0xFF000000) == 0) {
+                      i |= 0xFF000000;
+                    }
+                    chatEditBox.setTextColor(i);
+                  });
+          return JsonNull.INSTANCE;
+        }
+    }
+
+    // TODO(maxuser): Job can be null only for testing of Pyjinn scripts until Pyjinn jobs are
+    // implemented.
+    throw new IllegalArgumentException(
+        String.format(
+            "Unknown function `%s` called from job: %s",
+            functionName, job == null ? "null" : job.jobSummary()));
+  }
+
+  /**
+   * Run no-return script function that has no return value when called from an external script.
+   *
+   * <p>No-return script functions are fire-and-forget when requested from an external script.
+   *
+   * @return true if a no-return script function was executed, false otherwise.
+   */
+  private static boolean runNoReturnScriptFunction(ScriptFunctionCall functionCall) {
+    final String functionName = functionCall.name();
+    final ScriptFunctionCall.ArgList args = functionCall.args();
+
+    switch (functionName) {
       case "execute":
         {
           args.expectArgs("command");
@@ -2923,7 +2993,7 @@ public class Minescript {
           } else {
             processMinecraftCommand(command.startsWith("/") ? command.substring(1) : command);
           }
-          return Optional.empty();
+          return true;
         }
 
       case "echo_json":
@@ -2931,7 +3001,7 @@ public class Minescript {
           args.expectArgs("json_text");
           var message = args.getString(0);
           processJsonFormattedText(message);
-          return Optional.empty();
+          return true;
         }
 
       case "echo":
@@ -2952,7 +3022,7 @@ public class Minescript {
           }
 
           processPlainText(message);
-          return Optional.empty();
+          return true;
         }
 
       case "chat":
@@ -2982,7 +3052,7 @@ public class Minescript {
           }
 
           processChatMessage(message);
-          return Optional.empty();
+          return true;
         }
 
       case "log":
@@ -3003,36 +3073,19 @@ public class Minescript {
           }
 
           LOGGER.info(message);
-          return Optional.empty();
+          return true;
         }
+    }
+    return false;
+  }
 
-      case "screenshot":
-        {
-          args.expectArgs("filename");
-          String filename = args.get(0) == null ? null : args.getString(0);
+  /** Returns a JSON response if a script function is called. */
+  private static Optional<JsonElement> runExternalScriptFunction(
+      Job job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
+    final String functionName = functionCall.name();
+    final ScriptFunctionCall.ArgList args = functionCall.args();
 
-          if (filename != null) {
-            if (filename.contains(File.separator)) {
-              throw new IllegalArgumentException(
-                  String.format(
-                      "`screenshot` does not support filenames with `%s` character.",
-                      File.separator));
-            }
-            int length = filename.length();
-            if (length > 4 && !filename.substring(length - 4).toLowerCase().equals(".png")) {
-              filename += ".png";
-            }
-          }
-
-          Screenshot.grab(
-              minecraft.gameDirectory,
-              filename,
-              minecraft.getMainRenderTarget(),
-              /* downScale= */ 1,
-              message -> job.log(message.getString()));
-          return OPTIONAL_JSON_TRUE;
-        }
-
+    switch (functionName) {
       case "blockpack_read_world":
         {
           // Python function signature:
@@ -3320,172 +3373,43 @@ public class Minescript {
           return OPTIONAL_JSON_TRUE;
         }
 
-      case "screen_name":
-        if (!args.isEmpty()) {
-          throw new IllegalArgumentException("Expected no params but got: " + args.toString());
-        }
-        return Optional.of(jsonPrimitiveOrNull(getScreenName()));
-
-      case "container_get_items": // List of Items in Chest
+      case "await_loaded_region":
         {
-          if (!args.isEmpty()) {
-            throw new IllegalArgumentException("Expected no params but got: " + args.toString());
-          }
-          Screen screen = minecraft.screen;
-          if (screen instanceof AbstractContainerScreen<?> handledScreen) {
-            AbstractContainerMenu screenHandler = handledScreen.getMenu();
-            Slot[] slots = screenHandler.slots.toArray(new Slot[0]);
-            var result = new JsonArray();
-            for (Slot slot : slots) {
-              ItemStack itemStack = slot.getItem();
-              if (itemStack.isEmpty()) {
-                continue;
-              }
-              result.add(itemStackToJsonElement(itemStack, OptionalInt.of(slot.index), false));
-            }
-            return Optional.of(result);
-          } else {
-            return OPTIONAL_JSON_NULL;
-          }
-        }
-
-      case "player_look_at": // Look at x, y, z
-        {
-          args.expectSize(3);
-          double x = args.getDouble(0);
-          double y = args.getDouble(1);
-          double z = args.getDouble(2);
-          player.lookAt(EntityAnchorArgument.Anchor.EYES, new Vec3(x, y, z));
-          return OPTIONAL_JSON_TRUE;
-        }
-
-      case "show_chat_screen":
-        {
-          args.expectSize(2);
-          boolean show = args.getBoolean(0);
-          var screen = minecraft.screen;
-          final Optional<JsonElement> result;
-          if (show) {
-            if (screen == null) {
-              minecraft.setScreen(new ChatScreen(""));
-            }
-            var prompt = args.get(1);
-            if (prompt != null && checkChatScreenInput()) {
-              chatEditBox.setValue(prompt.toString());
-            }
-            result = OPTIONAL_JSON_TRUE;
-          } else {
-            if (screen != null && screen instanceof ChatScreen) {
-              screen.onClose();
-              result = OPTIONAL_JSON_TRUE;
-            } else {
-              result = OPTIONAL_JSON_FALSE;
-            }
-          }
-          return result;
-        }
-
-      case "job_info":
-        {
-          args.expectSize(0);
-          var result = new ArrayList<JobInfo>();
-          jobs.getMap().entrySet().stream()
-              .sorted(Map.Entry.comparingByKey())
-              .map(Map.Entry::getValue)
-              .forEach(
-                  j -> {
-                    Path path = j.boundCommand().scriptPath();
-                    result.add(
-                        new JobInfo(
-                            j.jobId(),
-                            j.boundCommand().command(),
-                            path == null ? null : path.toString(),
-                            j.state().name(),
-                            j == job ? Boolean.valueOf(true) : null));
-                  });
-          // Use default-constructed Gson (instead of GSON) so that nulls are not serialized.
-          return Optional.of(new Gson().toJsonTree(result));
-        }
-
-      case "flush":
-        args.expectSize(0);
-        return OPTIONAL_JSON_TRUE;
-
-      case "cancelfn!":
-        {
-          var cancelfnRetval = Optional.of((JsonElement) new JsonPrimitive("cancelfn!"));
-          if (funcCallId != 0) {
-            LOGGER.error(
-                "Internal error while cancelling function: funcCallId = 0 but got {} in job: {}",
-                funcCallId,
-                job.jobSummary());
-            return cancelfnRetval;
-          }
-          if (args.size() != 2
-              || !(args.get(0) instanceof Number)
-              || !(args.get(1) instanceof String)) {
-            LOGGER.error(
-                "Internal error while cancelling function: expected [int, str] but got {} in job:"
-                    + " {}",
-                args,
-                job.jobSummary());
-            return cancelfnRetval;
-          }
-          long funcIdToCancel = ((Number) args.get(0)).longValue();
-          String funcName = (String) args.get(1);
-          if (job.cancelOperation(funcIdToCancel)) {
-            LOGGER.info(
-                "Cancelled function call {} for \"{}\" in job: {}",
-                funcIdToCancel,
-                funcName,
-                job.jobSummary());
-          } else {
-            LOGGER.warn(
-                "Failed to find operation to cancel: funcCallId {} for \"{}\" in job: {}",
-                funcIdToCancel,
-                funcName,
-                job.jobSummary());
-          }
-          return cancelfnRetval;
-        }
-
-      case "exit!":
-        if (funcCallId == 0) {
-          return Optional.of(new JsonPrimitive("exit!"));
-        } else {
-          return OPTIONAL_JSON_NULL;
-        }
-
-      case "append_chat_history":
-        args.expectSize(1);
-        minecraft.gui.getChat().addRecentChat(args.getString(0));
-        return OPTIONAL_JSON_NULL;
-
-      case "chat_input":
-        {
-          args.expectSize(0);
-          var result = new JsonArray();
-          result.add(chatEditBox.getValue());
-          result.add(chatEditBox.getCursorPosition());
-          return Optional.of(result);
-        }
-
-      case "set_chat_input":
-        {
-          args.expectSize(3);
-          args.getOptionalString(0).ifPresent(chatEditBox::setValue);
-          args.getOptionalStrictInt(1).ifPresent(chatEditBox::setCursorPosition);
-          args.getOptionalStrictInt(2)
-              .ifPresent(
-                  i -> {
-                    // If the high byte (alpha) is zero, promote to 0xFF so it's fully opaque
-                    // instead of fully invsible.
-                    if ((i & 0xFF000000) == 0) {
-                      i |= 0xFF000000;
+          functionCall.expectNotRunningAsTask();
+          args.expectSize(4);
+          int arg0 = args.getStrictInt(0);
+          int arg1 = args.getStrictInt(1);
+          int arg2 = args.getStrictInt(2);
+          int arg3 = args.getStrictInt(3);
+          var jobOpId = new JobOperationId(job.jobId(), funcCallId);
+          var listener =
+              new ChunkLoadEventListener(
+                  arg0,
+                  arg1,
+                  arg2,
+                  arg3,
+                  (boolean success, boolean removeFromListeners) -> {
+                    // TODO(maxuser): The calling convention should be respected within Job::respond
+                    // so that it's applied universally for all async script functions, not just for
+                    // this one.
+                    job.respond(
+                        funcCallId,
+                        functionCall.callingConvention()
+                                == ScriptFunctionCall.CallingConvention.JAVA
+                            ? new JsonPrimitive(job.objects.retain(success))
+                            : new JsonPrimitive(success),
+                        true);
+                    job.removeOperation(funcCallId);
+                    if (removeFromListeners) {
+                      chunkLoadEventListeners.remove(jobOpId);
                     }
-                    chatEditBox.setTextColor(i);
                   });
-          return OPTIONAL_JSON_NULL;
+          listener.updateChunkStatuses();
+          if (!listener.checkFullyLoaded()) {
+            job.addOperation(funcCallId, listener);
+            chunkLoadEventListeners.put(jobOpId, listener);
+          }
+          return Optional.empty();
         }
 
       case "java_string":
@@ -3660,7 +3584,7 @@ public class Minescript {
           }
           var funcCall = new ScriptFunctionCall(funcName, params);
           funcCall.setCallingConvention(ScriptFunctionCall.CallingConvention.JAVA);
-          Optional<JsonElement> result = runScriptFunction(job, funcCallId, funcCall);
+          Optional<JsonElement> result = runExternalScriptFunction(job, funcCallId, funcCall);
           return result.isEmpty()
               ? result
               : Optional.of(new JsonPrimitive(job.objects.retain(result)));
@@ -3738,11 +3662,111 @@ public class Minescript {
           return Optional.of(new JsonPrimitive(job.cancelOperation(opId)));
         }
 
-      default:
-        throw new IllegalArgumentException(
-            String.format(
-                "Unknown function `%s` called from job: %s", functionName, job.jobSummary()));
+      case "start_key_listener":
+        functionCall.expectNotRunningAsTask();
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, keyEventListeners, args.getStrictLong(0));
+
+      case "start_mouse_listener":
+        functionCall.expectNotRunningAsTask();
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, mouseEventListeners, args.getStrictLong(0));
+
+      case "start_chat_message_listener":
+        functionCall.expectNotRunningAsTask();
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, chatEventListeners, args.getStrictLong(0));
+
+      case "start_chat_message_interceptor":
+        functionCall.expectNotRunningAsTask();
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, chatInterceptors, args.getStrictLong(0));
+
+      case "start_add_entity_listener":
+        functionCall.expectNotRunningAsTask();
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, addEntityEventListeners, args.getStrictLong(0));
+
+      case "start_block_update_listener":
+        functionCall.expectNotRunningAsTask();
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, blockUpdateEventListeners, args.getStrictLong(0));
+
+      case "start_take_item_listener":
+        functionCall.expectNotRunningAsTask();
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, takeItemEventListeners, args.getStrictLong(0));
+
+      case "start_damage_listener":
+        functionCall.expectNotRunningAsTask();
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, damageEventListeners, args.getStrictLong(0));
+
+      case "start_explosion_listener":
+        functionCall.expectNotRunningAsTask();
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, explosionEventListeners, args.getStrictLong(0));
+
+      case "start_chunk_listener":
+        functionCall.expectNotRunningAsTask();
+        args.expectArgs("handler_id");
+        return startEventHandler(job, funcCallId, chunkEventListeners, args.getStrictLong(0));
+
+      case "flush":
+        args.expectSize(0);
+        return OPTIONAL_JSON_TRUE;
+
+      case "cancelfn!":
+        {
+          var cancelfnRetval = Optional.of((JsonElement) new JsonPrimitive("cancelfn!"));
+          if (funcCallId != 0) {
+            LOGGER.error(
+                "Internal error while cancelling function: funcCallId = 0 but got {} in job: {}",
+                funcCallId,
+                job.jobSummary());
+            return cancelfnRetval;
+          }
+          if (args.size() != 2
+              || !(args.get(0) instanceof Number)
+              || !(args.get(1) instanceof String)) {
+            LOGGER.error(
+                "Internal error while cancelling function: expected [int, str] but got {} in job:"
+                    + " {}",
+                args,
+                job.jobSummary());
+            return cancelfnRetval;
+          }
+          long funcIdToCancel = ((Number) args.get(0)).longValue();
+          String funcName = (String) args.get(1);
+          if (job.cancelOperation(funcIdToCancel)) {
+            LOGGER.info(
+                "Cancelled function call {} for \"{}\" in job: {}",
+                funcIdToCancel,
+                funcName,
+                job.jobSummary());
+          } else {
+            LOGGER.warn(
+                "Failed to find operation to cancel: funcCallId {} for \"{}\" in job: {}",
+                funcIdToCancel,
+                funcName,
+                job.jobSummary());
+          }
+          return cancelfnRetval;
+        }
+
+      case "exit!":
+        if (funcCallId == 0) {
+          return Optional.of(new JsonPrimitive("exit!"));
+        } else {
+          return OPTIONAL_JSON_NULL;
+        }
     }
+
+    if (runNoReturnScriptFunction(functionCall)) {
+      return Optional.empty();
+    }
+
+    return Optional.of(runScriptFunction(job, funcCallId, functionCall));
   }
 
   private static JsonElement scheduleTasks(
@@ -3930,7 +3954,8 @@ public class Minescript {
       default:
         var embeddedFuncCall = new ScriptFunctionCall(funcName, resolvedArgs);
         embeddedFuncCall.setRunningAsTask();
-        return runScriptFunction(job, funcCallId, embeddedFuncCall).orElse(JsonNull.INSTANCE);
+        return runExternalScriptFunction(job, funcCallId, embeddedFuncCall)
+            .orElse(JsonNull.INSTANCE);
     }
   }
 
@@ -4001,7 +4026,7 @@ public class Minescript {
   }
 
   public static void processMessageQueue(
-      boolean processSystemMessages, Function<Job, Message> jobMessageQueue) {
+      boolean processSystemMessages, Function<JobControl, Message> jobMessageQueue) {
     var minecraft = Minecraft.getInstance();
     boolean hasMessage;
     int iterations = 0;
@@ -4018,27 +4043,30 @@ public class Minescript {
       }
       for (var job : jobs.getMap().values()) {
         if (job.state() == JobState.RUNNING || job.state() == JobState.DONE) {
-          try {
-            Message message = jobMessageQueue.apply(job);
-            if (message != null) {
-              hasMessage = true;
-              if (message.type() == Message.Type.FUNCTION_CALL) {
-                String functionName = message.value();
-                var funcCallData = (Message.FunctionCallData) message.data();
-                processScriptFunction(
-                    job, functionName, funcCallData.funcCallId(), funcCallData.args());
+          if (job instanceof Job asyncJob) {
+            try {
+              Message message = jobMessageQueue.apply(asyncJob);
+              if (message != null) {
+                hasMessage = true;
+                if (message.type() == Message.Type.FUNCTION_CALL) {
+                  String functionName = message.value();
+                  var funcCallData = (Message.FunctionCallData) message.data();
+                  processScriptFunction(
+                      asyncJob, functionName, funcCallData.funcCallId(), funcCallData.args());
 
-              } else {
-                // TODO(maxuser): Stash level in UndoableAction as a WeakReference<Level> so
-                // that an undo operation gets applied only to the world that at existed at the
-                // time the UndoableAction was created.
-                Level level = minecraft.level;
-                jobs.getUndoForJob(job).ifPresent(u -> u.processCommandToUndo(level, message));
-                processMessage(message);
+                } else {
+                  // TODO(maxuser): Stash level in UndoableAction as a WeakReference<Level> so
+                  // that an undo operation gets applied only to the world that at existed at the
+                  // time the UndoableAction was created.
+                  Level level = minecraft.level;
+                  jobs.getUndoForJob(asyncJob)
+                      .ifPresent(u -> u.processCommandToUndo(level, message));
+                  processMessage(message);
+                }
               }
+            } catch (RuntimeException e) {
+              asyncJob.logJobException(e);
             }
-          } catch (RuntimeException e) {
-            job.logJobException(e);
           }
         }
       }

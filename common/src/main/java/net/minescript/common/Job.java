@@ -54,16 +54,6 @@ public class Job implements JobControl {
   // - script system call: "?mnsc:0 X exit! []"
   private static final String FUNCTION_PREFIX = "?mnsc:";
 
-  public interface Operation {
-    String name();
-
-    void suspend();
-
-    boolean resumeAndCheckDone();
-
-    void cancel();
-  }
-
   public Job(
       int jobId,
       ScriptConfig.BoundCommand command,
@@ -84,10 +74,12 @@ public class Job implements JobControl {
     blockpackers = new ResourceTracker<>(BlockPacker.class, jobId, config);
   }
 
+  @Override
   public ScriptConfig.BoundCommand boundCommand() {
     return command;
   }
 
+  @Override
   public void addOperation(long opId, Operation op) {
     if (operations.put(opId, op) != null) {
       throw new IllegalStateException("Job added operation with duplicate ID: " + opId);
@@ -103,6 +95,7 @@ public class Job implements JobControl {
    *
    * <p>If operation is found, it is cancelled and removed from this job.
    */
+  @Override
   public boolean cancelOperation(long opId) {
     if (config.debugOutput()) {
       LOGGER.info("Cancelling operation {} among {} in job {}", opId, operations.keySet(), jobId);
@@ -173,16 +166,16 @@ public class Job implements JobControl {
     switch (command.redirects().stdout()) {
       case CHAT:
         if (text.startsWith("/")) {
-          jobTickQueue.add(Message.createMinecraftCommand(text.substring(1)));
+          tickQueue().add(Message.createMinecraftCommand(text.substring(1)));
         } else if (text.startsWith("\\")) {
-          jobTickQueue.add(Message.createMinescriptCommand(text.substring(1)));
+          tickQueue().add(Message.createMinescriptCommand(text.substring(1)));
         } else {
-          jobTickQueue.add(Message.createChatMessage(text));
+          tickQueue().add(Message.createChatMessage(text));
         }
         break;
       case DEFAULT:
       case ECHO:
-        jobTickQueue.add(Message.fromPlainText(text));
+        tickQueue().add(Message.fromPlainText(text));
         break;
       case LOG:
         LOGGER.info(text);
@@ -237,7 +230,7 @@ public class Job implements JobControl {
       return;
     }
 
-    jobTickQueue.add(Message.createFunctionCall(funcCallId, executor, functionName, args));
+    tickQueue().add(Message.createFunctionCall(funcCallId, executor, functionName, args));
   }
 
   @Override
@@ -249,16 +242,16 @@ public class Job implements JobControl {
     switch (command.redirects().stderr()) {
       case CHAT:
         if (text.startsWith("/")) {
-          jobTickQueue.add(Message.createMinecraftCommand(text.substring(1)));
+          tickQueue().add(Message.createMinecraftCommand(text.substring(1)));
         } else if (text.startsWith("\\")) {
-          jobTickQueue.add(Message.createMinescriptCommand(text.substring(1)));
+          tickQueue().add(Message.createMinescriptCommand(text.substring(1)));
         } else {
-          jobTickQueue.add(Message.createChatMessage(text));
+          tickQueue().add(Message.createChatMessage(text));
         }
         break;
       case DEFAULT:
       case ECHO:
-        jobTickQueue.add(Message.formatAsJsonColoredText(text, "yellow"));
+        tickQueue().add(Message.formatAsJsonColoredText(text, "yellow"));
         break;
       case LOG:
         LOGGER.info(text);
@@ -280,10 +273,13 @@ public class Job implements JobControl {
 
   public void start() {
     thread =
-        new Thread(this::runOnJobThread, String.format("job-%d-%s", jobId, command.command()[0]));
+        new Thread(
+            () -> runOnJobThread(this, task, systemMessageQueue, config),
+            String.format("job-%d-%s", jobId, command.command()[0]));
     thread.start();
   }
 
+  @Override
   public boolean suspend() {
     if (state == JobState.KILLED) {
       systemMessageQueue.logUserError("Job already killed: {}", jobSummary());
@@ -316,6 +312,7 @@ public class Job implements JobControl {
     }
   }
 
+  @Override
   public boolean resume() {
     if (state != JobState.SUSPENDED && state != JobState.KILLED) {
       systemMessageQueue.logUserError("Job not suspended: {}", jobSummary());
@@ -344,6 +341,7 @@ public class Job implements JobControl {
     }
   }
 
+  @Override
   public void kill() {
     JobState prevState = state;
     state = JobState.KILLED;
@@ -352,47 +350,58 @@ public class Job implements JobControl {
     }
   }
 
-  private void runOnJobThread() {
-    if (state == JobState.NOT_STARTED) {
-      state = JobState.RUNNING;
+  protected void setState(JobState state) {
+    this.state = state;
+  }
+
+  private static void runOnJobThread(
+      Job job, Task task, SystemMessageQueue systemMessageQueue, Config config) {
+    if (job.state() == JobState.NOT_STARTED) {
+      job.setState(JobState.RUNNING);
     }
     try {
       final long startTimeMillis = System.currentTimeMillis();
-      int exitCode = task.run(command, this);
+      int exitCode = task.run(job.boundCommand(), job);
       LOGGER.info(
-          "Job `{}` exited with code {}, draining message queues...", jobSummary(), exitCode);
+          "Job `{}` exited with code {}, draining message queues...", job.jobSummary(), exitCode);
 
       final int millisToSleep = 1000;
-      while (!(state == JobState.KILLED || (jobTickQueue.isEmpty() && jobRenderQueue.isEmpty()))) {
+      while (!(job.state() == JobState.KILLED
+          || (job.tickQueue().isEmpty() && job.renderQueue().isEmpty()))) {
         try {
           Thread.sleep(millisToSleep);
         } catch (InterruptedException e) {
-          logJobException(e);
+          job.logJobException(e);
         }
       }
       final long endTimeMillis = System.currentTimeMillis();
       final long reportJobSuccessThresholdMillis = config.reportJobSuccessThresholdMillis();
       if (exitCode != 0) {
-        systemMessageQueue.logUserError(jobSummaryWithStatus("Exited with error code " + exitCode));
+        systemMessageQueue.logUserError(
+            job.jobSummaryWithStatus("Exited with error code " + exitCode));
       } else if (reportJobSuccessThresholdMillis >= 0
           && endTimeMillis - startTimeMillis > reportJobSuccessThresholdMillis) {
-        if (state != JobState.KILLED) {
-          state = JobState.DONE;
+        if (job.state() != JobState.KILLED) {
+          job.setState(JobState.DONE);
         }
-        systemMessageQueue.logUserInfo(toString());
+        systemMessageQueue.logUserInfo(job.toString());
       }
     } finally {
-      for (Operation op : operations.values()) {
-        op.cancel();
-      }
-      operations.clear();
-
-      objects.releaseAll();
-      blockpacks.releaseAll();
-      blockpackers.releaseAll();
-
-      doneCallback.accept(jobId);
+      job.finish();
     }
+  }
+
+  private void finish() {
+    for (Operation op : operations.values()) {
+      op.cancel();
+    }
+    operations.clear();
+
+    objects.releaseAll();
+    blockpacks.releaseAll();
+    blockpackers.releaseAll();
+
+    doneCallback.accept(jobId);
   }
 
   @Override
@@ -400,11 +409,12 @@ public class Job implements JobControl {
     return jobId;
   }
 
+  @Override
   public String jobSummary() {
     return jobSummaryWithStatus("");
   }
 
-  private String jobSummaryWithStatus(String status) {
+  protected String jobSummaryWithStatus(String status) {
     String displayCommand = quoteCommand(command.command());
     if (displayCommand.length() > 61) {
       displayCommand = displayCommand.substring(0, 61) + "...";

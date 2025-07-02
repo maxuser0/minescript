@@ -10,9 +10,19 @@ import org.apache.logging.log4j.message.ParameterizedMessage;
 public interface JobControl {
   int jobId();
 
+  ScriptConfig.BoundCommand boundCommand();
+
   JobState state();
 
+  String jobSummary();
+
   void yield();
+
+  boolean suspend();
+
+  boolean resume();
+
+  void kill();
 
   Queue<Message> renderQueue();
 
@@ -25,6 +35,20 @@ public interface JobControl {
   void processStdout(String text);
 
   void processStderr(String text);
+
+  interface Operation {
+    String name();
+
+    void suspend();
+
+    boolean resumeAndCheckDone();
+
+    void cancel();
+  }
+
+  void addOperation(long opId, Operation op);
+
+  boolean cancelOperation(long opId);
 
   default void log(String messagePattern, Object... arguments) {
     String logMessage =
