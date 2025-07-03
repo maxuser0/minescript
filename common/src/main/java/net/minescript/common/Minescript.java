@@ -2360,16 +2360,14 @@ public class Minescript {
   }
 
   /** Call script function. Intended as a helper for external scripts. */
-  public static JsonElement call(String function, List<?> args) throws Exception {
+  public static JsonElement call(JobControl job, long funcCallId, String function, List<?> args)
+      throws Exception {
     var functionCall = new ScriptFunctionCall(function, args);
     if (runNoReturnScriptFunction(functionCall)) {
       return JsonNull.INSTANCE;
     }
 
-    // TODO(maxuser): Pass real values for job and funcCallId.
-    JobControl nullJob = null;
-    long nullFuncCallId = 0;
-    return runScriptFunction(nullJob, nullFuncCallId, functionCall);
+    return runScriptFunction(job, funcCallId, functionCall);
   }
 
   private static JsonElement runScriptFunction(

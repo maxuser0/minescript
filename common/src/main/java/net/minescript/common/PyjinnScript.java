@@ -6,6 +6,7 @@ package net.minescript.common;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.HashMultimap;
+import com.google.common.collect.ImmutableMap;
 import com.google.gson.JsonElement;
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -15,6 +16,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -37,8 +39,23 @@ public class PyjinnScript {
     this.script = script;
     this.onFinish = onFinish;
 
-    // TODO(maxuser): Define addEventListener in a module that needs to be imported explicitly?
-    script.globals().setVariable("addEventListener", new AddEventListener());
+    // TODO(maxuser): Define add_event_listener in a module that needs to be imported explicitly?
+    script.globals().setVariable("add_event_listener", new AddEventListener());
+    initBuiltinFunctions(script);
+  }
+
+  private static void initBuiltinFunctions(Script script) {
+    if (builtinFunctions == null) {
+      var mapBuilder = new ImmutableMap.Builder<String, BuiltinScriptFunction>();
+      for (String name : BUILTIN_FUNCTIONS) {
+        mapBuilder.put(name, new BuiltinScriptFunction(name));
+      }
+      builtinFunctions = mapBuilder.build();
+    }
+    var globals = script.globals();
+    for (var entry : builtinFunctions.entrySet()) {
+      globals.setVariable(entry.getKey(), entry.getValue());
+    }
   }
 
   public interface NameMappings {
@@ -788,7 +805,7 @@ public class PyjinnScript {
 
   public class AddEventListener implements Script.Function {
     @Override
-    public Object call(Object... params) {
+    public Object call(Script.Environment env, Object... params) {
       expectNumParams(params, 2);
       String eventType = params[0].toString();
       var value = params[1];
@@ -796,12 +813,88 @@ public class PyjinnScript {
         // TODO(maxuser): Call the event listener only when an event fires.
         LOGGER.info(
             "(maxuser-debug) Adding fake event listener... triggering it once for testing...");
-        eventListener.call(new Event(eventType));
+        eventListener.call(env, new Event(eventType));
         LOGGER.info("(maxuser-debug) Done testing event listener");
       } else {
         throw new IllegalArgumentException("Expected addEventListener param to be callable");
       }
       return null; // TODO(maxuser): Return an listener registration object that can be cancelled.
+    }
+  }
+
+  private static Map<String, BuiltinScriptFunction> builtinFunctions = null;
+
+  private static final String[] BUILTIN_FUNCTIONS = {
+    "player_position",
+    "player_name",
+    "getblock",
+    "getblocklist",
+    "register_key_listener",
+    "register_mouse_listener",
+    "register_chat_message_listener",
+    "register_chat_message_interceptor",
+    "register_add_entity_listener",
+    "register_block_update_listener",
+    "register_explosion_listener",
+    "register_take_item_listener",
+    "register_damage_listener",
+    "register_chunk_listener",
+    "unregister_event_handler",
+    "set_nickname",
+    "player_hand_items",
+    "player_inventory",
+    // Removed in Minescript 5.0: "player_inventory_slot_to_hotbar",
+    "player_inventory_select_slot",
+    "press_key_bind",
+    "player_press_forward",
+    "player_press_backward",
+    "player_press_left",
+    "player_press_right",
+    "player_press_jump",
+    "player_press_sprint",
+    "player_press_sneak",
+    "player_press_pick_item",
+    "player_press_use",
+    "player_press_attack",
+    "player_press_swap_hands",
+    "player_press_drop",
+    "player_orientation",
+    "player_set_orientation",
+    "player_get_targeted_block",
+    "player_get_targeted_entity",
+    "player_health",
+    "player",
+    "players",
+    "entities",
+    "version_info",
+    "world_info",
+    "screenshot",
+    "screen_name",
+    "container_get_items",
+    "player_look_at",
+    "show_chat_screen",
+    "job_info",
+    "append_chat_history",
+    "chat_input",
+    "set_chat_input",
+    "execute",
+    "echo_json",
+    "echo",
+    "chat",
+    "log"
+  };
+
+  public record BuiltinScriptFunction(String name) implements Script.Function {
+    @Override
+    public Object call(Script.Environment env, Object... params) {
+      try {
+        // TODO(maxuser): Pass real values for job and funcCallId to be gotten from env vars.
+        JobControl nullJob = null;
+        long nullFuncCallId = 0;
+        return Minescript.call(nullJob, nullFuncCallId, name, List.of(params));
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
     }
   }
 }
