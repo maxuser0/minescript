@@ -169,7 +169,7 @@ public class Minescript {
   }
 
   // TODO(maxuser): Allow this to be controlled via config.
-  public void enableDebugPyjinnLogging(boolean enable) {
+  public static void enableDebugPyjinnLogging(boolean enable) {
     if (enable) {
       Script.setDebugLogger((str, args) -> LOGGER.info("Pyjinn debug output: " + str + "%n", args));
     } else {
@@ -695,14 +695,15 @@ public class Minescript {
   }
 
   static class ScheduledTaskList implements JobControl.Operation {
-    private final Job job;
+    private final Job.ExternalJob job;
     private final String name;
     private final List<?> tasks;
     private final Runnable doneCallback;
     private long lastReportedErrorTime; // Throttle error reporting so as to not spam logs or chat.
     private boolean suspended = false;
 
-    public ScheduledTaskList(Job job, String name, List<?> tasks, Runnable doneCallback) {
+    public ScheduledTaskList(
+        Job.ExternalJob job, String name, List<?> tasks, Runnable doneCallback) {
       this.job = job;
       this.name = name;
       this.tasks = tasks;
@@ -774,9 +775,27 @@ public class Minescript {
 
     private final Deque<UndoableAction> undoStack = new ArrayDeque<>();
 
-    public void createSubprocess(ScriptConfig.BoundCommand command, List<Token> nextCommand) {
+    public void createInternalJob(ScriptConfig.BoundCommand command, List<Token> nextCommand) {
+      try {
+        var job =
+            PyjinnScript.createJob(
+                allocateJobId(),
+                command,
+                config,
+                systemMessageQueue,
+                Minescript::processPlainText,
+                platform.modLoaderName(),
+                i -> finishJob(i, nextCommand));
+        jobMap.put(job.jobId(), job);
+        job.start();
+      } catch (Exception e) {
+        systemMessageQueue.logException(e);
+      }
+    }
+
+    public void createExternalJob(ScriptConfig.BoundCommand command, List<Token> nextCommand) {
       var job =
-          new Job(
+          new Job.ExternalJob(
               allocateJobId(),
               command,
               new SubprocessTask(config),
@@ -815,8 +834,9 @@ public class Minescript {
         }
       }
 
+      // TODO(maxuser): Migrate undo to Job.InternalJob.
       var undoJob =
-          new Job(
+          new Job.ExternalJob(
               allocateJobId(),
               new ScriptConfig.BoundCommand(
                   null, undo.derivativeCommand(), ScriptRedirect.Pair.DEFAULTS),
@@ -1442,28 +1462,14 @@ public class Minescript {
 
       if (commandPath.getFileName().toString().toLowerCase().endsWith(".pyj")) {
         try {
-          final var next = nextCommand;
-          var execCommand = config.scriptConfig().getExecutableCommand(boundCommand);
-          var scriptFilename = commandPath.getFileName().toString();
-          var script =
-              PyjinnScript.create(
-                  execCommand,
-                  out -> {
-                    LOGGER.info("{} stdout: {}", scriptFilename, out);
-                    systemMessageQueue.add(Message.fromPlainText(out));
-                  },
-                  platform.modLoaderName(),
-                  () -> runParsedMinescriptCommand(next));
-          script.start();
-          // TODO(maxuser): Manage the returned PyjinnScript as a script job that can be suspended,
-          // resumed, and killed.
+          jobs.createInternalJob(boundCommand, nextCommand);
         } catch (Exception e) {
           systemMessageQueue.logException(e);
         }
         return;
       }
 
-      jobs.createSubprocess(boundCommand, nextCommand);
+      jobs.createExternalJob(boundCommand, nextCommand);
 
     } catch (RuntimeException e) {
       systemMessageQueue.logException(e);
@@ -2294,7 +2300,7 @@ public class Minescript {
       int job_id, String[] command, String source, String status, Boolean self) {}
 
   public static void processScriptFunction(
-      Job job, String functionName, long funcCallId, List<?> parsedArgs) {
+      Job.ExternalJob job, String functionName, long funcCallId, List<?> parsedArgs) {
     var funcCall = new ScriptFunctionCall(functionName, parsedArgs);
     try {
       Optional<JsonElement> response = runExternalScriptFunction(job, funcCallId, funcCall);
@@ -2962,12 +2968,8 @@ public class Minescript {
         }
     }
 
-    // TODO(maxuser): Job can be null only for testing of Pyjinn scripts until Pyjinn jobs are
-    // implemented.
     throw new IllegalArgumentException(
-        String.format(
-            "Unknown function `%s` called from job: %s",
-            functionName, job == null ? "null" : job.jobSummary()));
+        String.format("Unknown function `%s` called from job: %s", functionName, job.jobSummary()));
   }
 
   /**
@@ -3079,7 +3081,7 @@ public class Minescript {
 
   /** Returns a JSON response if a script function is called. */
   private static Optional<JsonElement> runExternalScriptFunction(
-      Job job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
+      Job.ExternalJob job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
     final String functionName = functionCall.name();
     final ScriptFunctionCall.ArgList args = functionCall.args();
 
@@ -3768,7 +3770,10 @@ public class Minescript {
   }
 
   private static JsonElement scheduleTasks(
-      Job job, long funcCallId, Map<JobOperationId, ScheduledTaskList> taskLists, List<?> tasks)
+      Job.ExternalJob job,
+      long funcCallId,
+      Map<JobOperationId, ScheduledTaskList> taskLists,
+      List<?> tasks)
       throws Exception {
     var jobOpId = new JobOperationId(job.jobId(), funcCallId);
     if (taskLists.containsKey(jobOpId)) {
@@ -3794,7 +3799,7 @@ public class Minescript {
     SKIP_TASKS // The remaining tasks in the list are skipped.
   }
 
-  private static JsonElement runTasks(Job job, List<?> tasks) throws Exception {
+  private static JsonElement runTasks(Job.ExternalJob job, List<?> tasks) throws Exception {
     var taskValues = new HashMap<Long, Supplier<Object>>();
     JsonElement tasksResult = JsonNull.INSTANCE;
     TaskFlowControl[] flowControl = {TaskFlowControl.NORMAL_FLOW};
@@ -3823,7 +3828,7 @@ public class Minescript {
 
   // flowControl is an array of length 1 to allow an output value without altering the return type.
   private static JsonElement runTask(
-      Job job,
+      Job.ExternalJob job,
       List<?> argList,
       Map<Long, Supplier<Object>> taskValues,
       TaskFlowControl[] flowControl)
@@ -4041,29 +4046,35 @@ public class Minescript {
       }
       for (var job : jobs.getMap().values()) {
         if (job.state() == JobState.RUNNING || job.state() == JobState.DONE) {
-          if (job instanceof Job asyncJob) {
+          if (job instanceof Job.ExternalJob externalJob) {
             try {
-              Message message = jobMessageQueue.apply(asyncJob);
+              Message message = jobMessageQueue.apply(externalJob);
               if (message != null) {
                 hasMessage = true;
                 if (message.type() == Message.Type.FUNCTION_CALL) {
                   String functionName = message.value();
                   var funcCallData = (Message.FunctionCallData) message.data();
                   processScriptFunction(
-                      asyncJob, functionName, funcCallData.funcCallId(), funcCallData.args());
+                      externalJob, functionName, funcCallData.funcCallId(), funcCallData.args());
 
                 } else {
                   // TODO(maxuser): Stash level in UndoableAction as a WeakReference<Level> so
                   // that an undo operation gets applied only to the world that at existed at the
                   // time the UndoableAction was created.
                   Level level = minecraft.level;
-                  jobs.getUndoForJob(asyncJob)
+                  jobs.getUndoForJob(externalJob)
                       .ifPresent(u -> u.processCommandToUndo(level, message));
                   processMessage(message);
                 }
               }
             } catch (RuntimeException e) {
-              asyncJob.logJobException(e);
+              externalJob.logJobException(e);
+            }
+          } else {
+            Message message = jobMessageQueue.apply(job);
+            if (message != null) {
+              hasMessage = true;
+              processMessage(message);
             }
           }
         }

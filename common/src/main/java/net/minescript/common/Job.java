@@ -25,21 +25,158 @@ import java.util.function.Consumer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-public class Job implements JobControl {
+public abstract class Job implements JobControl {
+
+  // TODO(maxuser): Move ExternalJob to its own file.
+  public static class ExternalJob extends Job {
+    private final ScriptFunctionRunner scriptFunctionRunner;
+    private Thread thread;
+    public final ResourceTracker<Object> objects;
+    public final ResourceTracker<BlockPack> blockpacks;
+    public final ResourceTracker<BlockPacker> blockpackers;
+
+    // Special prefix for commands and function calls emitted from stdout of scripts, for example:
+    // - script function call: "?mnsc:123 X my_func [4, 5, 6]"
+    // - script system call: "?mnsc:0 X exit! []"
+    private static final String FUNCTION_PREFIX = "?mnsc:";
+
+    public ExternalJob(
+        int jobId,
+        ScriptConfig.BoundCommand command,
+        Task task,
+        Config config,
+        SystemMessageQueue systemMessageQueue,
+        ScriptFunctionRunner scriptFunctionRunner,
+        Consumer<Integer> doneCallback) {
+      super(jobId, command, task, config, systemMessageQueue, doneCallback);
+
+      this.scriptFunctionRunner = scriptFunctionRunner;
+      this.objects = new ResourceTracker<>(Object.class, jobId, config);
+      this.blockpacks = new ResourceTracker<>(BlockPack.class, jobId, config);
+      this.blockpackers = new ResourceTracker<>(BlockPacker.class, jobId, config);
+    }
+
+    @Override
+    protected void start() {
+      thread =
+          new Thread(
+              () -> runOnJobThread(this, task, systemMessageQueue, config),
+              String.format("job-%d-%s", jobId, command.command()[0]));
+      thread.start();
+    }
+
+    private static void runOnJobThread(
+        Job job, Task task, SystemMessageQueue systemMessageQueue, Config config) {
+      if (job.state() == JobState.NOT_STARTED) {
+        job.setState(JobState.RUNNING);
+      }
+      try {
+        final long startTimeMillis = System.currentTimeMillis();
+        int exitCode = task.run(job.boundCommand(), job);
+        LOGGER.info(
+            "Job `{}` exited with code {}, draining message queues...", job.jobSummary(), exitCode);
+
+        final int millisToSleep = 1000;
+        while (!(job.state() == JobState.KILLED
+            || (job.tickQueue().isEmpty() && job.renderQueue().isEmpty()))) {
+          try {
+            Thread.sleep(millisToSleep);
+          } catch (InterruptedException e) {
+            job.logJobException(e);
+          }
+        }
+        final long endTimeMillis = System.currentTimeMillis();
+        final long reportJobSuccessThresholdMillis = config.reportJobSuccessThresholdMillis();
+        if (exitCode != 0) {
+          systemMessageQueue.logUserError(
+              job.jobSummaryWithStatus("Exited with error code " + exitCode));
+        } else if (reportJobSuccessThresholdMillis >= 0
+            && endTimeMillis - startTimeMillis > reportJobSuccessThresholdMillis) {
+          if (job.state() != JobState.KILLED) {
+            job.setState(JobState.DONE);
+          }
+          systemMessageQueue.logUserInfo(job.toString());
+        }
+      } finally {
+        job.close();
+      }
+    }
+
+    @Override
+    protected boolean handleStdout(String text) {
+      // Stdout lines with FUNCTION_PREFIX are handled as function calls regardless of redirection.
+      if (text.startsWith(FUNCTION_PREFIX)) {
+        processFunctionCall(text.substring(FUNCTION_PREFIX.length()));
+        return true;
+      }
+      return false;
+    }
+
+    private void processFunctionCall(String functionCallLine) {
+      // Function call messages have values formatted as:
+      // "{funcCallId} {functionName} {args}"
+      //
+      // args may have spaces, e.g. "123 my_func [4, 5, 6]"
+
+      String[] functionCall = functionCallLine.split("\\s+", 4);
+      long funcCallId = Long.valueOf(functionCall[0]);
+      final FunctionExecutor executor;
+      try {
+        executor = FunctionExecutor.fromValue(functionCall[1]);
+      } catch (IllegalArgumentException e) {
+        raiseException(funcCallId, ExceptionInfo.fromException(e));
+        return;
+      }
+      String functionName = functionCall[2];
+      String argsString = functionCall[3];
+
+      final List<?> args;
+      try {
+        args = GSON.fromJson(argsString, ArrayList.class);
+      } catch (JsonSyntaxException e) {
+        String exceptionMessage =
+            String.format(
+                "Syntax error in script function args to `%s`: `%s`. This is likely"
+                    + " caused by unsynchronized output printed to stdout elsewhere"
+                    + " in this script. If the error persists, try replacing those"
+                    + " raw print() calls with minescript.echo() or printing to"
+                    + " stderr instead.",
+                functionName, functionCallLine);
+        raiseException(
+            funcCallId,
+            ExceptionInfo.fromException(new IllegalArgumentException(exceptionMessage)));
+        return;
+      }
+
+      if (executor == FunctionExecutor.SCRIPT_LOOP) {
+        scriptFunctionRunner.run(this, functionName, funcCallId, args);
+        return;
+      }
+
+      if (executor == FunctionExecutor.RENDER_LOOP) {
+        renderQueue().add(Message.createFunctionCall(funcCallId, executor, functionName, args));
+        return;
+      }
+
+      tickQueue().add(Message.createFunctionCall(funcCallId, executor, functionName, args));
+    }
+
+    @Override
+    protected void onClose() {
+      objects.releaseAll();
+      blockpacks.releaseAll();
+      blockpackers.releaseAll();
+    }
+  }
+
   private static final Logger LOGGER = LogManager.getLogger();
   private static final Gson GSON = new GsonBuilder().serializeNulls().create();
 
   public final int jobId;
-  public final ResourceTracker<Object> objects;
-  public final ResourceTracker<BlockPack> blockpacks;
-  public final ResourceTracker<BlockPacker> blockpackers;
-
-  private final ScriptConfig.BoundCommand command;
-  private final Task task;
-  private final Config config;
-  private final SystemMessageQueue systemMessageQueue;
-  private final ScriptFunctionRunner scriptFunctionRunner;
-  private Thread thread;
+  protected final ScriptConfig.BoundCommand command;
+  protected final Task task;
+  protected final Config config;
+  protected final SystemMessageQueue systemMessageQueue;
   private volatile JobState state = JobState.NOT_STARTED;
   private Consumer<Integer> doneCallback;
   private Queue<Message> jobTickQueue = new ConcurrentLinkedQueue<Message>();
@@ -49,29 +186,19 @@ public class Job implements JobControl {
   // Key is unique within this job, typically a func call ID.
   private Map<Long, Operation> operations = new ConcurrentHashMap<>();
 
-  // Special prefix for commands and function calls emitted from stdout of scripts, for example:
-  // - script function call: "?mnsc:123 X my_func [4, 5, 6]"
-  // - script system call: "?mnsc:0 X exit! []"
-  private static final String FUNCTION_PREFIX = "?mnsc:";
-
-  public Job(
+  protected Job(
       int jobId,
       ScriptConfig.BoundCommand command,
       Task task,
       Config config,
       SystemMessageQueue systemMessageQueue,
-      ScriptFunctionRunner scriptFunctionRunner,
       Consumer<Integer> doneCallback) {
     this.jobId = jobId;
     this.command = command;
     this.task = task;
     this.config = config;
     this.systemMessageQueue = systemMessageQueue;
-    this.scriptFunctionRunner = scriptFunctionRunner;
     this.doneCallback = doneCallback;
-    objects = new ResourceTracker<>(Object.class, jobId, config);
-    blockpacks = new ResourceTracker<>(BlockPack.class, jobId, config);
-    blockpackers = new ResourceTracker<>(BlockPacker.class, jobId, config);
   }
 
   @Override
@@ -155,11 +282,13 @@ public class Job implements JobControl {
     return task.sendException(functionCallId, exception);
   }
 
+  protected boolean handleStdout(String text) {
+    return false;
+  }
+
   @Override
   public void processStdout(String text) {
-    // Stdout lines with FUNCTION_PREFIX are handled as function calls regardless of redirection.
-    if (text.startsWith(FUNCTION_PREFIX)) {
-      processFunctionCall(text.substring(FUNCTION_PREFIX.length()));
+    if (handleStdout(text)) {
       return;
     }
 
@@ -183,54 +312,6 @@ public class Job implements JobControl {
       case NULL:
         break;
     }
-  }
-
-  private void processFunctionCall(String functionCallLine) {
-    // Function call messages have values formatted as:
-    // "{funcCallId} {functionName} {args}"
-    //
-    // args may have spaces, e.g. "123 my_func [4, 5, 6]"
-
-    String[] functionCall = functionCallLine.split("\\s+", 4);
-    long funcCallId = Long.valueOf(functionCall[0]);
-    final FunctionExecutor executor;
-    try {
-      executor = FunctionExecutor.fromValue(functionCall[1]);
-    } catch (IllegalArgumentException e) {
-      raiseException(funcCallId, ExceptionInfo.fromException(e));
-      return;
-    }
-    String functionName = functionCall[2];
-    String argsString = functionCall[3];
-
-    final List<?> args;
-    try {
-      args = GSON.fromJson(argsString, ArrayList.class);
-    } catch (JsonSyntaxException e) {
-      String exceptionMessage =
-          String.format(
-              "Syntax error in script function args to `%s`: `%s`. This is likely"
-                  + " caused by unsynchronized output printed to stdout elsewhere"
-                  + " in this script. If the error persists, try replacing those"
-                  + " raw print() calls with minescript.echo() or printing to"
-                  + " stderr instead.",
-              functionName, functionCallLine);
-      raiseException(
-          funcCallId, ExceptionInfo.fromException(new IllegalArgumentException(exceptionMessage)));
-      return;
-    }
-
-    if (executor == FunctionExecutor.SCRIPT_LOOP) {
-      scriptFunctionRunner.run(this, functionName, funcCallId, args);
-      return;
-    }
-
-    if (executor == FunctionExecutor.RENDER_LOOP) {
-      jobRenderQueue.add(Message.createFunctionCall(funcCallId, executor, functionName, args));
-      return;
-    }
-
-    tickQueue().add(Message.createFunctionCall(funcCallId, executor, functionName, args));
   }
 
   @Override
@@ -271,13 +352,7 @@ public class Job implements JobControl {
     LOGGER.error("exception stack trace in job `{}`: {}", jobSummary(), sw.toString());
   }
 
-  public void start() {
-    thread =
-        new Thread(
-            () -> runOnJobThread(this, task, systemMessageQueue, config),
-            String.format("job-%d-%s", jobId, command.command()[0]));
-    thread.start();
-  }
+  protected abstract void start();
 
   @Override
   public boolean suspend() {
@@ -354,53 +429,14 @@ public class Job implements JobControl {
     this.state = state;
   }
 
-  private static void runOnJobThread(
-      Job job, Task task, SystemMessageQueue systemMessageQueue, Config config) {
-    if (job.state() == JobState.NOT_STARTED) {
-      job.setState(JobState.RUNNING);
-    }
-    try {
-      final long startTimeMillis = System.currentTimeMillis();
-      int exitCode = task.run(job.boundCommand(), job);
-      LOGGER.info(
-          "Job `{}` exited with code {}, draining message queues...", job.jobSummary(), exitCode);
+  protected abstract void onClose();
 
-      final int millisToSleep = 1000;
-      while (!(job.state() == JobState.KILLED
-          || (job.tickQueue().isEmpty() && job.renderQueue().isEmpty()))) {
-        try {
-          Thread.sleep(millisToSleep);
-        } catch (InterruptedException e) {
-          job.logJobException(e);
-        }
-      }
-      final long endTimeMillis = System.currentTimeMillis();
-      final long reportJobSuccessThresholdMillis = config.reportJobSuccessThresholdMillis();
-      if (exitCode != 0) {
-        systemMessageQueue.logUserError(
-            job.jobSummaryWithStatus("Exited with error code " + exitCode));
-      } else if (reportJobSuccessThresholdMillis >= 0
-          && endTimeMillis - startTimeMillis > reportJobSuccessThresholdMillis) {
-        if (job.state() != JobState.KILLED) {
-          job.setState(JobState.DONE);
-        }
-        systemMessageQueue.logUserInfo(job.toString());
-      }
-    } finally {
-      job.finish();
-    }
-  }
-
-  private void finish() {
+  protected final void close() {
     for (Operation op : operations.values()) {
       op.cancel();
     }
     operations.clear();
-
-    objects.releaseAll();
-    blockpacks.releaseAll();
-    blockpackers.releaseAll();
-
+    onClose();
     doneCallback.accept(jobId);
   }
 
@@ -410,11 +446,11 @@ public class Job implements JobControl {
   }
 
   @Override
-  public String jobSummary() {
+  public final String jobSummary() {
     return jobSummaryWithStatus("");
   }
 
-  protected String jobSummaryWithStatus(String status) {
+  protected final String jobSummaryWithStatus(String status) {
     String displayCommand = quoteCommand(command.command());
     if (displayCommand.length() > 61) {
       displayCommand = displayCommand.substring(0, 61) + "...";

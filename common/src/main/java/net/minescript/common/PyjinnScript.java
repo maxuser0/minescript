@@ -32,23 +32,16 @@ import org.pyjinn.parser.PyjinnParser;
 public class PyjinnScript {
   private static final Logger LOGGER = LogManager.getLogger();
 
-  private final Script script;
-  private final Runnable onFinish;
-
-  private PyjinnScript(Script script, Runnable onFinish) {
-    this.script = script;
-    this.onFinish = onFinish;
-
-    // TODO(maxuser): Define add_event_listener in a module that needs to be imported explicitly?
-    script.globals().setVariable("add_event_listener", new AddEventListener());
-    initBuiltinFunctions(script);
-  }
+  private PyjinnScript() {}
 
   private static void initBuiltinFunctions(Script script) {
     if (builtinFunctions == null) {
-      var mapBuilder = new ImmutableMap.Builder<String, BuiltinScriptFunction>();
+      var mapBuilder = new ImmutableMap.Builder<String, Script.Function>();
       for (String name : BUILTIN_FUNCTIONS) {
         mapBuilder.put(name, new BuiltinScriptFunction(name));
+      }
+      for (String name : BUILTIN_ASYNC_FUNCTIONS) {
+        mapBuilder.put(name, new BuiltinAsyncScriptFunction(name));
       }
       builtinFunctions = mapBuilder.build();
     }
@@ -735,75 +728,134 @@ public class PyjinnScript {
     }
   }
 
-  public static PyjinnScript create(
-      ScriptConfig.ExecutableCommand execCommand,
-      Consumer<String> stdoutConsumer,
-      String modLoaderName,
-      Runnable onFinish)
-      throws Exception {
-    try {
-      String sourceFilename = execCommand.command()[0];
-      boolean isMinecraftClassObfuscated =
-          !Minecraft.class.getName().equals("net.minecraft.client.Minecraft");
+  private static class PyjinnTask implements Task {
+    private final Script script;
 
-      final NameMappings nameMappings;
-      // Check for obfuscated names, and if needed, load a mappings file.
-      if (isMinecraftClassObfuscated) {
-        String mcVersion = SharedConstants.getCurrentVersion().name();
-        var scriptMetadata =
-            ScriptNameMappings.loadScriptMetadata(sourceFilename, modLoaderName, mcVersion);
-        if (scriptMetadata.mappings().isPresent()) {
-          nameMappings = scriptMetadata.mappings().get();
-        } else {
-          var obfuscatedMappings =
-              ObfuscatedNameMappings.loadFromFiles(modLoaderName, mcVersion, scriptMetadata);
-          if (obfuscatedMappings.isPresent()) {
-            nameMappings = obfuscatedMappings.get();
-          } else {
-            throw new IllegalArgumentException(
-                "Runtime is using obfuscated names for Java code and no mappings found for script: "
-                    + execCommand.command()[0]
-                    + "\nFor more information see: minescript.net/mappings");
-          }
-        }
-      } else {
-        nameMappings = new NoNameMappings();
-      }
+    public PyjinnTask(Script script) {
+      this.script = script;
+    }
 
-      String sourceCode = Files.readString(Paths.get(sourceFilename));
-      JsonElement ast = PyjinnParser.parse(sourceCode);
-      var script =
-          new Script(
-              PyjinnScript.class.getClassLoader(),
-              nameMappings::getRuntimeClassName,
-              nameMappings::getRuntimeFieldName,
-              nameMappings::getRuntimeMethodNames);
+    // TODO(maxuser): Does Task::run make sense for Pyjinn script jobs?
+    @Override
+    public int run(ScriptConfig.BoundCommand command, JobControl jobControl) {
+      return 0;
+    }
 
-      // TODO(maxuser): Support stderr redirection, too.
-      script.redirectStdout(stdoutConsumer);
+    /**
+     * Sends a return value to the given script function call. Returns true if response succeeds.
+     */
+    @Override
+    public boolean sendResponse(long functionCallId, JsonElement returnValue, boolean finalReply) {
+      return false; // TODO(maxuser): implement...
+    }
 
-      script.parse(ast, sourceFilename);
-      return new PyjinnScript(script, onFinish);
-    } catch (Exception e) {
-      LOGGER.error("Error creating PyjinnScript", e);
-      onFinish.run();
-      throw e;
+    /** Sends an exception to the given script function call. Returns true if response succeeds. */
+    @Override
+    public boolean sendException(long functionCallId, ExceptionInfo exception) {
+      return false; // TODO(maxuser): implement...
     }
   }
 
-  public void start() {
-    try {
-      script.exec();
-    } finally {
-      // TODO(maxuser): Run onFinish only when there are no remaining event listeners, i.e. when all
-      // event listeners added by the script have been cancelled or none were added.
-      onFinish.run();
+  private static class PyjinnJob extends Job {
+    private final Script script;
+
+    public PyjinnJob(
+        int jobId,
+        ScriptConfig.BoundCommand command,
+        Script script,
+        Config config,
+        SystemMessageQueue systemMessageQueue,
+        Consumer<String> stdoutConsumer,
+        Consumer<Integer> doneCallback) {
+      super(jobId, command, new PyjinnTask(script), config, systemMessageQueue, doneCallback);
+      this.script = script;
+
+      // TODO(maxuser): Support stderr redirection, too.
+      script.redirectStdout(stdoutConsumer);
     }
+
+    @Override
+    protected void start() {
+      setState(JobState.RUNNING);
+
+      initBuiltinFunctions(script);
+
+      // TODO(maxuser): Define add_event_listener in a module that needs to be imported explicitly?
+      script.globals().setVariable("add_event_listener", new AddEventListener());
+      script.globals().setVariable("__job__", this);
+      script.globals().setVariable("__next_fcallid__", Long.valueOf(1000L));
+
+      script.exec();
+
+      // TODO(maxuser): Call close() (which calls onClose()) once there are no more event listeners.
+      close();
+      // TODO(maxuser): setState(JobState.DONE);
+    }
+
+    @Override
+    protected void onClose() {
+      // TODO(maxuser): implement...
+    }
+  }
+
+  public static Job createJob(
+      int jobId,
+      ScriptConfig.BoundCommand boundCommand,
+      Config config,
+      SystemMessageQueue systemMessageQueue,
+      Consumer<String> stdoutConsumer,
+      String modLoaderName,
+      Consumer<Integer> doneCallback)
+      throws Exception {
+    var execCommand = config.scriptConfig().getExecutableCommand(boundCommand);
+    String sourceFilename = execCommand.command()[0];
+    boolean isMinecraftClassObfuscated =
+        !Minecraft.class.getName().equals("net.minecraft.client.Minecraft");
+
+    final NameMappings nameMappings;
+    // Check for obfuscated names, and if needed, load a mappings file.
+    if (isMinecraftClassObfuscated) {
+      String mcVersion = SharedConstants.getCurrentVersion().name();
+      var scriptMetadata =
+          ScriptNameMappings.loadScriptMetadata(sourceFilename, modLoaderName, mcVersion);
+      if (scriptMetadata.mappings().isPresent()) {
+        nameMappings = scriptMetadata.mappings().get();
+      } else {
+        var obfuscatedMappings =
+            ObfuscatedNameMappings.loadFromFiles(modLoaderName, mcVersion, scriptMetadata);
+        if (obfuscatedMappings.isPresent()) {
+          nameMappings = obfuscatedMappings.get();
+        } else {
+          throw new IllegalArgumentException(
+              "Runtime is using obfuscated names for Java code and no mappings found for script: "
+                  + execCommand.command()[0]
+                  + "\nFor more information see: minescript.net/mappings");
+        }
+      }
+    } else {
+      nameMappings = new NoNameMappings();
+    }
+
+    String sourceCode = Files.readString(Paths.get(sourceFilename));
+    JsonElement ast = PyjinnParser.parse(sourceCode);
+    var script =
+        new Script(
+            PyjinnScript.class.getClassLoader(),
+            nameMappings::getRuntimeClassName,
+            nameMappings::getRuntimeFieldName,
+            nameMappings::getRuntimeMethodNames);
+
+    script.parse(ast, sourceFilename);
+    var job =
+        new PyjinnJob(
+            jobId, boundCommand, script, config, systemMessageQueue, stdoutConsumer, doneCallback);
+
+    return job;
   }
 
   public record Event(String type) {}
 
-  public class AddEventListener implements Script.Function {
+  public static class AddEventListener implements Script.Function {
     @Override
     public Object call(Script.Environment env, Object... params) {
       expectNumParams(params, 2);
@@ -822,13 +874,9 @@ public class PyjinnScript {
     }
   }
 
-  private static Map<String, BuiltinScriptFunction> builtinFunctions = null;
+  private static Map<String, Script.Function> builtinFunctions = null;
 
-  private static final String[] BUILTIN_FUNCTIONS = {
-    "player_position",
-    "player_name",
-    "getblock",
-    "getblocklist",
+  private static final String[] BUILTIN_ASYNC_FUNCTIONS = {
     "register_key_listener",
     "register_mouse_listener",
     "register_chat_message_listener",
@@ -838,7 +886,14 @@ public class PyjinnScript {
     "register_explosion_listener",
     "register_take_item_listener",
     "register_damage_listener",
-    "register_chunk_listener",
+    "register_chunk_listener"
+  };
+
+  private static final String[] BUILTIN_FUNCTIONS = {
+    "player_position",
+    "player_name",
+    "getblock",
+    "getblocklist",
     "unregister_event_handler",
     "set_nickname",
     "player_hand_items",
@@ -884,14 +939,29 @@ public class PyjinnScript {
     "log"
   };
 
+  // Async script functions increment the script's __next_fcallid__ global variable.
+  public record BuiltinAsyncScriptFunction(String name) implements Script.Function {
+    @Override
+    public Object call(Script.Environment env, Object... params) {
+      try {
+        var job = (JobControl) env.getVariable("__job__");
+        long fcallId = (Long) env.getVariable("__next_fcallid__");
+        env.setVariable("__next_fcallid__", fcallId + 1);
+        return Minescript.call(job, fcallId, name, List.of(params));
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
+
+  // Non-async script functions don't need a function call ID, so pass zero for it.
   public record BuiltinScriptFunction(String name) implements Script.Function {
     @Override
     public Object call(Script.Environment env, Object... params) {
       try {
-        // TODO(maxuser): Pass real values for job and funcCallId to be gotten from env vars.
-        JobControl nullJob = null;
-        long nullFuncCallId = 0;
-        return Minescript.call(nullJob, nullFuncCallId, name, List.of(params));
+        var job = (JobControl) env.getVariable("__job__");
+        long noFuncCallId = 0; // Non-async script functions don't need a func call ID.
+        return Minescript.call(job, noFuncCallId, name, List.of(params));
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
