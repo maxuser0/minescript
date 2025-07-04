@@ -21,7 +21,6 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Consumer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -47,7 +46,7 @@ public abstract class Job implements JobControl {
         Config config,
         SystemMessageQueue systemMessageQueue,
         ScriptFunctionRunner scriptFunctionRunner,
-        Consumer<Integer> doneCallback) {
+        Runnable doneCallback) {
       super(jobId, command, task, config, systemMessageQueue, doneCallback);
 
       this.scriptFunctionRunner = scriptFunctionRunner;
@@ -178,7 +177,7 @@ public abstract class Job implements JobControl {
   protected final Config config;
   protected final SystemMessageQueue systemMessageQueue;
   private volatile JobState state = JobState.NOT_STARTED;
-  private Consumer<Integer> doneCallback;
+  private Runnable doneCallback;
   private Queue<Message> jobTickQueue = new ConcurrentLinkedQueue<Message>();
   private Queue<Message> jobRenderQueue = new ConcurrentLinkedQueue<Message>();
   private Lock lock = new ReentrantLock(true); // true indicates a fair lock to avoid starvation
@@ -192,7 +191,7 @@ public abstract class Job implements JobControl {
       Task task,
       Config config,
       SystemMessageQueue systemMessageQueue,
-      Consumer<Integer> doneCallback) {
+      Runnable doneCallback) {
     this.jobId = jobId;
     this.command = command;
     this.task = task;
@@ -417,7 +416,7 @@ public abstract class Job implements JobControl {
   }
 
   @Override
-  public void kill() {
+  public void requestKill() {
     JobState prevState = state;
     state = JobState.KILLED;
     if (prevState == JobState.SUSPENDED) {
@@ -437,7 +436,7 @@ public abstract class Job implements JobControl {
     }
     operations.clear();
     onClose();
-    doneCallback.accept(jobId);
+    doneCallback.run();
   }
 
   @Override

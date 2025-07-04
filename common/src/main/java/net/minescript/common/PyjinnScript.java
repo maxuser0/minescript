@@ -40,12 +40,10 @@ public class PyjinnScript {
       for (String name : BUILTIN_FUNCTIONS) {
         mapBuilder.put(name, new BuiltinScriptFunction(name));
       }
-      for (String name : BUILTIN_ASYNC_FUNCTIONS) {
-        mapBuilder.put(name, new BuiltinAsyncScriptFunction(name));
-      }
       builtinFunctions = mapBuilder.build();
     }
     var globals = script.globals();
+    globals.setVariable("add_event_listener", new AddEventListener());
     for (var entry : builtinFunctions.entrySet()) {
       globals.setVariable(entry.getKey(), entry.getValue());
     }
@@ -730,11 +728,11 @@ public class PyjinnScript {
 
   // TODO(maxuser): Merge PyjinnTask into PyjinnJob.
   private static class PyjinnTask implements Task {
-    private final Script script;
+    private final Map<Long, Callback> callbackMap = new HashMap<>();
 
-    public PyjinnTask(Script script) {
-      this.script = script;
-    }
+    public record Callback(Script.Environment env, Script.Function function) {}
+
+    public PyjinnTask() {}
 
     // TODO(maxuser): Does Task::run make sense for Pyjinn script jobs?
     @Override
@@ -747,10 +745,13 @@ public class PyjinnScript {
      */
     @Override
     public boolean sendResponse(long functionCallId, JsonElement returnValue, boolean finalReply) {
-      // TODO(maxuser)! implement...
-      LOGGER.info(
-          "(maxuser-debug) got callback to Pyjinn for fcall {}: {}", functionCallId, returnValue);
-      return false;
+      var callback = callbackMap.get(functionCallId);
+      if (callback == null) {
+        LOGGER.error("No callback found in Pyjinn task for function call {}", functionCallId);
+        return false;
+      }
+      callback.function.call(callback.env, returnValue);
+      return true;
     }
 
     /** Sends an exception to the given script function call. Returns true if response succeeds. */
@@ -764,18 +765,21 @@ public class PyjinnScript {
     private static final long ASYNC_FCALL_START_ID = 1000L;
 
     private final Script script;
+    private final PyjinnTask task;
     private long nextFcallId = ASYNC_FCALL_START_ID;
 
     public PyjinnJob(
         int jobId,
         ScriptConfig.BoundCommand command,
+        PyjinnTask task,
         Script script,
         Config config,
         SystemMessageQueue systemMessageQueue,
         Consumer<String> stdoutConsumer,
-        Consumer<Integer> doneCallback) {
-      super(jobId, command, new PyjinnTask(script), config, systemMessageQueue, doneCallback);
+        Runnable doneCallback) {
+      super(jobId, command, task, config, systemMessageQueue, doneCallback);
       this.script = script;
+      this.task = task;
 
       // TODO(maxuser): Support stderr redirection, too.
       script.redirectStdout(stdoutConsumer);
@@ -785,13 +789,15 @@ public class PyjinnScript {
     protected void start() {
       setState(JobState.RUNNING);
 
-      initBuiltinFunctions(script);
-
-      // TODO(maxuser): Define add_event_listener in a module that needs to be imported explicitly?
-      script.globals().setVariable("add_event_listener", new AddEventListener());
-      script.globals().setVariable("__job__", this);
-
-      script.exec();
+      try {
+        initBuiltinFunctions(script);
+        script.globals().setVariable("__job__", this);
+        script.exec();
+      } catch (Exception e) {
+        systemMessageQueue.logException(e);
+        close();
+        return;
+      }
 
       // If nextFcallId still has its initial value, then no async listeners have been scheduled, so
       // close the script job.
@@ -801,8 +807,17 @@ public class PyjinnScript {
     }
 
     @Override
+    public void requestKill() {
+      super.requestKill();
+
+      // Pyjinn jobs can be immediately closed upon a kill request because all their work occurs on
+      // the game thread, i.e. there's no asynchronous work that needs to be waited for.
+      close();
+    }
+
+    @Override
     protected void onClose() {
-      // TODO(maxuser): implement...
+      // Nothing special to do when closing the Pyjinn job.
     }
   }
 
@@ -813,7 +828,7 @@ public class PyjinnScript {
       SystemMessageQueue systemMessageQueue,
       Consumer<String> stdoutConsumer,
       String modLoaderName,
-      Consumer<Integer> doneCallback)
+      Runnable doneCallback)
       throws Exception {
     var execCommand = config.scriptConfig().getExecutableCommand(boundCommand);
     String sourceFilename = execCommand.command()[0];
@@ -856,46 +871,19 @@ public class PyjinnScript {
     script.parse(ast, sourceFilename);
     var job =
         new PyjinnJob(
-            jobId, boundCommand, script, config, systemMessageQueue, stdoutConsumer, doneCallback);
+            jobId,
+            boundCommand,
+            new PyjinnTask(),
+            script,
+            config,
+            systemMessageQueue,
+            stdoutConsumer,
+            doneCallback);
 
     return job;
   }
 
-  public record Event(String type) {}
-
-  public static class AddEventListener implements Script.Function {
-    @Override
-    public Object call(Script.Environment env, Object... params) {
-      expectNumParams(params, 2);
-      String eventType = params[0].toString();
-      var value = params[1];
-      if (value instanceof Script.Function eventListener) {
-        // TODO(maxuser): Call the event listener only when an event fires.
-        LOGGER.info(
-            "(maxuser-debug) Adding fake event listener... triggering it once for testing...");
-        eventListener.call(env, new Event(eventType));
-        LOGGER.info("(maxuser-debug) Done testing event listener");
-      } else {
-        throw new IllegalArgumentException("Expected addEventListener param to be callable");
-      }
-      return null; // TODO(maxuser): Return an listener registration object that can be cancelled.
-    }
-  }
-
   private static Map<String, Script.Function> builtinFunctions = null;
-
-  private static final String[] BUILTIN_ASYNC_FUNCTIONS = {
-    "register_key_listener",
-    "register_mouse_listener",
-    "register_chat_message_listener",
-    "register_chat_message_interceptor",
-    "register_add_entity_listener",
-    "register_block_update_listener",
-    "register_explosion_listener",
-    "register_take_item_listener",
-    "register_damage_listener",
-    "register_chunk_listener"
-  };
 
   private static final String[] BUILTIN_FUNCTIONS = {
     "player_position",
@@ -947,49 +935,6 @@ public class PyjinnScript {
     "log"
   };
 
-  // Async script functions increment the script job's nextFcallId.
-  public record BuiltinAsyncScriptFunction(String name) implements Script.Function {
-    @Override
-    public Object call(Script.Environment env, Object... params) {
-      try {
-        var job = (PyjinnJob) env.getVariable("__job__");
-        long handlerId = job.nextFcallId++;
-
-        // TODO(maxuser): This is a gross hack, kicking off the start_foo_listener call immediately
-        // after the corresponding register_foo_listener. Refactor and simplfy how async ops work
-        // from Pyjinn scripts. "register..." and "start..." calls got split in the first place to
-        // accomodate the semantics of externally executed (Python) scripts, because the
-        // "register..." call was to return a handle to the calling script to refer to the listener
-        // while the "start..." has no return value (Minescript::runExternalScriptFunction returns
-        // Optional.empty()) to indicate that it's an async operation that will return value(s) at a
-        // later time.
-        //
-        // Add 2 to __next_fcallid__ for the register and the start. See registerEventHandler() and
-        // startEventHandler() in Minescript.java for details.
-
-        LOGGER.info(
-            "(maxuser-debug) TODO: associate fcallId {} with {}",
-            handlerId,
-            params[0]); // TODO(maxuser)! preserve mapping for invoking the callback in PyjinnTask
-
-        Minescript.call(job, handlerId, name, List.of());
-
-        if (name.startsWith("register_")) {
-          long startId = job.nextFcallId++;
-          var functionCall =
-              new ScriptFunctionCall(name.replace("register_", "start_"), List.of(handlerId));
-          if (!Minescript.startEventListener(job, startId, functionCall)) {
-            throw new IllegalArgumentException(
-                "Unable to start event listener using {}".formatted(functionCall.name()));
-          }
-        }
-        return null;
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    }
-  }
-
   // Non-async script functions don't need a function call ID, so pass zero for it.
   public record BuiltinScriptFunction(String name) implements Script.Function {
     @Override
@@ -998,6 +943,71 @@ public class PyjinnScript {
         var job = (JobControl) env.getVariable("__job__");
         long noFuncCallId = 0; // Non-async script functions don't need a func call ID.
         return Minescript.call(job, noFuncCallId, name, List.of(params));
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
+
+  private static final Set<String> EVENT_NAMES =
+      Set.of(
+          "key",
+          "mouse",
+          "chat_message",
+          "chat_intercept",
+          "add_entity",
+          "block_update",
+          "explosion",
+          "take_item",
+          "damage",
+          "chunk");
+
+  public static class AddEventListener implements Script.Function {
+    @Override
+    public Object call(Script.Environment env, Object... params) {
+      expectNumParams(params, 2);
+      if (!(params[0] instanceof String)) {
+        throw new IllegalArgumentException(
+            "Expected first param to add_event_listener to be string (event type) but got "
+                + params[0].toString());
+      }
+
+      String eventName = (String) params[0];
+      if (!EVENT_NAMES.contains(eventName)) {
+        throw new IllegalArgumentException(
+            "Unsupported event type: %s. Must be one of: %s".formatted(eventName, EVENT_NAMES));
+      }
+
+      try {
+        var job = (PyjinnJob) env.getVariable("__job__");
+        long listenerId = job.nextFcallId++;
+
+        // TODO(maxuser): This is a hack, kicking off the start_foo_listener call immediately after
+        // the corresponding register_foo_listener. Refactor and simplfy how async ops work from
+        // Pyjinn scripts. "register..." and "start..." calls got split in the first place to
+        // accomodate the semantics of externally executed (Python) scripts, because the
+        // "register..." call was to return a handle to the calling script to refer to the listener
+        // while the "start..." has no return value (Minescript::runExternalScriptFunction returns
+        // Optional.empty()) to indicate that it's an async operation that will return value(s) at a
+        // later time.
+
+        if (params[1] instanceof Script.Function callback) {
+          job.task.callbackMap.put(listenerId, new PyjinnTask.Callback(env, callback));
+
+          Minescript.call(job, listenerId, "register_%s_listener".formatted(eventName), List.of());
+
+          var functionCall =
+              new ScriptFunctionCall("start_%s_listener".formatted(eventName), List.of(listenerId));
+          if (!Minescript.startEventListener(job, listenerId, functionCall)) {
+            throw new IllegalArgumentException(
+                "Unable to start event listener using %s".formatted(functionCall.name()));
+          }
+        } else {
+          throw new IllegalArgumentException(
+              "Expected second param to `%s` to be callable but got %s"
+                  .formatted(eventName, params[1]));
+        }
+        return null;
       } catch (Exception e) {
         throw new RuntimeException(e);
       }

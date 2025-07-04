@@ -235,7 +235,7 @@ public class Minescript {
   private static void killAllJobs() {
     for (var job : jobs.getMap().values()) {
       LOGGER.info("Killing job: {}", job.jobSummary());
-      job.kill();
+      job.requestKill();
     }
 
     // Job operations should have been cleaned up when killing jobs, but the jobs killed above might
@@ -777,15 +777,16 @@ public class Minescript {
 
     public void createInternalJob(ScriptConfig.BoundCommand command, List<Token> nextCommand) {
       try {
+        int jobId = allocateJobId();
         var job =
             PyjinnScript.createJob(
-                allocateJobId(),
+                jobId,
                 command,
                 config,
                 systemMessageQueue,
                 Minescript::processPlainText,
                 platform.modLoaderName(),
-                i -> finishJob(i, nextCommand));
+                () -> finishJob(jobId, nextCommand));
         jobMap.put(job.jobId(), job);
         job.start();
       } catch (Exception e) {
@@ -794,15 +795,16 @@ public class Minescript {
     }
 
     public void createExternalJob(ScriptConfig.BoundCommand command, List<Token> nextCommand) {
+      int jobId = allocateJobId();
       var job =
           new Job.ExternalJob(
-              allocateJobId(),
+              jobId,
               command,
               new SubprocessTask(config),
               config,
               systemMessageQueue,
               Minescript::processScriptFunction,
-              i -> finishJob(i, nextCommand));
+              () -> finishJob(jobId, nextCommand));
       var undo = new UndoableActionBlockPack(job.jobId(), command.command());
       jobUndoMap.put(job.jobId(), undo);
       undoStack.addFirst(undo);
@@ -830,21 +832,22 @@ public class Minescript {
       if (originalJobId != -1) {
         var job = jobMap.get(undo.originalJobId());
         if (job != null) {
-          job.kill();
+          job.requestKill();
         }
       }
 
       // TODO(maxuser): Migrate undo to Job.InternalJob.
+      int jobId = allocateJobId();
       var undoJob =
           new Job.ExternalJob(
-              allocateJobId(),
+              jobId,
               new ScriptConfig.BoundCommand(
                   null, undo.derivativeCommand(), ScriptRedirect.Pair.DEFAULTS),
               new UndoTask(undo),
               config,
               systemMessageQueue,
               Minescript::processScriptFunction,
-              i -> finishJob(i, Collections.emptyList()));
+              () -> finishJob(jobId, Collections.emptyList()));
       jobMap.put(undoJob.jobId(), undoJob);
       undoJob.start();
     }
@@ -1002,7 +1005,7 @@ public class Minescript {
     if (jobId == -1) {
       // Special pseudo job ID -1 kills all jobs.
       for (var job : jobs.getMap().values()) {
-        job.kill();
+        job.requestKill();
       }
       return;
     }
@@ -1011,7 +1014,7 @@ public class Minescript {
       systemMessageQueue.logUserError("No job with ID {}. Use \\jobs to list jobs.", jobId);
       return;
     }
-    job.kill();
+    job.requestKill();
     systemMessageQueue.logUserInfo("Removed job: {}", job.jobSummary());
   }
 
@@ -2467,7 +2470,7 @@ public class Minescript {
         return registerEventHandler(
             job, functionName, funcCallId, chatEventListeners, Optional.empty());
 
-      case "register_chat_message_interceptor":
+      case "register_chat_intercept_listener":
         {
           functionCall.expectNotRunningAsTask();
           args.expectArgs("prefix", "pattern");

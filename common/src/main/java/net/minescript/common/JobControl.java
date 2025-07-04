@@ -22,7 +22,7 @@ public interface JobControl {
 
   boolean resume();
 
-  void kill();
+  void requestKill();
 
   Queue<Message> renderQueue();
 
