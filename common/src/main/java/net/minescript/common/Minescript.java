@@ -2349,7 +2349,7 @@ public class Minescript {
     return new JsonPrimitive(funcCallId);
   }
 
-  private static Optional<JsonElement> startEventHandler(
+  private static void startEventHandlerFromMap(
       JobControl job,
       long funcCallId,
       Map<JobOperationId, EventHandler> handlerMap,
@@ -2362,7 +2362,6 @@ public class Minescript {
     }
     job.addOperation(handlerId, handler);
     handler.start(funcCallId);
-    return Optional.empty();
   }
 
   /** Call script function. Intended as a helper for external scripts. */
@@ -3079,11 +3078,44 @@ public class Minescript {
     return false;
   }
 
+  /** Returns true if an event listener was started. */
+  public static boolean startEventListener(
+      JobControl job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
+    Map<JobOperationId, EventHandler> handlerMap =
+        switch (functionCall.name()) {
+          case "start_key_listener" -> keyEventListeners;
+          case "start_mouse_listener" -> mouseEventListeners;
+          case "start_chat_message_listener" -> chatEventListeners;
+          case "start_chat_message_interceptor" -> chatInterceptors;
+          case "start_add_entity_listener" -> addEntityEventListeners;
+          case "start_block_update_listener" -> blockUpdateEventListeners;
+          case "start_take_item_listener" -> takeItemEventListeners;
+          case "start_damage_listener" -> damageEventListeners;
+          case "start_explosion_listener" -> explosionEventListeners;
+          case "start_chunk_listener" -> chunkEventListeners;
+          default -> null;
+        };
+
+    if (handlerMap != null) {
+      functionCall.expectNotRunningAsTask();
+      ScriptFunctionCall.ArgList args = functionCall.args();
+      args.expectArgs("handler_id");
+      startEventHandlerFromMap(job, funcCallId, handlerMap, args.getStrictLong(0));
+      return true;
+    }
+
+    return false;
+  }
+
   /** Returns a JSON response if a script function is called. */
   private static Optional<JsonElement> runExternalScriptFunction(
       Job.ExternalJob job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
     final String functionName = functionCall.name();
     final ScriptFunctionCall.ArgList args = functionCall.args();
+
+    if (startEventListener(job, funcCallId, functionCall)) {
+      return Optional.empty(); // No return value means this is an async operation.
+    }
 
     switch (functionName) {
       case "blockpack_read_world":
@@ -3661,56 +3693,6 @@ public class Minescript {
           long opId = args.getStrictLong(0);
           return Optional.of(new JsonPrimitive(job.cancelOperation(opId)));
         }
-
-      case "start_key_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, keyEventListeners, args.getStrictLong(0));
-
-      case "start_mouse_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, mouseEventListeners, args.getStrictLong(0));
-
-      case "start_chat_message_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, chatEventListeners, args.getStrictLong(0));
-
-      case "start_chat_message_interceptor":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, chatInterceptors, args.getStrictLong(0));
-
-      case "start_add_entity_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, addEntityEventListeners, args.getStrictLong(0));
-
-      case "start_block_update_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, blockUpdateEventListeners, args.getStrictLong(0));
-
-      case "start_take_item_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, takeItemEventListeners, args.getStrictLong(0));
-
-      case "start_damage_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, damageEventListeners, args.getStrictLong(0));
-
-      case "start_explosion_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, explosionEventListeners, args.getStrictLong(0));
-
-      case "start_chunk_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectArgs("handler_id");
-        return startEventHandler(job, funcCallId, chunkEventListeners, args.getStrictLong(0));
 
       case "flush":
         args.expectSize(0);

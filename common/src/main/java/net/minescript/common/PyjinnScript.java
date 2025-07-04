@@ -728,6 +728,7 @@ public class PyjinnScript {
     }
   }
 
+  // TODO(maxuser): Merge PyjinnTask into PyjinnJob.
   private static class PyjinnTask implements Task {
     private final Script script;
 
@@ -746,7 +747,10 @@ public class PyjinnScript {
      */
     @Override
     public boolean sendResponse(long functionCallId, JsonElement returnValue, boolean finalReply) {
-      return false; // TODO(maxuser): implement...
+      // TODO(maxuser)! implement...
+      LOGGER.info(
+          "(maxuser-debug) got callback to Pyjinn for fcall {}: {}", functionCallId, returnValue);
+      return false;
     }
 
     /** Sends an exception to the given script function call. Returns true if response succeeds. */
@@ -757,7 +761,10 @@ public class PyjinnScript {
   }
 
   private static class PyjinnJob extends Job {
+    private static final long ASYNC_FCALL_START_ID = 1000L;
+
     private final Script script;
+    private long nextFcallId = ASYNC_FCALL_START_ID;
 
     public PyjinnJob(
         int jobId,
@@ -783,13 +790,14 @@ public class PyjinnScript {
       // TODO(maxuser): Define add_event_listener in a module that needs to be imported explicitly?
       script.globals().setVariable("add_event_listener", new AddEventListener());
       script.globals().setVariable("__job__", this);
-      script.globals().setVariable("__next_fcallid__", Long.valueOf(1000L));
 
       script.exec();
 
-      // TODO(maxuser): Call close() (which calls onClose()) once there are no more event listeners.
-      close();
-      // TODO(maxuser): setState(JobState.DONE);
+      // If nextFcallId still has its initial value, then no async listeners have been scheduled, so
+      // close the script job.
+      if (nextFcallId == ASYNC_FCALL_START_ID) {
+        close();
+      }
     }
 
     @Override
@@ -939,15 +947,43 @@ public class PyjinnScript {
     "log"
   };
 
-  // Async script functions increment the script's __next_fcallid__ global variable.
+  // Async script functions increment the script job's nextFcallId.
   public record BuiltinAsyncScriptFunction(String name) implements Script.Function {
     @Override
     public Object call(Script.Environment env, Object... params) {
       try {
-        var job = (JobControl) env.getVariable("__job__");
-        long fcallId = (Long) env.getVariable("__next_fcallid__");
-        env.setVariable("__next_fcallid__", fcallId + 1);
-        return Minescript.call(job, fcallId, name, List.of(params));
+        var job = (PyjinnJob) env.getVariable("__job__");
+        long handlerId = job.nextFcallId++;
+
+        // TODO(maxuser): This is a gross hack, kicking off the start_foo_listener call immediately
+        // after the corresponding register_foo_listener. Refactor and simplfy how async ops work
+        // from Pyjinn scripts. "register..." and "start..." calls got split in the first place to
+        // accomodate the semantics of externally executed (Python) scripts, because the
+        // "register..." call was to return a handle to the calling script to refer to the listener
+        // while the "start..." has no return value (Minescript::runExternalScriptFunction returns
+        // Optional.empty()) to indicate that it's an async operation that will return value(s) at a
+        // later time.
+        //
+        // Add 2 to __next_fcallid__ for the register and the start. See registerEventHandler() and
+        // startEventHandler() in Minescript.java for details.
+
+        LOGGER.info(
+            "(maxuser-debug) TODO: associate fcallId {} with {}",
+            handlerId,
+            params[0]); // TODO(maxuser)! preserve mapping for invoking the callback in PyjinnTask
+
+        Minescript.call(job, handlerId, name, List.of());
+
+        if (name.startsWith("register_")) {
+          long startId = job.nextFcallId++;
+          var functionCall =
+              new ScriptFunctionCall(name.replace("register_", "start_"), List.of(handlerId));
+          if (!Minescript.startEventListener(job, startId, functionCall)) {
+            throw new IllegalArgumentException(
+                "Unable to start event listener using {}".formatted(functionCall.name()));
+          }
+        }
+        return null;
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
