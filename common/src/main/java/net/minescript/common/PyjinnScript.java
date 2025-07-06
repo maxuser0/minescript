@@ -961,8 +961,8 @@ public class PyjinnScript {
       Set.of(
           "key",
           "mouse",
-          "chat_message",
-          "chat_intercept",
+          "chat",
+          "outgoing_chat_intercept",
           "add_entity",
           "block_update",
           "explosion",
@@ -990,7 +990,7 @@ public class PyjinnScript {
       // keyword args in Pyjinn library code (e.g. minescript.pyj) so that the resulting flattened
       // arg list can be passed blindly to Minescript::call.
       final List<Object> args;
-      if (eventName.equals("chat_intercept")) {
+      if (eventName.equals("outgoing_chat_intercept")) {
         expectMaxParams(params, 3);
         if (params[2] instanceof Script.KeywordArgs kwargs) {
           // Can't use List.of(...) because at least one of the args must be null.

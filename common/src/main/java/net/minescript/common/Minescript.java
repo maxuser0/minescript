@@ -1537,6 +1537,7 @@ public class Minescript {
           String screenName = getScreenName().orElse(null);
           long timeMillis = System.currentTimeMillis();
           json = new JsonObject();
+          json.addProperty("type", "key");
           json.addProperty("key", key);
           json.addProperty("scan_code", scanCode);
           json.addProperty("action", action);
@@ -1562,6 +1563,7 @@ public class Minescript {
           String screenName = getScreenName().orElse(null);
           long timeMillis = System.currentTimeMillis();
           json = new JsonObject();
+          json.addProperty("type", "mouse");
           json.addProperty("button", button);
           json.addProperty("action", action);
           json.addProperty("modifiers", modifiers);
@@ -1775,15 +1777,19 @@ public class Minescript {
   public static boolean onClientChatReceived(Component message) {
     boolean cancel = false;
     String text = message.getString();
+    JsonObject json = null;
 
     var iter = chatEventListeners.entrySet().iterator();
     while (iter.hasNext()) {
       var entry = iter.next();
       var listener = entry.getValue();
       if (listener.isActive()) {
-        var json = new JsonObject();
-        json.addProperty("message", text);
-        json.addProperty("time", System.currentTimeMillis() / 1000.);
+        if (json == null) {
+          json = new JsonObject();
+          json.addProperty("type", "chat");
+          json.addProperty("message", text);
+          json.addProperty("time", System.currentTimeMillis() / 1000.);
+        }
         if (config.debugOutput()) {
           LOGGER.info("Forwarding chat message to listener {}: {}", entry.getKey(), json);
         }
@@ -1820,6 +1826,7 @@ public class Minescript {
           json = new JsonObject();
           int worldX = chunkCoordToWorldCoord(chunkX);
           int worldZ = chunkCoordToWorldCoord(chunkZ);
+          json.addProperty("type", "chunk");
           json.addProperty("loaded", loaded);
           json.addProperty("x_min", worldX);
           json.addProperty("z_min", worldZ);
@@ -1877,6 +1884,7 @@ public class Minescript {
     for (var interceptor : chatInterceptors.values()) {
       if (interceptor.applies(message)) {
         var json = new JsonObject();
+        json.addProperty("type", "outgoing_chat_intercept");
         json.addProperty("message", message);
         json.addProperty("time", System.currentTimeMillis() / 1000.);
         interceptor.respond(json);
@@ -2014,6 +2022,7 @@ public class Minescript {
         if (json == null) {
           json = new JsonObject();
           boolean includeNbt = false;
+          json.addProperty("type", "add_entity");
           json.add(
               "entity",
               new EntityExporter(entityPositionInterpolation(), includeNbt).export(entity));
@@ -2032,6 +2041,7 @@ public class Minescript {
       if (handler.isActive()) {
         if (json == null) {
           json = new JsonObject();
+          json.addProperty("type", "block_update");
           var position = new JsonArray();
           position.add(pos.getX());
           position.add(pos.getY());
@@ -2058,6 +2068,7 @@ public class Minescript {
         if (json == null) {
           json = new JsonObject();
           boolean includeNbt = false;
+          json.addProperty("type", "take_item");
           json.addProperty("player_uuid", player.getUUID().toString());
           json.add(
               "item", new EntityExporter(entityPositionInterpolation(), includeNbt).export(item));
@@ -2075,6 +2086,7 @@ public class Minescript {
       if (handler.isActive()) {
         if (json == null) {
           json = new JsonObject();
+          json.addProperty("type", "damage");
           json.addProperty("entity_uuid", entity.getUUID().toString());
           json.addProperty("cause_uuid", cause == null ? null : cause.getUUID().toString());
           json.addProperty("source", source);
@@ -2093,6 +2105,7 @@ public class Minescript {
       if (handler.isActive()) {
         if (json == null) {
           json = new JsonObject();
+          json.addProperty("type", "explosion");
 
           var blockpacker = new BlockPacker();
           for (var pos : toExplode) {
@@ -2464,13 +2477,13 @@ public class Minescript {
         return registerEventHandler(
             job, functionName, funcCallId, mouseEventListeners, Optional.empty());
 
-      case "register_chat_message_listener":
+      case "register_chat_listener":
         functionCall.expectNotRunningAsTask();
         args.expectSize(0);
         return registerEventHandler(
             job, functionName, funcCallId, chatEventListeners, Optional.empty());
 
-      case "register_chat_intercept_listener":
+      case "register_outgoing_chat_intercept_listener":
         {
           functionCall.expectNotRunningAsTask();
           args.expectArgs("prefix", "pattern");
@@ -3088,8 +3101,8 @@ public class Minescript {
         switch (functionCall.name()) {
           case "start_key_listener" -> keyEventListeners;
           case "start_mouse_listener" -> mouseEventListeners;
-          case "start_chat_message_listener" -> chatEventListeners;
-          case "start_chat_intercept_listener" -> chatInterceptors;
+          case "start_chat_listener" -> chatEventListeners;
+          case "start_outgoing_chat_intercept_listener" -> chatInterceptors;
           case "start_add_entity_listener" -> addEntityEventListeners;
           case "start_block_update_listener" -> blockUpdateEventListeners;
           case "start_take_item_listener" -> takeItemEventListeners;

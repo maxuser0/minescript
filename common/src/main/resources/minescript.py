@@ -928,9 +928,9 @@ def register_chat_message_listener(
   See also:
     `register_chat_message_interceptor()` for swallowing outgoing chat messages
   """
-  handler_id = await_script_function("register_chat_message_listener", ())
+  handler_id = await_script_function("register_chat_listener", ())
   send_script_function_request(
-      "start_chat_message_listener", (handler_id,), handler, exception_handler)
+      "start_chat_listener", (handler_id,), handler, exception_handler)
   return handler_id
 
 
@@ -959,10 +959,10 @@ def register_chat_message_interceptor(
   See also:
     `register_chat_message_listener()` for non-destructive listening of chat messages
   """
-  handler_id = await_script_function("register_chat_intercept_listener", (prefix, pattern))
+  handler_id = await_script_function("register_outgoing_chat_intercept_listener", (prefix, pattern))
 
   send_script_function_request(
-      "start_chat_intercept_listener", (handler_id,), handler, exception_handler)
+      "start_outgoing_chat_intercept_listener", (handler_id,), handler, exception_handler)
 
   return handler_id
 
@@ -1557,7 +1557,10 @@ class EventQueue:
   def _register(self, event_type: str, registration_func):
     def put_typed_event(event):
       try:
-        event["type"] = event_type
+        if event["type"] != event_type:
+          print(
+              f"Unexpected event type: expected `{event_type}`, got `{event['type']}`",
+              file=sys.stderr)
         self.queue.put(event)
       except Exception as e:
         exception_message = f"Exception in event handler for `{event_type}`: {e}"
