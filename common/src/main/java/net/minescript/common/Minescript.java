@@ -3089,7 +3089,7 @@ public class Minescript {
           case "start_key_listener" -> keyEventListeners;
           case "start_mouse_listener" -> mouseEventListeners;
           case "start_chat_message_listener" -> chatEventListeners;
-          case "start_chat_message_interceptor" -> chatInterceptors;
+          case "start_chat_intercept_listener" -> chatInterceptors;
           case "start_add_entity_listener" -> addEntityEventListeners;
           case "start_block_update_listener" -> blockUpdateEventListeners;
           case "start_take_item_listener" -> takeItemEventListeners;

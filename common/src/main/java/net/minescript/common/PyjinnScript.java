@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -729,10 +730,13 @@ public class PyjinnScript {
   // TODO(maxuser): Merge PyjinnTask into PyjinnJob.
   private static class PyjinnTask implements Task {
     private final Map<Long, Callback> callbackMap = new HashMap<>();
+    private final SystemMessageQueue systemMessageQueue;
 
     public record Callback(Script.Environment env, Script.Function function) {}
 
-    public PyjinnTask() {}
+    public PyjinnTask(SystemMessageQueue systemMessageQueue) {
+      this.systemMessageQueue = systemMessageQueue;
+    }
 
     // TODO(maxuser): Does Task::run make sense for Pyjinn script jobs?
     @Override
@@ -750,7 +754,11 @@ public class PyjinnScript {
         LOGGER.error("No callback found in Pyjinn task for function call {}", functionCallId);
         return false;
       }
-      callback.function.call(callback.env, returnValue);
+      try {
+        callback.function.call(callback.env, returnValue);
+      } catch (Exception e) {
+        systemMessageQueue.logException(e);
+      }
       return true;
     }
 
@@ -873,7 +881,7 @@ public class PyjinnScript {
         new PyjinnJob(
             jobId,
             boundCommand,
-            new PyjinnTask(),
+            new PyjinnTask(systemMessageQueue),
             script,
             config,
             systemMessageQueue,
@@ -965,7 +973,7 @@ public class PyjinnScript {
   public static class AddEventListener implements Script.Function {
     @Override
     public Object call(Script.Environment env, Object... params) {
-      expectNumParams(params, 2);
+      expectMinParams(params, 2);
       if (!(params[0] instanceof String)) {
         throw new IllegalArgumentException(
             "Expected first param to add_event_listener to be string (event type) but got "
@@ -976,6 +984,27 @@ public class PyjinnScript {
       if (!EVENT_NAMES.contains(eventName)) {
         throw new IllegalArgumentException(
             "Unsupported event type: %s. Must be one of: %s".formatted(eventName, EVENT_NAMES));
+      }
+
+      // TODO(maxuser): Instead of special-casing the chat_intercept registration, process the
+      // keyword args in Pyjinn library code (e.g. minescript.pyj) so that the resulting flattened
+      // arg list can be passed blindly to Minescript::call.
+      final List<Object> args;
+      if (eventName.equals("chat_intercept")) {
+        expectMaxParams(params, 3);
+        if (params[2] instanceof Script.KeywordArgs kwargs) {
+          // Can't use List.of(...) because at least one of the args must be null.
+          args = new ArrayList<>();
+          args.add(kwargs.get("prefix"));
+          args.add(kwargs.get("pattern"));
+        } else {
+          throw new IllegalArgumentException(
+              "Expected third param to add_event_listener() to be keyword args but got: "
+                  + params[2]);
+        }
+      } else {
+        expectMaxParams(params, 2);
+        args = List.of();
       }
 
       try {
@@ -994,7 +1023,7 @@ public class PyjinnScript {
         if (params[1] instanceof Script.Function callback) {
           job.task.callbackMap.put(listenerId, new PyjinnTask.Callback(env, callback));
 
-          Minescript.call(job, listenerId, "register_%s_listener".formatted(eventName), List.of());
+          Minescript.call(job, listenerId, "register_%s_listener".formatted(eventName), args);
 
           var functionCall =
               new ScriptFunctionCall("start_%s_listener".formatted(eventName), List.of(listenerId));

@@ -962,7 +962,7 @@ def register_chat_message_interceptor(
   handler_id = await_script_function("register_chat_intercept_listener", (prefix, pattern))
 
   send_script_function_request(
-      "start_chat_message_interceptor", (handler_id,), handler, exception_handler)
+      "start_chat_intercept_listener", (handler_id,), handler, exception_handler)
 
   return handler_id
 
