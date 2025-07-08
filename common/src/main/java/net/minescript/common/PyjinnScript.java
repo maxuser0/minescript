@@ -858,6 +858,8 @@ public class PyjinnScript {
             nameMappings::getRuntimeFieldName,
             nameMappings::getRuntimeMethodNames);
 
+    script.globals().setVariable("__argv__", boundCommand.command());
+
     // TODO(maxuser): Cache minescriptLibraryAst for reuse across script jobs.
     Path minescriptLibraryPath = Paths.get("minescript", "system", "lib", "minescript.pyj");
     String minescriptLibraryCode = Files.readString(minescriptLibraryPath);

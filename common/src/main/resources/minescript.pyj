@@ -16,7 +16,7 @@ Minescript = JavaClass("net.minescript.common.Minescript")
 # TODO(maxuser): Replace this with a proper sys.pjn module.
 @dataclass
 class __Sys__:
-  argv = []
+  argv = __argv__
 
 sys = __Sys__()
 
