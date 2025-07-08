@@ -1585,6 +1585,19 @@ public class Minescript {
       taskList.run();
     }
 
+    // Process render event listeners from Pyjinn scripts.
+    JsonObject json = null;
+    for (var entry : renderEventListeners.entrySet()) {
+      var listener = entry.getValue();
+      if (listener.isActive()) {
+        if (json == null) {
+          json = new JsonObject();
+          json.addProperty("type", "render");
+        }
+        listener.respond(json);
+      }
+    }
+
     if (++worldRenderEventCounter % config.ticksPerCycle() == 0) {
       var minecraft = Minecraft.getInstance();
       var player = minecraft.player;
@@ -1981,6 +1994,8 @@ public class Minescript {
   // "register_key_listener") which is considered the listener ID. But the funcCallId
   // associated with the actual listening within the EventHandler corresponds to the start method
   // (e.g. "start_key_listener").
+  private static Map<JobOperationId, EventHandler> tickEventListeners = new ConcurrentHashMap<>();
+  private static Map<JobOperationId, EventHandler> renderEventListeners = new ConcurrentHashMap<>();
   private static Map<JobOperationId, EventHandler> keyEventListeners = new ConcurrentHashMap<>();
   private static Map<JobOperationId, EventHandler> mouseEventListeners = new ConcurrentHashMap<>();
   private static Map<JobOperationId, EventHandler> chatEventListeners = new ConcurrentHashMap<>();
@@ -1998,6 +2013,8 @@ public class Minescript {
 
   private static ImmutableList<Map<JobOperationId, EventHandler>> eventHandlerMaps =
       ImmutableList.of(
+          tickEventListeners,
+          renderEventListeners,
           keyEventListeners,
           mouseEventListeners,
           chatEventListeners,
@@ -2464,6 +2481,18 @@ public class Minescript {
           }
           return blocks;
         }
+
+      case "register_tick_listener":
+        functionCall.expectNotRunningAsTask();
+        args.expectSize(0);
+        return registerEventHandler(
+            job, functionName, funcCallId, tickEventListeners, Optional.empty());
+
+      case "register_render_listener":
+        functionCall.expectNotRunningAsTask();
+        args.expectSize(0);
+        return registerEventHandler(
+            job, functionName, funcCallId, renderEventListeners, Optional.empty());
 
       case "register_key_listener":
         functionCall.expectNotRunningAsTask();
@@ -3099,6 +3128,8 @@ public class Minescript {
       JobControl job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
     Map<JobOperationId, EventHandler> handlerMap =
         switch (functionCall.name()) {
+          case "start_tick_listener" -> tickEventListeners;
+          case "start_render_listener" -> renderEventListeners;
           case "start_key_listener" -> keyEventListeners;
           case "start_mouse_listener" -> mouseEventListeners;
           case "start_chat_listener" -> chatEventListeners;
@@ -4006,6 +4037,19 @@ public class Minescript {
   public static void onClientWorldTick() {
     for (var taskList : tickTaskLists.values()) {
       taskList.run();
+    }
+
+    // Process tick event listeners from Pyjinn scripts.
+    JsonObject json = null;
+    for (var entry : tickEventListeners.entrySet()) {
+      var listener = entry.getValue();
+      if (listener.isActive()) {
+        if (json == null) {
+          json = new JsonObject();
+          json.addProperty("type", "tick");
+        }
+        listener.respond(json);
+      }
     }
 
     lastTickStartTime = System.currentTimeMillis();

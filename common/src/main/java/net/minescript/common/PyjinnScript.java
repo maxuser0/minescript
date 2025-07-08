@@ -886,6 +886,8 @@ public class PyjinnScript {
 
   private static final Set<String> EVENT_NAMES =
       Set.of(
+          "tick",
+          "render",
           "key",
           "mouse",
           "chat",
