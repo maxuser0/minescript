@@ -21,8 +21,22 @@ class __Sys__:
 sys = __Sys__()
 
 
+def unbox_json_primitive(json):
+  if json.isJsonNull():
+    return None
+  elif json.isJsonPrimitive():
+    primitive = json.getAsJsonPrimitive()
+    if primitive.isString():
+      return primitive.getAsString()
+    elif primitive.isBoolean():
+      return primitive.getAsBoolean()
+    elif primitive.isNumber():
+      return primitive.getAsNumber()
+  return json
+
+
 def __mcall__(name: str, args):
-  return Minescript.call(__job__, 0, name, args.getJavaList())
+  return unbox_json_primitive(Minescript.call(__job__, 0, name, args.getJavaList()))
 
 
 def execute(command: str):
@@ -415,7 +429,11 @@ def player_get_targeted_block(max_distance: float = 20) -> Union[TargetedBlock, 
 
   Since: v3.0
   """
-  return __mcall__("player_get_targeted_block", [max_distance])
+  # TODO(maxuser): Return JsonObject matching TargetedBlock from Java.
+  result = __mcall__("player_get_targeted_block", [max_distance])
+  if result is None:
+    return None
+  return TargetedBlock(result[0], result[1], result[2], result[3])
 
 
 @dataclass
