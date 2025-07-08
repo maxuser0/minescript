@@ -6,7 +6,6 @@ package net.minescript.common;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.HashMultimap;
-import com.google.common.collect.ImmutableMap;
 import com.google.gson.JsonElement;
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -34,21 +33,6 @@ public class PyjinnScript {
   private static final Logger LOGGER = LogManager.getLogger();
 
   private PyjinnScript() {}
-
-  private static void initBuiltinFunctions(Script script) {
-    if (builtinFunctions == null) {
-      var mapBuilder = new ImmutableMap.Builder<String, Script.Function>();
-      for (String name : BUILTIN_FUNCTIONS) {
-        mapBuilder.put(name, new BuiltinScriptFunction(name));
-      }
-      builtinFunctions = mapBuilder.build();
-    }
-    var globals = script.globals();
-    globals.setVariable("add_event_listener", new AddEventListener());
-    for (var entry : builtinFunctions.entrySet()) {
-      globals.setVariable(entry.getKey(), entry.getValue());
-    }
-  }
 
   public interface NameMappings {
     String getRuntimeClassName(String prettyClassName);
@@ -798,8 +782,8 @@ public class PyjinnScript {
       setState(JobState.RUNNING);
 
       try {
-        initBuiltinFunctions(script);
         script.globals().setVariable("__job__", this);
+        script.globals().setVariable("add_event_listener", new AddEventListener());
         script.exec();
       } catch (Exception e) {
         systemMessageQueue.logException(e);
@@ -839,7 +823,7 @@ public class PyjinnScript {
       Runnable doneCallback)
       throws Exception {
     var execCommand = config.scriptConfig().getExecutableCommand(boundCommand);
-    String sourceFilename = execCommand.command()[0];
+    String scriptFilename = execCommand.command()[0];
     boolean isMinecraftClassObfuscated =
         !Minecraft.class.getName().equals("net.minecraft.client.Minecraft");
 
@@ -848,7 +832,7 @@ public class PyjinnScript {
     if (isMinecraftClassObfuscated) {
       String mcVersion = SharedConstants.getCurrentVersion().name();
       var scriptMetadata =
-          ScriptNameMappings.loadScriptMetadata(sourceFilename, modLoaderName, mcVersion);
+          ScriptNameMappings.loadScriptMetadata(scriptFilename, modLoaderName, mcVersion);
       if (scriptMetadata.mappings().isPresent()) {
         nameMappings = scriptMetadata.mappings().get();
       } else {
@@ -867,8 +851,6 @@ public class PyjinnScript {
       nameMappings = new NoNameMappings();
     }
 
-    String sourceCode = Files.readString(Paths.get(sourceFilename));
-    JsonElement ast = PyjinnParser.parse(sourceCode);
     var script =
         new Script(
             PyjinnScript.class.getClassLoader(),
@@ -876,7 +858,16 @@ public class PyjinnScript {
             nameMappings::getRuntimeFieldName,
             nameMappings::getRuntimeMethodNames);
 
-    script.parse(ast, sourceFilename);
+    // TODO(maxuser): Cache minescriptLibraryAst for reuse across script jobs.
+    Path minescriptLibraryPath = Paths.get("minescript", "system", "lib", "minescript.pyj");
+    String minescriptLibraryCode = Files.readString(minescriptLibraryPath);
+    JsonElement minescriptLibraryAst = PyjinnParser.parse(minescriptLibraryCode);
+    script.parse(minescriptLibraryAst, minescriptLibraryPath.getFileName().toString());
+
+    String scriptCode = Files.readString(Paths.get(scriptFilename));
+    JsonElement scriptAst = PyjinnParser.parse(scriptCode);
+    script.parse(scriptAst, scriptFilename);
+
     var job =
         new PyjinnJob(
             jobId,
@@ -889,72 +880,6 @@ public class PyjinnScript {
             doneCallback);
 
     return job;
-  }
-
-  private static Map<String, Script.Function> builtinFunctions = null;
-
-  private static final String[] BUILTIN_FUNCTIONS = {
-    "player_position",
-    "player_name",
-    "getblock",
-    "getblocklist",
-    "unregister_event_handler",
-    "set_nickname",
-    "player_hand_items",
-    "player_inventory",
-    // Removed in Minescript 5.0: "player_inventory_slot_to_hotbar",
-    "player_inventory_select_slot",
-    "press_key_bind",
-    "player_press_forward",
-    "player_press_backward",
-    "player_press_left",
-    "player_press_right",
-    "player_press_jump",
-    "player_press_sprint",
-    "player_press_sneak",
-    "player_press_pick_item",
-    "player_press_use",
-    "player_press_attack",
-    "player_press_swap_hands",
-    "player_press_drop",
-    "player_orientation",
-    "player_set_orientation",
-    "player_get_targeted_block",
-    "player_get_targeted_entity",
-    "player_health",
-    "player",
-    "players",
-    "entities",
-    "version_info",
-    "world_info",
-    "screenshot",
-    "screen_name",
-    "container_get_items",
-    "player_look_at",
-    "show_chat_screen",
-    "job_info",
-    "append_chat_history",
-    "chat_input",
-    "set_chat_input",
-    "execute",
-    "echo_json",
-    "echo",
-    "chat",
-    "log"
-  };
-
-  // Non-async script functions don't need a function call ID, so pass zero for it.
-  public record BuiltinScriptFunction(String name) implements Script.Function {
-    @Override
-    public Object call(Script.Environment env, Object... params) {
-      try {
-        var job = (JobControl) env.getVariable("__job__");
-        long noFuncCallId = 0; // Non-async script functions don't need a func call ID.
-        return Minescript.call(job, noFuncCallId, name, List.of(params));
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    }
   }
 
   private static final Set<String> EVENT_NAMES =

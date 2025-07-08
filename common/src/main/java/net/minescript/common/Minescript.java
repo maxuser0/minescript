@@ -191,7 +191,6 @@ public class Minescript {
   }
 
   private static void loadMinescriptResources() {
-    Path minescriptDir = Paths.get(MINESCRIPT_DIR);
     Path systemDir = Paths.get(MINESCRIPT_DIR, "system");
     Path libDir = systemDir.resolve("lib");
     Path execDir = systemDir.resolve("exec");
@@ -202,6 +201,7 @@ public class Minescript {
     copyJarResourceToFile("version.txt", systemDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("minescript.py", libDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("minescript_runtime.py", libDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("minescript.pyj", libDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("help.py", execDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("copy_blocks.py", execDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("paste.py", execDir, FileOverwritePolicy.OVERWRITTE);

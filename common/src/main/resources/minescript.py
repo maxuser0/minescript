@@ -2547,3 +2547,6 @@ def java_release(*targets: List[JavaHandle]):
 
 java_release = ScriptFunction("java_release", java_release)
 
+
+def add_event_listener(event_type: str, callback: Callable[[Any], None], **args):
+  raise NotImplementedError("add_event_listener is supported in Pyjinn scripts byt no Python")
