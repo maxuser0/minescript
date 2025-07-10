@@ -436,7 +436,7 @@ def player_get_targeted_block(max_distance: float = 20) -> Union[TargetedBlock, 
   result = __mcall__("player_get_targeted_block", [max_distance])
   if result is None:
     return None
-  return TargetedBlock(result[0], result[1], result[2], result[3])
+  return TargetedBlock(*[unbox_json_primitive(x) for x in result])
 
 
 @dataclass
