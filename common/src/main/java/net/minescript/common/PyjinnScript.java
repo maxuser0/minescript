@@ -573,7 +573,7 @@ public class PyjinnScript {
     /**
      * Returns inline mappings loaded from a script based on the mod loader and MC version.
      *
-     * <p>Loads mappings from a script file looking for a comment section that starts with a line
+     * <p>Loads mappings from script source looking for a comment section that starts with a line
      * like "# &lt;mappings Fabric 1.21.6&gt;" and parses lines until "# &lt;/mappings&gt;".
      *
      * <p>The file format is:
@@ -588,13 +588,8 @@ public class PyjinnScript {
      * </ul>
      */
     public static ScriptMetadata loadScriptMetadata(
-        String sourceFilename, String modLoaderName, String mcVersion) throws IOException {
-      Path scriptPath = Paths.get(sourceFilename);
-
-      if (!Files.exists(scriptPath)) {
-        return new ScriptMetadata(sourceFilename);
-      }
-
+        String sourceFilename, String scriptCode, String modLoaderName, String mcVersion)
+        throws IOException {
       Map<String, String> classMappings = new HashMap<>();
       Map<ClassMemberKey, String> fieldMappings = new HashMap<>();
       HashMultimap<ClassMemberKey, String> methodMappings = HashMultimap.create();
@@ -604,99 +599,97 @@ public class PyjinnScript {
       final String mappingsEndLine = "# </mappings>";
 
       boolean foundMappings = false;
-      try (BufferedReader reader = new BufferedReader(new FileReader(scriptPath.toFile()))) {
-        String line;
-        int lineNumber = 0;
-        while ((line = reader.readLine()) != null) {
-          lineNumber++;
+      int lineNumber = 0;
+      Iterable<String> lines = scriptCode.lines()::iterator;
+      for (String line : lines) {
+        lineNumber++;
 
-          if (line.trim().equals("# @dump_active_mappings")) {
-            dumpActiveMappings = true;
-            continue;
+        if (line.trim().equals("# @dump_active_mappings")) {
+          dumpActiveMappings = true;
+          continue;
+        }
+
+        if (!foundMappings) {
+          if (line.startsWith(mappingsStartLine)) {
+            foundMappings = true;
+            LOGGER.info("Found matching `{}` in {}", line.trim().substring(2), sourceFilename);
           }
+          continue;
+        }
 
-          if (!foundMappings) {
-            if (line.startsWith(mappingsStartLine)) {
-              foundMappings = true;
-              LOGGER.info("Found matching `{}` in {}", line.trim().substring(2), sourceFilename);
-            }
-            continue;
-          }
+        if (line.startsWith(mappingsEndLine)) {
+          break;
+        }
 
-          if (line.startsWith(mappingsEndLine)) {
-            break;
-          }
+        line = line.startsWith("# ") ? line.substring(2) : line; // Remove leading "# "
+        line = line.split("#")[0].trim(); // Remove comments.
+        if (line.isEmpty()) {
+          continue;
+        }
 
-          line = line.startsWith("# ") ? line.substring(2) : line; // Remove leading "# "
-          line = line.split("#")[0].trim(); // Remove comments.
-          if (line.isEmpty()) {
-            continue;
-          }
-
-          String[] parts = line.split("\\s+");
-          if (parts[0].equals("class")) {
-            // Parse class mapping: "class package.PrettyClassName pkg.RuntimeClassName"
-            if (parts.length != 3) {
-              LOGGER.warn(
-                  "Malformed line at {}:{}: expected 3 words on `class` line but got:\n{}",
-                  sourceFilename,
-                  lineNumber,
-                  line);
-              continue;
-            }
-            String prettyClassName = parts[1];
-            String runtimeClassName = parts[2];
-            classMappings.put(prettyClassName, runtimeClassName);
-          } else if (parts[0].equals("field")) {
-            // Field mapping: "field pkg.RuntimeClassName prettyFieldName runtimeFieldName"
-            if (parts.length != 4) {
-              LOGGER.warn(
-                  "Malformed line at {}:{}: expected 4 words on line but got:\n{}",
-                  sourceFilename,
-                  lineNumber,
-                  line);
-              continue;
-            }
-            String runtimeClassName = parts[1];
-            String prettyMemberName = parts[2];
-            String runtimeMemberName = parts[3];
-            String oldFieldName =
-                fieldMappings.put(
-                    new ClassMemberKey(runtimeClassName, prettyMemberName), runtimeMemberName);
-            if (oldFieldName != null) {
-              LOGGER.warn(
-                  "{}:{}: Field `{}` of class `{}` previously mapped to `{}` now mapped to `{}`:\n"
-                      + "{}",
-                  sourceFilename,
-                  lineNumber,
-                  prettyMemberName,
-                  runtimeClassName,
-                  oldFieldName,
-                  runtimeMemberName,
-                  line);
-            }
-          } else if (parts[0].equals("method")) {
-            // Method mapping: "method pkg.RuntimeClassName prettyMethodName runtimeMethodName"
-            if (parts.length != 4) {
-              LOGGER.warn(
-                  "Malformed line at {}:{}: expected 4 words on `method` line but got:\n{}",
-                  sourceFilename,
-                  lineNumber,
-                  line);
-              continue;
-            }
-            String runtimeClassName = parts[1];
-            String prettyMemberName = parts[2];
-            String runtimeMemberName = parts[3];
-            methodMappings.put(
-                new ClassMemberKey(runtimeClassName, prettyMemberName), runtimeMemberName);
-          } else {
+        String[] parts = line.split("\\s+");
+        if (parts[0].equals("class")) {
+          // Parse class mapping: "class package.PrettyClassName pkg.RuntimeClassName"
+          if (parts.length != 3) {
             LOGGER.warn(
-                "Unexpected format at {}:{}: unrecognized mapping metadata:\n{}",
+                "Malformed line at {}:{}: expected 3 words on `class` line but got:\n{}",
                 sourceFilename,
                 lineNumber,
                 line);
+            continue;
           }
+          String prettyClassName = parts[1];
+          String runtimeClassName = parts[2];
+          classMappings.put(prettyClassName, runtimeClassName);
+        } else if (parts[0].equals("field")) {
+          // Field mapping: "field pkg.RuntimeClassName prettyFieldName runtimeFieldName"
+          if (parts.length != 4) {
+            LOGGER.warn(
+                "Malformed line at {}:{}: expected 4 words on line but got:\n{}",
+                sourceFilename,
+                lineNumber,
+                line);
+            continue;
+          }
+          String runtimeClassName = parts[1];
+          String prettyMemberName = parts[2];
+          String runtimeMemberName = parts[3];
+          String oldFieldName =
+              fieldMappings.put(
+                  new ClassMemberKey(runtimeClassName, prettyMemberName), runtimeMemberName);
+          if (oldFieldName != null) {
+            LOGGER.warn(
+                "{}:{}: Field `{}` of class `{}` previously mapped to `{}` now mapped to `{}`:\n"
+                    + "{}",
+                sourceFilename,
+                lineNumber,
+                prettyMemberName,
+                runtimeClassName,
+                oldFieldName,
+                runtimeMemberName,
+                line);
+          }
+        } else if (parts[0].equals("method")) {
+          // Method mapping: "method pkg.RuntimeClassName prettyMethodName runtimeMethodName"
+          if (parts.length != 4) {
+            LOGGER.warn(
+                "Malformed line at {}:{}: expected 4 words on `method` line but got:\n{}",
+                sourceFilename,
+                lineNumber,
+                line);
+            continue;
+          }
+          String runtimeClassName = parts[1];
+          String prettyMemberName = parts[2];
+          String runtimeMemberName = parts[3];
+          methodMappings.put(
+              new ClassMemberKey(runtimeClassName, prettyMemberName), runtimeMemberName);
+        } else {
+          LOGGER.warn(
+              "Unexpected format at {}:{}: unrecognized mapping metadata:\n{}",
+              sourceFilename,
+              lineNumber,
+              line);
         }
       }
 
@@ -767,14 +760,10 @@ public class PyjinnScript {
         Script script,
         Config config,
         SystemMessageQueue systemMessageQueue,
-        Consumer<String> stdoutConsumer,
         Runnable doneCallback) {
       super(jobId, command, task, config, systemMessageQueue, doneCallback);
       this.script = script;
       this.task = task;
-
-      // TODO(maxuser): Support stderr redirection, too.
-      script.redirectStdout(stdoutConsumer);
     }
 
     @Override
@@ -783,7 +772,6 @@ public class PyjinnScript {
 
       try {
         script.globals().setVariable("__job__", this);
-        script.globals().setVariable("add_event_listener", new AddEventListener());
         script.exec();
       } catch (Exception e) {
         systemMessageQueue.logException(e);
@@ -823,7 +811,34 @@ public class PyjinnScript {
       Runnable doneCallback)
       throws Exception {
     var execCommand = config.scriptConfig().getExecutableCommand(boundCommand);
-    String scriptFilename = execCommand.command()[0];
+
+    var script =
+        loadScript(
+            execCommand.command(),
+            Files.readString(Paths.get(execCommand.command()[0])),
+            stdoutConsumer,
+            modLoaderName);
+
+    var job =
+        new PyjinnJob(
+            jobId,
+            boundCommand,
+            new PyjinnTask(systemMessageQueue),
+            script,
+            config,
+            systemMessageQueue,
+            doneCallback);
+
+    return job;
+  }
+
+  public static Script loadScript(
+      String[] scriptCommand,
+      String scriptCode,
+      Consumer<String> stdoutConsumer,
+      String modLoaderName)
+      throws Exception {
+    String scriptFilename = scriptCommand[0];
     boolean isMinecraftClassObfuscated =
         !Minecraft.class.getName().equals("net.minecraft.client.Minecraft");
 
@@ -832,7 +847,8 @@ public class PyjinnScript {
     if (isMinecraftClassObfuscated) {
       String mcVersion = SharedConstants.getCurrentVersion().name();
       var scriptMetadata =
-          ScriptNameMappings.loadScriptMetadata(scriptFilename, modLoaderName, mcVersion);
+          ScriptNameMappings.loadScriptMetadata(
+              scriptFilename, scriptCode, modLoaderName, mcVersion);
       if (scriptMetadata.mappings().isPresent()) {
         nameMappings = scriptMetadata.mappings().get();
       } else {
@@ -843,7 +859,7 @@ public class PyjinnScript {
         } else {
           throw new IllegalArgumentException(
               "Runtime is using obfuscated names for Java code and no mappings found for script: "
-                  + execCommand.command()[0]
+                  + scriptCommand[0]
                   + "\nFor more information see: minescript.net/mappings");
         }
       }
@@ -858,7 +874,11 @@ public class PyjinnScript {
             nameMappings::getRuntimeFieldName,
             nameMappings::getRuntimeMethodNames);
 
-    script.globals().setVariable("__argv__", boundCommand.command());
+    // TODO(maxuser): Support stderr redirection, too.
+    script.redirectStdout(stdoutConsumer);
+
+    script.globals().setVariable("__argv__", scriptCommand);
+    script.globals().setVariable("add_event_listener", new AddEventListener());
 
     // TODO(maxuser): Cache minescriptLibraryAst for reuse across script jobs.
     Path minescriptLibraryPath = Paths.get("minescript", "system", "lib", "minescript.pyj");
@@ -866,22 +886,9 @@ public class PyjinnScript {
     JsonElement minescriptLibraryAst = PyjinnParser.parse(minescriptLibraryCode);
     script.parse(minescriptLibraryAst, minescriptLibraryPath.getFileName().toString());
 
-    String scriptCode = Files.readString(Paths.get(scriptFilename));
     JsonElement scriptAst = PyjinnParser.parse(scriptCode);
     script.parse(scriptAst, scriptFilename);
-
-    var job =
-        new PyjinnJob(
-            jobId,
-            boundCommand,
-            new PyjinnTask(systemMessageQueue),
-            script,
-            config,
-            systemMessageQueue,
-            stdoutConsumer,
-            doneCallback);
-
-    return job;
+    return script;
   }
 
   private static final Set<String> EVENT_NAMES =

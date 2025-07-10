@@ -18,6 +18,9 @@ Minescript = JavaClass("net.minescript.common.Minescript")
 class __Sys__:
   argv = __argv__
 
+  def exit(self, status: int = None):
+    __job__.requestKill()
+
 sys = __Sys__()
 
 

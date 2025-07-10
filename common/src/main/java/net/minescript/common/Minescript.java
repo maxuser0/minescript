@@ -137,9 +137,6 @@ public class Minescript {
     }
 
     String lastRunVersion = getLastRunVersion();
-    if (lastRunVersion.equals(LEGACY_VERSION)) {
-      deleteLegacyFiles();
-    }
     Minescript.version = getCurrentVersion();
     if (!version.equals(lastRunVersion)) {
       LOGGER.info(
@@ -147,6 +144,11 @@ public class Minescript {
           Minescript.version,
           lastRunVersion);
 
+      LOGGER.info("Deleting files from version `{}` of Minescript...", lastRunVersion);
+      deleteObsoleteFiles();
+
+      LOGGER.info(
+          "Loading files for current version `{}` of Minescript from jar resources...", version);
       loadMinescriptResources();
     }
 
@@ -177,17 +179,23 @@ public class Minescript {
     }
   }
 
-  private static void deleteLegacyFiles() {
-    LOGGER.info("Deleting files from legacy version of Minescript...");
+  private static void deleteObsoleteFiles() {
+    Path minescriptDir = Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR);
+    Path systemDir = minescriptDir.resolve("system");
+    Path execDir = systemDir.resolve("exec");
 
     // Delete files that used to be stored directly within the `minescript` dir in legacy versions.
-    deleteMinescriptFile("version.txt");
-    deleteMinescriptFile("minescript.py");
-    deleteMinescriptFile("minescript_runtime.py");
-    deleteMinescriptFile("help.py");
-    deleteMinescriptFile("copy.py");
-    deleteMinescriptFile("paste.py");
-    deleteMinescriptFile("eval.py");
+    deleteMinescriptFile(minescriptDir, "version.txt");
+    deleteMinescriptFile(minescriptDir, "minescript.py");
+    deleteMinescriptFile(minescriptDir, "minescript.pyj");
+    deleteMinescriptFile(minescriptDir, "minescript_runtime.py");
+    deleteMinescriptFile(minescriptDir, "help.py");
+    deleteMinescriptFile(minescriptDir, "copy.py");
+    deleteMinescriptFile(minescriptDir, "paste.py");
+    deleteMinescriptFile(minescriptDir, "eval.py");
+
+    // Delete Python files replaced by Pyjinn equivalents in v5.0.
+    deleteMinescriptFile(execDir, "eval.py");
   }
 
   private static void loadMinescriptResources() {
@@ -205,11 +213,12 @@ public class Minescript {
     copyJarResourceToFile("help.py", execDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("copy_blocks.py", execDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("paste.py", execDir, FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("eval.py", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("eval.pyj", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("pyeval.py", execDir, FileOverwritePolicy.OVERWRITTE);
   }
 
-  private static void deleteMinescriptFile(String fileName) {
-    var fileToDelete = new File(Paths.get(MINESCRIPT_DIR, fileName).toString());
+  private static void deleteMinescriptFile(Path dir, String fileName) {
+    var fileToDelete = new File(dir.resolve(fileName).toString());
     if (fileToDelete.exists()) {
       if (fileToDelete.delete()) {
         LOGGER.info("Deleted obsolete file: `{}`", fileToDelete.getPath());
@@ -876,6 +885,14 @@ public class Minescript {
   private static JobManager jobs = new JobManager();
 
   private static SystemMessageQueue systemMessageQueue = new SystemMessageQueue();
+
+  public static Script loadScript(List<String> scriptCommand, String scriptCode) throws Exception {
+    return PyjinnScript.loadScript(
+        scriptCommand.toArray(String[]::new),
+        scriptCode,
+        Minescript::processPlainText,
+        platform.modLoaderName());
+  }
 
   private static boolean checkMinescriptDir() {
     Path minescriptDir = Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR);

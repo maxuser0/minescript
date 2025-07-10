@@ -6,10 +6,10 @@
 # make edits to this file, make sure to save a backup copy when upgrading to a
 # new version of Minescript.
 
-r"""eval v5.0 distributed via Minescript jar file
+r"""pyeval v5.0 distributed via Minescript jar file
 
 Usage:
-  \eval <pythonCode> [<line2> [<line3> ...]]
+  \pyeval <pythonCode> [<line2> [<line3> ...]]
 
 Executes <pythonCode> (and optional subsequent lines
 <line2>, <line3>, etc) as either a Python expression (code that
@@ -22,13 +22,13 @@ qualification.
 
 Examples:
   Print information about nearby entities to the chat screen:
-  \eval "entities()"
+  \pyeval "entities()"
 
   Print the names of nearby entities to the chat screen:
-  \eval "for e in entities(): echo(e['name'])"
+  \pyeval "for e in entities(): echo(e['name'])"
 
   Import `time` module, sleep 3 seconds, and take a screenshot:
-  \eval "import time" "time.sleep(3)" "screenshot()"
+  \pyeval "import time" "time.sleep(3)" "screenshot()"
 
 """
 
@@ -61,9 +61,9 @@ def run(python_code: str) -> None:
 if __name__ == "__main__":
   if len(sys.argv) < 2:
     print(
-        f"eval.py: Expected at least 1 parameter, instead got {len(sys.argv) - 1}: {sys.argv[1:]}",
+        f"pyeval.py: Expected at least 1 parameter, instead got {len(sys.argv) - 1}: {sys.argv[1:]}",
         file=sys.stderr)
-    print(r"Usage: \eval <pythonCode> [<line2> [<line3> ...]]", file=sys.stderr)
+    print(r"Usage: \pyeval <pythonCode> [<line2> [<line3> ...]]", file=sys.stderr)
     sys.exit(1)
 
   run("\n".join(sys.argv[1:]))

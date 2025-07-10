@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
+# SPDX-License-Identifier: GPL-3.0-only
+
+# WARNING: This file is generated from the Minescript jar file. This file will
+# be overwritten automatically when Minescript updates to a new version. If you
+# make edits to this file, make sure to save a backup copy when upgrading to a
+# new version of Minescript.
+
+r"""eval v5.0 distributed via Minescript jar file
+
+Usage:
+  \eval <pythonCode> [<line2> [<line3> ...]]
+
+Executes <pythonCode> (and optional subsequent lines
+<line2>, <line3>, etc) as Python statements.
+
+Functions from minescript.pyj are available automatically without
+qualification.
+
+Examples:
+  Print information about nearby entities to the chat screen:
+  \eval "entities()"
+
+  Print the names of nearby entities to the chat screen:
+  \eval "for e in entities(): echo(e['name'])"
+
+  # TODO(maxuser): Replace example with set_timeout(...)
+  Take a screenshot after 3 seconds:
+  \eval 'ticks = 0' 'def on_tick(event):' '  global ticks' '  ticks += 1' '  if ticks >= 20 * 3:' '    screenshot()' '    sys.exit()' 'add_event_listener("tick", on_tick)'
+"""
+
+Minescript = JavaClass("net.minescript.common.Minescript")
+
+source = "\n".join(tuple(sys.argv[1:]))
+if not source:
+  print("Usage: eval SOURCE_CODE")
+else:
+  if "\n" not in source and not source.startswith("print("):
+    source = f"print({source})"
+
+  script = Minescript.loadScript(["eval"].getJavaList(), source)
+  script.globals().setVariable("__job__", __job__)
+  script.exec()
