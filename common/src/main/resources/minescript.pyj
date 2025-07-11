@@ -830,32 +830,29 @@ def player_look_at(x: float, y: float, z: float):
   return __mcall__("player_look_at", [x, y, z])
 
 
-class _TimerCallback:
-  def __init__(self, repeat: bool, callback: Callable[[], None], timer_millis: int, *args):
-    self.repeat = repeat
-    self.callback = callback
-    self.timer_millis = timer_millis
-    self.args = args
-    self.activation_time = System.currentTimeMillis() + timer_millis
-    self.listener_id = -1
-
-  def on_render(self, event):
-    now = System.currentTimeMillis()
-    if now >= self.activation_time:
-      self.callback(*self.args)
-      if self.repeat:
-        self.activation_time = now + self.timer_millis
-      else:
-        remove_event_listener(self.listener_id)
-
-
 def set_interval(callback: Callable[[], None], timer_millis: int, *args) -> int:
-  timer = _TimerCallback(True, callback, timer_millis, *args)
-  return add_event_listener("render", timer.on_render)
+  activation_time = System.currentTimeMillis() + timer_millis
+
+  def on_render(event):
+    nonlocal activation_time
+    now = System.currentTimeMillis()
+    if now >= activation_time:
+      callback(*args)
+      activation_time = now + timer_millis
+
+  return add_event_listener("render", on_render)
 
 
 def set_timeout(callback: Callable[[], None], timer_millis: int, *args) -> int:
-  timer = _TimerCallback(False, callback, timer_millis, *args)
-  listener_id = add_event_listener("render", timer.on_render)
-  timer.listener_id = listener_id
+  listener_id = -1
+  activation_time = System.currentTimeMillis() + timer_millis
+
+  def on_render(event):
+    nonlocal listener_id
+    now = System.currentTimeMillis()
+    if now >= activation_time:
+      callback(*args)
+      remove_event_listener(listener_id)
+
+  listener_id = add_event_listener("render", on_render)
   return listener_id
