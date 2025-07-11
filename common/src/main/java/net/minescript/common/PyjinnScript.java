@@ -879,6 +879,7 @@ public class PyjinnScript {
 
     script.globals().setVariable("__argv__", scriptCommand);
     script.globals().setVariable("add_event_listener", new AddEventListener());
+    script.globals().setVariable("remove_event_listener", new RemoveEventListener());
 
     // TODO(maxuser): Cache minescriptLibraryAst for reuse across script jobs.
     Path minescriptLibraryPath = Paths.get("minescript", "system", "lib", "minescript.pyj");
@@ -969,12 +970,42 @@ public class PyjinnScript {
           }
         } else {
           throw new IllegalArgumentException(
-              "Expected second param to `%s` to be callable but got %s"
-                  .formatted(eventName, params[1]));
+              "Expected second param to `add_event_listener` to be callable but got %s"
+                  .formatted(params[1]));
         }
-        return null;
+        return listenerId;
       } catch (Exception e) {
         throw new RuntimeException(e);
+      }
+    }
+  }
+
+  public static class RemoveEventListener implements Script.Function {
+    @Override
+    public Object call(Script.Environment env, Object... params) {
+      expectNumParams(params, 1);
+      if (params[0] instanceof Number listenerNum) {
+        try {
+          var job = (PyjinnJob) env.getVariable("__job__");
+          Long listenerId = listenerNum.longValue();
+          job.cancelOperation(listenerId);
+          var removedListener = job.task.callbackMap.remove(listenerId);
+          if (removedListener != null) {
+            // If this is the last listener being removed, then kill the job.
+            if (job.task.callbackMap.isEmpty()) {
+              job.requestKill();
+            }
+            return true;
+          } else {
+            return false;
+          }
+        } catch (Exception e) {
+          throw new RuntimeException(e);
+        }
+      } else {
+        throw new IllegalArgumentException(
+            "Expected param to `remove_event_listener` to be java.lang.Long but got %s"
+                .formatted(params[0]));
       }
     }
   }

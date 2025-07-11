@@ -2548,6 +2548,18 @@ def java_release(*targets: List[JavaHandle]):
 java_release = ScriptFunction("java_release", java_release)
 
 
-def add_event_listener(event_type: str, callback: Callable[[Any], None], **args):
+def add_event_listener(event_type: str, callback: Callable[[Any], None], **args) -> int:
   raise NotImplementedError(
       "add_event_listener is supported in Pyjinn scripts but not externally executed Python scripts")
+
+def remove_event_listener(listener_id: int) -> bool:
+  raise NotImplementedError(
+      "remove_event_listener is supported in Pyjinn scripts but not externally executed Python scripts")
+
+def set_interval(callback: Callable[[], None], timer_millis: int, *args) -> int:
+  raise NotImplementedError(
+      "set_interval is supported in Pyjinn scripts but not externally executed Python scripts")
+
+def set_timeout(callback: Callable[[], None], timer_millis: int, *args) -> int:
+  raise NotImplementedError(
+      "set_timeout is supported in Pyjinn scripts but not externally executed Python scripts")
