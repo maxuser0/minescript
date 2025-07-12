@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -47,7 +48,7 @@ public abstract class Job implements JobControl {
         SystemMessageQueue systemMessageQueue,
         ScriptFunctionRunner scriptFunctionRunner,
         Runnable doneCallback) {
-      super(jobId, command, task, config, systemMessageQueue, doneCallback);
+      super(jobId, command, task, config, systemMessageQueue, null, doneCallback);
 
       this.scriptFunctionRunner = scriptFunctionRunner;
       this.objects = new ResourceTracker<>(Object.class, jobId, config);
@@ -177,10 +178,12 @@ public abstract class Job implements JobControl {
   protected final Config config;
   protected final SystemMessageQueue systemMessageQueue;
   private volatile JobState state = JobState.NOT_STARTED;
-  private Runnable doneCallback;
-  private Queue<Message> jobTickQueue = new ConcurrentLinkedQueue<Message>();
-  private Queue<Message> jobRenderQueue = new ConcurrentLinkedQueue<Message>();
-  private Lock lock = new ReentrantLock(true); // true indicates a fair lock to avoid starvation
+  private final Consumer<Message> messageConsumer;
+  private final Runnable doneCallback;
+  private final Queue<Message> jobTickQueue = new ConcurrentLinkedQueue<Message>();
+  private final Queue<Message> jobRenderQueue = new ConcurrentLinkedQueue<Message>();
+  private final Lock lock =
+      new ReentrantLock(true); // true indicates a fair lock to avoid starvation
 
   // Key is unique within this job, typically a func call ID.
   private Map<Long, Operation> operations = new ConcurrentHashMap<>();
@@ -191,12 +194,14 @@ public abstract class Job implements JobControl {
       Task task,
       Config config,
       SystemMessageQueue systemMessageQueue,
+      Consumer<Message> messageConsumer,
       Runnable doneCallback) {
     this.jobId = jobId;
     this.command = command;
     this.task = task;
     this.config = config;
     this.systemMessageQueue = systemMessageQueue;
+    this.messageConsumer = messageConsumer == null ? jobTickQueue::add : messageConsumer;
     this.doneCallback = doneCallback;
   }
 
@@ -294,16 +299,16 @@ public abstract class Job implements JobControl {
     switch (command.redirects().stdout()) {
       case CHAT:
         if (text.startsWith("/")) {
-          tickQueue().add(Message.createMinecraftCommand(text.substring(1)));
+          messageConsumer.accept(Message.createMinecraftCommand(text.substring(1)));
         } else if (text.startsWith("\\")) {
-          tickQueue().add(Message.createMinescriptCommand(text.substring(1)));
+          messageConsumer.accept(Message.createMinescriptCommand(text.substring(1)));
         } else {
-          tickQueue().add(Message.createChatMessage(text));
+          messageConsumer.accept(Message.createChatMessage(text));
         }
         break;
       case DEFAULT:
       case ECHO:
-        tickQueue().add(Message.fromPlainText(text));
+        messageConsumer.accept(Message.fromPlainText(text));
         break;
       case LOG:
         LOGGER.info(text);
@@ -322,16 +327,16 @@ public abstract class Job implements JobControl {
     switch (command.redirects().stderr()) {
       case CHAT:
         if (text.startsWith("/")) {
-          tickQueue().add(Message.createMinecraftCommand(text.substring(1)));
+          messageConsumer.accept(Message.createMinecraftCommand(text.substring(1)));
         } else if (text.startsWith("\\")) {
-          tickQueue().add(Message.createMinescriptCommand(text.substring(1)));
+          messageConsumer.accept(Message.createMinescriptCommand(text.substring(1)));
         } else {
-          tickQueue().add(Message.createChatMessage(text));
+          messageConsumer.accept(Message.createChatMessage(text));
         }
         break;
       case DEFAULT:
       case ECHO:
-        tickQueue().add(Message.formatAsJsonColoredText(text, "yellow"));
+        messageConsumer.accept(Message.formatAsJsonColoredText(text, "yellow"));
         break;
       case LOG:
         LOGGER.info(text);

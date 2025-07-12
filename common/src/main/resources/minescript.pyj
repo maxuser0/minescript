@@ -14,10 +14,12 @@ Minescript standard library for Pyjinn scripts.
 System = JavaClass("java.lang.System")
 Minescript = JavaClass("net.minescript.common.Minescript")
 
-# TODO(maxuser): Replace this with a proper sys.pjn module.
+# TODO(maxuser): Replace this with a proper sys.pyj module.
 @dataclass
 class __Sys__:
   argv = __argv__
+  stdout = System.out
+  stderr = System.err
 
   def exit(self, status: int = None):
     __job__.requestKill()

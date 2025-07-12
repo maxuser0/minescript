@@ -20,7 +20,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
@@ -761,7 +760,14 @@ public class PyjinnScript {
         Config config,
         SystemMessageQueue systemMessageQueue,
         Runnable doneCallback) {
-      super(jobId, command, task, config, systemMessageQueue, doneCallback);
+      super(
+          jobId,
+          command,
+          task,
+          config,
+          systemMessageQueue,
+          Minescript::processMessage,
+          doneCallback);
       this.script = script;
       this.task = task;
     }
@@ -772,6 +778,8 @@ public class PyjinnScript {
 
       try {
         script.globals().setVariable("__job__", this);
+        script.redirectStdout(this::processStdout);
+        script.redirectStderr(this::processStderr);
         script.exec();
       } catch (Exception e) {
         systemMessageQueue.logException(e);
@@ -806,7 +814,6 @@ public class PyjinnScript {
       ScriptConfig.BoundCommand boundCommand,
       Config config,
       SystemMessageQueue systemMessageQueue,
-      Consumer<String> stdoutConsumer,
       String modLoaderName,
       Runnable doneCallback)
       throws Exception {
@@ -816,7 +823,6 @@ public class PyjinnScript {
         loadScript(
             execCommand.command(),
             Files.readString(Paths.get(execCommand.command()[0])),
-            stdoutConsumer,
             modLoaderName);
 
     var job =
@@ -832,11 +838,7 @@ public class PyjinnScript {
     return job;
   }
 
-  public static Script loadScript(
-      String[] scriptCommand,
-      String scriptCode,
-      Consumer<String> stdoutConsumer,
-      String modLoaderName)
+  public static Script loadScript(String[] scriptCommand, String scriptCode, String modLoaderName)
       throws Exception {
     String scriptFilename = scriptCommand[0];
     boolean isMinecraftClassObfuscated =
@@ -873,9 +875,6 @@ public class PyjinnScript {
             nameMappings::getRuntimeClassName,
             nameMappings::getRuntimeFieldName,
             nameMappings::getRuntimeMethodNames);
-
-    // TODO(maxuser): Support stderr redirection, too.
-    script.redirectStdout(stdoutConsumer);
 
     script.globals().setVariable("__argv__", scriptCommand);
     script.globals().setVariable("add_event_listener", new AddEventListener());

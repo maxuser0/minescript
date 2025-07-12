@@ -793,7 +793,6 @@ public class Minescript {
                 command,
                 config,
                 systemMessageQueue,
-                Minescript::processPlainText,
                 platform.modLoaderName(),
                 () -> finishJob(jobId, nextCommand));
         jobMap.put(job.jobId(), job);
@@ -888,10 +887,7 @@ public class Minescript {
 
   public static Script loadScript(List<String> scriptCommand, String scriptCode) throws Exception {
     return PyjinnScript.loadScript(
-        scriptCommand.toArray(String[]::new),
-        scriptCode,
-        Minescript::processPlainText,
-        platform.modLoaderName());
+        scriptCommand.toArray(String[]::new), scriptCode, platform.modLoaderName());
   }
 
   private static boolean checkMinescriptDir() {
@@ -2211,7 +2207,7 @@ public class Minescript {
     chat.addMessage(component);
   }
 
-  private static void processMessage(Message message) {
+  static void processMessage(Message message) {
     var minecraft = Minecraft.getInstance();
     switch (message.type()) {
       case MINECRAFT_COMMAND:
