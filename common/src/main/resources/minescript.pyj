@@ -1,3 +1,4 @@
+#!python
 # SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: GPL-3.0-only
 
@@ -10,6 +11,22 @@
 
 Minescript standard library for Pyjinn scripts.
 """
+
+from dataclasses import dataclass
+from typing import Any, List, Set, Dict, Tuple, Optional, Callable, Union
+
+# These definitions are provided for IDE integration since actual definitions are built into the
+# Minescript mod.
+if "__pyjinn__" not in globals():
+  def JavaClass(name: str) -> Any:
+    raise NotImplementedError("JavaClass is implemented in Java for Pyjinn scripts")
+
+  def add_event_listener(event_type: str, callback: Callable[[Any], None], **args) -> int:
+    raise NotImplementedError("add_event_listener is implemented in Java for Pyjinn scripts")
+
+  def remove_event_listener(listener_id: int) -> bool:
+    raise NotImplementedError("remove_event_listener is implemented in Java for Pyjinn scripts")
+
 
 System = JavaClass("java.lang.System")
 Minescript = JavaClass("net.minescript.common.Minescript")

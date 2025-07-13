@@ -182,12 +182,13 @@ public class Minescript {
   private static void deleteObsoleteFiles() {
     Path minescriptDir = Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR);
     Path systemDir = minescriptDir.resolve("system");
+    Path libDir = systemDir.resolve("lib");
     Path execDir = systemDir.resolve("exec");
 
     // Delete files that used to be stored directly within the `minescript` dir in legacy versions.
     deleteMinescriptFile(minescriptDir, "version.txt");
     deleteMinescriptFile(minescriptDir, "minescript.py");
-    deleteMinescriptFile(minescriptDir, "minescript.pyj");
+    deleteMinescriptFile(libDir, "minescript.pyj"); // File appeared here before 5.0a4
     deleteMinescriptFile(minescriptDir, "minescript_runtime.py");
     deleteMinescriptFile(minescriptDir, "help.py");
     deleteMinescriptFile(minescriptDir, "copy.py");
@@ -201,15 +202,18 @@ public class Minescript {
   private static void loadMinescriptResources() {
     Path systemDir = Paths.get(MINESCRIPT_DIR, "system");
     Path libDir = systemDir.resolve("lib");
+    Path pyjDir = systemDir.resolve("pyj");
     Path execDir = systemDir.resolve("exec");
 
     new File(libDir.toString()).mkdirs();
+    new File(pyjDir.toString()).mkdirs();
     new File(execDir.toString()).mkdirs();
 
     copyJarResourceToFile("version.txt", systemDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("minescript.py", libDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("minescript_runtime.py", libDir, FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("minescript.pyj", libDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile(
+        "minescript.pyj", pyjDir, "minescript.py", FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("help.py", execDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("copy_blocks.py", execDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("paste.py", execDir, FileOverwritePolicy.OVERWRITTE);

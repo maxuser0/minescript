@@ -1,3 +1,4 @@
+#!python
 # SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: GPL-3.0-only
 
@@ -28,6 +29,8 @@ Examples:
   \eval "set_timeout(screenshot, 3000)"
 """
 
+from system.pyj.minescript import *
+
 Minescript = JavaClass("net.minescript.common.Minescript")
 
 source = "\n".join(tuple(sys.argv[1:]))
@@ -35,7 +38,7 @@ if not source:
   print("Usage: eval SOURCE_CODE")
 else:
   if "\n" not in source and not source.startswith("print("):
-    source = f"print({source})"
+    source = f"print({source}, file=sys.stderr)"
 
   script = Minescript.loadScript(["eval"].getJavaList(), source)
   script.globals().setVariable("__job__", __job__)

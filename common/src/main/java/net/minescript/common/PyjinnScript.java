@@ -876,12 +876,13 @@ public class PyjinnScript {
             nameMappings::getRuntimeFieldName,
             nameMappings::getRuntimeMethodNames);
 
+    script.globals().setVariable("__pyjinn__", true);
     script.globals().setVariable("__argv__", scriptCommand);
     script.globals().setVariable("add_event_listener", new AddEventListener());
     script.globals().setVariable("remove_event_listener", new RemoveEventListener());
 
     // TODO(maxuser): Cache minescriptLibraryAst for reuse across script jobs.
-    Path minescriptLibraryPath = Paths.get("minescript", "system", "lib", "minescript.pyj");
+    Path minescriptLibraryPath = Paths.get("minescript", "system", "pyj", "minescript.py");
     String minescriptLibraryCode = Files.readString(minescriptLibraryPath);
     JsonElement minescriptLibraryAst = PyjinnParser.parse(minescriptLibraryCode);
     script.parse(minescriptLibraryAst, minescriptLibraryPath.getFileName().toString());
@@ -923,8 +924,8 @@ public class PyjinnScript {
       }
 
       // TODO(maxuser): Instead of special-casing the chat_intercept registration, process the
-      // keyword args in Pyjinn library code (e.g. minescript.pyj) so that the resulting flattened
-      // arg list can be passed blindly to Minescript::call.
+      // keyword args in Pyjinn library code (e.g. system/pyj/minescript.py) so that the resulting
+      // flattened arg list can be passed blindly to Minescript::call.
       final List<Object> args;
       if (eventName.equals("outgoing_chat_intercept")) {
         expectMaxParams(params, 3);
