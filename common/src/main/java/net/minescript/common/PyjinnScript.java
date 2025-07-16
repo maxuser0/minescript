@@ -777,7 +777,7 @@ public class PyjinnScript {
       setState(JobState.RUNNING);
 
       try {
-        script.globals().setVariable("__job__", this);
+        script.vars.__setitem__("job", this);
         script.redirectStdout(this::processStdout);
         script.redirectStderr(this::processStderr);
         script.exec();
@@ -838,6 +838,61 @@ public class PyjinnScript {
     return job;
   }
 
+  private static class MinescriptModuleHandler implements Script.ModuleHandler {
+    public MinescriptModuleHandler() {}
+
+    @Override
+    public void onParseImport(Script.Module module, Script.Import importModules) {
+      for (var importedModule : importModules.modules()) {
+        switch (importedModule.name()) {
+          case "minescript":
+          case "system.pyj.minescript":
+            module.globals().setVariable("__has_explicit_minescript_import__", true);
+            return;
+        }
+      }
+    }
+
+    @Override
+    public void onParseImport(Script.Module module, Script.ImportFrom fromModule) {
+      switch (fromModule.module()) {
+        case "minescript":
+        case "system.pyj.minescript":
+          module.globals().setVariable("__has_explicit_minescript_import__", true);
+          return;
+      }
+    }
+
+    @Override
+    public Path getModulePath(String name) {
+      return Script.ModuleHandler.super.getModulePath("minescript." + name);
+    }
+
+    @Override
+    public void onExecModule(Script.Module module) {
+      LOGGER.info("Running Minescript module handler for Pyjinn module: {}", module.name());
+      if (module.name().equals("minescript") || module.name().equals("system.pyj.minescript")) {
+        LOGGER.info("Adding built-in functions to Minescript Pyjinn module");
+        module.globals().setVariable("add_event_listener", new AddEventListener());
+        module.globals().setVariable("remove_event_listener", new RemoveEventListener());
+      } else if (!(Boolean)
+          module.globals().vars().get("__has_explicit_minescript_import__", false)) {
+        LOGGER.info("Adding implicit import of Minescript Pyjinn module");
+        module
+            .globals()
+            .globalStatements()
+            .add(
+                0,
+                new Script.ImportFrom(
+                    -1,
+                    "system.pyj.minescript",
+                    List.of(new Script.ImportName("*", Optional.empty()))));
+        module.globals().setVariable("add_event_listener", new AddEventListener());
+        module.globals().setVariable("remove_event_listener", new RemoveEventListener());
+      }
+    }
+  }
+
   public static Script loadScript(String[] scriptCommand, String scriptCode, String modLoaderName)
       throws Exception {
     String scriptFilename = scriptCommand[0];
@@ -869,23 +924,26 @@ public class PyjinnScript {
       nameMappings = new NoNameMappings();
     }
 
+    var moduleHandler = new MinescriptModuleHandler();
+
     var script =
         new Script(
             PyjinnScript.class.getClassLoader(),
+            moduleHandler,
             nameMappings::getRuntimeClassName,
             nameMappings::getRuntimeFieldName,
             nameMappings::getRuntimeMethodNames);
 
-    script.globals().setVariable("__pyjinn__", true);
-    script.globals().setVariable("__argv__", scriptCommand);
-    script.globals().setVariable("add_event_listener", new AddEventListener());
-    script.globals().setVariable("remove_event_listener", new RemoveEventListener());
+    // TODO(maxuser): Include Pyjinn version in version_info() output.
+    // TODO(maxuser): Generate the version string from the Pyjinn build.
+    String pyjinnVersion = "0.4";
+    String timestamp = "Jul 15 2025, 17:33:31";
+    String buildEnv = "openjdk version \"21.0.3\" 2024-04-16 LTS";
+    script.vars.__setitem__(
+        "sys_version",
+        "Pyjinn %s (default, %s) [%s]".formatted(pyjinnVersion, timestamp, buildEnv));
 
-    // TODO(maxuser): Cache minescriptLibraryAst for reuse across script jobs.
-    Path minescriptLibraryPath = Paths.get("minescript", "system", "pyj", "minescript.py");
-    String minescriptLibraryCode = Files.readString(minescriptLibraryPath);
-    JsonElement minescriptLibraryAst = PyjinnParser.parse(minescriptLibraryCode);
-    script.parse(minescriptLibraryAst, minescriptLibraryPath.getFileName().toString());
+    script.vars.__setitem__("sys_argv", scriptCommand);
 
     JsonElement scriptAst = PyjinnParser.parse(scriptCode);
     script.parse(scriptAst, scriptFilename);
@@ -945,7 +1003,8 @@ public class PyjinnScript {
       }
 
       try {
-        var job = (PyjinnJob) env.getVariable("__job__");
+        var script = (Script) env.getVariable("__script__");
+        var job = (PyjinnJob) script.vars.__getitem__("job");
         long listenerId = job.nextFcallId++;
 
         // TODO(maxuser): This is a hack, kicking off the start_foo_listener call immediately after
@@ -986,7 +1045,8 @@ public class PyjinnScript {
       expectNumParams(params, 1);
       if (params[0] instanceof Number listenerNum) {
         try {
-          var job = (PyjinnJob) env.getVariable("__job__");
+          var script = (Script) env.getVariable("__script__");
+          var job = (PyjinnJob) script.vars.__getitem__("job");
           Long listenerId = listenerNum.longValue();
           job.cancelOperation(listenerId);
           var removedListener = job.task.callbackMap.remove(listenerId);
