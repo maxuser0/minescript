@@ -214,6 +214,7 @@ public class Minescript {
     copyJarResourceToFile("minescript_runtime.py", libDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile(
         "minescript.pyj", pyjDir, "minescript.py", FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("sys.pyj", pyjDir, "sys.py", FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("help.py", execDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("copy_blocks.py", execDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("paste.py", execDir, FileOverwritePolicy.OVERWRITTE);
@@ -2852,6 +2853,7 @@ public class Minescript {
           result.addProperty("os_name", System.getProperty("os.name"));
           result.addProperty("os_version", System.getProperty("os.version"));
           result.addProperty("minecraft_class_name", Minecraft.class.getName());
+          result.addProperty("pyjinn", PyjinnScript.getInterpreterVersion());
           return result;
         }
 

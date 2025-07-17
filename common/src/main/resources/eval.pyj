@@ -30,6 +30,7 @@ Examples:
 """
 
 from system.pyj.minescript import *
+import system.pyj.sys as sys
 
 Minescript = JavaClass("net.minescript.common.Minescript")
 

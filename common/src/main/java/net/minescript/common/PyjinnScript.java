@@ -6,6 +6,7 @@ package net.minescript.common;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.HashMultimap;
+import com.google.common.collect.ImmutableList;
 import com.google.gson.JsonElement;
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -863,9 +864,22 @@ public class PyjinnScript {
       }
     }
 
+    private static ImmutableList<Path> importDirs =
+        ImmutableList.of(Paths.get("minescript"), Paths.get("minescript", "system", "pyj"));
+
     @Override
     public Path getModulePath(String name) {
-      return Script.ModuleHandler.super.getModulePath("minescript." + name);
+      Path relativeImportPath = Script.ModuleHandler.super.getModulePath(name);
+      for (Path dir : importDirs) {
+        Path path = dir.resolve(relativeImportPath);
+        if (Files.exists(path)) {
+          LOGGER.info("Resovled import of {} to {}", name, path);
+          return path;
+        }
+      }
+      throw new IllegalArgumentException(
+          "No module named '%s' (%s) found in import dirs: %s"
+              .formatted(name, relativeImportPath, importDirs));
     }
 
     @Override
@@ -875,8 +889,8 @@ public class PyjinnScript {
         LOGGER.info("Adding built-in functions to Minescript Pyjinn module");
         module.globals().setVariable("add_event_listener", new AddEventListener());
         module.globals().setVariable("remove_event_listener", new RemoveEventListener());
-      } else if (!(Boolean)
-          module.globals().vars().get("__has_explicit_minescript_import__", false)) {
+      } else if (module.name().equals("__main__")
+          && !(Boolean) module.globals().vars().get("__has_explicit_minescript_import__", false)) {
         LOGGER.info("Adding implicit import of Minescript Pyjinn module");
         module
             .globals()
@@ -934,20 +948,20 @@ public class PyjinnScript {
             nameMappings::getRuntimeFieldName,
             nameMappings::getRuntimeMethodNames);
 
-    // TODO(maxuser): Include Pyjinn version in version_info() output.
-    // TODO(maxuser): Generate the version string from the Pyjinn build.
-    String pyjinnVersion = "0.4";
-    String timestamp = "Jul 15 2025, 17:33:31";
-    String buildEnv = "openjdk version \"21.0.3\" 2024-04-16 LTS";
-    script.vars.__setitem__(
-        "sys_version",
-        "Pyjinn %s (default, %s) [%s]".formatted(pyjinnVersion, timestamp, buildEnv));
-
+    script.vars.__setitem__("sys_version", getInterpreterVersion());
     script.vars.__setitem__("sys_argv", scriptCommand);
 
     JsonElement scriptAst = PyjinnParser.parse(scriptCode);
     script.parse(scriptAst, scriptFilename);
     return script;
+  }
+
+  public static String getInterpreterVersion() {
+    // TODO(maxuser): Generate the version string from the Pyjinn build.
+    String pyjinnVersion = "0.4";
+    String timestamp = "Jul 15 2025, 17:33:31";
+    String buildEnv = "openjdk version \"21.0.3\" 2024-04-16 LTS";
+    return "Pyjinn %s (default, %s) [%s]".formatted(pyjinnVersion, timestamp, buildEnv);
   }
 
   private static final Set<String> EVENT_NAMES =

@@ -12,13 +12,9 @@
 Minescript standard library for Pyjinn scripts.
 """
 
-# TODO(maxuser): Make these imports compatible with Python.
-# from dataclasses import dataclass
-# from typing import Any, List, Set, Dict, Tuple, Optional, Callable, Union
+import system.pyj.sys as sys
 
-# These definitions are provided for IDE integration since actual definitions are built into the
-# Minescript mod.
-if "__script__" not in globals() and "Pyjinn" not in __script__.vars["sys_version"]:
+if "Pyjinn" not in sys.version:
   def JavaClass(name: str) -> Any:
     raise NotImplementedError("JavaClass is implemented in Java for Pyjinn scripts")
 
@@ -31,19 +27,6 @@ if "__script__" not in globals() and "Pyjinn" not in __script__.vars["sys_versio
 
 System = JavaClass("java.lang.System")
 Minescript = JavaClass("net.minescript.common.Minescript")
-
-# TODO(maxuser): Replace this with a proper sys.pyj module.
-@dataclass
-class __Sys__:
-  argv = __script__.vars["sys_argv"]
-  version = __script__.vars["sys_version"]
-  stdout = System.out
-  stderr = System.err
-
-  def exit(self, status: int = None):
-    __script__.vars["job"].requestKill()
-
-sys = __Sys__()
 
 
 def unbox_json_primitive(json):
@@ -609,6 +592,7 @@ class VersionInfo:
   os_name: str
   os_version: str
   minecraft_class_name: str
+  pyjinn: str
 
 def version_info() -> VersionInfo:
   """Gets version info for Minecraft, Minescript, mod loader, launcher, and OS.

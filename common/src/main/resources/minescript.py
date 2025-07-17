@@ -755,6 +755,7 @@ class VersionInfo:
   os_name: str
   os_version: str
   minecraft_class_name: str
+  pyjinn: str
 
 def version_info() -> VersionInfo:
   """Gets version info for Minecraft, Minescript, mod loader, launcher, and OS.
