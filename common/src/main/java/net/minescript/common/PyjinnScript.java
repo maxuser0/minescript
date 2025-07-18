@@ -32,6 +32,10 @@ import org.pyjinn.parser.PyjinnParser;
 public class PyjinnScript {
   private static final Logger LOGGER = LogManager.getLogger();
 
+  static {
+    Script.setDebugLogger((str, args) -> LOGGER.info(str, args));
+  }
+
   private PyjinnScript() {}
 
   public interface NameMappings {
@@ -752,6 +756,9 @@ public class PyjinnScript {
     private final Script script;
     private final PyjinnTask task;
     private long nextFcallId = ASYNC_FCALL_START_ID;
+    private boolean isRunningScriptGlobals = false;
+    private boolean hasPendingCallbacksAfterExec = false;
+    private boolean handlingExit = false;
 
     public PyjinnJob(
         int jobId,
@@ -781,27 +788,52 @@ public class PyjinnScript {
         script.vars.__setitem__("job", this);
         script.redirectStdout(this::processStdout);
         script.redirectStderr(this::processStderr);
+        script.atExit(this::atExit);
+        isRunningScriptGlobals = true;
         script.exec();
+        isRunningScriptGlobals = false;
+        hasPendingCallbacksAfterExec = !task.callbackMap.isEmpty();
       } catch (Exception e) {
+        isRunningScriptGlobals = false;
         systemMessageQueue.logException(e);
-        close();
+        script.exit(1);
         return;
       }
 
-      // If nextFcallId still has its initial value, then no async listeners have been scheduled, so
-      // close the script job.
-      if (nextFcallId == ASYNC_FCALL_START_ID) {
+      if (!hasPendingCallbacksAfterExec) {
+        script.exit(0);
+      }
+    }
+
+    private void atExit(Integer exitCode) {
+      // Ensure that atExit is called at most once.
+      if (handlingExit) {
+        return;
+      }
+      try {
+        handlingExit = true;
+        if (exitCode != null && exitCode.intValue() != 0) {
+          systemMessageQueue.logUserError(
+              jobSummaryWithStatus("Exited with error code " + exitCode));
+        } else if (hasPendingCallbacksAfterExec) {
+          // Log an info message about the script exits successfully only if the task had pending
+          // callbacks immediately after running all global statements.
+          if (state() != JobState.KILLED) {
+            setState(JobState.DONE);
+          }
+          systemMessageQueue.logUserInfo(toString());
+        }
+      } finally {
         close();
       }
     }
 
     @Override
     public void requestKill() {
+      // Note that atExit() is called directly (not through script.exit()) when the sciript job is
+      // killed by the user.
       super.requestKill();
-
-      // Pyjinn jobs can be immediately closed upon a kill request because all their work occurs on
-      // the game thread, i.e. there's no asynchronous work that needs to be waited for.
-      close();
+      atExit(128);
     }
 
     @Override
@@ -1067,9 +1099,10 @@ public class PyjinnScript {
           job.cancelOperation(listenerId);
           var removedListener = job.task.callbackMap.remove(listenerId);
           if (removedListener != null) {
-            // If this is the last listener being removed, then kill the job.
-            if (job.task.callbackMap.isEmpty()) {
-              job.requestKill();
+            // If this is the last listener being removed and the job is no longer running global
+            // statements, then kill the job.
+            if (job.task.callbackMap.isEmpty() && !job.isRunningScriptGlobals) {
+              script.exit(0);
             }
             return true;
           } else {

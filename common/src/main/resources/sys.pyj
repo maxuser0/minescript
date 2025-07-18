@@ -23,4 +23,4 @@ stdout = _System.out
 stderr = _System.err
 
 def exit(status: int = None):
-  __script__.vars["job"].requestKill()
+  __exit__(status)

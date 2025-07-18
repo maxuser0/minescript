@@ -836,16 +836,24 @@ def player_look_at(x: float, y: float, z: float):
 
 
 def set_interval(callback: Callable[[], None], timer_millis: int, *args) -> int:
+  listener_id = -1
   activation_time = System.currentTimeMillis() + timer_millis
 
   def on_render(event):
-    nonlocal activation_time
+    nonlocal activation_time, listener_id
     now = System.currentTimeMillis()
     if now >= activation_time:
-      callback(*args)
-      activation_time = now + timer_millis
+      try:
+        call_finished = False
+        callback(*args)
+        call_finished = True
+        activation_time = now + timer_millis
+      finally:
+        if not call_finished:
+          remove_event_listener(listener_id)
 
-  return add_event_listener("render", on_render)
+  listener_id = add_event_listener("render", on_render)
+  return listener_id
 
 
 def set_timeout(callback: Callable[[], None], timer_millis: int, *args) -> int:
@@ -856,8 +864,10 @@ def set_timeout(callback: Callable[[], None], timer_millis: int, *args) -> int:
     nonlocal listener_id
     now = System.currentTimeMillis()
     if now >= activation_time:
-      callback(*args)
-      remove_event_listener(listener_id)
+      try:
+        callback(*args)
+      finally:
+        remove_event_listener(listener_id)
 
   listener_id = add_event_listener("render", on_render)
   return listener_id

@@ -48,5 +48,6 @@ else:
   script.redirectStderr(__script__.stderr)
   for name in __script__.vars.keys():
     script.vars[name] = __script__.vars[name]
+  script.atExit(lambda status: __script__.exit(status))
 
   script.exec()
