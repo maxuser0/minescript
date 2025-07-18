@@ -885,7 +885,9 @@ public class PyjinnScript {
     @Override
     public void onExecModule(Script.Module module) {
       LOGGER.info("Running Minescript module handler for Pyjinn module: {}", module.name());
-      if (module.name().equals("minescript") || module.name().equals("system.pyj.minescript")) {
+      // The canonical module name is the filename relative to the Minecraft dir without the ".py"
+      // extension and dots dir separators replaced with dots.
+      if (module.name().equals("minescript.system.pyj.minescript")) {
         LOGGER.info("Adding built-in functions to Minescript Pyjinn module");
         module.globals().setVariable("add_event_listener", new AddEventListener());
         module.globals().setVariable("remove_event_listener", new RemoveEventListener());
