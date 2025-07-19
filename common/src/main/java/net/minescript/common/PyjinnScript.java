@@ -982,20 +982,12 @@ public class PyjinnScript {
             nameMappings::getRuntimeFieldName,
             nameMappings::getRuntimeMethodNames);
 
-    script.vars.__setitem__("sys_version", getInterpreterVersion());
+    script.vars.__setitem__("sys_version", Script.versionInfo().toString());
     script.vars.__setitem__("sys_argv", scriptCommand);
 
     JsonElement scriptAst = PyjinnParser.parse(scriptCode);
     script.parse(scriptAst, scriptFilename);
     return script;
-  }
-
-  public static String getInterpreterVersion() {
-    // TODO(maxuser): Generate the version string from the Pyjinn build.
-    String pyjinnVersion = "0.4";
-    String timestamp = "Jul 15 2025, 17:33:31";
-    String buildEnv = "openjdk version \"21.0.3\" 2024-04-16 LTS";
-    return "Pyjinn %s (default, %s) [%s]".formatted(pyjinnVersion, timestamp, buildEnv);
   }
 
   private static final Set<String> EVENT_NAMES =

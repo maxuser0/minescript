@@ -12,9 +12,6 @@
 Minescript sys module for Pyjinn scripts.
 """
 
-if not ("__script__" in globals() and "Pyjinn" in __script__.vars["sys_version"]):
-  raise ImportError(f"This implementation of module '{__name__}' requires a Pyjinn interpreter")
-
 _System = JavaClass("java.lang.System")
 
 argv = __script__.vars["sys_argv"]
