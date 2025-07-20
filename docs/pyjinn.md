@@ -1,4 +1,14 @@
-# Pyjinn
+## Pyjinn
+
+### Contents
+
+- [What is Pyjinn?](#what-is-pyjinn)
+- [Pyjinn in Minescript 5.0](#pyjinn-in-minescript-50)
+- [Java Integration](#java-integration)
+- [Python Language Features](#python-language-features)
+- [Python 3.x features not supported by Pyjinn](#python-3x-features-not-supported-by-pyjinn)
+
+### What is Pyjinn?
 
 **Pyjinn** (pronounced like "pidgeon") is a scripting language with Python syntax
 that integrates deeply with Java programs. It’s a "pidgin" language that looks
@@ -11,7 +21,7 @@ access the Java standard library and any publicly accessible Java classes loaded
 into the Java program in which it's embedded.
 
 
-## Pyjinn in Minescript 5.0
+### Pyjinn in Minescript 5.0
 
 Pyjinn is integrated into the upcoming release of Minescript 5.0.  This allows
 Python-syntax scripts to be executed directly by the Minescript mod within
@@ -49,6 +59,19 @@ highlighting, autocompletion, etc), add this line to the top of your `.pyj`
 file:
 - `#!python`
 
+Pyjinn's search path for imports (the equivalent of `PYTHONPATH`, but currently hardcoded) is:
+
+- `minecraft/minescript`
+- `minecraft/minescript/system/pyj`
+
+Pyjinn libraries in your `minecraft/minescript` directory can be imported by dropping their `.py`
+filename extension.  E.g. `minecraft/minescript/my_kewl_library.py` can be imported into a Pyjinn
+script as:
+
+```
+import my_kewl_library
+```
+
 Pyjinn scripts (`.pyj`) and Python scripts (`.py`) can import the same `.py`
 library if that library is compatible with both Python and Pyjinn.
 
@@ -62,8 +85,6 @@ import sys
 if "Pyjinn" not in sys.version:
   raise ImportError(f"Module '{__name__}' requires a Pyjinn interpreter.")
 ```
-
-## Pyjinn Language Features
 
 ### Java Integration
 
@@ -79,11 +100,23 @@ constructors and static methods using function-call and method-call syntax. This
 `Class<?>` instances which are metaclasses that provide access to reflection information.
 
 ```
-print(JavaClass("java.lang.String"))  # prints: JavaClass("java.lang.String")
-print(type("This is a string"))       # prints: JavaClass("java.lang.String")
-print("This is a string".getClass())  # prints Class<String>: class java.lang.String
-print(type(42))                       # prints: JavaClass("java.lang.Integer")
-print(type(42)(99))                   # prints equivalent of `new Integer(99)`: 99
+print(JavaClass("java.lang.String"))
+# prints: JavaClass("java.lang.String")
+
+print(type("This is a string"))
+# prints: JavaClass("java.lang.String")
+
+print("This is a string".getClass())
+# prints Class<String>: class java.lang.String
+
+print(type(42))
+# prints: JavaClass("java.lang.Integer")
+
+print(type(42).MAX_VALUE)
+# prints equivalent of `Integer.MAX_VALUE`: 2147483647
+
+print(type(42)(99))
+# prints equivalent of `new Integer(99)`: 99
 ```
 
 Call static method of Java class:
@@ -139,11 +172,15 @@ x = Runnable(lambda: print("hello!"))
 x.run()  # prints: hello!
 ```
 
-### Python Expressions
+### Python Language Features
+
+The following are the Python language features supported in Pyjinn.
 
 Names in `UPPER_CASE_WITH_UNDERSCORES` are example names.
 
 `...` refers to omitted code.
+
+**Python expressions:**
 
 ```
 # Constant expressions:
@@ -227,11 +264,7 @@ lambda X, Y: print("2 args:", X, Y)
 ```
 
 
-### Python Statements
-
-Names in `UPPER_CASE_WITH_UNDERSCORES` are example names.
-
-`...` refers to omitted code.
+**Python statements:**
 
 ```
 # Imports:
