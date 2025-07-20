@@ -44,12 +44,21 @@ The supported event types are:
 - "tick", "render", "key", "mouse", "chat", "outgoing_chat_intercept", "add_entity",
   "block_update", "explosion", "take_item", "damage", "chunk"
 
-Scripts can import the Minescript standard library explicitly:
-  - for simple IDE integration (e.g. VSCode): `from system.pyj.minescript import *`
-  - for consistency with existing Python scripts: `from minescript import *` or `import minescript`
+Scripts can import the Minescript standard library explicitly. For simple IDE integration (e.g.
+VSCode), you can use imports like these:
+
+- `from system.pyj.minescript import *`
+- `import system.pyj.minescript as m`
+
+For consistency with existing Python scripts you can use imports like these:
+
+- `from minescript import *`
+- `import minescript`
+- `import minescript as m`
 
 If there are no imports of `minescript` or `system.pyj.minescript` in the main
 script, it is imported implicitly as:
+
 - `from system.pyj.minescript import *`
 
 For IDE compatibility, `.pyj` files are used only for the main script file and
@@ -57,6 +66,7 @@ not imported from other scripts. This is because IDEs like VSCode do not
 recognize imports of `.pyj` files. To enable Python-syntax support (syntax
 highlighting, autocompletion, etc), add this line to the top of your `.pyj`
 file:
+
 - `#!python`
 
 Pyjinn's search path for imports (the equivalent of `PYTHONPATH`, but currently hardcoded) is:
