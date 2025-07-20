@@ -962,10 +962,11 @@ public class PyjinnScript {
         if (obfuscatedMappings.isPresent()) {
           nameMappings = obfuscatedMappings.get();
         } else {
-          throw new IllegalArgumentException(
-              "Runtime is using obfuscated names for Java code and no mappings found for script: "
-                  + scriptCommand[0]
-                  + "\nFor more information see: minescript.net/mappings");
+          LOGGER.warn(
+              "Runtime is using obfuscated names for Java code and no mappings found for script"
+                  + " '{}'; For more information see: https://minescript.net/mappings",
+              scriptCommand[0]);
+          nameMappings = new NoNameMappings();
         }
       }
     } else {
