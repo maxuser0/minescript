@@ -50,7 +50,7 @@ Script developers can download the Fabric intermediary mappings for a specific v
 To generate mappings for your script, add this comment to the top of your script:
 
 ```
- @dump_active_mappings
+# @dump_active_mappings
 ```
 
 And with the official and Fabric mappings installed as described in the previous sections, run your script from within the game. All the mappings resolved by Minescript will be dumped to the Minecraft log file (`minecraft/logs/latest.log`) with messages like:
@@ -58,9 +58,9 @@ And with the official and Fabric mappings installed as described in the previous
 
 ```
 [12:34:56] [Render thread/INFO]: Dumping script mapping for your_script.pyj:
- <mappings Fabric 1.21.7>  # timestamp=1234567890123
+# <mappings Fabric 1.21.7>  # timestamp=1234567890123
 [12:34:56] [Render thread/INFO]: Dumping script mapping for your_script.pyj:
-   class net.minecraft.client.Minecraft net.minecraft.class_310  # timestamp=1234567890123
+#   class net.minecraft.client.Minecraft net.minecraft.class_310  # timestamp=1234567890123
 ```
 
 The timestamp portion of the comments refer to the time that the script was launched, to help identify the generated mappings for a specific run of your script in case you need to run it multiple times.
@@ -68,19 +68,19 @@ The timestamp portion of the comments refer to the time that the script was laun
 Copy the log lines starting with `#` to the top of your Pyjinn script. You can drop the `# timestamp=...` portion of the line when copying to your script. Then, add this extra comment line immediately after the other lines that you copied from the log file:
 
 ```
- </mappings>
+# </mappings>
 ```
 
 For example:
 
 ```
- <mappings Fabric 1.21.7>
-   class net.minecraft.client.Minecraft net.minecraft.class_310
-   method net.minecraft.class_310 getInstance method_1551
- </mappings>
+# <mappings Fabric 1.21.7>
+#   class net.minecraft.client.Minecraft net.minecraft.class_310
+#   method net.minecraft.class_310 getInstance method_1551
+# </mappings>
 ```
 
-**NOTE:** When you run your script to generate mappings with `@dump_active_mappings`, you need to exercise all of your script's code, because script code that isn't run will not get its symbols resolved. You might need to run your script multiple times with different parameters to exercise all of its code.
+**NOTE:** When you run your script to generate mappings with `# @dump_active_mappings`, you need to exercise all of your script's code, because script code that isn't run will not get its symbols resolved. You might need to run your script multiple times with different parameters to exercise all of its code.
 
 You can provide multiple sets of mappings in the same script, one for each version of Minecraft that you want to support for Fabric users.
 
