@@ -32,6 +32,8 @@ import org.pyjinn.parser.PyjinnParser;
 public class PyjinnScript {
   private static final Logger LOGGER = LogManager.getLogger();
 
+  private static final Script.PyDict gameGlobalDict = new Script.PyDict();
+
   static {
     Script.setDebugLogger((str, args) -> LOGGER.info(str, args));
   }
@@ -786,6 +788,7 @@ public class PyjinnScript {
 
       try {
         script.vars.__setitem__("job", this);
+        script.vars.__setitem__("game", gameGlobalDict);
         script.redirectStdout(this::processStdout);
         script.redirectStderr(this::processStderr);
         script.atExit(this::atExit);
