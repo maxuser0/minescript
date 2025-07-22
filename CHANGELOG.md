@@ -9,6 +9,14 @@
 
 ## v5.0b1
 
+- Introduce global game dict shared across Pyjinn scripts: `__script__.vars["game"]`
+- Implement 'continue' statement inside loops
+- Fix slice parser to respect blank slice values
+- Support slice syntax like `x[:y]` where some slice values are omitted (previously, `x[:y]` was
+  mistakenly parsed as `y` being the lowerbound instead of the upperbound because it was the first
+  value encountered between the square brackets.)
+
+
 ## v5.0a4
 
 - Built-in `eval` script is now implemented using Pyjinn (`eval.pyj`); Python eval command is now
