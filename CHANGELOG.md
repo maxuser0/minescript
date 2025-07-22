@@ -1,5 +1,99 @@
 # Changelog
 
+## Docs
+
+- For Pyjinn integration with Java and language compatibility with Python see
+  [minescript.net/pyjinn](https://minescript.net/pyjinn)
+- To set up Fabric mappings for Pyjinn scripts see
+  [minescript.net/mappings](https://minescript.net/mappings)
+
+## v5.0b1
+
+## v5.0a4
+
+- Built-in `eval` script is now implemented using Pyjinn (`eval.pyj`); Python eval command is now
+  available as `pyeval`
+- Introduce `set_interval()` and `set_timeout()` which behave similiarly to `setInterval()` and
+  `setTimeout()` in JavaScript:
+  - `set_interval(callback: Callable[..., None], timer_millis: int, *args) -> int`
+  - `set_timeout(callback: Callable[..., None], timer_millis: int, *args) -> int`
+- Introduce `remove_event_listener()` which cancels listeners using the int ID returned from
+  `add_event_listener()`, `set_interval()`, and `set_timeout()`:
+  - `add_event_listener(event_type: str, callback: Callable[..., None], **args) -> int`
+  - `remove_event_listener(listener_id: int) -> bool`
+- Basic support for `sys` module in Pyjinn scripts and stderr output:
+  - `sys.argv, sys.exit(status=None), sys.version, sys.stdout, sys.stderr`
+  - `print(..., file=sys.stderr)`
+- Support for output redirection of Pyjinn scripts:
+  - `\eval 'print("Send this message to other players via chat.")' > chat`
+- Scripts can explicitly import the Pyjinn version of the Minescript standard library
+  - for simple IDE integration (e.g. VSCode) use the module name relative to the `minescript` dir:
+    - `import system.pyj.minescript`
+    - `import system.pyj.minescript as m`
+    - `from system.pyj.minescript import *`
+  - for simpler imports and consistency with existing Python scripts you can use the short module name:
+    - `import minescript`
+    - `import minescript as m`
+    - `from minescript import *`
+- If there are no imports of `minescript` or `system.pyj.minescript` in the main script, it is
+  imported implicitly as:
+  - `from system.pyj.minescript import *`
+
+## v5.0a3
+
+Support for event listeners in Pyjinn scripts for these events:
+
+- tick, render, key, mouse, chat, outgoing_chat_intercept, add_entity, block_update, explosion, take_item, damage, chunk
+
+e.g.
+
+```
+frames = 0
+def on_render(event):
+  global frames
+  frames += 1
+  if frames % 1000 == 0:
+    print(f"Rendered {frames} frames.")
+
+add_event_listener("render", on_render)
+```
+
+Support for Minescript functions in Pyjinn scripts using the same API and syntax as Python scripts:
+
+- execute, echo, echo_json, chat, log, screenshot, job_info, player_name, player_position, player_hand_items, player_inventory, player_inventory_select_slot, press_key_bind, player_press_forward, player_press_backward, player_press_left, player_press_right, player_press_jump, player_press_sprint, player_press_sneak, player_press_pick_item, player_press_use, player_press_attack, player_press_swap_hands, player_press_drop, player_orientation, player_set_orientation, player_get_targeted_block, player_get_targeted_entity, player_health, player, players, entities, version_info, world_info, getblock, getblocklist, screen_name, show_chat_screen, append_chat_history, chat_input, set_chat_input, container_get_items, player_look_at
+
+## v5.0a2
+
+This is the first step in calling Minescript script functions from
+Pyjinn scripts, for example:
+
+```
+# pyjinn_test.pyj
+
+Minescript = JavaClass("net.minescript.common.Minescript")
+
+def call(func_name, args):
+  return Minescript.call(func_name, args.getJavaList())
+
+print(call("player_get_targeted_block", [20]))
+print(call("world_info", []))
+print("minescript version:", call("version_info", []).get("minescript"))
+call("echo", ["hello?"])
+call("echo_json", ['{"text": "hello", "color": "green"}'])
+call("execute", ["time set day"])
+```
+
+## v5.0a1
+
+**WARNING:** This is a pre-release version with features that are incomplete and APIs are subject to change and compatibility with the final release is not guaranteed.
+
+Support for integrated [Pyjinn](https://github.com/maxuser0/pyjinn) interpreter. Files placed in the `minescript` directory ending in `.pyj` and written with Python syntax are interpreted without the need for an external Python installation. Minescript API functions are not yet supported from Pyjinn scripts. Java code can be run from scripts similar to Python scripts with Minescript 4.0 using [`lib_java.py`](https://minescript.net/sdm_downloads/lib_java-v2/).
+
+
+## v4.1
+
+- fixes to type hints in function signatures in `minescript.py` for improved integration with IDEs ([b2e8490](https://github.com/maxuser0/minescript/commit/b2e84901ccc2971bb0486fbe56df4f748499c848))
+
 ## v4.0
 
 ### Major changes
