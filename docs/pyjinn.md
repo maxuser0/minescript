@@ -356,13 +356,17 @@ for VAR in ITERABLE:
   ...
   if CONDITION:
     break
-  # TODO: support 'continue'
+  ...
+  if CONDITION:
+    continue
 
 while CONDITION:
   ...
   if CONDITION:
     break
-  # TODO: support 'continue'
+  ...
+  if CONDITION:
+    continue
 
 try:
   ...
@@ -383,7 +387,7 @@ def FUNCTION_NAME(...):
 
 ### Python 3.x features not supported by Pyjinn
 
-Unsupported language features in Pyjinn 0.4:
+Unsupported language features in Pyjinn 0.5:
 
 - Python standard library (except for some basics in `sys` module: `sys.argv`,
   `sys.version`, `sys.stdout`, `sys.stderr`)
@@ -398,7 +402,8 @@ Unsupported language features in Pyjinn 0.4:
 - `with` statement
 - `match` statement (Python 3.10+)
 - keyword-only arguments to functions ([PEP 3102](https://peps.python.org/pep-3102/))
-- `continue` statement in loops (coming soon)
+- f-string assignment expressions, e.g. `f"{x = }"` (just prints x's value, not `"x = "`)
+- step increments in slice expressions (parses ok, but step values that aren't equivalent to 1 result in an exception)
 - special class methods with double underscores (except for `__init__()` which is
   supported)
 - arbitrary-precision integers (only fixed-size integers like Java `Integer` and `Long`
