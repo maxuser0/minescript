@@ -14,7 +14,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -1013,64 +1012,38 @@ public class PyjinnScript {
     @Override
     public Object call(Script.Environment env, Object... params) {
       expectMinParams(params, 2);
-      if (!(params[0] instanceof String)) {
+      expectMaxParams(params, 3);
+      if (!(params[0] instanceof String eventName)) {
         throw new IllegalArgumentException(
             "Expected first param to add_event_listener to be string (event type) but got "
                 + params[0].toString());
       }
 
-      String eventName = (String) params[0];
       if (!EVENT_NAMES.contains(eventName)) {
         throw new IllegalArgumentException(
             "Unsupported event type: %s. Must be one of: %s".formatted(eventName, EVENT_NAMES));
       }
 
-      // TODO(maxuser): Instead of special-casing the chat_intercept registration, process the
-      // keyword args in Pyjinn library code (e.g. system/pyj/minescript.py) so that the resulting
-      // flattened arg list can be passed blindly to Minescript::call.
-      final List<Object> args;
-      if (eventName.equals("outgoing_chat_intercept")) {
-        expectMaxParams(params, 3);
-        if (params[2] instanceof Script.KeywordArgs kwargs) {
-          // Can't use List.of(...) because at least one of the args must be null.
-          args = new ArrayList<>();
-          args.add(kwargs.get("prefix"));
-          args.add(kwargs.get("pattern"));
-        } else {
-          throw new IllegalArgumentException(
-              "Expected third param to add_event_listener() to be keyword args but got: "
-                  + params[2]);
-        }
-      } else {
-        expectMaxParams(params, 2);
-        args = List.of();
-      }
+      var kwargs =
+          (params.length > 2 && params[2] instanceof Script.KeywordArgs ka)
+              ? ka
+              : new Script.KeywordArgs();
 
       try {
         var script = (Script) env.getVariable("__script__");
         var job = (PyjinnJob) script.vars.__getitem__("job");
         long listenerId = job.nextFcallId++;
 
-        // TODO(maxuser): This is a hack, kicking off the start_foo_listener call immediately after
-        // the corresponding register_foo_listener. Refactor and simplfy how async ops work from
-        // Pyjinn scripts. "register..." and "start..." calls got split in the first place to
-        // accomodate the semantics of externally executed (Python) scripts, because the
-        // "register..." call was to return a handle to the calling script to refer to the listener
-        // while the "start..." has no return value (Minescript::runExternalScriptFunction returns
-        // Optional.empty()) to indicate that it's an async operation that will return value(s) at a
-        // later time.
+        // registerEventListener() and startEventListener() were split to accomodate the semantics
+        // of externally executed (Python) scripts, because the "register" call was to return a
+        // handle to the calling script to refer to the listener while the "start" has no return
+        // value (Minescript::runExternalScriptFunction returns Optional.empty()) to indicate that
+        // it's an async operation that will return value(s) at a later time.
 
         if (params[1] instanceof Script.Function callback) {
           job.task.callbackMap.put(listenerId, new PyjinnTask.Callback(env, callback));
-
-          Minescript.call(job, listenerId, "register_%s_listener".formatted(eventName), args);
-
-          var functionCall =
-              new ScriptFunctionCall("start_%s_listener".formatted(eventName), List.of(listenerId));
-          if (!Minescript.startEventListener(job, listenerId, functionCall)) {
-            throw new IllegalArgumentException(
-                "Unable to start event listener using %s".formatted(functionCall.name()));
-          }
+          Minescript.registerEventListener(job, listenerId, eventName, kwargs);
+          Minescript.startEventListener(job, listenerId, eventName, listenerId);
         } else {
           throw new IllegalArgumentException(
               "Expected second param to `add_event_listener` to be callable but got %s"

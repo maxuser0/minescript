@@ -627,7 +627,7 @@ public class Minescript {
 
   static class EventHandler implements JobControl.Operation {
     private final JobControl job;
-    private final String funcName;
+    private final String name;
     private OptionalLong funcCallId = OptionalLong.empty();
     private State state = State.IDLE;
     private boolean suspended = false;
@@ -640,9 +640,9 @@ public class Minescript {
       CANCELLED
     }
 
-    public EventHandler(JobControl job, String funcName, Runnable doneCallback) {
+    public EventHandler(JobControl job, String eventName, Runnable doneCallback) {
       this.job = job;
-      this.funcName = funcName;
+      this.name = eventName + "_handler";
       this.doneCallback = doneCallback;
     }
 
@@ -663,7 +663,7 @@ public class Minescript {
 
     @Override
     public String name() {
-      return funcName;
+      return name;
     }
 
     public synchronized void start(long funcCallId) {
@@ -693,7 +693,7 @@ public class Minescript {
 
     @Override
     public synchronized void cancel() {
-      LOGGER.info("Cancelling EventHandler for job {} func {}", jobId(), funcCallId);
+      LOGGER.info("Cancelling EventHandler `{}` for job {} func {}", name(), jobId(), funcCallId);
       state = State.CANCELLED;
       funcCallId = OptionalLong.empty();
       doneCallback.run();
@@ -2010,8 +2010,8 @@ public class Minescript {
 
   // The keys in the event listener maps are based on the funcCallId of the register method (e.g.
   // "register_key_listener") which is considered the listener ID. But the funcCallId
-  // associated with the actual listening within the EventHandler corresponds to the start method
-  // (e.g. "start_key_listener").
+  // associated with the actual listening within the EventHandler corresponds to the start method,
+  // "start_event_listener".
   private static Map<JobOperationId, EventHandler> tickEventListeners = new ConcurrentHashMap<>();
   private static Map<JobOperationId, EventHandler> renderEventListeners = new ConcurrentHashMap<>();
   private static Map<JobOperationId, EventHandler> keyEventListeners = new ConcurrentHashMap<>();
@@ -2043,6 +2043,26 @@ public class Minescript {
           damageEventListeners,
           explosionEventListeners,
           chunkEventListeners);
+
+  /** Returns event handler for the given event name, or {@code null}. */
+  static Map<JobOperationId, EventHandler> getHandlerMapForEventName(String eventName)
+      throws Exception {
+    return switch (eventName) {
+      case "tick" -> tickEventListeners;
+      case "render" -> renderEventListeners;
+      case "key" -> keyEventListeners;
+      case "mouse" -> mouseEventListeners;
+      case "chat" -> chatEventListeners;
+      case "outgoing_chat_intercept" -> chatInterceptors;
+      case "add_entity" -> addEntityEventListeners;
+      case "block_update" -> blockUpdateEventListeners;
+      case "take_item" -> takeItemEventListeners;
+      case "damage" -> damageEventListeners;
+      case "explosion" -> explosionEventListeners;
+      case "chunk" -> chunkEventListeners;
+      default -> null;
+    };
+  }
 
   private static Map<JobOperationId, ChunkLoadEventListener> chunkLoadEventListeners =
       new ConcurrentHashMap<JobOperationId, ChunkLoadEventListener>();
@@ -2382,37 +2402,48 @@ public class Minescript {
     }
   }
 
-  private static JsonElement registerEventHandler(
-      JobControl job,
-      String functionName,
-      long funcCallId,
-      Map<JobOperationId, EventHandler> handlerMap,
-      Optional<Predicate<Object>> filter) {
+  static void registerEventListener(
+      JobControl job, long funcCallId, String eventName, Map<String, Object> kwargs)
+      throws Exception {
     var jobOpId = new JobOperationId(job.jobId(), funcCallId);
+    var handlerMap = getHandlerMapForEventName(eventName);
     if (handlerMap.containsKey(jobOpId)) {
       throw new IllegalStateException(
-          "Failed to create event handler because handler ID is already registered for job: "
-              + job.jobSummary());
+          "Failed to create event listener because function call ID '%s' is already registered for job '%s': %s"
+              .formatted(funcCallId, job.jobSummary()));
     }
-    var handler = new EventHandler(job, functionName, () -> handlerMap.remove(jobOpId));
+    Optional<Predicate<Object>> filter = Optional.empty();
+    LOGGER.info(
+        "Creating `{}` listener {} for `{}` with args {}", eventName, funcCallId, job, kwargs);
+    // TODO(maxuser): Move this event-specific logic into EventHandler by passing it kwargs.
+    if (eventName.equals("outgoing_chat_intercept")) {
+      Object prefixArg = kwargs.get("prefix");
+      Object patternArg = kwargs.get("pattern");
+      if (prefixArg != null && patternArg != null) {
+        throw new IllegalArgumentException("Only one of `prefix` and `pattern` can be specified");
+      }
+      if (prefixArg != null) {
+        if (prefixArg instanceof String prefix) {
+          filter = Optional.of(o -> o instanceof String s && s.startsWith(prefix));
+        } else {
+          throw new IllegalArgumentException(
+              "Expected keyword arg `prefix` to event listener of `%s` to be string but got `%s`"
+                  .formatted(eventName, prefixArg));
+        }
+      } else if (patternArg != null) {
+        if (patternArg instanceof String patternString) {
+          Pattern pattern = Pattern.compile(patternString);
+          filter = Optional.of(o -> o instanceof String s && pattern.matcher(s).matches());
+        } else {
+          throw new IllegalArgumentException(
+              "Expected keyword arg `pattern` to event listener of `%s` to be string but got `%s`"
+                  .formatted(eventName, patternArg));
+        }
+      }
+    }
+    var handler = new EventHandler(job, eventName, () -> handlerMap.remove(jobOpId));
     filter.ifPresent(handler::setFilter);
     handlerMap.put(jobOpId, handler);
-    return new JsonPrimitive(funcCallId);
-  }
-
-  private static void startEventHandlerFromMap(
-      JobControl job,
-      long funcCallId,
-      Map<JobOperationId, EventHandler> handlerMap,
-      long handlerId) {
-    var jobOpId = new JobOperationId(job.jobId(), handlerId);
-    var handler = handlerMap.get(jobOpId);
-    if (handler == null) {
-      throw new IllegalStateException(
-          "Event handler not found with requested ID: " + jobOpId.toString());
-    }
-    job.addOperation(handlerId, handler);
-    handler.start(funcCallId);
   }
 
   /** Call script function. Intended as a helper for external scripts. */
@@ -2499,93 +2530,6 @@ public class Minescript {
           }
           return blocks;
         }
-
-      case "register_tick_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, tickEventListeners, Optional.empty());
-
-      case "register_render_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, renderEventListeners, Optional.empty());
-
-      case "register_key_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, keyEventListeners, Optional.empty());
-
-      case "register_mouse_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, mouseEventListeners, Optional.empty());
-
-      case "register_chat_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, chatEventListeners, Optional.empty());
-
-      case "register_outgoing_chat_intercept_listener":
-        {
-          functionCall.expectNotRunningAsTask();
-          args.expectArgs("prefix", "pattern");
-          Optional<String> prefixArg = args.getOptionalString(0);
-          Optional<String> patternArg = args.getOptionalString(1);
-          if (prefixArg.isPresent() && patternArg.isPresent()) {
-            throw new IllegalArgumentException(
-                "Only one of `prefix` and `pattern` can be specified");
-          }
-          Optional<Predicate<Object>> filter = Optional.empty();
-          if (prefixArg.isPresent()) {
-            String prefix = prefixArg.get();
-            filter = Optional.of(o -> o instanceof String s && s.startsWith(prefix));
-          } else if (patternArg.isPresent()) {
-            Pattern pattern = Pattern.compile(patternArg.get());
-            filter = Optional.of(o -> o instanceof String s && pattern.matcher(s).matches());
-          }
-          return registerEventHandler(job, functionName, funcCallId, chatInterceptors, filter);
-        }
-
-      case "register_add_entity_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, addEntityEventListeners, Optional.empty());
-
-      case "register_block_update_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, blockUpdateEventListeners, Optional.empty());
-
-      case "register_explosion_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, explosionEventListeners, Optional.empty());
-
-      case "register_take_item_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, takeItemEventListeners, Optional.empty());
-
-      case "register_damage_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, damageEventListeners, Optional.empty());
-
-      case "register_chunk_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, chunkEventListeners, Optional.empty());
 
       case "unregister_event_handler":
         {
@@ -3142,35 +3086,20 @@ public class Minescript {
     return false;
   }
 
-  /** Returns true if an event listener was started. */
-  public static boolean startEventListener(
-      JobControl job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
-    Map<JobOperationId, EventHandler> handlerMap =
-        switch (functionCall.name()) {
-          case "start_tick_listener" -> tickEventListeners;
-          case "start_render_listener" -> renderEventListeners;
-          case "start_key_listener" -> keyEventListeners;
-          case "start_mouse_listener" -> mouseEventListeners;
-          case "start_chat_listener" -> chatEventListeners;
-          case "start_outgoing_chat_intercept_listener" -> chatInterceptors;
-          case "start_add_entity_listener" -> addEntityEventListeners;
-          case "start_block_update_listener" -> blockUpdateEventListeners;
-          case "start_take_item_listener" -> takeItemEventListeners;
-          case "start_damage_listener" -> damageEventListeners;
-          case "start_explosion_listener" -> explosionEventListeners;
-          case "start_chunk_listener" -> chunkEventListeners;
-          default -> null;
-        };
-
-    if (handlerMap != null) {
-      functionCall.expectNotRunningAsTask();
-      ScriptFunctionCall.ArgList args = functionCall.args();
-      args.expectArgs("handler_id");
-      startEventHandlerFromMap(job, funcCallId, handlerMap, args.getStrictLong(0));
-      return true;
+  static void startEventListener(JobControl job, long funcCallId, String eventName, long listenerId)
+      throws Exception {
+    var handlerMap = getHandlerMapForEventName(eventName);
+    if (handlerMap == null) {
+      throw new IllegalArgumentException("No event named '%s'".formatted(eventName));
     }
-
-    return false;
+    var jobOpId = new JobOperationId(job.jobId(), listenerId);
+    var handler = handlerMap.get(jobOpId);
+    if (handler == null) {
+      throw new IllegalStateException(
+          "Event handler not found with requested ID: " + jobOpId.toString());
+    }
+    job.addOperation(listenerId, handler);
+    handler.start(funcCallId);
   }
 
   /** Returns a JSON response if a script function is called. */
@@ -3179,11 +3108,27 @@ public class Minescript {
     final String functionName = functionCall.name();
     final ScriptFunctionCall.ArgList args = functionCall.args();
 
-    if (startEventListener(job, funcCallId, functionCall)) {
-      return Optional.empty(); // No return value means this is an async operation.
-    }
-
     switch (functionName) {
+      case "register_event_listener":
+        {
+          functionCall.expectNotRunningAsTask();
+          args.expectArgs("event_name", "kwargs");
+          String eventName = args.getString(0);
+          var kwargs = args.getStringKeyMap(1);
+          registerEventListener(job, funcCallId, eventName, kwargs);
+          return Optional.of(new JsonPrimitive(funcCallId));
+        }
+
+      case "start_event_listener":
+        {
+          functionCall.expectNotRunningAsTask();
+          args.expectArgs("event_name", "listener_id");
+          String eventName = args.getString(0);
+          long listenerId = args.getStrictLong(1);
+          startEventListener(job, funcCallId, eventName, listenerId);
+          return Optional.empty();
+        }
+
       case "blockpack_read_world":
         {
           // Python function signature:

@@ -879,10 +879,10 @@ def register_key_listener(
 
   Since: v3.2
   """
-  handler_id = await_script_function("register_key_listener", ())
+  listener_id = await_script_function("register_event_listener", ("key", {}))
   send_script_function_request(
-      "start_key_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("key", listener_id), handler, exception_handler)
+  return listener_id
 
 
 def register_mouse_listener(
@@ -900,10 +900,10 @@ def register_mouse_listener(
 
   Since: v4.0
   """
-  handler_id = await_script_function("register_mouse_listener", ())
+  listener_id = await_script_function("register_event_listener", ("mouse", {}))
   send_script_function_request(
-      "start_mouse_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("mouse", listener_id), handler, exception_handler)
+  return listener_id
 
 
 def register_chat_message_listener(
@@ -929,10 +929,10 @@ def register_chat_message_listener(
   See also:
     `register_chat_message_interceptor()` for swallowing outgoing chat messages
   """
-  handler_id = await_script_function("register_chat_listener", ())
+  listener_id = await_script_function("register_event_listener", ("chat", {}))
   send_script_function_request(
-      "start_chat_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("chat", listener_id), handler, exception_handler)
+  return listener_id
 
 
 def register_chat_message_interceptor(
@@ -960,12 +960,17 @@ def register_chat_message_interceptor(
   See also:
     `register_chat_message_listener()` for non-destructive listening of chat messages
   """
-  handler_id = await_script_function("register_outgoing_chat_intercept_listener", (prefix, pattern))
+  kwargs = {}
+  if prefix is not None:
+      kwargs["prefix"] = prefix
+  if pattern is not None:
+      kwargs["pattern"] = pattern
+  listener_id = await_script_function("register_event_listener", ("outgoing_chat_intercept", kwargs))
 
   send_script_function_request(
-      "start_outgoing_chat_intercept_listener", (handler_id,), handler, exception_handler)
+      "start_event_listener", ("outgoing_chat_intercept", listener_id), handler, exception_handler)
 
-  return handler_id
+  return listener_id
 
 
 def register_add_entity_listener(
@@ -980,10 +985,10 @@ def register_add_entity_listener(
 
   Since: v4.0
   """
-  handler_id = await_script_function("register_add_entity_listener", ())
+  listener_id = await_script_function("register_event_listener", ("add_entity", {}))
   send_script_function_request(
-      "start_add_entity_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("add_entity", listener_id), handler, exception_handler)
+  return listener_id
 
 
 def register_block_update_listener(
@@ -998,10 +1003,10 @@ def register_block_update_listener(
 
   Since: v4.0
   """
-  handler_id = await_script_function("register_block_update_listener", ())
+  listener_id = await_script_function("register_event_listener", ("block_update", {}))
   send_script_function_request(
-      "start_block_update_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("block_update", listener_id), handler, exception_handler)
+  return listener_id
 
 
 def register_take_item_listener(
@@ -1016,10 +1021,10 @@ def register_take_item_listener(
 
   Since: v4.0
   """
-  handler_id = await_script_function("register_take_item_listener", ())
+  listener_id = await_script_function("register_event_listener", ("take_item", {}))
   send_script_function_request(
-      "start_take_item_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("take_item", listener_id), handler, exception_handler)
+  return listener_id
 
 
 def register_damage_listener(
@@ -1034,10 +1039,10 @@ def register_damage_listener(
 
   Since: v4.0
   """
-  handler_id = await_script_function("register_damage_listener", ())
+  listener_id = await_script_function("register_event_listener", ("damage", {}))
   send_script_function_request(
-      "start_damage_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("damage", listener_id), handler, exception_handler)
+  return listener_id
 
 
 def register_explosion_listener(
@@ -1052,10 +1057,10 @@ def register_explosion_listener(
 
   Since: v4.0
   """
-  handler_id = await_script_function("register_explosion_listener", ())
+  listener_id = await_script_function("register_event_listener", ("explosion", {}))
   send_script_function_request(
-      "start_explosion_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("explosion", listener_id), handler, exception_handler)
+  return listener_id
 
 
 def register_chunk_listener(
@@ -1070,24 +1075,24 @@ def register_chunk_listener(
 
   Since: v4.0
   """
-  handler_id = await_script_function("register_chunk_listener", ())
+  listener_id = await_script_function("register_event_listener", ("chunk", {}))
   send_script_function_request(
-      "start_chunk_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("chunk", listener_id), handler, exception_handler)
+  return listener_id
 
 
-def unregister_event_handler(handler_id: int) -> bool:
+def unregister_event_handler(listener_id: int) -> bool:
   """Unregisters an event handler, if any, for the currently running job. (__internal__)
 
   Args:
-    handler_id: ID of an event handler returned from a `register_...()` function.
+    listener_id: ID of an event handler returned from a `register_...()` function.
 
   Returns:
-    `True` if `handler_id` was successfully cancelled, `False` otherwise.
+    `True` if `listener_id` was successfully cancelled, `False` otherwise.
 
   Since: v4.0
   """
-  return await_script_function("unregister_event_handler", (handler_id,))
+  return await_script_function("unregister_event_handler", (listener_id,))
 
 
 def set_default_executor(executor: minescript_runtime.FunctionExecutor):
@@ -1379,7 +1384,7 @@ class EventQueue:
   def __init__(self):
     """Creates an event registration handler."""
     self.queue = queue.Queue()
-    self.event_handler_ids = []
+    self.event_listener_ids = []
 
   def register_key_listener(self):
     """Registers listener for `EventType.KEY` events as `KeyEvent`.
@@ -1568,18 +1573,18 @@ class EventQueue:
         minescript_runtime.debug_log(exception_message)
         print(exception_message, file=sys.stderr)
 
-    handler_id = registration_func(put_typed_event, self.queue.put)
-    if type(handler_id) is not int:
-      error_message = f"Expected registration function to return int but got `{self.handler_id}`"
+    listener_id = registration_func(put_typed_event, self.queue.put)
+    if type(listener_id) is not int:
+      error_message = f"Expected registration function to return int but got `{listener_id}`"
       minescript_runtime.debug_log(error_message)
       raise ValueError(error_message)
-    self.event_handler_ids.append(handler_id)
+    self.event_listener_ids.append(listener_id)
 
   def unregister_all(self):
-    handler_ids = self.event_handler_ids
-    self.event_handler_ids = []
-    for handler_id in handler_ids:
-      unregister_event_handler(handler_id)
+    listener_ids = self.event_listener_ids
+    self.event_listener_ids = []
+    for listener_id in listener_ids:
+      unregister_event_handler(listener_id)
 
   def get(self, block: bool = True, timeout: float = None) -> Any:
     """Gets the next event in the queue.
