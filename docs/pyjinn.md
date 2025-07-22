@@ -410,5 +410,6 @@ Unsupported language features in Pyjinn 0.5:
   are supported)
 - user-defined decorators
 - asyncio and async/await syntax
+- generators and `yield` statement
 - Python-style metaclasses
 
