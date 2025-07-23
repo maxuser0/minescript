@@ -354,19 +354,15 @@ else:
 
 for VAR in ITERABLE:
   ...
-  if CONDITION:
-    break
+  break
   ...
-  if CONDITION:
-    continue
+  continue  # since 5.0b1
 
 while CONDITION:
   ...
-  if CONDITION:
-    break
+  break
   ...
-  if CONDITION:
-    continue
+  continue  # since 5.0b1
 
 try:
   ...
@@ -387,7 +383,7 @@ def FUNCTION_NAME(...):
 
 ### Python 3.x features not supported by Pyjinn
 
-Unsupported language features in Pyjinn 0.5:
+Language features **NOT** supported in Minescript 5.0b1 / Pyjinn 0.5:
 
 - Python standard library (except for some basics in `sys` module: `sys.argv`,
   `sys.version`, `sys.stdout`, `sys.stderr`)
@@ -397,7 +393,9 @@ Unsupported language features in Pyjinn 0.5:
   supported, e.g. `print("foo", file=sys.stderr)`)
 - `dict(k1=v1, k2=v2, ...)` syntax for constructing a dictionary (but `{k1: v1, k2: v2, ...}` is
   supported)
-- threading
+- `else` blocks following `for` and `while` blocks
+- generators and `yield` statement
+- threading, asyncio, and async/await syntax (API for asynchronous execution under development in 5.0 beta)
 - inheritance
 - `with` statement
 - `match` statement (Python 3.10+)
@@ -409,7 +407,5 @@ Unsupported language features in Pyjinn 0.5:
 - arbitrary-precision integers (only fixed-size integers like Java `Integer` and `Long`
   are supported)
 - user-defined decorators
-- asyncio and async/await syntax
-- generators and `yield` statement
 - Python-style metaclasses
 
