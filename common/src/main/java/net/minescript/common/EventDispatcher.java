@@ -32,6 +32,10 @@ class EventDispatcher {
     return listeners.entrySet();
   }
 
+  Set<JobOperationId> keySet() {
+    return listeners.keySet();
+  }
+
   Collection<EventListener> values() {
     return listeners.values();
   }

@@ -979,6 +979,7 @@ public class PyjinnScript {
 
     var script =
         new Script(
+            scriptFilename,
             PyjinnScript.class.getClassLoader(),
             moduleHandler,
             nameMappings::getRuntimeClassName,
@@ -993,6 +994,7 @@ public class PyjinnScript {
     return script;
   }
 
+  // TODO(maxuser): Share these event names with Minescript.getDispatcherForEventName().
   private static final Set<String> EVENT_NAMES =
       Set.of(
           "tick",
@@ -1006,7 +1008,8 @@ public class PyjinnScript {
           "explosion",
           "take_item",
           "damage",
-          "chunk");
+          "chunk",
+          "world");
 
   public static class AddEventListener implements Script.Function {
     @Override

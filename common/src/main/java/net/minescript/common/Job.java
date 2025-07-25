@@ -114,9 +114,9 @@ public abstract class Job implements JobControl {
 
     private void processFunctionCall(String functionCallLine) {
       // Function call messages have values formatted as:
-      // "{funcCallId} {functionName} {args}"
+      // "{funcCallId} {executor} {functionName} {args}"
       //
-      // args may have spaces, e.g. "123 my_func [4, 5, 6]"
+      // args may have spaces, e.g. "123 R my_func [4, 5, 6]"
 
       String[] functionCall = functionCallLine.split("\\s+", 4);
       long funcCallId = Long.valueOf(functionCall[0]);

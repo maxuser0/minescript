@@ -231,31 +231,50 @@ public class Minescript {
     }
   }
 
-  private static void cancelOrphanedOperations(EventDispatcher eventDispatcher) {
+  private static void cancelOrphanedOperations(
+      Set<Integer> jobIdsToKeep, EventDispatcher eventDispatcher) {
     if (!eventDispatcher.isEmpty()) {
       LOGGER.info(
-          "Cancelling orphaned operations when exiting world: {}",
+          "Cancelling orphaned operations when exiting world (excluding jobs with 'world' event"
+              + " listeners): {}",
           eventDispatcher.entrySet().stream()
+              .filter(e -> !jobIdsToKeep.contains(e.getValue().jobId()))
               .map(e -> String.format("%s %s", e.getValue().name(), e.getKey()))
               .collect(Collectors.toList()));
 
       // Stash values in a new list so that the operations map isn't modified while being
       // iterated/streamed, because Job.Operation::cancel removes a listener from the map.
-      new ArrayList<>(eventDispatcher.values()).stream().forEach(JobControl.Operation::cancel);
+      new ArrayList<>(eventDispatcher.values())
+          .stream()
+              .forEach(
+                  op -> {
+                    if (!jobIdsToKeep.contains(op.jobId())) {
+                      op.cancel();
+                    }
+                  });
     }
   }
 
   private static void killAllJobs() {
+    // Find all the jobs that have "world" event listeners and keep them alive.
+    var jobIdsToKeep =
+        new HashSet<>(worldListeners.keySet().stream().map(key -> key.jobId()).toList());
+
     for (var job : jobs.getMap().values()) {
-      LOGGER.info("Killing job: {}", job.jobSummary());
-      job.requestKill();
+      if (jobIdsToKeep.contains(job.jobId())) {
+        LOGGER.info(
+            "Keeping job alive because it has a world event listener: {}", job.jobSummary());
+      } else {
+        LOGGER.info("Killing job that has no world event listener: {}", job.jobSummary());
+        job.requestKill();
+      }
     }
 
     // Job operations should have been cleaned up when killing jobs, but the jobs killed above might
     // still be in the process of shutting down, or operations may have been leaked accidentally.
     // Clear any leaked operations here.
     for (var dispatcher : eventDispatchers) {
-      cancelOrphanedOperations(dispatcher);
+      cancelOrphanedOperations(jobIdsToKeep, dispatcher);
     }
 
     customNickname = null;
@@ -271,12 +290,17 @@ public class Minescript {
       boolean noWorldNow = (minecraft.level == null);
       if (noWorld != noWorldNow) {
         if (noWorldNow) {
+          // TODO(maxuser): It's not safe to call these listeners outside of the render thread. Can
+          // this be processed on the render thread even when there's no current world? Where would
+          // job stdout and stderr show up? Redirected to the log file?
+          onWorldConnectionChange(false);
           autorunHandled.set(false);
           LOGGER.info("Exited world");
           killAllJobs();
           systemMessageQueue.clear();
         } else {
           LOGGER.info("Entered world");
+          onWorldConnectionChange(true);
         }
         noWorld = noWorldNow;
       }
@@ -284,6 +308,21 @@ public class Minescript {
         Thread.sleep(millisToSleep);
       } catch (InterruptedException e) {
         systemMessageQueue.logException(e);
+      }
+    }
+  }
+
+  private static void onWorldConnectionChange(boolean connected) {
+    JsonObject json = null;
+    for (var listener : worldListeners.values()) {
+      if (listener.isActive()) {
+        if (json == null) {
+          json = new JsonObject();
+          json.addProperty("type", "world");
+          json.addProperty("connected", connected);
+          json.addProperty("time", System.currentTimeMillis() / 1000.);
+        }
+        listener.respond(json);
       }
     }
   }
@@ -1933,6 +1972,7 @@ public class Minescript {
   private static EventDispatcher damageEventListeners = new EventDispatcher();
   private static EventDispatcher explosionEventListeners = new EventDispatcher();
   private static EventDispatcher chunkEventListeners = new EventDispatcher();
+  private static EventDispatcher worldListeners = new EventDispatcher();
 
   private static ImmutableList<EventDispatcher> eventDispatchers =
       ImmutableList.of(
@@ -1947,7 +1987,8 @@ public class Minescript {
           takeItemEventListeners,
           damageEventListeners,
           explosionEventListeners,
-          chunkEventListeners);
+          chunkEventListeners,
+          worldListeners);
 
   /** Returns the event dispatcher for the given event name, or {@code null}. */
   static EventDispatcher getDispatcherForEventName(String eventName) throws Exception {
@@ -1964,6 +2005,7 @@ public class Minescript {
       case "damage" -> damageEventListeners;
       case "explosion" -> explosionEventListeners;
       case "chunk" -> chunkEventListeners;
+      case "world" -> worldListeners;
       default -> null;
     };
   }

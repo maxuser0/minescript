@@ -1256,6 +1256,7 @@ class _EventType:
   DAMAGE: str = "damage"
   EXPLOSION: str = "explosion"
   CHUNK: str = "chunk"
+  WORLD: str = "world"
 
 EventType = _EventType()
 
@@ -1342,6 +1343,12 @@ class ChunkEvent:
   x_max: int
   z_max: int
 
+@dataclass
+class WorldEvent:
+  type: str
+  time: float
+  connected: bool
+
 def _create_add_entity_event(**kwargs):
   kwargs["entity"] = EntityData(**kwargs["entity"])
   return AddEntityEvent(**kwargs)
@@ -1361,6 +1368,7 @@ _EVENT_CONSTRUCTORS = {
   EventType.DAMAGE: DamageEvent,
   EventType.EXPLOSION: ExplosionEvent,
   EventType.CHUNK: ChunkEvent,
+  EventType.WORLD: WorldEvent,
 }
 
 class EventQueue:
@@ -1559,6 +1567,37 @@ class EventQueue:
     ```
     """
     self._register(EventType.CHUNK, register_chunk_listener)
+
+  def register_world_listener(self):
+    """Registers listener for `EventType.WORLD` events as `WorldEvent`.
+
+    Script jobs are automatically terminated when the user's game client disconnects from a world
+    unless the script has an active "world" listener registered. All script jobs, including ones
+    with "world" listeners, are terminated when the game client exits.
+
+    Example:
+    ```
+      with EventQueue() as event_queue:
+        event_queue.register_world_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.WORLD:
+            if event.connected:
+              log(f"Connected to world {world_info().name}.")
+            else:
+              log("Disconnected from world.")
+    ```
+
+    Since: v5.0
+    """
+    def register_world_listener(
+        handler: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
+      listener_id = await_script_function("register_event_listener", ("world", {}))
+      send_script_function_request(
+          "start_event_listener", ("world", listener_id), handler, exception_handler)
+      return listener_id
+
+    self._register(EventType.WORLD, register_world_listener)
 
   def _register(self, event_type: str, registration_func):
     def put_typed_event(event):

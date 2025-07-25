@@ -377,8 +377,8 @@ def _ScriptServiceLoopImpl():
     try:
       json_input = stdin_readline()
       if not json_input:
-        debug_log("minescript_runtime.py: stdin reached EOF, exiting script service loop")
-        break
+        debug_log("minescript_runtime.py: stdin reached EOF, terminating script with os._exit()")
+        os._exit(1)
       reply = json.loads(json_input)
       if _is_debug:
         debug_log("Parsed json reply:", reply)
