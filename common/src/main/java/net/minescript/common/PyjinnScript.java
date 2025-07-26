@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
@@ -31,7 +32,7 @@ import org.pyjinn.parser.PyjinnParser;
 public class PyjinnScript {
   private static final Logger LOGGER = LogManager.getLogger();
 
-  private static final Script.PyDict gameGlobalDict = new Script.PyDict();
+  private static final Script.PyDict gameGlobalDict = new Script.PyDict(new ConcurrentHashMap<>());
 
   static {
     Script.setDebugLogger((str, args) -> LOGGER.info(str, args));
