@@ -3,7 +3,6 @@
 
 package net.minescript.common;
 
-import com.google.gson.JsonElement;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.function.Predicate;
@@ -48,6 +47,10 @@ class EventListener implements JobControl.Operation {
     return job.jobId();
   }
 
+  JobControl job() {
+    return job;
+  }
+
   @Override
   public String name() {
     return name;
@@ -86,9 +89,9 @@ class EventListener implements JobControl.Operation {
     doneCallback.run();
   }
 
-  public synchronized boolean respond(JsonElement returnValue) {
+  public synchronized boolean respond(ScriptValue value) {
     if (funcCallId.isPresent()) {
-      return job.respond(funcCallId.getAsLong(), returnValue, /* finalReply= */ false);
+      return job.respond(funcCallId.getAsLong(), value, /* finalReply= */ false);
     } else {
       return false;
     }

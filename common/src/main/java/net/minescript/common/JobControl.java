@@ -3,7 +3,6 @@
 
 package net.minescript.common;
 
-import com.google.gson.JsonElement;
 import java.util.Queue;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 
@@ -28,9 +27,9 @@ public interface JobControl {
 
   Queue<Message> tickQueue();
 
-  boolean respond(long functionCallId, JsonElement returnValue, boolean finalReply);
+  boolean respond(long functionCallId, ScriptValue value, boolean finalReply);
 
-  boolean raiseException(long functionCallId, ExceptionInfo exception);
+  boolean raiseException(long functionCallId, Exception exception);
 
   void processStdout(String text);
 

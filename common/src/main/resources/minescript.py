@@ -244,10 +244,7 @@ def _player_hand_items_result_transform(items):
   """(__internal__)"""
   if options.legacy_dict_return_values:
     return items
-  main, off = items
-  return HandItems(
-      main_hand=None if main is None else ItemStack(**main),
-      off_hand=None if off is None else ItemStack(**off))
+  return HandItems(**items)
 
 player_hand_items = ScriptFunction(
     "player_hand_items", player_hand_items, _player_hand_items_result_transform)
@@ -574,7 +571,7 @@ def player_get_targeted_block(max_distance: float = 20) -> Union[TargetedBlock, 
   return (max_distance,)
 
 def _player_get_targeted_block_result_transform(targeted_block):
-  return None if targeted_block is None else TargetedBlock(*targeted_block)
+  return None if targeted_block is None else TargetedBlock(**targeted_block)
 
 player_get_targeted_block = ScriptFunction(
     "player_get_targeted_block", player_get_targeted_block,
@@ -595,7 +592,7 @@ class EntityData:
   health: float = None
   local: bool = None  # `True` if this the local player
   passengers: List[str] = None  # UUIDs of passengers as strings
-  nbt: Dict[str, Any] = None
+  nbt: str = None
 
 
 def player_get_targeted_entity(max_distance: float = 20, nbt: bool = False) -> Union[EntityData, None]:

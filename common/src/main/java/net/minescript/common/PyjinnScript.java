@@ -731,14 +731,14 @@ public class PyjinnScript {
      * Sends a return value to the given script function call. Returns true if response succeeds.
      */
     @Override
-    public boolean sendResponse(long functionCallId, JsonElement returnValue, boolean finalReply) {
+    public boolean sendResponse(long functionCallId, ScriptValue scriptValue, boolean finalReply) {
       var callback = callbackMap.get(functionCallId);
       if (callback == null) {
         LOGGER.error("No callback found in Pyjinn task for function call {}", functionCallId);
         return false;
       }
       try {
-        callback.function.call(callback.env, returnValue);
+        callback.function.call(callback.env, scriptValue.get());
       } catch (Exception e) {
         systemMessageQueue.logException(e);
       }
@@ -747,12 +747,16 @@ public class PyjinnScript {
 
     /** Sends an exception to the given script function call. Returns true if response succeeds. */
     @Override
-    public boolean sendException(long functionCallId, ExceptionInfo exception) {
-      return false; // TODO(maxuser): implement...
+    public boolean sendException(long functionCallId, Exception exception) {
+      if (exception instanceof RuntimeException runtimeException) {
+        throw runtimeException;
+      } else {
+        throw new RuntimeException(exception);
+      }
     }
   }
 
-  private static class PyjinnJob extends Job {
+  static class PyjinnJob extends Job {
     private static final long ASYNC_FCALL_START_ID = 1000L;
 
     private final Script script;
@@ -780,6 +784,10 @@ public class PyjinnScript {
           doneCallback);
       this.script = script;
       this.task = task;
+    }
+
+    Script script() {
+      return script;
     }
 
     @Override

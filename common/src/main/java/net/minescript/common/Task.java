@@ -3,18 +3,16 @@
 
 package net.minescript.common;
 
-import com.google.gson.JsonElement;
-
 public interface Task {
   int run(ScriptConfig.BoundCommand command, JobControl jobControl);
 
   /** Sends a return value to the given script function call. Returns true if response succeeds. */
-  default boolean sendResponse(long functionCallId, JsonElement returnValue, boolean finalReply) {
+  default boolean sendResponse(long functionCallId, ScriptValue scriptValue, boolean finalReply) {
     return false;
   }
 
   /** Sends an exception to the given script function call. Returns true if response succeeds. */
-  default boolean sendException(long functionCallId, ExceptionInfo exception) {
+  default boolean sendException(long functionCallId, Exception exception) {
     return false;
   }
 }

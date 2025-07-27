@@ -15,7 +15,6 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
-import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -72,10 +71,8 @@ import net.minecraft.client.renderer.debug.DebugRenderer;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.RegistryAccess;
-import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
-import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
@@ -84,11 +81,12 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minescript.common.CommandSyntax.Token;
+import net.minescript.common.dataclasses.*;
+import net.minescript.common.events.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.pyjinn.interpreter.Script;
@@ -313,16 +311,16 @@ public class Minescript {
   }
 
   private static void onWorldConnectionChange(boolean connected) {
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var listener : worldListeners.values()) {
       if (listener.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
-          json.addProperty("type", "world");
-          json.addProperty("connected", connected);
-          json.addProperty("time", System.currentTimeMillis() / 1000.);
+        if (eventValue == null) {
+          var event = new WorldEvent();
+          event.connected = connected;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
-        listener.respond(json);
+        listener.respond(eventValue);
       }
     }
   }
@@ -1502,72 +1500,73 @@ public class Minescript {
   private static List<String> commandSuggestions = new ArrayList<>();
 
   public static void onKeyboardEvent(int key, int scanCode, int action, int modifiers) {
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var entry : keyEventListeners.entrySet()) {
       var listener = entry.getValue();
       if (listener.isActive()) {
-        if (json == null) {
+        if (eventValue == null) {
           String screenName = getScreenName().orElse(null);
           long timeMillis = System.currentTimeMillis();
-          json = new JsonObject();
-          json.addProperty("type", "key");
-          json.addProperty("key", key);
-          json.addProperty("scan_code", scanCode);
-          json.addProperty("action", action);
-          json.addProperty("modifiers", modifiers);
-          json.addProperty("time", timeMillis / 1000.);
-          json.addProperty("screen", screenName);
+          var event = new KeyEvent();
+          event.key = key;
+          event.scan_code = scanCode;
+          event.action = action;
+          event.modifiers = modifiers;
+          event.time = timeMillis / 1000.;
+          event.screen = screenName;
+          eventValue = ScriptValue.of(event);
         }
         if (config.debugOutput()) {
-          LOGGER.info("Forwarding key event to listener {}: {}", entry.getKey(), json);
+          LOGGER.info("Forwarding key event to listener {}: {}", entry.getKey(), eventValue);
         }
-        listener.respond(json);
+        listener.respond(eventValue);
       }
     }
   }
 
   public static void onMouseClick(int button, int action, int modifiers, double x, double y) {
-    var minecraft = Minecraft.getInstance();
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var entry : mouseEventListeners.entrySet()) {
       var listener = entry.getValue();
       if (listener.isActive()) {
-        if (json == null) {
+        if (eventValue == null) {
           String screenName = getScreenName().orElse(null);
           long timeMillis = System.currentTimeMillis();
-          json = new JsonObject();
-          json.addProperty("type", "mouse");
-          json.addProperty("button", button);
-          json.addProperty("action", action);
-          json.addProperty("modifiers", modifiers);
-          json.addProperty("time", timeMillis / 1000.);
-          json.addProperty("x", x);
-          json.addProperty("y", y);
-          json.addProperty("screen", screenName);
+          var event = new MouseEvent();
+          event.button = button;
+          event.action = action;
+          event.modifiers = modifiers;
+          event.time = timeMillis / 1000.;
+          event.x = x;
+          event.y = y;
+          event.screen = screenName;
+          eventValue = ScriptValue.of(event);
         }
         if (config.debugOutput()) {
-          LOGGER.info("Forwarding mouse event to listener {}: {}", entry.getKey(), json);
+          LOGGER.info("Forwarding mouse event to listener {}: {}", entry.getKey(), eventValue);
         }
-        listener.respond(json);
+        listener.respond(eventValue);
       }
     }
   }
 
-  public static void onRenderWorld() {
+  public static void onRenderWorld(Object context) {
     for (var taskList : renderTaskLists.values()) {
       taskList.run();
     }
 
     // Process render event listeners from Pyjinn scripts.
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var entry : renderEventListeners.entrySet()) {
       var listener = entry.getValue();
       if (listener.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
-          json.addProperty("type", "render");
+        if (eventValue == null) {
+          var event = new RenderEvent();
+          event.context = context;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
-        listener.respond(json);
+        listener.respond(eventValue);
       }
     }
 
@@ -1763,23 +1762,24 @@ public class Minescript {
   public static boolean onClientChatReceived(Component message) {
     boolean cancel = false;
     String text = message.getString();
-    JsonObject json = null;
+    ScriptValue eventValue = null;
 
     var iter = chatEventListeners.entrySet().iterator();
     while (iter.hasNext()) {
       var entry = iter.next();
       var listener = entry.getValue();
       if (listener.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
-          json.addProperty("type", "chat");
-          json.addProperty("message", text);
-          json.addProperty("time", System.currentTimeMillis() / 1000.);
+        if (eventValue == null) {
+          var event = new ChatEvent();
+          event.type = "chat";
+          event.message = text;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
         if (config.debugOutput()) {
-          LOGGER.info("Forwarding chat message to listener {}: {}", entry.getKey(), json);
+          LOGGER.info("Forwarding chat message to listener {}: {}", entry.getKey(), eventValue);
         }
-        listener.respond(json);
+        listener.respond(eventValue);
       }
     }
 
@@ -1803,22 +1803,22 @@ public class Minescript {
   }
 
   private static void handleChunkEvent(int chunkX, int chunkZ, boolean loaded) {
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var handler : chunkEventListeners.values()) {
       if (handler.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
+        if (eventValue == null) {
           int worldX = chunkCoordToWorldCoord(chunkX);
           int worldZ = chunkCoordToWorldCoord(chunkZ);
-          json.addProperty("type", "chunk");
-          json.addProperty("loaded", loaded);
-          json.addProperty("x_min", worldX);
-          json.addProperty("z_min", worldZ);
-          json.addProperty("x_max", worldX + 15);
-          json.addProperty("z_max", worldZ + 15);
-          json.addProperty("time", System.currentTimeMillis() / 1000.);
+          var event = new ChunkEvent();
+          event.loaded = loaded;
+          event.x_min = worldX;
+          event.z_min = worldZ;
+          event.x_max = worldX + 15;
+          event.z_max = worldZ + 15;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
-        handler.respond(json);
+        handler.respond(eventValue);
       }
     }
   }
@@ -1867,11 +1867,11 @@ public class Minescript {
   private static boolean applyChatInterceptors(String message) {
     for (var interceptor : chatInterceptors.values()) {
       if (interceptor.applies(message)) {
-        var json = new JsonObject();
-        json.addProperty("type", "outgoing_chat_intercept");
-        json.addProperty("message", message);
-        json.addProperty("time", System.currentTimeMillis() / 1000.);
-        interceptor.respond(json);
+        var event = new ChatEvent();
+        event.type = "outgoing_chat_intercept";
+        event.message = message;
+        event.time = System.currentTimeMillis() / 1000.;
+        interceptor.respond(ScriptValue.of(event));
         return true;
       }
     }
@@ -2047,19 +2047,18 @@ public class Minescript {
   }
 
   public static void onAddEntityEvent(Entity entity) {
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var handler : addEntityEventListeners.values()) {
       if (handler.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
+        if (eventValue == null) {
           boolean includeNbt = false;
-          json.addProperty("type", "add_entity");
-          json.add(
-              "entity",
-              new EntityExporter(entityPositionInterpolation(), includeNbt).export(entity));
-          json.addProperty("time", System.currentTimeMillis() / 1000.);
+          var event = new AddEntityEvent();
+          event.entity =
+              new EntityExporter(entityPositionInterpolation(), includeNbt).export(entity);
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
-        handler.respond(json);
+        handler.respond(eventValue);
       }
     }
   }
@@ -2067,63 +2066,60 @@ public class Minescript {
   public static void onBlockUpdateEvent(BlockPos pos, BlockState newState) {
     var minecraft = Minecraft.getInstance();
     var level = minecraft.level;
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var handler : blockUpdateEventListeners.values()) {
       if (handler.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
-          json.addProperty("type", "block_update");
-          var position = new JsonArray();
-          position.add(pos.getX());
-          position.add(pos.getY());
-          position.add(pos.getZ());
-          json.add("position", position);
+        if (eventValue == null) {
+          var event = new BlockUpdateEvent();
+          event.position[0] = pos.getX();
+          event.position[1] = pos.getY();
+          event.position[2] = pos.getZ();
 
           // TODO(maxuser): If a block changes due to local player's mouse click or key press,
           // the block can change locally before the BlockUpdate packet is received by the client.
           // Maybe track the current block during mouse and key events via
           // minecraft.getCameraEntity().pick(...). (see player_get_targeted_block())
-          json.addProperty("old_state", blockStateToString(level.getBlockState(pos)).orElse(null));
-          json.addProperty("new_state", blockStateToString(newState).orElse(null));
-          json.addProperty("time", System.currentTimeMillis() / 1000.);
+          event.old_state = blockStateToString(level.getBlockState(pos)).orElse(null);
+          event.new_state = blockStateToString(newState).orElse(null);
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
-        handler.respond(json);
+        handler.respond(eventValue);
       }
     }
   }
 
   public static void onTakeItemEvent(Entity player, Entity item, int amount) {
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var handler : takeItemEventListeners.values()) {
       if (handler.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
+        if (eventValue == null) {
           boolean includeNbt = false;
-          json.addProperty("type", "take_item");
-          json.addProperty("player_uuid", player.getUUID().toString());
-          json.add(
-              "item", new EntityExporter(entityPositionInterpolation(), includeNbt).export(item));
-          json.addProperty("amount", amount);
-          json.addProperty("time", System.currentTimeMillis() / 1000.);
+          var event = new TakeItemEvent();
+          event.player_uuid = player.getUUID().toString();
+          event.item = new EntityExporter(entityPositionInterpolation(), includeNbt).export(item);
+          event.amount = amount;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
-        handler.respond(json);
+        handler.respond(eventValue);
       }
     }
   }
 
   public static void onDamageEvent(Entity entity, Entity cause, String source) {
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var handler : damageEventListeners.values()) {
       if (handler.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
-          json.addProperty("type", "damage");
-          json.addProperty("entity_uuid", entity.getUUID().toString());
-          json.addProperty("cause_uuid", cause == null ? null : cause.getUUID().toString());
-          json.addProperty("source", source);
-          json.addProperty("time", System.currentTimeMillis() / 1000.);
+        if (eventValue == null) {
+          var event = new DamageEvent();
+          event.entity_uuid = entity.getUUID().toString();
+          event.cause_uuid = cause == null ? null : cause.getUUID().toString();
+          event.source = source;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
-        handler.respond(json);
+        handler.respond(eventValue);
       }
     }
   }
@@ -2131,12 +2127,11 @@ public class Minescript {
   public static void onExplosionEvent(double x, double y, double z, List<BlockPos> toExplode) {
     var minecraft = Minecraft.getInstance();
     var level = minecraft.level;
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var handler : explosionEventListeners.values()) {
       if (handler.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
-          json.addProperty("type", "explosion");
+        if (eventValue == null) {
+          var event = new ExplosionEvent();
 
           var blockpacker = new BlockPacker();
           for (var pos : toExplode) {
@@ -2146,16 +2141,15 @@ public class Minescript {
           }
           String encodedBlockpack = blockpacker.pack().toBase64EncodedString();
 
-          var position = new JsonArray();
-          position.add(x);
-          position.add(y);
-          position.add(z);
-          json.add("position", position);
+          event.position[0] = x;
+          event.position[1] = y;
+          event.position[2] = z;
 
-          json.addProperty("blockpack_base64", encodedBlockpack);
-          json.addProperty("time", System.currentTimeMillis() / 1000.);
+          event.blockpack_base64 = encodedBlockpack;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
-        handler.respond(json);
+        handler.respond(eventValue);
       }
     }
   }
@@ -2239,32 +2233,6 @@ public class Minescript {
     }
   }
 
-  private static JsonElement itemStackToJsonElement(
-      ItemStack itemStack, OptionalInt slot, boolean markSelected) {
-    if (itemStack.getCount() == 0) {
-      return JsonNull.INSTANCE;
-    } else {
-      var reporter = new ProblemReporter.Collector();
-      var nbtOutput = TagValueOutput.createWithoutContext(reporter);
-      nbtOutput.store("minescript_item_wrapper", ItemStack.CODEC, itemStack);
-      Tag nbt = nbtOutput.buildResult().get("minescript_item_wrapper");
-
-      var out = new JsonObject();
-      out.addProperty("item", itemStack.getItem().toString());
-      out.addProperty("count", itemStack.getCount());
-      if (nbt != null) {
-        out.addProperty("nbt", nbt.toString());
-      }
-      if (slot.isPresent()) {
-        out.addProperty("slot", slot.getAsInt());
-      }
-      if (markSelected) {
-        out.addProperty("selected", true);
-      }
-      return out;
-    }
-  }
-
   // String key: KeyMapping.getName()
   private static final Map<String, InputConstants.Key> keyBinds = new ConcurrentHashMap<>();
 
@@ -2289,12 +2257,12 @@ public class Minescript {
     }
   }
 
-  private static JsonElement doPlayerAction(
+  private static ScriptValue doPlayerAction(
       String functionName, KeyMapping keyMapping, ScriptFunctionCall.ArgList args) {
     args.expectSize(1);
     boolean pressed = args.getBoolean(0);
     pressKeyBind(keyMapping.getName(), pressed);
-    return JSON_TRUE;
+    return ScriptValue.TRUE;
   }
 
   public static String getWorldName() {
@@ -2335,16 +2303,7 @@ public class Minescript {
 
   private static final JsonElement JSON_TRUE = new JsonPrimitive(true);
 
-  private static final JsonElement JSON_FALSE = new JsonPrimitive(false);
-
   private static final Optional<JsonElement> OPTIONAL_JSON_TRUE = Optional.of(JSON_TRUE);
-
-  private static JsonElement jsonPrimitiveOrNull(Optional<String> s) {
-    return s.map(str -> (JsonElement) new JsonPrimitive(str)).orElse(JsonNull.INSTANCE);
-  }
-
-  private record JobInfo(
-      int job_id, String[] command, String source, String status, Boolean self) {}
 
   public static void processScriptFunction(
       Job.ExternalJob job, String functionName, long funcCallId, List<?> parsedArgs) {
@@ -2352,7 +2311,7 @@ public class Minescript {
     try {
       Optional<JsonElement> response = runExternalScriptFunction(job, funcCallId, funcCall);
       if (response.isPresent()) {
-        job.respond(funcCallId, response.get(), true);
+        job.respond(funcCallId, response.map(json -> ScriptValue.fromJson(json)).get(), true);
       }
       if (config.debugOutput()) {
         LOGGER.info(
@@ -2373,7 +2332,7 @@ public class Minescript {
                     "Exception while calling script function `%s` with args %s: %s",
                     functionName, funcCall.args(), e.toString())));
       } else {
-        job.raiseException(funcCallId, ExceptionInfo.fromException(e));
+        job.raiseException(funcCallId, e);
       }
     }
   }
@@ -2398,18 +2357,18 @@ public class Minescript {
     eventDispatcher.addListener(jobOpId, listenerArgs, listener);
   }
 
-  /** Call script function. Intended as a helper for external scripts. */
-  public static JsonElement call(JobControl job, long funcCallId, String function, List<?> args)
+  /** Call script function. Intended as a helper for Pyjinn scripts. */
+  public static Object call(JobControl job, long funcCallId, String function, List<?> args)
       throws Exception {
     var functionCall = new ScriptFunctionCall(function, args);
     if (runNoReturnScriptFunction(functionCall)) {
-      return JsonNull.INSTANCE;
+      return null;
     }
 
-    return runScriptFunction(job, funcCallId, functionCall);
+    return runScriptFunction(job, funcCallId, functionCall).get();
   }
 
-  private static JsonElement runScriptFunction(
+  private static ScriptValue runScriptFunction(
       JobControl job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
     var minecraft = Minecraft.getInstance();
     var world = minecraft.level;
@@ -2422,16 +2381,12 @@ public class Minescript {
       case "player_position":
         {
           args.expectSize(0);
-          var result = new JsonArray();
-          result.add(player.getX());
-          result.add(player.getY());
-          result.add(player.getZ());
-          return result;
+          return ScriptValue.of(new Double[] {player.getX(), player.getY(), player.getZ()});
         }
 
       case "player_name":
         args.expectSize(0);
-        return new JsonPrimitive(player.getName().getString());
+        return ScriptValue.of(player.getName().getString());
 
       case "getblock":
         {
@@ -2442,7 +2397,7 @@ public class Minescript {
           int arg2 = args.getConvertibleInt(2);
           Optional<String> block =
               blockStateToString(level.getBlockState(new BlockPos(arg0, arg1, arg2)));
-          return jsonPrimitiveOrNull(block);
+          return block.map(ScriptValue::of).orElse(ScriptValue.NULL);
         }
 
       case "getblocklist":
@@ -2461,7 +2416,7 @@ public class Minescript {
           }
           List<?> positions = (List<?>) args.get(0);
           Level level = minecraft.level;
-          var blocks = new JsonArray();
+          var blocks = new ArrayList<String>();
           var pos = new BlockPos.MutableBlockPos();
           for (var position : positions) {
             if (!(position instanceof List)) {
@@ -2478,16 +2433,16 @@ public class Minescript {
             int y = ((Number) coords.get(1)).intValue();
             int z = ((Number) coords.get(2)).intValue();
             Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, y, z)));
-            blocks.add(jsonPrimitiveOrNull(block));
+            blocks.add(block.orElse(null));
           }
-          return blocks;
+          return ScriptValue.of(blocks.toArray(String[]::new));
         }
 
       case "unregister_event_handler":
         {
           args.expectArgs("handler_id");
           long handlerId = args.getStrictLong(0);
-          return new JsonPrimitive(job.cancelOperation(handlerId));
+          return ScriptValue.of(job.cancelOperation(handlerId));
         }
 
       case "set_nickname":
@@ -2508,31 +2463,33 @@ public class Minescript {
             systemMessageQueue.logUserInfo("Chat nickname set to {}.", quoteString(arg));
             customNickname = arg;
           }
-          return JSON_TRUE;
+          return ScriptValue.TRUE;
         }
 
       case "player_hand_items":
         {
           args.expectSize(0);
-          var result = new JsonArray();
-          result.add(itemStackToJsonElement(player.getMainHandItem(), OptionalInt.empty(), false));
-          result.add(itemStackToJsonElement(player.getOffhandItem(), OptionalInt.empty(), false));
-          return result;
+          var handItems = new HandItems();
+          handItems.main_hand =
+              ItemStackData.of(player.getMainHandItem(), OptionalInt.empty(), false);
+          handItems.off_hand =
+              ItemStackData.of(player.getOffhandItem(), OptionalInt.empty(), false);
+          return ScriptValue.of(handItems);
         }
 
       case "player_inventory":
         {
           args.expectSize(0);
           var inventory = player.getInventory();
-          var result = new JsonArray();
+          var result = new ArrayList<ItemStackData>();
           int selectedSlot = inventory.getSelectedSlot();
           for (int i = 0; i < inventory.getContainerSize(); i++) {
             var itemStack = inventory.getItem(i);
             if (itemStack.getCount() > 0) {
-              result.add(itemStackToJsonElement(itemStack, OptionalInt.of(i), i == selectedSlot));
+              result.add(ItemStackData.of(itemStack, OptionalInt.of(i), i == selectedSlot));
             }
           }
-          return result;
+          return ScriptValue.of(result.toArray(ItemStackData[]::new));
         }
 
       case "player_inventory_slot_to_hotbar":
@@ -2547,15 +2504,15 @@ public class Minescript {
           args.expectSize(1);
           int slot = args.getStrictInt(0);
           var inventory = player.getInventory();
-          var previouslySelectedSlot = inventory.getSelectedSlot();
+          int previouslySelectedSlot = inventory.getSelectedSlot();
           inventory.setSelectedSlot(slot);
-          return new JsonPrimitive(previouslySelectedSlot);
+          return ScriptValue.of(previouslySelectedSlot);
         }
 
       case "press_key_bind":
         args.expectSize(2);
         pressKeyBind(args.getString(0), args.getBoolean(1));
-        return JSON_TRUE;
+        return ScriptValue.TRUE;
 
       case "player_press_forward":
         return doPlayerAction(functionName, options.keyUp, args);
@@ -2596,10 +2553,7 @@ public class Minescript {
       case "player_orientation":
         {
           args.expectSize(0);
-          var result = new JsonArray();
-          result.add(player.getYRot());
-          result.add(player.getXRot());
-          return result;
+          return ScriptValue.of(new Float[] {player.getYRot(), player.getXRot()});
         }
 
       case "player_set_orientation":
@@ -2609,7 +2563,7 @@ public class Minescript {
           Double pitch = args.getDouble(1);
           player.setYRot(yaw.floatValue() % 360.0f);
           player.setXRot(pitch.floatValue() % 360.0f);
-          return JSON_TRUE;
+          return ScriptValue.TRUE;
         }
 
       case "player_get_targeted_block":
@@ -2632,18 +2586,16 @@ public class Minescript {
                     blockPos.getZ());
             Level level = minecraft.level;
             Optional<String> block = blockStateToString(level.getBlockState(blockPos));
-            var result = new JsonArray();
-            var pos = new JsonArray();
-            pos.add(blockPos.getX());
-            pos.add(blockPos.getY());
-            pos.add(blockPos.getZ());
-            result.add(pos);
-            result.add(playerDistance);
-            result.add(hitResult.getDirection().toString());
-            result.add(jsonPrimitiveOrNull(block));
-            return result;
+            var targetedBlock = new TargetedBlock();
+            targetedBlock.position[0] = blockPos.getX();
+            targetedBlock.position[1] = blockPos.getY();
+            targetedBlock.position[2] = blockPos.getZ();
+            targetedBlock.distance = playerDistance;
+            targetedBlock.side = hitResult.getDirection().toString();
+            targetedBlock.type = block.orElse(null);
+            return ScriptValue.of(targetedBlock);
           } else {
-            return JsonNull.INSTANCE;
+            return ScriptValue.NULL;
           }
         }
 
@@ -2654,22 +2606,19 @@ public class Minescript {
           boolean includeNbt = args.getBoolean(1);
           return DebugRenderer.getTargetedEntity(player, (int) maxDistance)
               .map(e -> new EntityExporter(entityPositionInterpolation(), includeNbt).export(e))
-              .map(
-                  obj -> {
-                    JsonElement element = obj; // implicit cast
-                    return element;
-                  })
-              .orElse(JsonNull.INSTANCE);
+              .map(e -> ScriptValue.of(e))
+              .orElse(ScriptValue.NULL);
         }
 
       case "player_health":
-        return new JsonPrimitive(player.getHealth());
+        return ScriptValue.of(player.getHealth());
 
       case "player":
         {
           args.expectArgs("nbt");
           boolean includeNbt = args.getBoolean(0);
-          return new EntityExporter(entityPositionInterpolation(), includeNbt).export(player);
+          return ScriptValue.of(
+              new EntityExporter(entityPositionInterpolation(), includeNbt).export(player));
         }
 
       case "players":
@@ -2697,11 +2646,20 @@ public class Minescript {
                   .map(String::toUpperCase)
                   .map(EntitySelection.SortType::valueOf);
           OptionalInt limit = args.getOptionalStrictInt(8);
-          return new EntityExporter(entityPositionInterpolation(), includeNbt)
-              .export(
-                  new EntitySelection(
-                          uuid, name, type, position, offset, minDistance, maxDistance, sort, limit)
-                      .selectFrom(world.players()));
+          return ScriptValue.of(
+              new EntityExporter(entityPositionInterpolation(), includeNbt)
+                  .export(
+                      new EntitySelection(
+                              uuid,
+                              name,
+                              type,
+                              position,
+                              offset,
+                              minDistance,
+                              maxDistance,
+                              sort,
+                              limit)
+                          .selectFrom(world.players())));
         }
 
       case "entities":
@@ -2730,27 +2688,36 @@ public class Minescript {
                   .map(String::toUpperCase)
                   .map(EntitySelection.SortType::valueOf);
           OptionalInt limit = args.getOptionalStrictInt(9);
-          return new EntityExporter(entityPositionInterpolation(), includeNbt)
-              .export(
-                  new EntitySelection(
-                          uuid, name, type, position, offset, minDistance, maxDistance, sort, limit)
-                      .selectFrom(world.entitiesForRendering()));
+          return ScriptValue.of(
+              new EntityExporter(entityPositionInterpolation(), includeNbt)
+                  .export(
+                      new EntitySelection(
+                              uuid,
+                              name,
+                              type,
+                              position,
+                              offset,
+                              minDistance,
+                              maxDistance,
+                              sort,
+                              limit)
+                          .selectFrom(world.entitiesForRendering())));
         }
 
       case "version_info":
         {
           args.expectSize(0);
 
-          var result = new JsonObject();
-          result.addProperty("minecraft", SharedConstants.getCurrentVersion().name());
-          result.addProperty("minescript", Minescript.version);
-          result.addProperty("mod_loader", platform.modLoaderName());
-          result.addProperty("launcher", minecraft.getLaunchedVersion());
-          result.addProperty("os_name", System.getProperty("os.name"));
-          result.addProperty("os_version", System.getProperty("os.version"));
-          result.addProperty("minecraft_class_name", Minecraft.class.getName());
-          result.addProperty("pyjinn", Script.versionInfo().toString());
-          return result;
+          var result = new VersionInfo();
+          result.minecraft = SharedConstants.getCurrentVersion().name();
+          result.minescript = Minescript.version;
+          result.mod_loader = platform.modLoaderName();
+          result.launcher = minecraft.getLaunchedVersion();
+          result.os_name = System.getProperty("os.name");
+          result.os_version = System.getProperty("os.version");
+          result.minecraft_class_name = Minecraft.class.getName();
+          result.pyjinn = Script.versionInfo().toString();
+          return ScriptValue.of(result);
         }
 
       case "world_info":
@@ -2761,23 +2728,22 @@ public class Minescript {
           var serverData = minecraft.getCurrentServer();
           var serverAddress = serverData == null ? "localhost" : serverData.ip;
 
-          var spawn = new JsonArray();
-          var spawnPos = levelProperties.getSpawnPos();
-          spawn.add(spawnPos.getX());
-          spawn.add(spawnPos.getY());
-          spawn.add(spawnPos.getZ());
+          var result = new WorldInfo();
+          result.game_ticks = levelProperties.getGameTime();
+          result.day_ticks = levelProperties.getDayTime();
+          result.raining = levelProperties.isRaining();
+          result.thundering = levelProperties.isThundering();
 
-          var result = new JsonObject();
-          result.addProperty("game_ticks", levelProperties.getGameTime());
-          result.addProperty("day_ticks", levelProperties.getDayTime());
-          result.addProperty("raining", levelProperties.isRaining());
-          result.addProperty("thundering", levelProperties.isThundering());
-          result.add("spawn", spawn);
-          result.addProperty("hardcore", levelProperties.isHardcore());
-          result.addProperty("difficulty", difficulty.getSerializedName());
-          result.addProperty("name", getWorldName());
-          result.addProperty("address", serverAddress);
-          return result;
+          var spawnPos = levelProperties.getSpawnPos();
+          result.spawn[0] = spawnPos.getX();
+          result.spawn[1] = spawnPos.getY();
+          result.spawn[2] = spawnPos.getZ();
+
+          result.hardcore = levelProperties.isHardcore();
+          result.difficulty = difficulty.getSerializedName();
+          result.name = getWorldName();
+          result.address = serverAddress;
+          return ScriptValue.of(result);
         }
 
       case "screenshot":
@@ -2804,14 +2770,14 @@ public class Minescript {
               minecraft.getMainRenderTarget(),
               /* downScale= */ 1,
               message -> job.log(message.getString()));
-          return JSON_TRUE;
+          return ScriptValue.TRUE;
         }
 
       case "screen_name":
         if (!args.isEmpty()) {
           throw new IllegalArgumentException("Expected no params but got: " + args.toString());
         }
-        return jsonPrimitiveOrNull(getScreenName());
+        return getScreenName().map(ScriptValue::of).orElse(ScriptValue.NULL);
 
       case "container_get_items": // List of Items in Chest
         {
@@ -2822,17 +2788,17 @@ public class Minescript {
           if (screen instanceof AbstractContainerScreen<?> handledScreen) {
             AbstractContainerMenu screenHandler = handledScreen.getMenu();
             Slot[] slots = screenHandler.slots.toArray(new Slot[0]);
-            var result = new JsonArray();
+            var result = new ArrayList<ItemStackData>();
             for (Slot slot : slots) {
               ItemStack itemStack = slot.getItem();
               if (itemStack.isEmpty()) {
                 continue;
               }
-              result.add(itemStackToJsonElement(itemStack, OptionalInt.of(slot.index), false));
+              result.add(ItemStackData.of(itemStack, OptionalInt.of(slot.index), false));
             }
-            return result;
+            return ScriptValue.of(result.toArray(ItemStackData[]::new));
           } else {
-            return JsonNull.INSTANCE;
+            return ScriptValue.NULL;
           }
         }
 
@@ -2843,7 +2809,7 @@ public class Minescript {
           double y = args.getDouble(1);
           double z = args.getDouble(2);
           player.lookAt(EntityAnchorArgument.Anchor.EYES, new Vec3(x, y, z));
-          return JSON_TRUE;
+          return ScriptValue.TRUE;
         }
 
       case "show_chat_screen":
@@ -2851,7 +2817,7 @@ public class Minescript {
           args.expectSize(2);
           boolean show = args.getBoolean(0);
           var screen = minecraft.screen;
-          final JsonElement result;
+          final ScriptValue result;
           if (show) {
             if (screen == null) {
               minecraft.setScreen(new ChatScreen(""));
@@ -2860,13 +2826,13 @@ public class Minescript {
             if (prompt != null && checkChatScreenInput()) {
               chatEditBox.setValue(prompt.toString());
             }
-            result = JSON_TRUE;
+            result = ScriptValue.TRUE;
           } else {
             if (screen != null && screen instanceof ChatScreen) {
               screen.onClose();
-              result = JSON_TRUE;
+              result = ScriptValue.TRUE;
             } else {
-              result = JSON_FALSE;
+              result = ScriptValue.FALSE;
             }
           }
           return result;
@@ -2890,22 +2856,19 @@ public class Minescript {
                             j.state().name(),
                             j == job ? Boolean.valueOf(true) : null));
                   });
-          // Use default-constructed Gson (instead of GSON) so that nulls are not serialized.
-          return new Gson().toJsonTree(result);
+          return ScriptValue.of(result.toArray(JobInfo[]::new));
         }
 
       case "append_chat_history":
         args.expectSize(1);
         minecraft.gui.getChat().addRecentChat(args.getString(0));
-        return JsonNull.INSTANCE;
+        return ScriptValue.NULL;
 
       case "chat_input":
         {
           args.expectSize(0);
-          var result = new JsonArray();
-          result.add(chatEditBox.getValue());
-          result.add(chatEditBox.getCursorPosition());
-          return result;
+          return ScriptValue.of(
+              new Object[] {chatEditBox.getValue(), chatEditBox.getCursorPosition()});
         }
 
       case "set_chat_input":
@@ -2923,7 +2886,7 @@ public class Minescript {
                     }
                     chatEditBox.setTextColor(i);
                   });
-          return JsonNull.INSTANCE;
+          return ScriptValue.NULL;
         }
     }
 
@@ -3389,10 +3352,11 @@ public class Minescript {
                     // this one.
                     job.respond(
                         funcCallId,
-                        functionCall.callingConvention()
-                                == ScriptFunctionCall.CallingConvention.JAVA
-                            ? new JsonPrimitive(job.objects.retain(success))
-                            : new JsonPrimitive(success),
+                        ScriptValue.fromJson(
+                            functionCall.callingConvention()
+                                    == ScriptFunctionCall.CallingConvention.JAVA
+                                ? new JsonPrimitive(job.objects.retain(success))
+                                : new JsonPrimitive(success)),
                         true);
                     job.removeOperation(funcCallId);
                     if (removeFromListeners) {
@@ -3711,7 +3675,7 @@ public class Minescript {
       return Optional.empty();
     }
 
-    return Optional.of(runScriptFunction(job, funcCallId, functionCall));
+    return Optional.of(runScriptFunction(job, funcCallId, functionCall).toJson());
   }
 
   private static JsonElement scheduleTasks(
@@ -3956,15 +3920,16 @@ public class Minescript {
     }
 
     // Process tick event listeners from Pyjinn scripts.
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var entry : tickEventListeners.entrySet()) {
       var listener = entry.getValue();
       if (listener.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
-          json.addProperty("type", "tick");
+        if (eventValue == null) {
+          var event = new TickEvent();
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
-        listener.respond(json);
+        listener.respond(eventValue);
       }
     }
 

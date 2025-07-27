@@ -23,28 +23,31 @@ if "Pyjinn" not in sys.version:
 
   def remove_event_listener(listener_id: int) -> bool:
     raise NotImplementedError("remove_event_listener is implemented in Java for Pyjinn scripts")
+  
+  # This import is mainly for IDEs to have access to the Python definitions of dataclasses that are
+  # not needed by Pyjinn scripts because they access the Java objects directly.
+  from system.lib.minescript import *
+  from typing import Any, List, Set, Dict, Tuple, Optional, Callable, Union
+  __script__ = None
+
+  @dataclass
+  class RenderEvent:
+    type: str = "render"
+    context: Any
+    time: float
+
+  @dataclass
+  class TickEvent:
+    type: str = "tick"
+    time: float
 
 
 System = JavaClass("java.lang.System")
 Minescript = JavaClass("net.minescript.common.Minescript")
 
 
-def unbox_json_primitive(json):
-  if json.isJsonNull():
-    return None
-  elif json.isJsonPrimitive():
-    primitive = json.getAsJsonPrimitive()
-    if primitive.isString():
-      return primitive.getAsString()
-    elif primitive.isBoolean():
-      return primitive.getAsBoolean()
-    elif primitive.isNumber():
-      return primitive.getAsNumber()
-  return json
-
-
 def __mcall__(name: str, args):
-  return unbox_json_primitive(Minescript.call(__script__.vars["job"], 0, name, args.getJavaList()))
+  return Minescript.call(__script__.vars["job"], 0, name, args.getJavaList())
 
 
 def execute(command: str):
@@ -129,14 +132,6 @@ def screenshot(filename: str=None):
   return __mcall__("screenshot", [filename])
 
 
-@dataclass
-class JobInfo:
-  job_id: int
-  command: List[str]
-  source: str
-  status: str
-  self: bool = False
-
 def job_info() -> List[JobInfo]:
   """Return info about active Minescript jobs.
 
@@ -167,19 +162,6 @@ def player_position() -> List[float]:
   """
   return __mcall__("player_position", [])
 
-
-@dataclass
-class ItemStack:
-  item: str
-  count: int
-  nbt: str = None
-  slot: int = None
-  selected: bool = None
-
-@dataclass
-class HandItems:
-  main_hand: ItemStack
-  off_hand: ItemStack
 
 def player_hand_items() -> HandItems:
   """Gets the items in the local player's hands.
@@ -415,14 +397,6 @@ def player_set_orientation(yaw: float, pitch: float) -> bool:
   return __mcall__("player_set_orientation", [yaw, pitch])
 
 
-@dataclass
-class TargetedBlock:
-  position: BlockPos
-  distance: float
-  side: str
-  type: str
-
-
 def player_get_targeted_block(max_distance: float = 20) -> Union[TargetedBlock, None]:
   """Gets info about the nearest block, if any, in the local player's crosshairs.
 
@@ -437,28 +411,7 @@ def player_get_targeted_block(max_distance: float = 20) -> Union[TargetedBlock, 
 
   Since: v3.0
   """
-  # TODO(maxuser): Return JsonObject matching TargetedBlock from Java.
-  result = __mcall__("player_get_targeted_block", [max_distance])
-  if result is None:
-    return None
-  return TargetedBlock(*[unbox_json_primitive(x) for x in result])
-
-
-@dataclass
-class EntityData:
-  name: str
-  type: str
-  uuid: str
-  id: int
-  position: Vector3f
-  yaw: float
-  pitch: float
-  velocity: Vector3f
-  lerp_position: Vector3f = None
-  health: float = None
-  local: bool = None  # `True` if this the local player
-  passengers: List[str] = None  # UUIDs of passengers as strings
-  nbt: Dict[str, Any] = None
+  return __mcall__("player_get_targeted_block", [max_distance])
 
 
 def player_get_targeted_entity(max_distance: float = 20, nbt: bool = False) -> Union[EntityData, None]:
@@ -583,17 +536,6 @@ def entities(
 get_entities = entities  # Alias for scripts with `entities` variables.
 
 
-@dataclass
-class VersionInfo:
-  minecraft: str
-  minescript: str
-  mod_loader: str
-  launcher: str
-  os_name: str
-  os_version: str
-  minecraft_class_name: str
-  pyjinn: str
-
 def version_info() -> VersionInfo:
   """Gets version info for Minecraft, Minescript, mod loader, launcher, and OS.
 
@@ -607,18 +549,6 @@ def version_info() -> VersionInfo:
   """
   return __mcall__("version_info", [])
 
-
-@dataclass
-class WorldInfo:
-  game_ticks: int
-  day_ticks: int
-  raining: bool
-  thundering: bool
-  spawn: BlockPos
-  hardcore: bool
-  difficulty: str
-  name: str
-  address: str
 
 def world_info() -> WorldInfo:
   """Gets world properties.
@@ -667,90 +597,6 @@ def getblocklist(positions: List[List[int]]) -> List[str]:
   Since: v2.1
   """
   return __mcall__("getblocklist", [positions])
-
-
-@dataclass
-class KeyEvent:
-  """Key event data.
-
-  For a list of key codes, see: https://www.glfw.org/docs/3.4/group__keys.html
-  `action` is 0 for key up, 1 for key down, and 2 for key repeat.
-  """
-  type: str
-  time: float
-  key: int
-  scan_code: int
-  action: int
-  modifiers: int
-  screen: str
-
-@dataclass
-class MouseEvent:
-  """Mouse event data.
-
-  `action` is 0 for mouse up and 1 for mouse down.
-  """
-  type: str
-  time: float
-  button: int
-  action: int
-  modifiers: int
-  x: float
-  y: float
-  screen: str = None
-
-@dataclass
-class ChatEvent:
-  type: str
-  time: float
-  message: str
-
-@dataclass
-class AddEntityEvent:
-  type: str
-  time: float
-  entity: EntityData
-
-@dataclass
-class BlockUpdateEvent:
-  type: str
-  time: float
-  position: BlockPos
-  old_state: str
-  new_state: str
-
-@dataclass
-class TakeItemEvent:
-  type: str
-  time: float
-  player_uuid: str
-  item: EntityData
-  amount: int
-
-@dataclass
-class DamageEvent:
-  type: str
-  time: float
-  entity_uuid: str
-  cause_uuid: str
-  source: str
-
-@dataclass
-class ExplosionEvent:
-  type: str
-  time: float
-  position: Vector3f
-  blockpack_base64: str
-
-@dataclass
-class ChunkEvent:
-  type: str
-  time: float
-  loaded: bool
-  x_min: int
-  z_min: int
-  x_max: int
-  z_max: int
 
 
 def screen_name() -> Union[str, None]:

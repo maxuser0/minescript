@@ -7,8 +7,6 @@ import static net.minescript.common.CommandSyntax.quoteCommand;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSyntaxException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -124,7 +122,7 @@ public abstract class Job implements JobControl {
       try {
         executor = FunctionExecutor.fromValue(functionCall[1]);
       } catch (IllegalArgumentException e) {
-        raiseException(funcCallId, ExceptionInfo.fromException(e));
+        raiseException(funcCallId, e);
         return;
       }
       String functionName = functionCall[2];
@@ -142,9 +140,7 @@ public abstract class Job implements JobControl {
                     + " raw print() calls with minescript.echo() or printing to"
                     + " stderr instead.",
                 functionName, functionCallLine);
-        raiseException(
-            funcCallId,
-            ExceptionInfo.fromException(new IllegalArgumentException(exceptionMessage)));
+        raiseException(funcCallId, new IllegalArgumentException(exceptionMessage));
         return;
       }
 
@@ -266,13 +262,11 @@ public abstract class Job implements JobControl {
   }
 
   @Override
-  public boolean respond(long functionCallId, JsonElement returnValue, boolean finalReply) {
+  public boolean respond(long functionCallId, ScriptValue returnValue, boolean finalReply) {
     boolean result = task.sendResponse(functionCallId, returnValue, finalReply);
     if (functionCallId == 0
-        && returnValue.isJsonPrimitive()
-        && returnValue instanceof JsonPrimitive primitive
-        && primitive.isString()
-        && primitive.getAsString().equals("exit!")) {
+        && returnValue.get() instanceof String string
+        && string.equals("exit!")) {
       if (config.debugOutput()) {
         LOGGER.info("Job {} got `exit!`, setting state to DONE", jobId);
       }
@@ -282,7 +276,7 @@ public abstract class Job implements JobControl {
   }
 
   @Override
-  public boolean raiseException(long functionCallId, ExceptionInfo exception) {
+  public boolean raiseException(long functionCallId, Exception exception) {
     return task.sendException(functionCallId, exception);
   }
 
