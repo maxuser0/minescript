@@ -32,13 +32,13 @@ if "Pyjinn" not in sys.version:
 
   @dataclass
   class RenderEvent:
-    type: str = "render"
-    context: Any
+    type: str  # "render"
+    context: Any  # Render context provided by the mod loader.
     time: float
 
   @dataclass
   class TickEvent:
-    type: str = "tick"
+    type: str  # "tick"
     time: float
 
 
