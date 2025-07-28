@@ -26,8 +26,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -87,6 +85,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minescript.common.CommandSyntax.Token;
 import net.minescript.common.dataclasses.*;
 import net.minescript.common.events.*;
+import net.minescript.common.mappings.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.pyjinn.interpreter.Script;
@@ -107,6 +106,7 @@ public class Minescript {
   private static Platform platform;
   private static String version;
   private static Thread worldListenerThread;
+  private static MappingsLoader mappingsLoader;
 
   public static void init(Platform platform) {
     Minescript.platform = platform;
@@ -166,6 +166,23 @@ public class Minescript {
     config =
         new Config(MINESCRIPT_DIR, "config.txt", BUILTIN_COMMANDS, IGNORE_DIRS_FOR_COMPLETIONS);
     config.load();
+
+    boolean isMinecraftClassObfuscated =
+        !Minecraft.class.getName().equals("net.minecraft.client.Minecraft");
+    mappingsLoader =
+        new MappingsLoader(
+            SharedConstants.getCurrentVersion().name(),
+            platform.modLoaderName(),
+            isMinecraftClassObfuscated);
+    try {
+      mappingsLoader.load();
+    } catch (Exception e) {
+      LOGGER.error("Error loading mappings: {}", e.toString());
+    }
+  }
+
+  public static void reloadMappings() throws Exception {
+    mappingsLoader.load();
   }
 
   // TODO(maxuser): Allow this to be controlled via config.
@@ -405,6 +422,7 @@ public class Minescript {
           "undo",
           "which",
           "config",
+          "reload_mappings",
           "reload_minescript_resources");
 
   private static final ImmutableSet<String> IGNORE_DIRS_FOR_COMPLETIONS =
@@ -751,7 +769,7 @@ public class Minescript {
                 command,
                 config,
                 systemMessageQueue,
-                platform.modLoaderName(),
+                mappingsLoader.get(),
                 () -> finishJob(jobId, nextCommand));
         jobMap.put(job.jobId(), job);
         job.start();
@@ -843,9 +861,10 @@ public class Minescript {
 
   private static SystemMessageQueue systemMessageQueue = new SystemMessageQueue();
 
-  public static Script loadScript(List<String> scriptCommand, String scriptCode) throws Exception {
+  public static Script loadPyjinnScript(List<String> scriptCommand, String scriptCode)
+      throws Exception {
     return PyjinnScript.loadScript(
-        scriptCommand.toArray(String[]::new), scriptCode, platform.modLoaderName());
+        scriptCommand.toArray(String[]::new), scriptCode, mappingsLoader.get());
   }
 
   private static boolean checkMinescriptDir() {
@@ -1221,6 +1240,11 @@ public class Minescript {
         systemMessageQueue.logUserInfo(
             "`\\config name value`: sets the value of the named variable");
         return true;
+      case "reload_mappings":
+        systemMessageQueue.logUserInfo("{} (built-in command)", command);
+        systemMessageQueue.logUserInfo("Usage: \\reload_mappings");
+        systemMessageQueue.logUserInfo("Reloads mappings files from `minescript/mappings` dir.");
+        return true;
       case "reload_minescript_resources":
         systemMessageQueue.logUserInfo("{} (built-in command)", command);
         systemMessageQueue.logUserInfo("Usage: \\reload_minescript_resources");
@@ -1383,6 +1407,16 @@ public class Minescript {
           } else {
             systemMessageQueue.logUserError(
                 "Expected 2 or fewer params, instead got `{}`", getParamsAsString(command));
+          }
+          runParsedMinescriptCommand(nextCommand);
+          return;
+
+        case "reload_mappings":
+          try {
+            reloadMappings();
+            systemMessageQueue.logUserInfo("Reloaded mappings from `minescript/mappings`.");
+          } catch (Exception e) {
+            systemMessageQueue.logException(e);
           }
           runParsedMinescriptCommand(nextCommand);
           return;
@@ -3399,121 +3433,68 @@ public class Minescript {
       case "java_class":
         {
           args.expectSize(1);
-          var object = Class.forName(args.getString(0));
+          var object = Class.forName(mappingsLoader.get().getRuntimeClassName(args.getString(0)));
           return Optional.of(new JsonPrimitive(job.objects.retain(object)));
         }
 
       case "java_ctor":
         {
           args.expectSize(1);
-          var target = (Class) job.objects.getById(args.getStrictLong(0));
-          var ctors = new ImmutableList.Builder<Constructor>();
-          var argCounts = new ImmutableSet.Builder<Integer>();
-          for (var ctor : target.getConstructors()) {
-            ctors.add(ctor);
-            argCounts.add(ctor.getParameterCount());
-          }
-          var ctorSet = new ConstructorSet(target.getName(), ctors.build(), argCounts.build());
-          return Optional.of(new JsonPrimitive(job.objects.retain(ctorSet)));
+          var target = (Class<?>) job.objects.getById(args.getStrictLong(0));
+          var ctor = new ClassConstructor(target);
+          return Optional.of(new JsonPrimitive(job.objects.retain(ctor)));
         }
 
       case "java_new_instance":
         {
-          var ctorSet = (ConstructorSet) job.objects.getById(args.getStrictLong(0));
+          var klass = (ClassConstructor) job.objects.getById(args.getStrictLong(0));
           Object[] params = new Object[args.size() - 1];
           for (int i = 0; i < params.length; ++i) {
             params[i] = job.objects.getById(args.getStrictLong(i + 1));
           }
-          if (!ctorSet.argCounts().contains(params.length)) {
+          Optional<Constructor<?>> ctor =
+              Script.TypeChecker.findBestMatchingConstructor(klass.type(), params);
+          if (ctor.isEmpty()) {
             throw new IllegalArgumentException(
-                String.format(
-                    "Constructor for `%s` got %d args but expected %s",
-                    ctorSet.name(), params.length, ctorSet.argCounts()));
+                "No matching constructor found for class '%s'".formatted(klass.type()));
           }
-          // Catch IllegalArgumentException until all the ctors in the set with the right number
-          // of args have been exhausted.
-          IllegalArgumentException exception = null;
-          for (Constructor ctor : ctorSet.ctors()) {
-            if (ctor.getParameterCount() == params.length) {
-              try {
-                var result = ctor.newInstance(params);
-                return Optional.of(new JsonPrimitive(job.objects.retain(result)));
-              } catch (IllegalArgumentException e) {
-                exception = e;
-              }
-            }
-          }
-          throw exception;
+          var result = ctor.get().newInstance(params);
+          return Optional.of(new JsonPrimitive(job.objects.retain(result)));
         }
 
       case "java_member":
         {
           args.expectSize(2);
+          var type = (Class<?>) job.objects.getById(args.getStrictLong(0));
           String memberName = args.getString(1);
-          var target = (Class) job.objects.getById(args.getStrictLong(0));
-          Optional<Field> field;
-          try {
-            field = Optional.of(target.getField(memberName));
-          } catch (NoSuchFieldException e) {
-            field = Optional.empty();
-          }
-          var methods = new ImmutableList.Builder<Method>();
-          var argCounts = new ImmutableSet.Builder<Integer>();
-          for (var method : target.getMethods()) {
-            if (method.getName().equals(memberName)) {
-              methods.add(method);
-              argCounts.add(method.getParameterCount());
-            }
-          }
-          var memberSet = new MemberSet(memberName, field, methods.build(), argCounts.build());
-          if (!memberSet.methods().isEmpty() || !memberSet.field().isEmpty()) {
-            return Optional.of(new JsonPrimitive(job.objects.retain(memberSet)));
-          }
-          throw new IllegalArgumentException("Method not found: " + memberName);
+          var classMember = new ClassMember(type, memberName);
+          return Optional.of(new JsonPrimitive(job.objects.retain(classMember)));
         }
 
       case "java_call_method":
         {
           var target = (Object) job.objects.getById(args.getStrictLong(0));
-          var memberSet = (MemberSet) job.objects.getById(args.getStrictLong(1));
+          var member = (ClassMember) job.objects.getById(args.getStrictLong(1));
           Object[] params = new Object[args.size() - 2];
           for (int i = 0; i < params.length; ++i) {
             params[i] = job.objects.getById(args.getStrictLong(i + 2));
           }
-          // Catch IllegalArgumentException until all the methods in the set with the right number
-          // of args have been exhausted.
-          for (Method method : memberSet.methods()) {
-            if (method.getParameterCount() == params.length) {
-              try {
-                var result = method.invoke(target, params);
-                return Optional.of(new JsonPrimitive(job.objects.retain(result)));
-              } catch (IllegalArgumentException e) {
-              } catch (InvocationTargetException e) {
-                throw new InvocationTargetException(
-                    e,
-                    String.format(
-                        "Error invoking `%s` on `%s` from `java_call_method`: %s",
-                        method.getName(), target, e.getCause()));
-              }
-            }
+
+          boolean isStaticMethod = target == null;
+          var classForLookup = target == null ? member.type() : target.getClass();
+          Optional<Method> method =
+              Script.TypeChecker.findBestMatchingMethod(
+                  classForLookup,
+                  isStaticMethod,
+                  mappingsLoader.get().getRuntimeMethodNames(member.type(), member.name()),
+                  params);
+          if (method.isEmpty()) {
+            throw new IllegalArgumentException(
+                "No matching method found for '%s' on class '%s'"
+                    .formatted(member.name(), classForLookup.getName()));
           }
-          // Fell through without successfully invoking a matching method. Throw an exception that
-          // reports the signatures of all methods in the overload set.
-          var paramTypes = new ArrayList<String>();
-          for (int i = 0; i < params.length; ++i) {
-            var param = params[i];
-            paramTypes.add(param == null ? "null" : param.getClass().getName());
-          }
-          var signatures = new ArrayList<String>();
-          for (Method method : memberSet.methods()) {
-            signatures.add(method.toString());
-          }
-          throw new IllegalArgumentException(
-              String.format(
-                  "No matching methods for %s(%s):\n%s",
-                  memberSet.name(),
-                  String.join(", ", paramTypes.toArray(String[]::new)),
-                  String.join("\n", signatures.toArray(String[]::new))));
+          var result = method.get().invoke(target, params);
+          return Optional.of(new JsonPrimitive(job.objects.retain(result)));
         }
 
       case "java_call_script_function":
@@ -3551,13 +3532,15 @@ public class Minescript {
 
       case "java_access_field":
         {
+          args.expectSize(2);
           var target = (Object) job.objects.getById(args.getStrictLong(0));
-          var memberSet = (MemberSet) job.objects.getById(args.getStrictLong(1));
-          var field = memberSet.field();
-          if (field.isEmpty()) {
-            throw new NoSuchFieldException(String.format("No field named `%s`", memberSet.name()));
-          }
-          var result = field.get().get(target);
+          var member = (ClassMember) job.objects.getById(args.getStrictLong(1));
+          var field =
+              member
+                  .type()
+                  .getField(mappingsLoader.get().getRuntimeFieldName(member.type(), member.name()));
+          boolean isClass = target instanceof Class;
+          var result = field.get(isClass ? null : target);
           return Optional.of(new JsonPrimitive(job.objects.retain(result)));
         }
 
@@ -3871,14 +3854,9 @@ public class Minescript {
     }
   }
 
-  private record ConstructorSet(
-      String name, ImmutableList<Constructor> ctors, ImmutableSet<Integer> argCounts) {}
+  private record ClassConstructor(Class<?> type) {}
 
-  private record MemberSet(
-      String name,
-      Optional<Field> field,
-      ImmutableList<Method> methods,
-      ImmutableSet<Integer> argCounts) {}
+  private record ClassMember(Class<?> type, String name) {}
 
   public static void handleAutorun(String worldName) {
     LOGGER.info("Handling autorun for world `{}`", worldName);

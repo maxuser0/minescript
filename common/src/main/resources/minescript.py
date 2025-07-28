@@ -2447,15 +2447,15 @@ def java_bool(b: bool) -> JavaHandle:
 
 java_bool = ScriptFunction("java_bool", java_bool)
 
-def java_ctor(clss: JavaHandle):
+def java_ctor(klass: JavaHandle):
   """Returns handle to a constructor set for the given class handle.
 
   Args:
-    clss: Java class handle returned from `java_class`
+    klass: Java class handle returned from `java_class`
 
   Since: v4.0
   """
-  return (clss,)
+  return (klass,)
 
 java_ctor = ScriptFunction("java_ctor", java_ctor)
 
@@ -2475,15 +2475,19 @@ def java_new_instance(ctor: JavaHandle, *args: List[JavaHandle]) -> JavaHandle:
 
 java_new_instance = ScriptFunction("java_new_instance", java_new_instance)
 
-def java_member(clss: JavaHandle, name: str) -> JavaHandle:
+def java_member(klass: JavaHandle, name: str) -> JavaHandle:
   """Gets Java member(s) matching `name`.
+
+  Args:
+    klass: Java class handle returned from `java_class` to look up member within
+    name: name of member to look up within `klass`
 
   Returns:
     Java member object for use with `java_access_field` or `java_call_method`.
 
   Since: v4.0
   """
-  return (clss, name)
+  return (klass, name)
 
 java_member = ScriptFunction("java_member", java_member)
 

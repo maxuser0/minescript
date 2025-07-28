@@ -22,6 +22,10 @@ public class ScriptValue {
     this.toJson = toJson;
   }
 
+  public static ScriptValue of(Object value, Callable<JsonElement> toJson) {
+    return new ScriptValue(value, toJson);
+  }
+
   public static ScriptValue of(Boolean value) {
     return new ScriptValue(value, () -> new JsonPrimitive(value));
   }
