@@ -9,11 +9,31 @@
 
 ## v5.0b1
 
-- Introduce global game dict shared across Pyjinn scripts: `__script__.vars["game"]`
-- Implement 'continue' statement inside loops
-- Support slice syntax like `x[:y]` where some slice values are omitted (previously, `x[:y]` was
-  mistakenly parsed as `y` being the lowerbound instead of the upperbound because it was the first
-  value encountered between the square brackets.)
+- Fix mappings for nested classes and enums ([0732f77](https://github.com/maxuser0/minescript/commit/0732f775526fcf64958b39e204d0f8ee76c1fc55))
+- Unify use of mappings across Python and Pyjinn ([c8e909d](https://github.com/maxuser0/minescript/commit/c8e909d5a9c428bf6e7dd7980bf7ba7a03607305))
+- Fix minescript.pyj to use valid Python syntax ([782c5a2](https://github.com/maxuser0/minescript/commit/782c5a2882c05a6f413e4d6354c9b45b858555f9))
+- Support passing non-JSON objects to Pyjinn events ([8abfa8f](https://github.com/maxuser0/minescript/commit/8abfa8ff9358d1c193b8434e1dcd61d544acbaf0))
+- Make `__script__.vars["game"]` threadsafe ([394c25a](https://github.com/maxuser0/minescript/commit/394c25a49ec72b76b0ef71108945bf19ca9789b4))
+- Support "world" event for connect/disconnect ([0c2d139](https://github.com/maxuser0/minescript/commit/0c2d1392eb5b600c1c50aa6f63d2511c12a18a6f))
+- Refactor event handling into EventDispatcher class ([6e63e6b](https://github.com/maxuser0/minescript/commit/6e63e6ba0da758ca540a3403f730827415a1d0f4))
+- Normalize event listener registration logic ([3325e66](https://github.com/maxuser0/minescript/commit/3325e662edbda7d8eda91ea57b36be73d4e86492))
+- Provide global game state shared by Pyjinn scripts ([06dffbc](https://github.com/maxuser0/minescript/commit/06dffbcc014be0bd074c43c681f18ead987042ea))
+
+### Pyjinn 0.5
+
+- Promote functional params for calls of Java ctors ([0383c7a](https://github.com/maxuser0/pyjinn/commit/0383c7a4d3107a9c5da026b5360daaf4561b05be))
+- Support multi-threaded scripts, fix stack traces ([08955c4](https://github.com/maxuser0/pyjinn/commit/08955c4aea9cf9514775ec310468e4de40ff03c6))
+- Update Pyjinn version to 0.5 ([4198082](https://github.com/maxuser0/pyjinn/commit/41980829965da80ecc6a25771c920ec6ca8aaf2c))
+- Simplify implementation of slice expression parser ([456a4b1](https://github.com/maxuser0/pyjinn/commit/456a4b198a39050fdbefe2cce9b2fe125b813248))
+- Fix slice parser to respect blank slice values ([817e8e2](https://github.com/maxuser0/pyjinn/commit/817e8e226c20d623c76324a07bc49e2a8c22664e))
+- Fix handling of int/long hex constants ([94c28f3](https://github.com/maxuser0/pyjinn/commit/94c28f36e9ab4d92ef7bda211a383c7dad8844c6))
+- Refactor TypeChecker methods for easier reuse ([8f42a73](https://github.com/maxuser0/pyjinn/commit/8f42a73a78047016ef99465d575fa0548c7e57dc))
+- Promote functional params for calls of Java ctors ([0383c7a](https://github.com/maxuser0/pyjinn/commit/0383c7a4d3107a9c5da026b5360daaf4561b05be))
+- Support multi-threaded scripts, fix stack traces ([08955c4](https://github.com/maxuser0/pyjinn/commit/08955c4aea9cf9514775ec310468e4de40ff03c6))
+- Update Pyjinn version to 0.5 ([4198082](https://github.com/maxuser0/pyjinn/commit/41980829965da80ecc6a25771c920ec6ca8aaf2c))
+- Simplify implementation of slice expression parser ([456a4b1](https://github.com/maxuser0/pyjinn/commit/456a4b198a39050fdbefe2cce9b2fe125b813248))
+- Fix slice parser to respect blank slice values ([817e8e2](https://github.com/maxuser0/pyjinn/commit/817e8e226c20d623c76324a07bc49e2a8c22664e))
+- Implement 'continue' statement inside loops ([0a91f61](https://github.com/maxuser0/pyjinn/commit/0a91f61a6677a6da9e82b46c19a2c7823aad0fe7))
 
 
 ## v5.0a4
