@@ -9,6 +9,7 @@
 
 ## v5.0b1
 
+- Support Outer.Nested class syntax with mappings ([268f8b1](https://github.com/maxuser0/minescript/commit/268f8b16b8709c2dcb09aeed7948b6796324ce3c))
 - Fix mappings for nested classes and enums ([0732f77](https://github.com/maxuser0/minescript/commit/0732f775526fcf64958b39e204d0f8ee76c1fc55))
 - Unify use of mappings across Python and Pyjinn ([c8e909d](https://github.com/maxuser0/minescript/commit/c8e909d5a9c428bf6e7dd7980bf7ba7a03607305))
 - Fix minescript.pyj to use valid Python syntax ([782c5a2](https://github.com/maxuser0/minescript/commit/782c5a2882c05a6f413e4d6354c9b45b858555f9))
@@ -21,6 +22,10 @@
 
 ### Pyjinn 0.5
 
+- Support Java array on rhs of `in` operator ([3ec7633](https://github.com/maxuser0/pyjinn/commit/3ec76330fbd14dd12736b49a5725285e6c75ddd6))
+- Support Outer.Nested class syntax ([29f988c](https://github.com/maxuser0/pyjinn/commit/29f988c8d318993a8829fded2635714615bfb4cf))
+- Fix handling of int/long hex constants ([94c28f3](https://github.com/maxuser0/pyjinn/commit/94c28f36e9ab4d92ef7bda211a383c7dad8844c6))
+- Refactor TypeChecker methods for easier reuse ([8f42a73](https://github.com/maxuser0/pyjinn/commit/8f42a73a78047016ef99465d575fa0548c7e57dc))
 - Promote functional params for calls of Java ctors ([0383c7a](https://github.com/maxuser0/pyjinn/commit/0383c7a4d3107a9c5da026b5360daaf4561b05be))
 - Support multi-threaded scripts, fix stack traces ([08955c4](https://github.com/maxuser0/pyjinn/commit/08955c4aea9cf9514775ec310468e4de40ff03c6))
 - Update Pyjinn version to 0.5 ([4198082](https://github.com/maxuser0/pyjinn/commit/41980829965da80ecc6a25771c920ec6ca8aaf2c))
