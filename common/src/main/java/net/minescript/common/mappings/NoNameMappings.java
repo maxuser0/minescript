@@ -12,6 +12,11 @@ public class NoNameMappings implements NameMappings {
   }
 
   @Override
+  public String getPrettyClassName(String runtimeClassName) {
+    return runtimeClassName;
+  }
+
+  @Override
   public String getRuntimeFieldName(Class<?> clazz, String prettyFieldName) {
     return prettyFieldName;
   }

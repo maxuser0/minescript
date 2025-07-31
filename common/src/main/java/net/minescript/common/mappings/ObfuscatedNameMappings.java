@@ -6,6 +6,7 @@ package net.minescript.common.mappings;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.HashMultimap;
+import com.google.common.collect.ImmutableSet;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
@@ -17,6 +18,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -45,19 +47,27 @@ public class ObfuscatedNameMappings implements NameMappings {
       officialToObfuscatedClassMap.inverse();
 
   // Map: [obfuscatedClassName, obfuscatedFieldName] -> fabricFieldName
-  private final Map<ClassMemberKey, String> fabricFieldMap = new HashMap<>();
+  private final Map<ClassMemberKey, String> fabricFieldMap = new ConcurrentHashMap<>();
 
   // Map: [obfuscatedClassName, obfuscatedMethodName] -> Set(fabricMethodName)]
   private final HashMultimap<ClassMemberKey, String> fabricMethodMap = HashMultimap.create();
 
   // Map: officialClassName -> fabricClassName
-  private final Map<String, String> runtimeClassMap = new HashMap<>();
+  private final Map<String, String> officialToFabricClassMap = new ConcurrentHashMap<>();
+
+  // Map: fabricClassName -> officialClassName
+  // (officialToFabricClassMap and fabricToOfficialClassMap could be BiMap inversions of each
+  // other, but if a caller passes in a pretty name when a runtime name is expected, or vice versa,
+  // the maps could get into inconsistent states and throw an exception. So, keep the maps
+  // independent.)
+  private final Map<String, String> fabricToOfficialClassMap = new ConcurrentHashMap<>();
 
   // Map: [fabricClassName, officialFieldName] -> fabricFieldName
-  private final Map<ClassMemberKey, String> runtimeFieldMap = new HashMap<>();
+  private final Map<ClassMemberKey, String> runtimeFieldMap = new ConcurrentHashMap<>();
 
   // Map: [fabricClassName, officialMethodName] -> Set(fabricMethodNames)]
-  private final HashMultimap<ClassMemberKey, String> runtimeMethodMap = HashMultimap.create();
+  private final Map<ClassMemberKey, ImmutableSet<String>> runtimeMethodMap =
+      new ConcurrentHashMap<>();
 
   private record ClassMemberKey(String runtimeClassName, String prettyMemberName) {}
 
@@ -65,7 +75,7 @@ public class ObfuscatedNameMappings implements NameMappings {
 
   @Override
   public String getRuntimeClassName(String prettyClassName) {
-    return runtimeClassMap.computeIfAbsent(prettyClassName, this::computeRuntimeClassName);
+    return officialToFabricClassMap.computeIfAbsent(prettyClassName, this::computeRuntimeClassName);
   }
 
   private String computeRuntimeClassName(String prettyClassName) {
@@ -82,69 +92,84 @@ public class ObfuscatedNameMappings implements NameMappings {
   }
 
   @Override
+  public String getPrettyClassName(String runtimeClassName) {
+    return fabricToOfficialClassMap.computeIfAbsent(runtimeClassName, this::computePrettyClassName);
+  }
+
+  private String computePrettyClassName(String runtimeClassName) {
+    String obfuscatedName = fabricToObfuscatedClassMap.get(runtimeClassName);
+    if (obfuscatedName == null) {
+      return runtimeClassName;
+    }
+    String officialName = obfuscatedToOfficialClassMap.get(obfuscatedName);
+    if (officialName == null) {
+      return runtimeClassName;
+    }
+    LOGGER.info(
+        "Mapped Fabric class name `{}` to official name `{}`", runtimeClassName, officialName);
+    return officialName;
+  }
+
+  @Override
   public String getRuntimeFieldName(Class<?> clazz, String prettyFieldName) {
     var cacheKey = new ClassMemberKey(clazz.getName(), prettyFieldName);
-    if (runtimeFieldMap.containsKey(cacheKey)) {
-      return runtimeFieldMap.get(cacheKey);
-    }
+    return runtimeFieldMap.computeIfAbsent(
+        cacheKey,
+        ignoreKey -> {
+          Optional<String> optFabricFieldName =
+              getFabricFieldNameUncached(clazz, prettyFieldName, "");
+          final String fabricFieldName;
 
-    Optional<String> optFabricFieldName = getFabricFieldNameUncached(clazz, prettyFieldName, "");
-    final String fabricFieldName;
-
-    if (optFabricFieldName.isEmpty()) {
-      fabricFieldName = prettyFieldName;
-      LOGGER.warn(
-          "Failed to map Fabric.official field name `{}/{}.{}`, falling back to `{}`",
-          obfuscatedToOfficialClassMap.getOrDefault(
-              fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
-          clazz.getName(),
-          prettyFieldName,
-          fabricFieldName);
-    } else {
-      fabricFieldName = optFabricFieldName.get();
-      LOGGER.info(
-          "Mapped Fabric.official field name `{}/{}.{}` to `{}`",
-          obfuscatedToOfficialClassMap.getOrDefault(
-              fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
-          clazz.getName(),
-          prettyFieldName,
-          fabricFieldName);
-    }
-
-    runtimeFieldMap.put(cacheKey, fabricFieldName);
-    return fabricFieldName;
+          if (optFabricFieldName.isEmpty()) {
+            fabricFieldName = prettyFieldName;
+            LOGGER.warn(
+                "Failed to map Fabric.official field name `{}/{}.{}`, falling back to `{}`",
+                obfuscatedToOfficialClassMap.getOrDefault(
+                    fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
+                clazz.getName(),
+                prettyFieldName,
+                fabricFieldName);
+          } else {
+            fabricFieldName = optFabricFieldName.get();
+            LOGGER.info(
+                "Mapped Fabric.official field name `{}/{}.{}` to `{}`",
+                obfuscatedToOfficialClassMap.getOrDefault(
+                    fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
+                clazz.getName(),
+                prettyFieldName,
+                fabricFieldName);
+          }
+          return fabricFieldName;
+        });
   }
 
   @Override
   public Set<String> getRuntimeMethodNames(Class<?> clazz, String prettyMethodName) {
     var cacheKey = new ClassMemberKey(clazz.getName(), prettyMethodName);
-    if (runtimeMethodMap.containsKey(cacheKey)) {
-      return runtimeMethodMap.get(cacheKey);
-    }
-
-    Set<String> fabricMethodNames = getFabricMethodNamesUncached(clazz, prettyMethodName, "");
-
-    if (fabricMethodNames.isEmpty()) {
-      LOGGER.warn(
-          "Failed to map Fabric.official method name `{}/{}.{}`, falling back to {}",
-          obfuscatedToOfficialClassMap.getOrDefault(
-              fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
-          clazz.getName(),
-          prettyMethodName,
-          fabricMethodNames);
-      fabricMethodNames = Set.of(prettyMethodName);
-    } else {
-      LOGGER.info(
-          "Mapped Fabric.official method name `{}/{}.{}` to {}",
-          obfuscatedToOfficialClassMap.getOrDefault(
-              fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
-          clazz.getName(),
-          prettyMethodName,
-          fabricMethodNames);
-    }
-
-    runtimeMethodMap.putAll(cacheKey, fabricMethodNames);
-    return fabricMethodNames;
+    return runtimeMethodMap.computeIfAbsent(
+        cacheKey,
+        ignoreKey -> {
+          Set<String> fabricMethodNames = getFabricMethodNamesUncached(clazz, prettyMethodName, "");
+          if (fabricMethodNames.isEmpty()) {
+            fabricMethodNames = Set.of(prettyMethodName);
+            LOGGER.warn(
+                "No mapping for Fabric.official method name `{}/{}.{}`, falling back to {}",
+                obfuscatedToOfficialClassMap.getOrDefault(
+                    fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
+                clazz.getName(),
+                prettyMethodName,
+                fabricMethodNames);
+          } else {
+            LOGGER.info(
+                "Mapped Fabric.official method name `{}/{}.{}` to {}",
+                obfuscatedToOfficialClassMap.getOrDefault(
+                    fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
+                clazz.getName(),
+                prettyMethodName,
+                fabricMethodNames);
+          }
+          return ImmutableSet.copyOf(fabricMethodNames);
+        });
   }
 
   private Optional<String> getFabricFieldNameUncached(

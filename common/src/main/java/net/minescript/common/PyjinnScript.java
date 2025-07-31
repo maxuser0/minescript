@@ -284,6 +284,7 @@ public class PyjinnScript {
             PyjinnScript.class.getClassLoader(),
             moduleHandler,
             nameMappings::getRuntimeClassName,
+            nameMappings::getPrettyClassName,
             nameMappings::getRuntimeFieldName,
             nameMappings::getRuntimeMethodNames);
 

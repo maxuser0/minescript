@@ -8,6 +8,8 @@ import java.util.Set;
 public interface NameMappings {
   String getRuntimeClassName(String prettyClassName);
 
+  String getPrettyClassName(String runtimeClassName);
+
   String getRuntimeFieldName(Class<?> clazz, String prettyFieldName);
 
   Set<String> getRuntimeMethodNames(Class<?> clazz, String prettyMethodName);
