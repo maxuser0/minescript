@@ -9,6 +9,7 @@
 
 ## v5.0b1
 
+- Pyjinn API change in method type checker ([d583429](https://github.com/maxuser0/minescript/commit/d583429280e3becf367ac4bb7faa7f4a755fcc32))
 - Support Outer.Nested class syntax with mappings ([268f8b1](https://github.com/maxuser0/minescript/commit/268f8b16b8709c2dcb09aeed7948b6796324ce3c))
 - Fix mappings for nested classes and enums ([0732f77](https://github.com/maxuser0/minescript/commit/0732f775526fcf64958b39e204d0f8ee76c1fc55))
 - Unify use of mappings across Python and Pyjinn ([c8e909d](https://github.com/maxuser0/minescript/commit/c8e909d5a9c428bf6e7dd7980bf7ba7a03607305))
@@ -22,6 +23,8 @@
 
 ### Pyjinn 0.5
 
+- Fix method resolution to check superclasses ([81d840a](https://github.com/maxuser0/pyjinn/commit/81d840aac4dd928a9145662b61eb5ff87f2dc836))
+- Remove java.vendor, build.timestamp from version ([1f56d6f](https://github.com/maxuser0/pyjinn/commit/1f56d6f232c034b4ce606d23a208dbfecf0c80ac))
 - Support Java array on rhs of `in` operator ([3ec7633](https://github.com/maxuser0/pyjinn/commit/3ec76330fbd14dd12736b49a5725285e6c75ddd6))
 - Support Outer.Nested class syntax ([29f988c](https://github.com/maxuser0/pyjinn/commit/29f988c8d318993a8829fded2635714615bfb4cf))
 - Fix handling of int/long hex constants ([94c28f3](https://github.com/maxuser0/pyjinn/commit/94c28f36e9ab4d92ef7bda211a383c7dad8844c6))
