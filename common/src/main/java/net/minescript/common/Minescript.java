@@ -3486,7 +3486,8 @@ public class Minescript {
               Script.TypeChecker.findBestMatchingMethod(
                   classForLookup,
                   isStaticMethod,
-                  mappingsLoader.get().getRuntimeMethodNames(member.type(), member.name()),
+                  mappingsLoader.get()::getRuntimeMethodNames,
+                  member.name(),
                   params);
           if (method.isEmpty()) {
             throw new IllegalArgumentException(
