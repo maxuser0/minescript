@@ -1,6 +1,6 @@
 # Minescript - Terms of Use
 
-**Last Updated:** June 26, 2025
+**Last Updated:** August 1, 2025
 
 Please read these Terms of Use ("Terms", "TOU") carefully before using the Minescript mod (the "Mod") developed by **maxuser** ("the Developer").
 
