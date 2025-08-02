@@ -1,4 +1,4 @@
-# Minescript - Terms of Use
+# Minescript Terms of Use
 
 **Last Updated:** August 1, 2025
 
@@ -22,7 +22,9 @@ Minescript is an open-source Minecraft mod that enables users to write scripts t
 
 ## 3. Licensing and Open Source
 
-Source code for the Mod is distributed under the GPL-3.0-only license. A copy of this license is included with the Mod distribution and can also be found at: https://github.com/maxuser0/minescript/blob/main/COPYING
+Source code for the Mod is distributed under the GPL-3.0-only license. A copy of this license is
+included with the Mod distribution and can also be found at:
+<https://github.com/maxuser0/minescript/blob/main/COPYING>
 
 Your use, modification, and distribution of Minescript are governed by the terms of the GPL-3.0-only license. These Terms of Use supplement, but do not replace, the obligations and rights granted by the GPL-3.0-only license.
 
@@ -125,6 +127,6 @@ By continuing to access or use the Developer's Mod after those revisions become 
 If you have any questions about these Terms, please contact the Developer:
 
 * **Email:** maxuser@minescript.net
-* **GitHub:** https://github.com/maxuser0/minescript
-* **Modrinth:** https://modrinth.com/mod/minescript
-* **CurseForge:** https://www.curseforge.com/minecraft/mc-mods/minescript
+* **GitHub:** <https://github.com/maxuser0/minescript>
+* **Modrinth:** <https://modrinth.com/mod/minescript>
+* **CurseForge:** <https://www.curseforge.com/minecraft/mc-mods/minescript>
