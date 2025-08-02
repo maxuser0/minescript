@@ -244,10 +244,7 @@ def _player_hand_items_result_transform(items):
   """(__internal__)"""
   if options.legacy_dict_return_values:
     return items
-  main, off = items
-  return HandItems(
-      main_hand=None if main is None else ItemStack(**main),
-      off_hand=None if off is None else ItemStack(**off))
+  return HandItems(**items)
 
 player_hand_items = ScriptFunction(
     "player_hand_items", player_hand_items, _player_hand_items_result_transform)
@@ -574,7 +571,7 @@ def player_get_targeted_block(max_distance: float = 20) -> Union[TargetedBlock, 
   return (max_distance,)
 
 def _player_get_targeted_block_result_transform(targeted_block):
-  return None if targeted_block is None else TargetedBlock(*targeted_block)
+  return None if targeted_block is None else TargetedBlock(**targeted_block)
 
 player_get_targeted_block = ScriptFunction(
     "player_get_targeted_block", player_get_targeted_block,
@@ -595,7 +592,7 @@ class EntityData:
   health: float = None
   local: bool = None  # `True` if this the local player
   passengers: List[str] = None  # UUIDs of passengers as strings
-  nbt: Dict[str, Any] = None
+  nbt: str = None
 
 
 def player_get_targeted_entity(max_distance: float = 20, nbt: bool = False) -> Union[EntityData, None]:
@@ -879,10 +876,10 @@ def register_key_listener(
 
   Since: v3.2
   """
-  handler_id = await_script_function("register_key_listener", ())
+  listener_id = await_script_function("register_event_listener", ("key", {}))
   send_script_function_request(
-      "start_key_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("key", listener_id), handler, exception_handler)
+  return listener_id
 
 
 def register_mouse_listener(
@@ -900,10 +897,10 @@ def register_mouse_listener(
 
   Since: v4.0
   """
-  handler_id = await_script_function("register_mouse_listener", ())
+  listener_id = await_script_function("register_event_listener", ("mouse", {}))
   send_script_function_request(
-      "start_mouse_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("mouse", listener_id), handler, exception_handler)
+  return listener_id
 
 
 def register_chat_message_listener(
@@ -929,10 +926,10 @@ def register_chat_message_listener(
   See also:
     `register_chat_message_interceptor()` for swallowing outgoing chat messages
   """
-  handler_id = await_script_function("register_chat_listener", ())
+  listener_id = await_script_function("register_event_listener", ("chat", {}))
   send_script_function_request(
-      "start_chat_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("chat", listener_id), handler, exception_handler)
+  return listener_id
 
 
 def register_chat_message_interceptor(
@@ -960,12 +957,17 @@ def register_chat_message_interceptor(
   See also:
     `register_chat_message_listener()` for non-destructive listening of chat messages
   """
-  handler_id = await_script_function("register_outgoing_chat_intercept_listener", (prefix, pattern))
+  kwargs = {}
+  if prefix is not None:
+      kwargs["prefix"] = prefix
+  if pattern is not None:
+      kwargs["pattern"] = pattern
+  listener_id = await_script_function("register_event_listener", ("outgoing_chat_intercept", kwargs))
 
   send_script_function_request(
-      "start_outgoing_chat_intercept_listener", (handler_id,), handler, exception_handler)
+      "start_event_listener", ("outgoing_chat_intercept", listener_id), handler, exception_handler)
 
-  return handler_id
+  return listener_id
 
 
 def register_add_entity_listener(
@@ -980,10 +982,10 @@ def register_add_entity_listener(
 
   Since: v4.0
   """
-  handler_id = await_script_function("register_add_entity_listener", ())
+  listener_id = await_script_function("register_event_listener", ("add_entity", {}))
   send_script_function_request(
-      "start_add_entity_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("add_entity", listener_id), handler, exception_handler)
+  return listener_id
 
 
 def register_block_update_listener(
@@ -998,10 +1000,10 @@ def register_block_update_listener(
 
   Since: v4.0
   """
-  handler_id = await_script_function("register_block_update_listener", ())
+  listener_id = await_script_function("register_event_listener", ("block_update", {}))
   send_script_function_request(
-      "start_block_update_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("block_update", listener_id), handler, exception_handler)
+  return listener_id
 
 
 def register_take_item_listener(
@@ -1016,10 +1018,10 @@ def register_take_item_listener(
 
   Since: v4.0
   """
-  handler_id = await_script_function("register_take_item_listener", ())
+  listener_id = await_script_function("register_event_listener", ("take_item", {}))
   send_script_function_request(
-      "start_take_item_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("take_item", listener_id), handler, exception_handler)
+  return listener_id
 
 
 def register_damage_listener(
@@ -1034,10 +1036,10 @@ def register_damage_listener(
 
   Since: v4.0
   """
-  handler_id = await_script_function("register_damage_listener", ())
+  listener_id = await_script_function("register_event_listener", ("damage", {}))
   send_script_function_request(
-      "start_damage_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("damage", listener_id), handler, exception_handler)
+  return listener_id
 
 
 def register_explosion_listener(
@@ -1052,10 +1054,10 @@ def register_explosion_listener(
 
   Since: v4.0
   """
-  handler_id = await_script_function("register_explosion_listener", ())
+  listener_id = await_script_function("register_event_listener", ("explosion", {}))
   send_script_function_request(
-      "start_explosion_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("explosion", listener_id), handler, exception_handler)
+  return listener_id
 
 
 def register_chunk_listener(
@@ -1070,24 +1072,24 @@ def register_chunk_listener(
 
   Since: v4.0
   """
-  handler_id = await_script_function("register_chunk_listener", ())
+  listener_id = await_script_function("register_event_listener", ("chunk", {}))
   send_script_function_request(
-      "start_chunk_listener", (handler_id,), handler, exception_handler)
-  return handler_id
+      "start_event_listener", ("chunk", listener_id), handler, exception_handler)
+  return listener_id
 
 
-def unregister_event_handler(handler_id: int) -> bool:
+def unregister_event_handler(listener_id: int) -> bool:
   """Unregisters an event handler, if any, for the currently running job. (__internal__)
 
   Args:
-    handler_id: ID of an event handler returned from a `register_...()` function.
+    listener_id: ID of an event handler returned from a `register_...()` function.
 
   Returns:
-    `True` if `handler_id` was successfully cancelled, `False` otherwise.
+    `True` if `listener_id` was successfully cancelled, `False` otherwise.
 
   Since: v4.0
   """
-  return await_script_function("unregister_event_handler", (handler_id,))
+  return await_script_function("unregister_event_handler", (listener_id,))
 
 
 def set_default_executor(executor: minescript_runtime.FunctionExecutor):
@@ -1251,6 +1253,7 @@ class _EventType:
   DAMAGE: str = "damage"
   EXPLOSION: str = "explosion"
   CHUNK: str = "chunk"
+  WORLD: str = "world"
 
 EventType = _EventType()
 
@@ -1337,6 +1340,12 @@ class ChunkEvent:
   x_max: int
   z_max: int
 
+@dataclass
+class WorldEvent:
+  type: str
+  time: float
+  connected: bool
+
 def _create_add_entity_event(**kwargs):
   kwargs["entity"] = EntityData(**kwargs["entity"])
   return AddEntityEvent(**kwargs)
@@ -1356,6 +1365,7 @@ _EVENT_CONSTRUCTORS = {
   EventType.DAMAGE: DamageEvent,
   EventType.EXPLOSION: ExplosionEvent,
   EventType.CHUNK: ChunkEvent,
+  EventType.WORLD: WorldEvent,
 }
 
 class EventQueue:
@@ -1379,7 +1389,7 @@ class EventQueue:
   def __init__(self):
     """Creates an event registration handler."""
     self.queue = queue.Queue()
-    self.event_handler_ids = []
+    self.event_listener_ids = []
 
   def register_key_listener(self):
     """Registers listener for `EventType.KEY` events as `KeyEvent`.
@@ -1555,6 +1565,37 @@ class EventQueue:
     """
     self._register(EventType.CHUNK, register_chunk_listener)
 
+  def register_world_listener(self):
+    """Registers listener for `EventType.WORLD` events as `WorldEvent`.
+
+    Script jobs are automatically terminated when the user's game client disconnects from a world
+    unless the script has an active "world" listener registered. All script jobs, including ones
+    with "world" listeners, are terminated when the game client exits.
+
+    Example:
+    ```
+      with EventQueue() as event_queue:
+        event_queue.register_world_listener()
+        while True:
+          event = event_queue.get()
+          if event.type == EventType.WORLD:
+            if event.connected:
+              log(f"Connected to world {world_info().name}.")
+            else:
+              log("Disconnected from world.")
+    ```
+
+    Since: v5.0
+    """
+    def register_world_listener(
+        handler: Callable[[Dict[str, Any]], None], exception_handler: ExceptionHandler = None) -> int:
+      listener_id = await_script_function("register_event_listener", ("world", {}))
+      send_script_function_request(
+          "start_event_listener", ("world", listener_id), handler, exception_handler)
+      return listener_id
+
+    self._register(EventType.WORLD, register_world_listener)
+
   def _register(self, event_type: str, registration_func):
     def put_typed_event(event):
       try:
@@ -1568,18 +1609,18 @@ class EventQueue:
         minescript_runtime.debug_log(exception_message)
         print(exception_message, file=sys.stderr)
 
-    handler_id = registration_func(put_typed_event, self.queue.put)
-    if type(handler_id) is not int:
-      error_message = f"Expected registration function to return int but got `{self.handler_id}`"
+    listener_id = registration_func(put_typed_event, self.queue.put)
+    if type(listener_id) is not int:
+      error_message = f"Expected registration function to return int but got `{listener_id}`"
       minescript_runtime.debug_log(error_message)
       raise ValueError(error_message)
-    self.event_handler_ids.append(handler_id)
+    self.event_listener_ids.append(listener_id)
 
   def unregister_all(self):
-    handler_ids = self.event_handler_ids
-    self.event_handler_ids = []
-    for handler_id in handler_ids:
-      unregister_event_handler(handler_id)
+    listener_ids = self.event_listener_ids
+    self.event_listener_ids = []
+    for listener_id in listener_ids:
+      unregister_event_handler(listener_id)
 
   def get(self, block: bool = True, timeout: float = None) -> Any:
     """Gets the next event in the queue.
@@ -2406,15 +2447,15 @@ def java_bool(b: bool) -> JavaHandle:
 
 java_bool = ScriptFunction("java_bool", java_bool)
 
-def java_ctor(clss: JavaHandle):
+def java_ctor(klass: JavaHandle):
   """Returns handle to a constructor set for the given class handle.
 
   Args:
-    clss: Java class handle returned from `java_class`
+    klass: Java class handle returned from `java_class`
 
   Since: v4.0
   """
-  return (clss,)
+  return (klass,)
 
 java_ctor = ScriptFunction("java_ctor", java_ctor)
 
@@ -2434,15 +2475,19 @@ def java_new_instance(ctor: JavaHandle, *args: List[JavaHandle]) -> JavaHandle:
 
 java_new_instance = ScriptFunction("java_new_instance", java_new_instance)
 
-def java_member(clss: JavaHandle, name: str) -> JavaHandle:
+def java_member(klass: JavaHandle, name: str) -> JavaHandle:
   """Gets Java member(s) matching `name`.
+
+  Args:
+    klass: Java class handle returned from `java_class` to look up member within
+    name: name of member to look up within `klass`
 
   Returns:
     Java member object for use with `java_access_field` or `java_call_method`.
 
   Since: v4.0
   """
-  return (clss, name)
+  return (klass, name)
 
 java_member = ScriptFunction("java_member", java_member)
 

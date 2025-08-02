@@ -15,7 +15,6 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
-import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -27,8 +26,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -72,10 +69,8 @@ import net.minecraft.client.renderer.debug.DebugRenderer;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.RegistryAccess;
-import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
-import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
@@ -84,11 +79,13 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minescript.common.CommandSyntax.Token;
+import net.minescript.common.dataclasses.*;
+import net.minescript.common.events.*;
+import net.minescript.common.mappings.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.pyjinn.interpreter.Script;
@@ -109,6 +106,7 @@ public class Minescript {
   private static Platform platform;
   private static String version;
   private static Thread worldListenerThread;
+  private static MappingsLoader mappingsLoader;
 
   public static void init(Platform platform) {
     Minescript.platform = platform;
@@ -168,6 +166,23 @@ public class Minescript {
     config =
         new Config(MINESCRIPT_DIR, "config.txt", BUILTIN_COMMANDS, IGNORE_DIRS_FOR_COMPLETIONS);
     config.load();
+
+    boolean isMinecraftClassObfuscated =
+        !Minecraft.class.getName().equals("net.minecraft.client.Minecraft");
+    mappingsLoader =
+        new MappingsLoader(
+            SharedConstants.getCurrentVersion().name(),
+            platform.modLoaderName(),
+            isMinecraftClassObfuscated);
+    try {
+      mappingsLoader.load();
+    } catch (Exception e) {
+      LOGGER.error("Error loading mappings: {}", e.toString());
+    }
+  }
+
+  public static void reloadMappings() throws Exception {
+    mappingsLoader.load();
   }
 
   // TODO(maxuser): Allow this to be controlled via config.
@@ -232,31 +247,49 @@ public class Minescript {
   }
 
   private static void cancelOrphanedOperations(
-      Map<JobOperationId, ? extends JobControl.Operation> operations) {
-    if (!operations.isEmpty()) {
+      Set<Integer> jobIdsToKeep, EventDispatcher eventDispatcher) {
+    if (!eventDispatcher.isEmpty()) {
       LOGGER.info(
-          "Cancelling orphaned operations when exiting world: {}",
-          operations.entrySet().stream()
+          "Cancelling orphaned operations when exiting world (excluding jobs with 'world' event"
+              + " listeners): {}",
+          eventDispatcher.entrySet().stream()
+              .filter(e -> !jobIdsToKeep.contains(e.getValue().jobId()))
               .map(e -> String.format("%s %s", e.getValue().name(), e.getKey()))
               .collect(Collectors.toList()));
 
       // Stash values in a new list so that the operations map isn't modified while being
       // iterated/streamed, because Job.Operation::cancel removes a listener from the map.
-      new ArrayList<>(operations.values()).stream().forEach(JobControl.Operation::cancel);
+      new ArrayList<>(eventDispatcher.values())
+          .stream()
+              .forEach(
+                  op -> {
+                    if (!jobIdsToKeep.contains(op.jobId())) {
+                      op.cancel();
+                    }
+                  });
     }
   }
 
   private static void killAllJobs() {
+    // Find all the jobs that have "world" event listeners and keep them alive.
+    var jobIdsToKeep =
+        new HashSet<>(worldListeners.keySet().stream().map(key -> key.jobId()).toList());
+
     for (var job : jobs.getMap().values()) {
-      LOGGER.info("Killing job: {}", job.jobSummary());
-      job.requestKill();
+      if (jobIdsToKeep.contains(job.jobId())) {
+        LOGGER.info(
+            "Keeping job alive because it has a world event listener: {}", job.jobSummary());
+      } else {
+        LOGGER.info("Killing job that has no world event listener: {}", job.jobSummary());
+        job.requestKill();
+      }
     }
 
     // Job operations should have been cleaned up when killing jobs, but the jobs killed above might
     // still be in the process of shutting down, or operations may have been leaked accidentally.
     // Clear any leaked operations here.
-    for (var handlerMap : eventHandlerMaps) {
-      cancelOrphanedOperations(handlerMap);
+    for (var dispatcher : eventDispatchers) {
+      cancelOrphanedOperations(jobIdsToKeep, dispatcher);
     }
 
     customNickname = null;
@@ -272,12 +305,17 @@ public class Minescript {
       boolean noWorldNow = (minecraft.level == null);
       if (noWorld != noWorldNow) {
         if (noWorldNow) {
+          // TODO(maxuser): It's not safe to call these listeners outside of the render thread. Can
+          // this be processed on the render thread even when there's no current world? Where would
+          // job stdout and stderr show up? Redirected to the log file?
+          onWorldConnectionChange(false);
           autorunHandled.set(false);
           LOGGER.info("Exited world");
           killAllJobs();
           systemMessageQueue.clear();
         } else {
           LOGGER.info("Entered world");
+          onWorldConnectionChange(true);
         }
         noWorld = noWorldNow;
       }
@@ -285,6 +323,21 @@ public class Minescript {
         Thread.sleep(millisToSleep);
       } catch (InterruptedException e) {
         systemMessageQueue.logException(e);
+      }
+    }
+  }
+
+  private static void onWorldConnectionChange(boolean connected) {
+    ScriptValue eventValue = null;
+    for (var listener : worldListeners.values()) {
+      if (listener.isActive()) {
+        if (eventValue == null) {
+          var event = new WorldEvent();
+          event.connected = connected;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
+        }
+        listener.respond(eventValue);
       }
     }
   }
@@ -369,6 +422,7 @@ public class Minescript {
           "undo",
           "which",
           "config",
+          "reload_mappings",
           "reload_minescript_resources");
 
   private static final ImmutableSet<String> IGNORE_DIRS_FOR_COMPLETIONS =
@@ -625,89 +679,6 @@ public class Minescript {
     }
   }
 
-  static class EventHandler implements JobControl.Operation {
-    private final JobControl job;
-    private final String funcName;
-    private OptionalLong funcCallId = OptionalLong.empty();
-    private State state = State.IDLE;
-    private boolean suspended = false;
-    private Runnable doneCallback;
-    private Optional<Predicate<Object>> filter;
-
-    public enum State {
-      IDLE,
-      ACTIVE,
-      CANCELLED
-    }
-
-    public EventHandler(JobControl job, String funcName, Runnable doneCallback) {
-      this.job = job;
-      this.funcName = funcName;
-      this.doneCallback = doneCallback;
-    }
-
-    public void setFilter(Predicate<Object> filter) {
-      this.filter = Optional.of(filter);
-    }
-
-    public boolean applies(Object event) {
-      if (filter.isPresent()) {
-        return filter.get().test(event);
-      }
-      return true;
-    }
-
-    int jobId() {
-      return job.jobId();
-    }
-
-    @Override
-    public String name() {
-      return funcName;
-    }
-
-    public synchronized void start(long funcCallId) {
-      if (state != State.CANCELLED) {
-        this.funcCallId = OptionalLong.of(funcCallId);
-        state = State.ACTIVE;
-      }
-    }
-
-    public synchronized boolean isActive() {
-      return !suspended && state == State.ACTIVE;
-    }
-
-    @Override
-    public synchronized void suspend() {
-      suspended = true;
-    }
-
-    @Override
-    public boolean resumeAndCheckDone() {
-      if (state == State.CANCELLED) {
-        return true;
-      }
-      suspended = false;
-      return false;
-    }
-
-    @Override
-    public synchronized void cancel() {
-      LOGGER.info("Cancelling EventHandler for job {} func {}", jobId(), funcCallId);
-      state = State.CANCELLED;
-      funcCallId = OptionalLong.empty();
-      doneCallback.run();
-    }
-
-    public synchronized boolean respond(JsonElement returnValue) {
-      if (funcCallId.isPresent()) {
-        return job.respond(funcCallId.getAsLong(), returnValue, /* finalReply= */ false);
-      } else {
-        return false;
-      }
-    }
-  }
-
   static class ScheduledTaskList implements JobControl.Operation {
     private final Job.ExternalJob job;
     private final String name;
@@ -798,7 +769,7 @@ public class Minescript {
                 command,
                 config,
                 systemMessageQueue,
-                platform.modLoaderName(),
+                mappingsLoader.get(),
                 () -> finishJob(jobId, nextCommand));
         jobMap.put(job.jobId(), job);
         job.start();
@@ -890,9 +861,10 @@ public class Minescript {
 
   private static SystemMessageQueue systemMessageQueue = new SystemMessageQueue();
 
-  public static Script loadScript(List<String> scriptCommand, String scriptCode) throws Exception {
+  public static Script loadPyjinnScript(List<String> scriptCommand, String scriptCode)
+      throws Exception {
     return PyjinnScript.loadScript(
-        scriptCommand.toArray(String[]::new), scriptCode, platform.modLoaderName());
+        scriptCommand.toArray(String[]::new), scriptCode, mappingsLoader.get());
   }
 
   private static boolean checkMinescriptDir() {
@@ -1268,6 +1240,11 @@ public class Minescript {
         systemMessageQueue.logUserInfo(
             "`\\config name value`: sets the value of the named variable");
         return true;
+      case "reload_mappings":
+        systemMessageQueue.logUserInfo("{} (built-in command)", command);
+        systemMessageQueue.logUserInfo("Usage: \\reload_mappings");
+        systemMessageQueue.logUserInfo("Reloads mappings files from `minescript/mappings` dir.");
+        return true;
       case "reload_minescript_resources":
         systemMessageQueue.logUserInfo("{} (built-in command)", command);
         systemMessageQueue.logUserInfo("Usage: \\reload_minescript_resources");
@@ -1434,6 +1411,16 @@ public class Minescript {
           runParsedMinescriptCommand(nextCommand);
           return;
 
+        case "reload_mappings":
+          try {
+            reloadMappings();
+            systemMessageQueue.logUserInfo("Reloaded mappings from `minescript/mappings`.");
+          } catch (Exception e) {
+            systemMessageQueue.logException(e);
+          }
+          runParsedMinescriptCommand(nextCommand);
+          return;
+
         case "reload_minescript_resources":
           loadMinescriptResources();
           systemMessageQueue.logUserInfo("Reloaded resources from Minescript jar.");
@@ -1547,72 +1534,73 @@ public class Minescript {
   private static List<String> commandSuggestions = new ArrayList<>();
 
   public static void onKeyboardEvent(int key, int scanCode, int action, int modifiers) {
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var entry : keyEventListeners.entrySet()) {
       var listener = entry.getValue();
       if (listener.isActive()) {
-        if (json == null) {
+        if (eventValue == null) {
           String screenName = getScreenName().orElse(null);
           long timeMillis = System.currentTimeMillis();
-          json = new JsonObject();
-          json.addProperty("type", "key");
-          json.addProperty("key", key);
-          json.addProperty("scan_code", scanCode);
-          json.addProperty("action", action);
-          json.addProperty("modifiers", modifiers);
-          json.addProperty("time", timeMillis / 1000.);
-          json.addProperty("screen", screenName);
+          var event = new KeyEvent();
+          event.key = key;
+          event.scan_code = scanCode;
+          event.action = action;
+          event.modifiers = modifiers;
+          event.time = timeMillis / 1000.;
+          event.screen = screenName;
+          eventValue = ScriptValue.of(event);
         }
         if (config.debugOutput()) {
-          LOGGER.info("Forwarding key event to listener {}: {}", entry.getKey(), json);
+          LOGGER.info("Forwarding key event to listener {}: {}", entry.getKey(), eventValue);
         }
-        listener.respond(json);
+        listener.respond(eventValue);
       }
     }
   }
 
   public static void onMouseClick(int button, int action, int modifiers, double x, double y) {
-    var minecraft = Minecraft.getInstance();
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var entry : mouseEventListeners.entrySet()) {
       var listener = entry.getValue();
       if (listener.isActive()) {
-        if (json == null) {
+        if (eventValue == null) {
           String screenName = getScreenName().orElse(null);
           long timeMillis = System.currentTimeMillis();
-          json = new JsonObject();
-          json.addProperty("type", "mouse");
-          json.addProperty("button", button);
-          json.addProperty("action", action);
-          json.addProperty("modifiers", modifiers);
-          json.addProperty("time", timeMillis / 1000.);
-          json.addProperty("x", x);
-          json.addProperty("y", y);
-          json.addProperty("screen", screenName);
+          var event = new MouseEvent();
+          event.button = button;
+          event.action = action;
+          event.modifiers = modifiers;
+          event.time = timeMillis / 1000.;
+          event.x = x;
+          event.y = y;
+          event.screen = screenName;
+          eventValue = ScriptValue.of(event);
         }
         if (config.debugOutput()) {
-          LOGGER.info("Forwarding mouse event to listener {}: {}", entry.getKey(), json);
+          LOGGER.info("Forwarding mouse event to listener {}: {}", entry.getKey(), eventValue);
         }
-        listener.respond(json);
+        listener.respond(eventValue);
       }
     }
   }
 
-  public static void onRenderWorld() {
+  public static void onRenderWorld(Object context) {
     for (var taskList : renderTaskLists.values()) {
       taskList.run();
     }
 
     // Process render event listeners from Pyjinn scripts.
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var entry : renderEventListeners.entrySet()) {
       var listener = entry.getValue();
       if (listener.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
-          json.addProperty("type", "render");
+        if (eventValue == null) {
+          var event = new RenderEvent();
+          event.context = context;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
-        listener.respond(json);
+        listener.respond(eventValue);
       }
     }
 
@@ -1808,23 +1796,24 @@ public class Minescript {
   public static boolean onClientChatReceived(Component message) {
     boolean cancel = false;
     String text = message.getString();
-    JsonObject json = null;
+    ScriptValue eventValue = null;
 
     var iter = chatEventListeners.entrySet().iterator();
     while (iter.hasNext()) {
       var entry = iter.next();
       var listener = entry.getValue();
       if (listener.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
-          json.addProperty("type", "chat");
-          json.addProperty("message", text);
-          json.addProperty("time", System.currentTimeMillis() / 1000.);
+        if (eventValue == null) {
+          var event = new ChatEvent();
+          event.type = "chat";
+          event.message = text;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
         if (config.debugOutput()) {
-          LOGGER.info("Forwarding chat message to listener {}: {}", entry.getKey(), json);
+          LOGGER.info("Forwarding chat message to listener {}: {}", entry.getKey(), eventValue);
         }
-        listener.respond(json);
+        listener.respond(eventValue);
       }
     }
 
@@ -1848,24 +1837,22 @@ public class Minescript {
   }
 
   private static void handleChunkEvent(int chunkX, int chunkZ, boolean loaded) {
-    var minecraft = Minecraft.getInstance();
-    var level = minecraft.level;
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var handler : chunkEventListeners.values()) {
       if (handler.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
+        if (eventValue == null) {
           int worldX = chunkCoordToWorldCoord(chunkX);
           int worldZ = chunkCoordToWorldCoord(chunkZ);
-          json.addProperty("type", "chunk");
-          json.addProperty("loaded", loaded);
-          json.addProperty("x_min", worldX);
-          json.addProperty("z_min", worldZ);
-          json.addProperty("x_max", worldX + 15);
-          json.addProperty("z_max", worldZ + 15);
-          json.addProperty("time", System.currentTimeMillis() / 1000.);
+          var event = new ChunkEvent();
+          event.loaded = loaded;
+          event.x_min = worldX;
+          event.z_min = worldZ;
+          event.x_max = worldX + 15;
+          event.z_max = worldZ + 15;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
-        handler.respond(json);
+        handler.respond(eventValue);
       }
     }
   }
@@ -1914,11 +1901,11 @@ public class Minescript {
   private static boolean applyChatInterceptors(String message) {
     for (var interceptor : chatInterceptors.values()) {
       if (interceptor.applies(message)) {
-        var json = new JsonObject();
-        json.addProperty("type", "outgoing_chat_intercept");
-        json.addProperty("message", message);
-        json.addProperty("time", System.currentTimeMillis() / 1000.);
-        interceptor.respond(json);
+        var event = new ChatEvent();
+        event.type = "outgoing_chat_intercept";
+        event.message = message;
+        event.time = System.currentTimeMillis() / 1000.;
+        interceptor.respond(ScriptValue.of(event));
         return true;
       }
     }
@@ -2006,30 +1993,22 @@ public class Minescript {
 
   private static ServerBlockList serverBlockList = new ServerBlockList();
 
-  public record JobOperationId(int jobId, long opId) {}
+  private static EventDispatcher tickEventListeners = new EventDispatcher();
+  private static EventDispatcher renderEventListeners = new EventDispatcher();
+  private static EventDispatcher keyEventListeners = new EventDispatcher();
+  private static EventDispatcher mouseEventListeners = new EventDispatcher();
+  private static EventDispatcher chatEventListeners = new EventDispatcher();
+  private static EventDispatcher chatInterceptors =
+      new EventDispatcher(Minescript::getOutgoingChatInterceptFilter);
+  private static EventDispatcher addEntityEventListeners = new EventDispatcher();
+  private static EventDispatcher blockUpdateEventListeners = new EventDispatcher();
+  private static EventDispatcher takeItemEventListeners = new EventDispatcher();
+  private static EventDispatcher damageEventListeners = new EventDispatcher();
+  private static EventDispatcher explosionEventListeners = new EventDispatcher();
+  private static EventDispatcher chunkEventListeners = new EventDispatcher();
+  private static EventDispatcher worldListeners = new EventDispatcher();
 
-  // The keys in the event listener maps are based on the funcCallId of the register method (e.g.
-  // "register_key_listener") which is considered the listener ID. But the funcCallId
-  // associated with the actual listening within the EventHandler corresponds to the start method
-  // (e.g. "start_key_listener").
-  private static Map<JobOperationId, EventHandler> tickEventListeners = new ConcurrentHashMap<>();
-  private static Map<JobOperationId, EventHandler> renderEventListeners = new ConcurrentHashMap<>();
-  private static Map<JobOperationId, EventHandler> keyEventListeners = new ConcurrentHashMap<>();
-  private static Map<JobOperationId, EventHandler> mouseEventListeners = new ConcurrentHashMap<>();
-  private static Map<JobOperationId, EventHandler> chatEventListeners = new ConcurrentHashMap<>();
-  private static Map<JobOperationId, EventHandler> chatInterceptors = new ConcurrentHashMap<>();
-  private static Map<JobOperationId, EventHandler> addEntityEventListeners =
-      new ConcurrentHashMap<>();
-  private static Map<JobOperationId, EventHandler> blockUpdateEventListeners =
-      new ConcurrentHashMap<>();
-  private static Map<JobOperationId, EventHandler> takeItemEventListeners =
-      new ConcurrentHashMap<>();
-  private static Map<JobOperationId, EventHandler> damageEventListeners = new ConcurrentHashMap<>();
-  private static Map<JobOperationId, EventHandler> explosionEventListeners =
-      new ConcurrentHashMap<>();
-  private static Map<JobOperationId, EventHandler> chunkEventListeners = new ConcurrentHashMap<>();
-
-  private static ImmutableList<Map<JobOperationId, EventHandler>> eventHandlerMaps =
+  private static ImmutableList<EventDispatcher> eventDispatchers =
       ImmutableList.of(
           tickEventListeners,
           renderEventListeners,
@@ -2042,7 +2021,28 @@ public class Minescript {
           takeItemEventListeners,
           damageEventListeners,
           explosionEventListeners,
-          chunkEventListeners);
+          chunkEventListeners,
+          worldListeners);
+
+  /** Returns the event dispatcher for the given event name, or {@code null}. */
+  static EventDispatcher getDispatcherForEventName(String eventName) throws Exception {
+    return switch (eventName) {
+      case "tick" -> tickEventListeners;
+      case "render" -> renderEventListeners;
+      case "key" -> keyEventListeners;
+      case "mouse" -> mouseEventListeners;
+      case "chat" -> chatEventListeners;
+      case "outgoing_chat_intercept" -> chatInterceptors;
+      case "add_entity" -> addEntityEventListeners;
+      case "block_update" -> blockUpdateEventListeners;
+      case "take_item" -> takeItemEventListeners;
+      case "damage" -> damageEventListeners;
+      case "explosion" -> explosionEventListeners;
+      case "chunk" -> chunkEventListeners;
+      case "world" -> worldListeners;
+      default -> null;
+    };
+  }
 
   private static Map<JobOperationId, ChunkLoadEventListener> chunkLoadEventListeners =
       new ConcurrentHashMap<JobOperationId, ChunkLoadEventListener>();
@@ -2050,20 +2050,49 @@ public class Minescript {
   private static Map<JobOperationId, ScheduledTaskList> tickTaskLists = new ConcurrentHashMap<>();
   private static Map<JobOperationId, ScheduledTaskList> renderTaskLists = new ConcurrentHashMap<>();
 
+  private static Optional<Predicate<Object>> getOutgoingChatInterceptFilter(
+      Map<String, Object> listenerArgs) {
+    String eventName = "outgoing_chat_intercept";
+    Optional<Predicate<Object>> filter = Optional.empty();
+    Object prefixArg = listenerArgs.get("prefix");
+    Object patternArg = listenerArgs.get("pattern");
+    if (prefixArg != null && patternArg != null) {
+      throw new IllegalArgumentException("Only one of `prefix` and `pattern` can be specified");
+    }
+    if (prefixArg != null) {
+      if (prefixArg instanceof String prefix) {
+        filter = Optional.of(o -> o instanceof String s && s.startsWith(prefix));
+      } else {
+        throw new IllegalArgumentException(
+            "Expected keyword arg `prefix` to event listener of `%s` to be string but got `%s`"
+                .formatted(eventName, prefixArg));
+      }
+    } else if (patternArg != null) {
+      if (patternArg instanceof String patternString) {
+        Pattern pattern = Pattern.compile(patternString);
+        filter = Optional.of(o -> o instanceof String s && pattern.matcher(s).matches());
+      } else {
+        throw new IllegalArgumentException(
+            "Expected keyword arg `pattern` to event listener of `%s` to be string but got `%s`"
+                .formatted(eventName, patternArg));
+      }
+    }
+    return filter;
+  }
+
   public static void onAddEntityEvent(Entity entity) {
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var handler : addEntityEventListeners.values()) {
       if (handler.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
+        if (eventValue == null) {
           boolean includeNbt = false;
-          json.addProperty("type", "add_entity");
-          json.add(
-              "entity",
-              new EntityExporter(entityPositionInterpolation(), includeNbt).export(entity));
-          json.addProperty("time", System.currentTimeMillis() / 1000.);
+          var event = new AddEntityEvent();
+          event.entity =
+              new EntityExporter(entityPositionInterpolation(), includeNbt).export(entity);
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
-        handler.respond(json);
+        handler.respond(eventValue);
       }
     }
   }
@@ -2071,63 +2100,60 @@ public class Minescript {
   public static void onBlockUpdateEvent(BlockPos pos, BlockState newState) {
     var minecraft = Minecraft.getInstance();
     var level = minecraft.level;
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var handler : blockUpdateEventListeners.values()) {
       if (handler.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
-          json.addProperty("type", "block_update");
-          var position = new JsonArray();
-          position.add(pos.getX());
-          position.add(pos.getY());
-          position.add(pos.getZ());
-          json.add("position", position);
+        if (eventValue == null) {
+          var event = new BlockUpdateEvent();
+          event.position[0] = pos.getX();
+          event.position[1] = pos.getY();
+          event.position[2] = pos.getZ();
 
           // TODO(maxuser): If a block changes due to local player's mouse click or key press,
           // the block can change locally before the BlockUpdate packet is received by the client.
           // Maybe track the current block during mouse and key events via
           // minecraft.getCameraEntity().pick(...). (see player_get_targeted_block())
-          json.addProperty("old_state", blockStateToString(level.getBlockState(pos)).orElse(null));
-          json.addProperty("new_state", blockStateToString(newState).orElse(null));
-          json.addProperty("time", System.currentTimeMillis() / 1000.);
+          event.old_state = blockStateToString(level.getBlockState(pos)).orElse(null);
+          event.new_state = blockStateToString(newState).orElse(null);
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
-        handler.respond(json);
+        handler.respond(eventValue);
       }
     }
   }
 
   public static void onTakeItemEvent(Entity player, Entity item, int amount) {
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var handler : takeItemEventListeners.values()) {
       if (handler.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
+        if (eventValue == null) {
           boolean includeNbt = false;
-          json.addProperty("type", "take_item");
-          json.addProperty("player_uuid", player.getUUID().toString());
-          json.add(
-              "item", new EntityExporter(entityPositionInterpolation(), includeNbt).export(item));
-          json.addProperty("amount", amount);
-          json.addProperty("time", System.currentTimeMillis() / 1000.);
+          var event = new TakeItemEvent();
+          event.player_uuid = player.getUUID().toString();
+          event.item = new EntityExporter(entityPositionInterpolation(), includeNbt).export(item);
+          event.amount = amount;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
-        handler.respond(json);
+        handler.respond(eventValue);
       }
     }
   }
 
   public static void onDamageEvent(Entity entity, Entity cause, String source) {
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var handler : damageEventListeners.values()) {
       if (handler.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
-          json.addProperty("type", "damage");
-          json.addProperty("entity_uuid", entity.getUUID().toString());
-          json.addProperty("cause_uuid", cause == null ? null : cause.getUUID().toString());
-          json.addProperty("source", source);
-          json.addProperty("time", System.currentTimeMillis() / 1000.);
+        if (eventValue == null) {
+          var event = new DamageEvent();
+          event.entity_uuid = entity.getUUID().toString();
+          event.cause_uuid = cause == null ? null : cause.getUUID().toString();
+          event.source = source;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
-        handler.respond(json);
+        handler.respond(eventValue);
       }
     }
   }
@@ -2135,12 +2161,11 @@ public class Minescript {
   public static void onExplosionEvent(double x, double y, double z, List<BlockPos> toExplode) {
     var minecraft = Minecraft.getInstance();
     var level = minecraft.level;
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var handler : explosionEventListeners.values()) {
       if (handler.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
-          json.addProperty("type", "explosion");
+        if (eventValue == null) {
+          var event = new ExplosionEvent();
 
           var blockpacker = new BlockPacker();
           for (var pos : toExplode) {
@@ -2150,16 +2175,15 @@ public class Minescript {
           }
           String encodedBlockpack = blockpacker.pack().toBase64EncodedString();
 
-          var position = new JsonArray();
-          position.add(x);
-          position.add(y);
-          position.add(z);
-          json.add("position", position);
+          event.position[0] = x;
+          event.position[1] = y;
+          event.position[2] = z;
 
-          json.addProperty("blockpack_base64", encodedBlockpack);
-          json.addProperty("time", System.currentTimeMillis() / 1000.);
+          event.blockpack_base64 = encodedBlockpack;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
-        handler.respond(json);
+        handler.respond(eventValue);
       }
     }
   }
@@ -2243,32 +2267,6 @@ public class Minescript {
     }
   }
 
-  private static JsonElement itemStackToJsonElement(
-      ItemStack itemStack, OptionalInt slot, boolean markSelected) {
-    if (itemStack.getCount() == 0) {
-      return JsonNull.INSTANCE;
-    } else {
-      var reporter = new ProblemReporter.Collector();
-      var nbtOutput = TagValueOutput.createWithoutContext(reporter);
-      nbtOutput.store("minescript_item_wrapper", ItemStack.CODEC, itemStack);
-      Tag nbt = nbtOutput.buildResult().get("minescript_item_wrapper");
-
-      var out = new JsonObject();
-      out.addProperty("item", itemStack.getItem().toString());
-      out.addProperty("count", itemStack.getCount());
-      if (nbt != null) {
-        out.addProperty("nbt", nbt.toString());
-      }
-      if (slot.isPresent()) {
-        out.addProperty("slot", slot.getAsInt());
-      }
-      if (markSelected) {
-        out.addProperty("selected", true);
-      }
-      return out;
-    }
-  }
-
   // String key: KeyMapping.getName()
   private static final Map<String, InputConstants.Key> keyBinds = new ConcurrentHashMap<>();
 
@@ -2293,12 +2291,12 @@ public class Minescript {
     }
   }
 
-  private static JsonElement doPlayerAction(
+  private static ScriptValue doPlayerAction(
       String functionName, KeyMapping keyMapping, ScriptFunctionCall.ArgList args) {
     args.expectSize(1);
     boolean pressed = args.getBoolean(0);
     pressKeyBind(keyMapping.getName(), pressed);
-    return JSON_TRUE;
+    return ScriptValue.TRUE;
   }
 
   public static String getWorldName() {
@@ -2339,16 +2337,7 @@ public class Minescript {
 
   private static final JsonElement JSON_TRUE = new JsonPrimitive(true);
 
-  private static final JsonElement JSON_FALSE = new JsonPrimitive(false);
-
   private static final Optional<JsonElement> OPTIONAL_JSON_TRUE = Optional.of(JSON_TRUE);
-
-  private static JsonElement jsonPrimitiveOrNull(Optional<String> s) {
-    return s.map(str -> (JsonElement) new JsonPrimitive(str)).orElse(JsonNull.INSTANCE);
-  }
-
-  private record JobInfo(
-      int job_id, String[] command, String source, String status, Boolean self) {}
 
   public static void processScriptFunction(
       Job.ExternalJob job, String functionName, long funcCallId, List<?> parsedArgs) {
@@ -2356,7 +2345,7 @@ public class Minescript {
     try {
       Optional<JsonElement> response = runExternalScriptFunction(job, funcCallId, funcCall);
       if (response.isPresent()) {
-        job.respond(funcCallId, response.get(), true);
+        job.respond(funcCallId, response.map(json -> ScriptValue.fromJson(json)).get(), true);
       }
       if (config.debugOutput()) {
         LOGGER.info(
@@ -2377,56 +2366,43 @@ public class Minescript {
                     "Exception while calling script function `%s` with args %s: %s",
                     functionName, funcCall.args(), e.toString())));
       } else {
-        job.raiseException(funcCallId, ExceptionInfo.fromException(e));
+        job.raiseException(funcCallId, e);
       }
     }
   }
 
-  private static JsonElement registerEventHandler(
-      JobControl job,
-      String functionName,
-      long funcCallId,
-      Map<JobOperationId, EventHandler> handlerMap,
-      Optional<Predicate<Object>> filter) {
+  static void registerEventListener(
+      JobControl job, long funcCallId, String eventName, Map<String, Object> listenerArgs)
+      throws Exception {
     var jobOpId = new JobOperationId(job.jobId(), funcCallId);
-    if (handlerMap.containsKey(jobOpId)) {
+    var eventDispatcher = getDispatcherForEventName(eventName);
+    if (eventDispatcher.containsKey(jobOpId)) {
       throw new IllegalStateException(
-          "Failed to create event handler because handler ID is already registered for job: "
-              + job.jobSummary());
+          "Failed to create event listener because function call ID '%s' is already registered for job '%s': %s"
+              .formatted(funcCallId, job.jobSummary()));
     }
-    var handler = new EventHandler(job, functionName, () -> handlerMap.remove(jobOpId));
-    filter.ifPresent(handler::setFilter);
-    handlerMap.put(jobOpId, handler);
-    return new JsonPrimitive(funcCallId);
+    LOGGER.info(
+        "Creating `{}` listener {} for `{}` with args {}",
+        eventName,
+        funcCallId,
+        job,
+        listenerArgs);
+    var listener = new EventListener(job, eventName, () -> eventDispatcher.remove(jobOpId));
+    eventDispatcher.addListener(jobOpId, listenerArgs, listener);
   }
 
-  private static void startEventHandlerFromMap(
-      JobControl job,
-      long funcCallId,
-      Map<JobOperationId, EventHandler> handlerMap,
-      long handlerId) {
-    var jobOpId = new JobOperationId(job.jobId(), handlerId);
-    var handler = handlerMap.get(jobOpId);
-    if (handler == null) {
-      throw new IllegalStateException(
-          "Event handler not found with requested ID: " + jobOpId.toString());
-    }
-    job.addOperation(handlerId, handler);
-    handler.start(funcCallId);
-  }
-
-  /** Call script function. Intended as a helper for external scripts. */
-  public static JsonElement call(JobControl job, long funcCallId, String function, List<?> args)
+  /** Call script function. Intended as a helper for Pyjinn scripts. */
+  public static Object call(JobControl job, long funcCallId, String function, List<?> args)
       throws Exception {
     var functionCall = new ScriptFunctionCall(function, args);
     if (runNoReturnScriptFunction(functionCall)) {
-      return JsonNull.INSTANCE;
+      return null;
     }
 
-    return runScriptFunction(job, funcCallId, functionCall);
+    return runScriptFunction(job, funcCallId, functionCall).get();
   }
 
-  private static JsonElement runScriptFunction(
+  private static ScriptValue runScriptFunction(
       JobControl job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
     var minecraft = Minecraft.getInstance();
     var world = minecraft.level;
@@ -2439,16 +2415,12 @@ public class Minescript {
       case "player_position":
         {
           args.expectSize(0);
-          var result = new JsonArray();
-          result.add(player.getX());
-          result.add(player.getY());
-          result.add(player.getZ());
-          return result;
+          return ScriptValue.of(new Double[] {player.getX(), player.getY(), player.getZ()});
         }
 
       case "player_name":
         args.expectSize(0);
-        return new JsonPrimitive(player.getName().getString());
+        return ScriptValue.of(player.getName().getString());
 
       case "getblock":
         {
@@ -2459,7 +2431,7 @@ public class Minescript {
           int arg2 = args.getConvertibleInt(2);
           Optional<String> block =
               blockStateToString(level.getBlockState(new BlockPos(arg0, arg1, arg2)));
-          return jsonPrimitiveOrNull(block);
+          return block.map(ScriptValue::of).orElse(ScriptValue.NULL);
         }
 
       case "getblocklist":
@@ -2478,7 +2450,7 @@ public class Minescript {
           }
           List<?> positions = (List<?>) args.get(0);
           Level level = minecraft.level;
-          var blocks = new JsonArray();
+          var blocks = new ArrayList<String>();
           var pos = new BlockPos.MutableBlockPos();
           for (var position : positions) {
             if (!(position instanceof List)) {
@@ -2495,103 +2467,16 @@ public class Minescript {
             int y = ((Number) coords.get(1)).intValue();
             int z = ((Number) coords.get(2)).intValue();
             Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, y, z)));
-            blocks.add(jsonPrimitiveOrNull(block));
+            blocks.add(block.orElse(null));
           }
-          return blocks;
+          return ScriptValue.of(blocks.toArray(String[]::new));
         }
-
-      case "register_tick_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, tickEventListeners, Optional.empty());
-
-      case "register_render_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, renderEventListeners, Optional.empty());
-
-      case "register_key_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, keyEventListeners, Optional.empty());
-
-      case "register_mouse_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, mouseEventListeners, Optional.empty());
-
-      case "register_chat_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, chatEventListeners, Optional.empty());
-
-      case "register_outgoing_chat_intercept_listener":
-        {
-          functionCall.expectNotRunningAsTask();
-          args.expectArgs("prefix", "pattern");
-          Optional<String> prefixArg = args.getOptionalString(0);
-          Optional<String> patternArg = args.getOptionalString(1);
-          if (prefixArg.isPresent() && patternArg.isPresent()) {
-            throw new IllegalArgumentException(
-                "Only one of `prefix` and `pattern` can be specified");
-          }
-          Optional<Predicate<Object>> filter = Optional.empty();
-          if (prefixArg.isPresent()) {
-            String prefix = prefixArg.get();
-            filter = Optional.of(o -> o instanceof String s && s.startsWith(prefix));
-          } else if (patternArg.isPresent()) {
-            Pattern pattern = Pattern.compile(patternArg.get());
-            filter = Optional.of(o -> o instanceof String s && pattern.matcher(s).matches());
-          }
-          return registerEventHandler(job, functionName, funcCallId, chatInterceptors, filter);
-        }
-
-      case "register_add_entity_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, addEntityEventListeners, Optional.empty());
-
-      case "register_block_update_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, blockUpdateEventListeners, Optional.empty());
-
-      case "register_explosion_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, explosionEventListeners, Optional.empty());
-
-      case "register_take_item_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, takeItemEventListeners, Optional.empty());
-
-      case "register_damage_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, damageEventListeners, Optional.empty());
-
-      case "register_chunk_listener":
-        functionCall.expectNotRunningAsTask();
-        args.expectSize(0);
-        return registerEventHandler(
-            job, functionName, funcCallId, chunkEventListeners, Optional.empty());
 
       case "unregister_event_handler":
         {
           args.expectArgs("handler_id");
           long handlerId = args.getStrictLong(0);
-          return new JsonPrimitive(job.cancelOperation(handlerId));
+          return ScriptValue.of(job.cancelOperation(handlerId));
         }
 
       case "set_nickname":
@@ -2612,31 +2497,33 @@ public class Minescript {
             systemMessageQueue.logUserInfo("Chat nickname set to {}.", quoteString(arg));
             customNickname = arg;
           }
-          return JSON_TRUE;
+          return ScriptValue.TRUE;
         }
 
       case "player_hand_items":
         {
           args.expectSize(0);
-          var result = new JsonArray();
-          result.add(itemStackToJsonElement(player.getMainHandItem(), OptionalInt.empty(), false));
-          result.add(itemStackToJsonElement(player.getOffhandItem(), OptionalInt.empty(), false));
-          return result;
+          var handItems = new HandItems();
+          handItems.main_hand =
+              ItemStackData.of(player.getMainHandItem(), OptionalInt.empty(), false);
+          handItems.off_hand =
+              ItemStackData.of(player.getOffhandItem(), OptionalInt.empty(), false);
+          return ScriptValue.of(handItems);
         }
 
       case "player_inventory":
         {
           args.expectSize(0);
           var inventory = player.getInventory();
-          var result = new JsonArray();
+          var result = new ArrayList<ItemStackData>();
           int selectedSlot = inventory.getSelectedSlot();
           for (int i = 0; i < inventory.getContainerSize(); i++) {
             var itemStack = inventory.getItem(i);
             if (itemStack.getCount() > 0) {
-              result.add(itemStackToJsonElement(itemStack, OptionalInt.of(i), i == selectedSlot));
+              result.add(ItemStackData.of(itemStack, OptionalInt.of(i), i == selectedSlot));
             }
           }
-          return result;
+          return ScriptValue.of(result.toArray(ItemStackData[]::new));
         }
 
       case "player_inventory_slot_to_hotbar":
@@ -2651,15 +2538,15 @@ public class Minescript {
           args.expectSize(1);
           int slot = args.getStrictInt(0);
           var inventory = player.getInventory();
-          var previouslySelectedSlot = inventory.getSelectedSlot();
+          int previouslySelectedSlot = inventory.getSelectedSlot();
           inventory.setSelectedSlot(slot);
-          return new JsonPrimitive(previouslySelectedSlot);
+          return ScriptValue.of(previouslySelectedSlot);
         }
 
       case "press_key_bind":
         args.expectSize(2);
         pressKeyBind(args.getString(0), args.getBoolean(1));
-        return JSON_TRUE;
+        return ScriptValue.TRUE;
 
       case "player_press_forward":
         return doPlayerAction(functionName, options.keyUp, args);
@@ -2700,10 +2587,7 @@ public class Minescript {
       case "player_orientation":
         {
           args.expectSize(0);
-          var result = new JsonArray();
-          result.add(player.getYRot());
-          result.add(player.getXRot());
-          return result;
+          return ScriptValue.of(new Float[] {player.getYRot(), player.getXRot()});
         }
 
       case "player_set_orientation":
@@ -2713,7 +2597,7 @@ public class Minescript {
           Double pitch = args.getDouble(1);
           player.setYRot(yaw.floatValue() % 360.0f);
           player.setXRot(pitch.floatValue() % 360.0f);
-          return JSON_TRUE;
+          return ScriptValue.TRUE;
         }
 
       case "player_get_targeted_block":
@@ -2736,18 +2620,16 @@ public class Minescript {
                     blockPos.getZ());
             Level level = minecraft.level;
             Optional<String> block = blockStateToString(level.getBlockState(blockPos));
-            var result = new JsonArray();
-            var pos = new JsonArray();
-            pos.add(blockPos.getX());
-            pos.add(blockPos.getY());
-            pos.add(blockPos.getZ());
-            result.add(pos);
-            result.add(playerDistance);
-            result.add(hitResult.getDirection().toString());
-            result.add(jsonPrimitiveOrNull(block));
-            return result;
+            var targetedBlock = new TargetedBlock();
+            targetedBlock.position[0] = blockPos.getX();
+            targetedBlock.position[1] = blockPos.getY();
+            targetedBlock.position[2] = blockPos.getZ();
+            targetedBlock.distance = playerDistance;
+            targetedBlock.side = hitResult.getDirection().toString();
+            targetedBlock.type = block.orElse(null);
+            return ScriptValue.of(targetedBlock);
           } else {
-            return JsonNull.INSTANCE;
+            return ScriptValue.NULL;
           }
         }
 
@@ -2758,22 +2640,19 @@ public class Minescript {
           boolean includeNbt = args.getBoolean(1);
           return DebugRenderer.getTargetedEntity(player, (int) maxDistance)
               .map(e -> new EntityExporter(entityPositionInterpolation(), includeNbt).export(e))
-              .map(
-                  obj -> {
-                    JsonElement element = obj; // implicit cast
-                    return element;
-                  })
-              .orElse(JsonNull.INSTANCE);
+              .map(e -> ScriptValue.of(e))
+              .orElse(ScriptValue.NULL);
         }
 
       case "player_health":
-        return new JsonPrimitive(player.getHealth());
+        return ScriptValue.of(player.getHealth());
 
       case "player":
         {
           args.expectArgs("nbt");
           boolean includeNbt = args.getBoolean(0);
-          return new EntityExporter(entityPositionInterpolation(), includeNbt).export(player);
+          return ScriptValue.of(
+              new EntityExporter(entityPositionInterpolation(), includeNbt).export(player));
         }
 
       case "players":
@@ -2801,11 +2680,20 @@ public class Minescript {
                   .map(String::toUpperCase)
                   .map(EntitySelection.SortType::valueOf);
           OptionalInt limit = args.getOptionalStrictInt(8);
-          return new EntityExporter(entityPositionInterpolation(), includeNbt)
-              .export(
-                  new EntitySelection(
-                          uuid, name, type, position, offset, minDistance, maxDistance, sort, limit)
-                      .selectFrom(world.players()));
+          return ScriptValue.of(
+              new EntityExporter(entityPositionInterpolation(), includeNbt)
+                  .export(
+                      new EntitySelection(
+                              uuid,
+                              name,
+                              type,
+                              position,
+                              offset,
+                              minDistance,
+                              maxDistance,
+                              sort,
+                              limit)
+                          .selectFrom(world.players())));
         }
 
       case "entities":
@@ -2834,27 +2722,36 @@ public class Minescript {
                   .map(String::toUpperCase)
                   .map(EntitySelection.SortType::valueOf);
           OptionalInt limit = args.getOptionalStrictInt(9);
-          return new EntityExporter(entityPositionInterpolation(), includeNbt)
-              .export(
-                  new EntitySelection(
-                          uuid, name, type, position, offset, minDistance, maxDistance, sort, limit)
-                      .selectFrom(world.entitiesForRendering()));
+          return ScriptValue.of(
+              new EntityExporter(entityPositionInterpolation(), includeNbt)
+                  .export(
+                      new EntitySelection(
+                              uuid,
+                              name,
+                              type,
+                              position,
+                              offset,
+                              minDistance,
+                              maxDistance,
+                              sort,
+                              limit)
+                          .selectFrom(world.entitiesForRendering())));
         }
 
       case "version_info":
         {
           args.expectSize(0);
 
-          var result = new JsonObject();
-          result.addProperty("minecraft", SharedConstants.getCurrentVersion().name());
-          result.addProperty("minescript", Minescript.version);
-          result.addProperty("mod_loader", platform.modLoaderName());
-          result.addProperty("launcher", minecraft.getLaunchedVersion());
-          result.addProperty("os_name", System.getProperty("os.name"));
-          result.addProperty("os_version", System.getProperty("os.version"));
-          result.addProperty("minecraft_class_name", Minecraft.class.getName());
-          result.addProperty("pyjinn", Script.versionInfo().toString());
-          return result;
+          var result = new VersionInfo();
+          result.minecraft = SharedConstants.getCurrentVersion().name();
+          result.minescript = Minescript.version;
+          result.mod_loader = platform.modLoaderName();
+          result.launcher = minecraft.getLaunchedVersion();
+          result.os_name = System.getProperty("os.name");
+          result.os_version = System.getProperty("os.version");
+          result.minecraft_class_name = Minecraft.class.getName();
+          result.pyjinn = Script.versionInfo().toString();
+          return ScriptValue.of(result);
         }
 
       case "world_info":
@@ -2865,23 +2762,22 @@ public class Minescript {
           var serverData = minecraft.getCurrentServer();
           var serverAddress = serverData == null ? "localhost" : serverData.ip;
 
-          var spawn = new JsonArray();
-          var spawnPos = levelProperties.getSpawnPos();
-          spawn.add(spawnPos.getX());
-          spawn.add(spawnPos.getY());
-          spawn.add(spawnPos.getZ());
+          var result = new WorldInfo();
+          result.game_ticks = levelProperties.getGameTime();
+          result.day_ticks = levelProperties.getDayTime();
+          result.raining = levelProperties.isRaining();
+          result.thundering = levelProperties.isThundering();
 
-          var result = new JsonObject();
-          result.addProperty("game_ticks", levelProperties.getGameTime());
-          result.addProperty("day_ticks", levelProperties.getDayTime());
-          result.addProperty("raining", levelProperties.isRaining());
-          result.addProperty("thundering", levelProperties.isThundering());
-          result.add("spawn", spawn);
-          result.addProperty("hardcore", levelProperties.isHardcore());
-          result.addProperty("difficulty", difficulty.getSerializedName());
-          result.addProperty("name", getWorldName());
-          result.addProperty("address", serverAddress);
-          return result;
+          var spawnPos = levelProperties.getSpawnPos();
+          result.spawn[0] = spawnPos.getX();
+          result.spawn[1] = spawnPos.getY();
+          result.spawn[2] = spawnPos.getZ();
+
+          result.hardcore = levelProperties.isHardcore();
+          result.difficulty = difficulty.getSerializedName();
+          result.name = getWorldName();
+          result.address = serverAddress;
+          return ScriptValue.of(result);
         }
 
       case "screenshot":
@@ -2908,14 +2804,14 @@ public class Minescript {
               minecraft.getMainRenderTarget(),
               /* downScale= */ 1,
               message -> job.log(message.getString()));
-          return JSON_TRUE;
+          return ScriptValue.TRUE;
         }
 
       case "screen_name":
         if (!args.isEmpty()) {
           throw new IllegalArgumentException("Expected no params but got: " + args.toString());
         }
-        return jsonPrimitiveOrNull(getScreenName());
+        return getScreenName().map(ScriptValue::of).orElse(ScriptValue.NULL);
 
       case "container_get_items": // List of Items in Chest
         {
@@ -2926,17 +2822,17 @@ public class Minescript {
           if (screen instanceof AbstractContainerScreen<?> handledScreen) {
             AbstractContainerMenu screenHandler = handledScreen.getMenu();
             Slot[] slots = screenHandler.slots.toArray(new Slot[0]);
-            var result = new JsonArray();
+            var result = new ArrayList<ItemStackData>();
             for (Slot slot : slots) {
               ItemStack itemStack = slot.getItem();
               if (itemStack.isEmpty()) {
                 continue;
               }
-              result.add(itemStackToJsonElement(itemStack, OptionalInt.of(slot.index), false));
+              result.add(ItemStackData.of(itemStack, OptionalInt.of(slot.index), false));
             }
-            return result;
+            return ScriptValue.of(result.toArray(ItemStackData[]::new));
           } else {
-            return JsonNull.INSTANCE;
+            return ScriptValue.NULL;
           }
         }
 
@@ -2947,7 +2843,7 @@ public class Minescript {
           double y = args.getDouble(1);
           double z = args.getDouble(2);
           player.lookAt(EntityAnchorArgument.Anchor.EYES, new Vec3(x, y, z));
-          return JSON_TRUE;
+          return ScriptValue.TRUE;
         }
 
       case "show_chat_screen":
@@ -2955,7 +2851,7 @@ public class Minescript {
           args.expectSize(2);
           boolean show = args.getBoolean(0);
           var screen = minecraft.screen;
-          final JsonElement result;
+          final ScriptValue result;
           if (show) {
             if (screen == null) {
               minecraft.setScreen(new ChatScreen(""));
@@ -2964,13 +2860,13 @@ public class Minescript {
             if (prompt != null && checkChatScreenInput()) {
               chatEditBox.setValue(prompt.toString());
             }
-            result = JSON_TRUE;
+            result = ScriptValue.TRUE;
           } else {
             if (screen != null && screen instanceof ChatScreen) {
               screen.onClose();
-              result = JSON_TRUE;
+              result = ScriptValue.TRUE;
             } else {
-              result = JSON_FALSE;
+              result = ScriptValue.FALSE;
             }
           }
           return result;
@@ -2994,22 +2890,19 @@ public class Minescript {
                             j.state().name(),
                             j == job ? Boolean.valueOf(true) : null));
                   });
-          // Use default-constructed Gson (instead of GSON) so that nulls are not serialized.
-          return new Gson().toJsonTree(result);
+          return ScriptValue.of(result.toArray(JobInfo[]::new));
         }
 
       case "append_chat_history":
         args.expectSize(1);
         minecraft.gui.getChat().addRecentChat(args.getString(0));
-        return JsonNull.INSTANCE;
+        return ScriptValue.NULL;
 
       case "chat_input":
         {
           args.expectSize(0);
-          var result = new JsonArray();
-          result.add(chatEditBox.getValue());
-          result.add(chatEditBox.getCursorPosition());
-          return result;
+          return ScriptValue.of(
+              new Object[] {chatEditBox.getValue(), chatEditBox.getCursorPosition()});
         }
 
       case "set_chat_input":
@@ -3027,7 +2920,7 @@ public class Minescript {
                     }
                     chatEditBox.setTextColor(i);
                   });
-          return JsonNull.INSTANCE;
+          return ScriptValue.NULL;
         }
     }
 
@@ -3142,35 +3035,20 @@ public class Minescript {
     return false;
   }
 
-  /** Returns true if an event listener was started. */
-  public static boolean startEventListener(
-      JobControl job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
-    Map<JobOperationId, EventHandler> handlerMap =
-        switch (functionCall.name()) {
-          case "start_tick_listener" -> tickEventListeners;
-          case "start_render_listener" -> renderEventListeners;
-          case "start_key_listener" -> keyEventListeners;
-          case "start_mouse_listener" -> mouseEventListeners;
-          case "start_chat_listener" -> chatEventListeners;
-          case "start_outgoing_chat_intercept_listener" -> chatInterceptors;
-          case "start_add_entity_listener" -> addEntityEventListeners;
-          case "start_block_update_listener" -> blockUpdateEventListeners;
-          case "start_take_item_listener" -> takeItemEventListeners;
-          case "start_damage_listener" -> damageEventListeners;
-          case "start_explosion_listener" -> explosionEventListeners;
-          case "start_chunk_listener" -> chunkEventListeners;
-          default -> null;
-        };
-
-    if (handlerMap != null) {
-      functionCall.expectNotRunningAsTask();
-      ScriptFunctionCall.ArgList args = functionCall.args();
-      args.expectArgs("handler_id");
-      startEventHandlerFromMap(job, funcCallId, handlerMap, args.getStrictLong(0));
-      return true;
+  static void startEventListener(JobControl job, long funcCallId, String eventName, long listenerId)
+      throws Exception {
+    var eventDispatcher = getDispatcherForEventName(eventName);
+    if (eventDispatcher == null) {
+      throw new IllegalArgumentException("No event named '%s'".formatted(eventName));
     }
-
-    return false;
+    var jobOpId = new JobOperationId(job.jobId(), listenerId);
+    var listener = eventDispatcher.get(jobOpId);
+    if (listener == null) {
+      throw new IllegalStateException(
+          "No %s listener found with requested ID: %s".formatted(eventName, jobOpId.toString()));
+    }
+    job.addOperation(listenerId, listener);
+    listener.start(funcCallId);
   }
 
   /** Returns a JSON response if a script function is called. */
@@ -3179,11 +3057,27 @@ public class Minescript {
     final String functionName = functionCall.name();
     final ScriptFunctionCall.ArgList args = functionCall.args();
 
-    if (startEventListener(job, funcCallId, functionCall)) {
-      return Optional.empty(); // No return value means this is an async operation.
-    }
-
     switch (functionName) {
+      case "register_event_listener":
+        {
+          functionCall.expectNotRunningAsTask();
+          args.expectArgs("event_name", "kwargs");
+          String eventName = args.getString(0);
+          var kwargs = args.getStringKeyMap(1);
+          registerEventListener(job, funcCallId, eventName, kwargs);
+          return Optional.of(new JsonPrimitive(funcCallId));
+        }
+
+      case "start_event_listener":
+        {
+          functionCall.expectNotRunningAsTask();
+          args.expectArgs("event_name", "listener_id");
+          String eventName = args.getString(0);
+          long listenerId = args.getStrictLong(1);
+          startEventListener(job, funcCallId, eventName, listenerId);
+          return Optional.empty();
+        }
+
       case "blockpack_read_world":
         {
           // Python function signature:
@@ -3492,10 +3386,11 @@ public class Minescript {
                     // this one.
                     job.respond(
                         funcCallId,
-                        functionCall.callingConvention()
-                                == ScriptFunctionCall.CallingConvention.JAVA
-                            ? new JsonPrimitive(job.objects.retain(success))
-                            : new JsonPrimitive(success),
+                        ScriptValue.fromJson(
+                            functionCall.callingConvention()
+                                    == ScriptFunctionCall.CallingConvention.JAVA
+                                ? new JsonPrimitive(job.objects.retain(success))
+                                : new JsonPrimitive(success)),
                         true);
                     job.removeOperation(funcCallId);
                     if (removeFromListeners) {
@@ -3538,121 +3433,69 @@ public class Minescript {
       case "java_class":
         {
           args.expectSize(1);
-          var object = Class.forName(args.getString(0));
+          var object = Class.forName(mappingsLoader.get().getRuntimeClassName(args.getString(0)));
           return Optional.of(new JsonPrimitive(job.objects.retain(object)));
         }
 
       case "java_ctor":
         {
           args.expectSize(1);
-          var target = (Class) job.objects.getById(args.getStrictLong(0));
-          var ctors = new ImmutableList.Builder<Constructor>();
-          var argCounts = new ImmutableSet.Builder<Integer>();
-          for (var ctor : target.getConstructors()) {
-            ctors.add(ctor);
-            argCounts.add(ctor.getParameterCount());
-          }
-          var ctorSet = new ConstructorSet(target.getName(), ctors.build(), argCounts.build());
-          return Optional.of(new JsonPrimitive(job.objects.retain(ctorSet)));
+          var target = (Class<?>) job.objects.getById(args.getStrictLong(0));
+          var ctor = new ClassConstructor(target);
+          return Optional.of(new JsonPrimitive(job.objects.retain(ctor)));
         }
 
       case "java_new_instance":
         {
-          var ctorSet = (ConstructorSet) job.objects.getById(args.getStrictLong(0));
+          var klass = (ClassConstructor) job.objects.getById(args.getStrictLong(0));
           Object[] params = new Object[args.size() - 1];
           for (int i = 0; i < params.length; ++i) {
             params[i] = job.objects.getById(args.getStrictLong(i + 1));
           }
-          if (!ctorSet.argCounts().contains(params.length)) {
+          Optional<Constructor<?>> ctor =
+              Script.TypeChecker.findBestMatchingConstructor(klass.type(), params);
+          if (ctor.isEmpty()) {
             throw new IllegalArgumentException(
-                String.format(
-                    "Constructor for `%s` got %d args but expected %s",
-                    ctorSet.name(), params.length, ctorSet.argCounts()));
+                "No matching constructor found for class '%s'".formatted(klass.type()));
           }
-          // Catch IllegalArgumentException until all the ctors in the set with the right number
-          // of args have been exhausted.
-          IllegalArgumentException exception = null;
-          for (Constructor ctor : ctorSet.ctors()) {
-            if (ctor.getParameterCount() == params.length) {
-              try {
-                var result = ctor.newInstance(params);
-                return Optional.of(new JsonPrimitive(job.objects.retain(result)));
-              } catch (IllegalArgumentException e) {
-                exception = e;
-              }
-            }
-          }
-          throw exception;
+          var result = ctor.get().newInstance(params);
+          return Optional.of(new JsonPrimitive(job.objects.retain(result)));
         }
 
       case "java_member":
         {
           args.expectSize(2);
+          var type = (Class<?>) job.objects.getById(args.getStrictLong(0));
           String memberName = args.getString(1);
-          var target = (Class) job.objects.getById(args.getStrictLong(0));
-          Optional<Field> field;
-          try {
-            field = Optional.of(target.getField(memberName));
-          } catch (NoSuchFieldException e) {
-            field = Optional.empty();
-          }
-          var methods = new ImmutableList.Builder<Method>();
-          var argCounts = new ImmutableSet.Builder<Integer>();
-          for (var method : target.getMethods()) {
-            if (method.getName().equals(memberName)) {
-              methods.add(method);
-              argCounts.add(method.getParameterCount());
-            }
-          }
-          var memberSet = new MemberSet(memberName, field, methods.build(), argCounts.build());
-          if (!memberSet.methods().isEmpty() || !memberSet.field().isEmpty()) {
-            return Optional.of(new JsonPrimitive(job.objects.retain(memberSet)));
-          }
-          throw new IllegalArgumentException("Method not found: " + memberName);
+          var classMember = new ClassMember(type, memberName);
+          return Optional.of(new JsonPrimitive(job.objects.retain(classMember)));
         }
 
       case "java_call_method":
         {
           var target = (Object) job.objects.getById(args.getStrictLong(0));
-          var memberSet = (MemberSet) job.objects.getById(args.getStrictLong(1));
+          var member = (ClassMember) job.objects.getById(args.getStrictLong(1));
           Object[] params = new Object[args.size() - 2];
           for (int i = 0; i < params.length; ++i) {
             params[i] = job.objects.getById(args.getStrictLong(i + 2));
           }
-          // Catch IllegalArgumentException until all the methods in the set with the right number
-          // of args have been exhausted.
-          for (Method method : memberSet.methods()) {
-            if (method.getParameterCount() == params.length) {
-              try {
-                var result = method.invoke(target, params);
-                return Optional.of(new JsonPrimitive(job.objects.retain(result)));
-              } catch (IllegalArgumentException e) {
-              } catch (InvocationTargetException e) {
-                throw new InvocationTargetException(
-                    e,
-                    String.format(
-                        "Error invoking `%s` on `%s` from `java_call_method`: %s",
-                        method.getName(), target, e.getCause()));
-              }
-            }
+
+          boolean isStaticMethod = target == null;
+          var classForLookup = target == null ? member.type() : target.getClass();
+          Optional<Method> method =
+              Script.TypeChecker.findBestMatchingMethod(
+                  classForLookup,
+                  isStaticMethod,
+                  mappingsLoader.get()::getRuntimeMethodNames,
+                  member.name(),
+                  params);
+          if (method.isEmpty()) {
+            throw new IllegalArgumentException(
+                "No matching method found for '%s' on class '%s'"
+                    .formatted(member.name(), classForLookup.getName()));
           }
-          // Fell through without successfully invoking a matching method. Throw an exception that
-          // reports the signatures of all methods in the overload set.
-          var paramTypes = new ArrayList<String>();
-          for (int i = 0; i < params.length; ++i) {
-            var param = params[i];
-            paramTypes.add(param == null ? "null" : param.getClass().getName());
-          }
-          var signatures = new ArrayList<String>();
-          for (Method method : memberSet.methods()) {
-            signatures.add(method.toString());
-          }
-          throw new IllegalArgumentException(
-              String.format(
-                  "No matching methods for %s(%s):\n%s",
-                  memberSet.name(),
-                  String.join(", ", paramTypes.toArray(String[]::new)),
-                  String.join("\n", signatures.toArray(String[]::new))));
+          var result = method.get().invoke(target, params);
+          return Optional.of(new JsonPrimitive(job.objects.retain(result)));
         }
 
       case "java_call_script_function":
@@ -3690,13 +3533,15 @@ public class Minescript {
 
       case "java_access_field":
         {
+          args.expectSize(2);
           var target = (Object) job.objects.getById(args.getStrictLong(0));
-          var memberSet = (MemberSet) job.objects.getById(args.getStrictLong(1));
-          var field = memberSet.field();
-          if (field.isEmpty()) {
-            throw new NoSuchFieldException(String.format("No field named `%s`", memberSet.name()));
-          }
-          var result = field.get().get(target);
+          var member = (ClassMember) job.objects.getById(args.getStrictLong(1));
+          var field =
+              member
+                  .type()
+                  .getField(mappingsLoader.get().getRuntimeFieldName(member.type(), member.name()));
+          boolean isClass = target instanceof Class;
+          var result = field.get(isClass ? null : target);
           return Optional.of(new JsonPrimitive(job.objects.retain(result)));
         }
 
@@ -3814,7 +3659,7 @@ public class Minescript {
       return Optional.empty();
     }
 
-    return Optional.of(runScriptFunction(job, funcCallId, functionCall));
+    return Optional.of(runScriptFunction(job, funcCallId, functionCall).toJson());
   }
 
   private static JsonElement scheduleTasks(
@@ -4010,14 +3855,9 @@ public class Minescript {
     }
   }
 
-  private record ConstructorSet(
-      String name, ImmutableList<Constructor> ctors, ImmutableSet<Integer> argCounts) {}
+  private record ClassConstructor(Class<?> type) {}
 
-  private record MemberSet(
-      String name,
-      Optional<Field> field,
-      ImmutableList<Method> methods,
-      ImmutableSet<Integer> argCounts) {}
+  private record ClassMember(Class<?> type, String name) {}
 
   public static void handleAutorun(String worldName) {
     LOGGER.info("Handling autorun for world `{}`", worldName);
@@ -4059,15 +3899,16 @@ public class Minescript {
     }
 
     // Process tick event listeners from Pyjinn scripts.
-    JsonObject json = null;
+    ScriptValue eventValue = null;
     for (var entry : tickEventListeners.entrySet()) {
       var listener = entry.getValue();
       if (listener.isActive()) {
-        if (json == null) {
-          json = new JsonObject();
-          json.addProperty("type", "tick");
+        if (eventValue == null) {
+          var event = new TickEvent();
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
         }
-        listener.respond(json);
+        listener.respond(eventValue);
       }
     }
 

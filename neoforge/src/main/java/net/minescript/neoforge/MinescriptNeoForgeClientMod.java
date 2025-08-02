@@ -39,7 +39,7 @@ public class MinescriptNeoForgeClientMod {
   public static class ClientEvents {
     @SubscribeEvent
     public static void onRender(RenderLevelStageEvent.AfterLevel event) {
-      Minescript.onRenderWorld();
+      Minescript.onRenderWorld(event);
     }
 
     @SubscribeEvent

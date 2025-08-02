@@ -44,6 +44,6 @@ public final class MinescriptFabricClientMod implements ClientModInitializer {
   }
 
   private void onRender(WorldRenderContext context) {
-    Minescript.onRenderWorld();
+    Minescript.onRenderWorld(context);
   }
 }

@@ -41,7 +41,7 @@ else:
   if "\n" not in source and not source.startswith("print("):
     source = f"print({source}, file=sys.stderr)"
 
-  script = Minescript.loadScript(["eval"].getJavaList(), source)
+  script = Minescript.loadPyjinnScript(["eval"].getJavaList(), source)
 
   # Copy script config and variables from this launcher script to the embedded script.
   script.redirectStdout(__script__.stdout)
