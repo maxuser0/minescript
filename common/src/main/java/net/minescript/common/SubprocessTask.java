@@ -8,9 +8,12 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.concurrent.TimeUnit;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -42,6 +45,16 @@ public class SubprocessTask implements Task {
           "Cannot run \"{}\" because execution is not configured for \"{}\" files.",
           command.scriptPath(),
           command.fileExtension());
+      return -1;
+    }
+    if (!Files.exists(Paths.get(exec.command()[0]))) {
+      jobControl.log(
+          "Cannot run \"{}\" because command \"{}\" does not exist. Check your config at"
+              + " minescript{}config.txt and see documentation at:"
+              + " https://minescript.net/docs/#configuration",
+          command.command()[0],
+          exec.command()[0],
+          File.separator);
       return -1;
     }
 
