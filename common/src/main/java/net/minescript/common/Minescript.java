@@ -106,7 +106,7 @@ public class Minescript {
   private static Platform platform;
   private static String version;
   private static Thread worldListenerThread;
-  private static MappingsLoader mappingsLoader;
+  public static MappingsLoader mappingsLoader;
 
   public static void init(Platform platform) {
     Minescript.platform = platform;
@@ -188,9 +188,10 @@ public class Minescript {
   // TODO(maxuser): Allow this to be controlled via config.
   public static void enableDebugPyjinnLogging(boolean enable) {
     if (enable) {
-      Script.setDebugLogger((str, args) -> LOGGER.info("Pyjinn debug output: " + str + "%n", args));
+      Script.setDebugLogger(
+          (message, args) -> LOGGER.info("Pyjinn debug output: " + message.formatted(args)));
     } else {
-      Script.setDebugLogger((str, args) -> {});
+      Script.setDebugLogger((message, args) -> {});
     }
   }
 

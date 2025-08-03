@@ -30,8 +30,7 @@ public class MappingsLoader {
       var obfuscatedMappings = ObfuscatedNameMappings.loadFromFiles(modLoaderName, mcVersion);
       if (obfuscatedMappings.isPresent()) {
         long loadEndTime = System.currentTimeMillis();
-        LOGGER.info(
-            "Loaded mappings for deobfuscation in {} milliseconds", loadEndTime - loadStartTime);
+        LOGGER.info("Loaded mappings for deobfuscation in {}ms", loadEndTime - loadStartTime);
         nameMappings = obfuscatedMappings.get();
       } else {
         LOGGER.warn("Unable to load mappings for runtime that's not using the official mappings");

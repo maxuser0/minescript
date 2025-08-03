@@ -25,10 +25,6 @@ public class PyjinnScript {
 
   private static final Script.PyDict gameGlobalDict = new Script.PyDict(new ConcurrentHashMap<>());
 
-  static {
-    Script.setDebugLogger((str, args) -> LOGGER.info(str, args));
-  }
-
   private PyjinnScript() {}
 
   // TODO(maxuser): Merge PyjinnTask into PyjinnJob.
