@@ -9,9 +9,9 @@ Python and other scripting languages. It is implemented as mod for [Fabric](http
 
 The examples below require Minescript 4.0 or higher.
 
-## Terms of Service
+## Terms of Use
 
-Before using Minescript, please review the [Terms of Service](https://github.com/maxuser0/minescript/blob/main/TERMS_OF_SERVICE.md).
+Before using Minescript, please review the [Terms of Use](https://github.com/maxuser0/minescript/blob/main/TERMS_OF_USE.md).
 
 ## How it works
 
