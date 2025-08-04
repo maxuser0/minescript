@@ -3454,10 +3454,14 @@ public class Minescript {
             params[i] = job.objects.getById(args.getStrictLong(i + 1));
           }
           Optional<Constructor<?>> ctor =
-              Script.TypeChecker.findBestMatchingConstructor(klass.type(), params);
+              Script.TypeChecker.findBestMatchingConstructor(
+                  klass.type(), params, /* diagnostics= */ null);
           if (ctor.isEmpty()) {
-            throw new IllegalArgumentException(
-                "No matching constructor found for class '%s'".formatted(klass.type()));
+            // Re-run type checker with same args but with error diagnostics for creating exception.
+            var diagnostics =
+                new Script.TypeChecker.Diagnostics(mappingsLoader.get()::getPrettyClassName);
+            Script.TypeChecker.findBestMatchingConstructor(klass.type(), params, diagnostics);
+            throw diagnostics.createTruncatedException();
           }
           var result = ctor.get().newInstance(params);
           return Optional.of(new JsonPrimitive(job.objects.retain(result)));
@@ -3489,11 +3493,20 @@ public class Minescript {
                   isStaticMethod,
                   mappingsLoader.get()::getRuntimeMethodNames,
                   member.name(),
-                  params);
+                  params,
+                  /* diagnostics= */ null);
           if (method.isEmpty()) {
-            throw new IllegalArgumentException(
-                "No matching method found for '%s' on class '%s'"
-                    .formatted(member.name(), classForLookup.getName()));
+            // Re-run type checker with same args but with error diagnostics for creating exception.
+            var diagnostics =
+                new Script.TypeChecker.Diagnostics(mappingsLoader.get()::getPrettyClassName);
+            Script.TypeChecker.findBestMatchingMethod(
+                classForLookup,
+                isStaticMethod,
+                mappingsLoader.get()::getRuntimeMethodNames,
+                member.name(),
+                params,
+                diagnostics);
+            throw diagnostics.createTruncatedException();
           }
           var result = method.get().invoke(target, params);
           return Optional.of(new JsonPrimitive(job.objects.retain(result)));

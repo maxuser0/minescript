@@ -57,8 +57,7 @@ public class PyjinnScript {
       try {
         callback.function.call(callback.env, scriptValue.get());
       } catch (Exception e) {
-        systemMessageQueue.logUserError(
-            prettyPrintScriptException(e, /* toplevelException= */ true));
+        ScriptExceptionHandler.reportException(systemMessageQueue, e);
       }
       return true;
     }
@@ -124,8 +123,7 @@ public class PyjinnScript {
         hasPendingCallbacksAfterExec = !task.callbackMap.isEmpty();
       } catch (Exception e) {
         isRunningScriptGlobals = false;
-        systemMessageQueue.logUserError(
-            prettyPrintScriptException(e, /* toplevelException= */ true));
+        ScriptExceptionHandler.reportException(systemMessageQueue, e);
         script.exit(1);
         return;
       }
@@ -170,40 +168,6 @@ public class PyjinnScript {
     protected void onClose() {
       // Nothing special to do when closing the Pyjinn job.
     }
-  }
-
-  private static String prettyPrintScriptException(Throwable e, boolean toplevelException) {
-    var out = new StringBuilder();
-    boolean didOutputException = false;
-
-    for (var frame : e.getStackTrace()) {
-      var filename = frame.getFileName();
-      if (filename.toLowerCase().endsWith(".py") || filename.toLowerCase().endsWith(".pyj")) {
-        // Output the exception only if there's a file in the stack trace that ends with a script
-        // extension.
-        if (!didOutputException) {
-          didOutputException = true;
-          if (!toplevelException) {
-            out.append("Caused by: ");
-          }
-          out.append(e.toString());
-          out.append("\n");
-        }
-        out.append(
-            "  at %s.%s(%s:%s)\n"
-                .formatted(
-                    frame.getClassName(), frame.getMethodName(), filename, frame.getLineNumber()));
-      } else {
-        // Skip the rest of the stack that's Java or native code.
-        break;
-      }
-    }
-
-    Throwable cause = e.getCause();
-    if (cause != null) {
-      out.append(prettyPrintScriptException(cause, /* toplevelException= */ false));
-    }
-    return out.toString();
   }
 
   public static Job createJob(
