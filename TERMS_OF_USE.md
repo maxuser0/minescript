@@ -1,8 +1,8 @@
-# Minescript - Terms of Service
+# Minescript Terms of Use
 
-**Last Updated:** June 26, 2025
+**Last Updated:** August 1, 2025
 
-Please read these Terms of Service ("Terms", "TOS") carefully before using the Minescript mod (the "Mod") developed by **maxuser** ("the Developer").
+Please read these Terms of Use ("Terms", "TOU") carefully before using the Minescript mod (the "Mod") developed by **maxuser** ("the Developer").
 
 By downloading, installing, using, or contributing to Minescript, you agree to be bound by these Terms. If you do not agree to these Terms, you may not use the Mod.
 
@@ -22,9 +22,11 @@ Minescript is an open-source Minecraft mod that enables users to write scripts t
 
 ## 3. Licensing and Open Source
 
-Source code for the Mod is distributed under the GPL-3.0-only license. A copy of this license is included with the Mod distribution and can also be found at: https://github.com/maxuser0/minescript/blob/main/COPYING
+Source code for the Mod is distributed under the GPL-3.0-only license. A copy of this license is
+included with the Mod distribution and can also be found at:
+<https://github.com/maxuser0/minescript/blob/main/COPYING>
 
-Your use, modification, and distribution of Minescript are governed by the terms of the GPL-3.0-only license. These Terms of Service supplement, but do not replace, the obligations and rights granted by the GPL-3.0-only license.
+Your use, modification, and distribution of Minescript are governed by the terms of the GPL-3.0-only license. These Terms of Use supplement, but do not replace, the obligations and rights granted by the GPL-3.0-only license.
 
 ---
 
@@ -125,6 +127,6 @@ By continuing to access or use the Developer's Mod after those revisions become 
 If you have any questions about these Terms, please contact the Developer:
 
 * **Email:** maxuser@minescript.net
-* **GitHub:** https://github.com/maxuser0/minescript
-* **Modrinth:** https://modrinth.com/mod/minescript
-* **CurseForge:** https://www.curseforge.com/minecraft/mc-mods/minescript
+* **GitHub:** <https://github.com/maxuser0/minescript>
+* **Modrinth:** <https://modrinth.com/mod/minescript>
+* **CurseForge:** <https://www.curseforge.com/minecraft/mc-mods/minescript>

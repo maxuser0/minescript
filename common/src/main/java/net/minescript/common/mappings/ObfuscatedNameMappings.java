@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -27,13 +28,20 @@ public class ObfuscatedNameMappings implements NameMappings {
   private static final Logger LOGGER = LogManager.getLogger();
 
   // Map: officialClassName -> obfuscatedClassName
+  // e.g. "net.minecraft.client.Minecraft" -> "fud"
   private final BiMap<String, String> officialToObfuscatedClassMap = HashBiMap.create();
 
   // Map: [obfuscatedClassName, officialFieldName] -> obfuscateFieldName
   private final Map<ClassMemberKey, String> officialFieldMap = new HashMap<>();
 
-  // Map: [obfuscatedClassName, officialMethodName] -> Set(obfuscatedMethodNames)]
-  private final HashMultimap<ClassMemberKey, String> officialMethodMap = HashMultimap.create();
+  private record MethodSignature(String methodName, String signature) {}
+
+  // Map: [obfuscatedClassName, officialMethodName] -> Set(obfuscated MethodSignature)]
+  // e.g. for "net.minecraft.world.phys.shapes.VoxelShape::add":
+  //   ["fjm", "max"] -> Set(["b", "Ljh$a;DD"], ["c", "Ljh$a;"])
+  // "Obficial" refers to the key containing the obfuscated class name and the official method name.
+  private final HashMultimap<ClassMemberKey, MethodSignature>
+      obficialMethodNameToObfuscatedSigMethodMap = HashMultimap.create();
 
   // Map: obfuscatedClassName -> fabricClassName
   private final BiMap<String, String> obfuscatedToFabricClassMap = HashBiMap.create();
@@ -49,8 +57,11 @@ public class ObfuscatedNameMappings implements NameMappings {
   // Map: [obfuscatedClassName, obfuscatedFieldName] -> fabricFieldName
   private final Map<ClassMemberKey, String> fabricFieldMap = new ConcurrentHashMap<>();
 
-  // Map: [obfuscatedClassName, obfuscatedMethodName] -> Set(fabricMethodName)]
-  private final HashMultimap<ClassMemberKey, String> fabricMethodMap = HashMultimap.create();
+  private record ObfuscatedMethodKey(
+      String obfuscatedClassName, MethodSignature obfuscatedMethodSig) {}
+
+  // Map: [obfuscatedClassName, obfuscated MethodSignature] -> Set(fabricMethodName)]
+  private final HashMultimap<ObfuscatedMethodKey, String> fabricMethodMap = HashMultimap.create();
 
   // Map: officialClassName -> fabricClassName
   private final Map<String, String> officialToFabricClassMap = new ConcurrentHashMap<>();
@@ -69,7 +80,7 @@ public class ObfuscatedNameMappings implements NameMappings {
   private final Map<ClassMemberKey, ImmutableSet<String>> runtimeMethodMap =
       new ConcurrentHashMap<>();
 
-  private record ClassMemberKey(String runtimeClassName, String prettyMemberName) {}
+  private record ClassMemberKey(String className, String memberName) {}
 
   private ObfuscatedNameMappings() {}
 
@@ -87,7 +98,7 @@ public class ObfuscatedNameMappings implements NameMappings {
     if (fabricName == null) {
       return prettyClassName;
     }
-    LOGGER.info("Mapped official class name `{}` to Fabric name `{}`", prettyClassName, fabricName);
+    LOGGER.info("Mapped official class name '{}' to Fabric name '{}'", prettyClassName, fabricName);
     return fabricName;
   }
 
@@ -106,7 +117,7 @@ public class ObfuscatedNameMappings implements NameMappings {
       return runtimeClassName;
     }
     LOGGER.info(
-        "Mapped Fabric class name `{}` to official name `{}`", runtimeClassName, officialName);
+        "Mapped Fabric class name '{}' to official name '{}'", runtimeClassName, officialName);
     return officialName;
   }
 
@@ -122,8 +133,8 @@ public class ObfuscatedNameMappings implements NameMappings {
 
           if (optFabricFieldName.isEmpty()) {
             fabricFieldName = prettyFieldName;
-            LOGGER.warn(
-                "Failed to map Fabric.official field name `{}/{}.{}`, falling back to `{}`",
+            LOGGER.info(
+                "No mapping for field name '{}/{}.{}', falling back to '{}'",
                 obfuscatedToOfficialClassMap.getOrDefault(
                     fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
                 clazz.getName(),
@@ -132,7 +143,7 @@ public class ObfuscatedNameMappings implements NameMappings {
           } else {
             fabricFieldName = optFabricFieldName.get();
             LOGGER.info(
-                "Mapped Fabric.official field name `{}/{}.{}` to `{}`",
+                "Mapped Fabric.official field name '{}/{}.{}' to '{}'",
                 obfuscatedToOfficialClassMap.getOrDefault(
                     fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
                 clazz.getName(),
@@ -152,8 +163,8 @@ public class ObfuscatedNameMappings implements NameMappings {
           Set<String> fabricMethodNames = getFabricMethodNamesUncached(clazz, prettyMethodName, "");
           if (fabricMethodNames.isEmpty()) {
             fabricMethodNames = Set.of(prettyMethodName);
-            LOGGER.warn(
-                "No mapping for Fabric.official method name `{}/{}.{}`, falling back to {}",
+            LOGGER.info(
+                "No mapping for method name '{}/{}.{}', falling back to {}",
                 obfuscatedToOfficialClassMap.getOrDefault(
                     fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
                 clazz.getName(),
@@ -161,7 +172,7 @@ public class ObfuscatedNameMappings implements NameMappings {
                 fabricMethodNames);
           } else {
             LOGGER.info(
-                "Mapped Fabric.official method name `{}/{}.{}` to {}",
+                "Mapped method name '{}/{}.{}' to {}",
                 obfuscatedToOfficialClassMap.getOrDefault(
                     fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
                 clazz.getName(),
@@ -248,41 +259,42 @@ public class ObfuscatedNameMappings implements NameMappings {
   }
 
   private Set<String> getFabricMethodNamesUncached(
-      Class<?> clazz, String officialMemberName, String indent) {
+      Class<?> clazz, String officialMethodName, String indent) {
     String obfuscatedClassName = fabricToObfuscatedClassMap.get(clazz.getName());
     if (obfuscatedClassName == null) {
       return Set.of();
     }
 
-    var officialMemberKey = new ClassMemberKey(obfuscatedClassName, officialMemberName);
-    Set<String> obfuscatedMemberNames = officialMethodMap.get(officialMemberKey);
+    var obficialMethodKey = new ClassMemberKey(obfuscatedClassName, officialMethodName);
+    Set<MethodSignature> obfuscatedMethodSignatures =
+        obficialMethodNameToObfuscatedSigMethodMap.get(obficialMethodKey);
 
-    var fabricMemberNames = new HashSet<String>();
-    for (var obfuscatedMemberName : obfuscatedMemberNames) {
-      var fabricMemberKey = new ClassMemberKey(obfuscatedClassName, obfuscatedMemberName);
-      fabricMemberNames.addAll(fabricMethodMap.get(fabricMemberKey));
+    var fabricMethodNames = new HashSet<String>();
+    for (var obfuscatedMethodSignature : obfuscatedMethodSignatures) {
+      var fabricMemberKey = new ObfuscatedMethodKey(obfuscatedClassName, obfuscatedMethodSignature);
+      fabricMethodNames.addAll(fabricMethodMap.get(fabricMemberKey));
     }
 
-    if (fabricMemberNames.isEmpty()) {
+    if (fabricMethodNames.isEmpty()) {
       LOGGER.info(
           "{}Could not find mapping in {}/{} for member {}; trying superclass and interfaces...",
           indent,
           obfuscatedToOfficialClassMap.getOrDefault(
               fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
           clazz.getName(),
-          officialMemberName);
+          officialMethodName);
 
       var superclass = clazz.getSuperclass();
       if (superclass != null) {
         LOGGER.info(
             "{}Looking for member {} in superclass {}/{}",
             indent,
-            officialMemberName,
+            officialMethodName,
             obfuscatedToOfficialClassMap.getOrDefault(
                 fabricToObfuscatedClassMap.get(superclass.getName()), "?"),
             superclass.getName());
 
-        var names = getFabricMethodNamesUncached(superclass, officialMemberName, indent + "  ");
+        var names = getFabricMethodNamesUncached(superclass, officialMethodName, indent + "  ");
         if (!names.isEmpty()) {
           return names;
         }
@@ -301,11 +313,11 @@ public class ObfuscatedNameMappings implements NameMappings {
         LOGGER.info(
             "{}Looking for member {} in interface {}/{}",
             indent,
-            officialMemberName,
+            officialMethodName,
             obfuscatedToOfficialClassMap.getOrDefault(
                 fabricToObfuscatedClassMap.get(iface.getName()), "?"),
             iface.getName());
-        var names = getFabricMethodNamesUncached(iface, officialMemberName, indent + "  ");
+        var names = getFabricMethodNamesUncached(iface, officialMethodName, indent + "  ");
         if (!names.isEmpty()) {
           return names;
         }
@@ -320,12 +332,16 @@ public class ObfuscatedNameMappings implements NameMappings {
         obfuscatedToOfficialClassMap.getOrDefault(
             fabricToObfuscatedClassMap.get(clazz.getName()), "?"),
         clazz.getName(),
-        officialMemberName,
-        fabricMemberNames);
-    return fabricMemberNames;
+        officialMethodName,
+        fabricMethodNames);
+    return fabricMethodNames;
   }
 
-  public static boolean debugLogging = false;
+  private static boolean debugLogging = false;
+
+  public static void enableDebugLogging(boolean enable) {
+    debugLogging = enable;
+  }
 
   public static Optional<ObfuscatedNameMappings> loadFromFiles(
       String modLoaderName, String mcVersion) throws IOException {
@@ -361,6 +377,18 @@ public class ObfuscatedNameMappings implements NameMappings {
 
   private void loadOfficalMappings(Path officialMappingsPath) throws IOException {
     long startTimeMillis = System.currentTimeMillis();
+
+    // Map: [obfuscatedClassName, officialMethodName] -> Set("obficial" MethodSignature)]
+    // e.g. for "net.minecraft.world.phys.shapes.VoxelShape::add":
+    //   ["fjm", "max"] -> Set(["b", "net.minecraft.core.Direction$Axis,double,double",
+    //                         ["c", "net.minecraft.core.Direction$Axis"])
+    //
+    // This map is used only temporarily during loading of official mappings. After all the
+    // official-to-obfuscated class name mappings are known, populate the
+    // obficialMethodNameToObfuscatedSigMethodMap from this.
+    final HashMultimap<ClassMemberKey, MethodSignature> obficialMethodNameToObficialSigMethodMap =
+        HashMultimap.create();
+
     try (BufferedReader reader =
         new BufferedReader(new FileReader(officialMappingsPath.toFile()))) {
       String line;
@@ -374,7 +402,7 @@ public class ObfuscatedNameMappings implements NameMappings {
           officialToObfuscatedClassMap.put(officialClassName, obfuscatedClassName);
           if (debugLogging) {
             LOGGER.info(
-                "(debug) Mapped official class name `{}` to obfuscated name `{}`",
+                "(debug) Mapped official class name '{}' to obfuscated name '{}'",
                 officialClassName,
                 obfuscatedClassName);
           }
@@ -391,39 +419,128 @@ public class ObfuscatedNameMappings implements NameMappings {
                 new ClassMemberKey(obfuscatedClassName, officialMemberName), obfuscatedMemberName);
             if (debugLogging) {
               LOGGER.info(
-                  "(debug) Mapped official field name `{}` of class `{}` to obfuscated name `{}`",
-                  officialMemberName,
+                  "(debug) Mapped class '{}' official field name '{}' to obfuscated name '{}'",
                   obfuscatedClassName,
+                  officialMemberName,
                   obfuscatedMemberName);
             }
           } else {
-            officialMethodMap.put(
-                new ClassMemberKey(obfuscatedClassName, officialMemberName), obfuscatedMemberName);
+            var methodParamsWithoutParens = methodParams.substring(1, methodParams.length() - 1);
+            obficialMethodNameToObficialSigMethodMap.put(
+                new ClassMemberKey(obfuscatedClassName, officialMemberName),
+                new MethodSignature(obfuscatedMemberName, methodParamsWithoutParens));
             if (debugLogging) {
               LOGGER.info(
-                  "(debug) Mapped official method name`{}` of class `{}` to obfuscated name `{}`",
-                  officialMemberName,
+                  "(debug) Mapped class '{}' official method '{}' to obfuscated name '{}' with"
+                      + " signature '{}'",
                   obfuscatedClassName,
-                  obfuscatedMemberName);
+                  officialMemberName,
+                  obfuscatedMemberName,
+                  methodParamsWithoutParens);
             }
           }
         }
       }
     }
+
+    long mapSignaturesStartTimeMillis = System.currentTimeMillis();
+    for (var entry : obficialMethodNameToObficialSigMethodMap.entries()) {
+      // key: [obfuscatedClassName, officialMethodName]
+      ClassMemberKey obficialMethodKey = entry.getKey();
+      MethodSignature obficialMethodSig = entry.getValue();
+      var obfuscatedMethodSig =
+          new MethodSignature(
+              obficialMethodSig.methodName,
+              obfuscateOfficialMethodSignature(
+                  officialToObfuscatedClassMap::get, obficialMethodSig.signature));
+      if (debugLogging) {
+        LOGGER.info(
+            "(debug) Obfuscated class '{}' method '{}' sig '{}' as '{}'",
+            obficialMethodKey.className,
+            obficialMethodKey.memberName,
+            obficialMethodSig.signature,
+            obfuscatedMethodSig.signature);
+      }
+      obficialMethodNameToObfuscatedSigMethodMap.put(obficialMethodKey, obfuscatedMethodSig);
+    }
+    long mapSignaturesEndTimeMillis = System.currentTimeMillis();
+    LOGGER.info(
+        "Mapped {} method signatures from official names to obfuscated JNI method format in {}ms",
+        obficialMethodNameToObficialSigMethodMap.size(),
+        mapSignaturesEndTimeMillis - mapSignaturesStartTimeMillis);
+
     long endTimeMillis = System.currentTimeMillis();
     LOGGER.info(
         "Loaded {} classes, {} fields, and {} methods from official mappings file in {}ms",
         officialToObfuscatedClassMap.size(),
         officialFieldMap.size(),
-        officialMethodMap.size(),
+        obficialMethodNameToObfuscatedSigMethodMap.size(),
         endTimeMillis - startTimeMillis);
+  }
+
+  /**
+   * Converts a method signature with official names to a signature with obfuscated names.
+   *
+   * <p>E.g. convert "net.minecraft.core.Direction$Axis,double,double" to "Ljh$a;DD".
+   */
+  private static String obfuscateOfficialMethodSignature(
+      Function<String, String> toObfuscatedClassName, String officialSignature) {
+    // officialSignature.split(",") below given "" returns [""]. So short-circuit that.
+    if (officialSignature.isEmpty()) {
+      return "";
+    }
+    String[] officialArgs = officialSignature.split(",");
+    var obfuscatedArgs = new StringBuilder();
+    for (String officialArg : officialArgs) {
+      while (officialArg.endsWith("[]")) {
+        officialArg = officialArg.substring(0, officialArg.length() - 2);
+        obfuscatedArgs.append("[");
+      }
+      switch (officialArg) {
+        case "boolean":
+          obfuscatedArgs.append("Z");
+          break;
+        case "byte":
+          obfuscatedArgs.append("B");
+          break;
+        case "char":
+          obfuscatedArgs.append("C");
+          break;
+        case "double":
+          obfuscatedArgs.append("D");
+          break;
+        case "float":
+          obfuscatedArgs.append("F");
+          break;
+        case "int":
+          obfuscatedArgs.append("I");
+          break;
+        case "long":
+          obfuscatedArgs.append("J");
+          break;
+        case "short":
+          obfuscatedArgs.append("S");
+          break;
+        default:
+          String obfuscatedName = toObfuscatedClassName.apply(officialArg);
+          if (obfuscatedName == null) {
+            obfuscatedName = officialArg;
+          }
+          obfuscatedArgs.append("L").append(obfuscatedName.replace('.', '/')).append(";");
+          break;
+      }
+    }
+    return obfuscatedArgs.toString();
   }
 
   private static final Pattern FABRIC_MAPPINGS_CLASS_RE =
       Pattern.compile("^CLASS\t([a-z0-9A-Z_/$]+)\t([a-z0-9A-Z_/$]+)$");
 
-  private static final Pattern FABRIC_MAPPINGS_MEMBER_RE =
-      Pattern.compile("^(FIELD|METHOD)\t([a-z0-9A-Z_/$]+)\t[^\t]+\t([^\t]+)\t([^\t]+)$");
+  private static final Pattern FABRIC_MAPPINGS_FIELD_RE =
+      Pattern.compile("^FIELD\t([a-z0-9A-Z_/$]+)\t[^\t]+\t([^\t]+)\t([^\t]+)$");
+
+  private static final Pattern FABRIC_MAPPINGS_METHOD_RE =
+      Pattern.compile("^METHOD\t([a-z0-9A-Z_/$]+)\t\\(([^)]*)\\)[^\t]+\t([^\t]+)\t([^\t]+)$");
 
   private void loadFabricMappings(Path fabricMappingsPath) throws IOException {
     long startTimeMillis = System.currentTimeMillis();
@@ -438,41 +555,53 @@ public class ObfuscatedNameMappings implements NameMappings {
           obfuscatedToFabricClassMap.put(obfuscatedClassName, fabricClassName);
           if (debugLogging) {
             LOGGER.info(
-                "(debug) Mapped obfuscated class name `{}` to Fabric name `{}`",
+                "(debug) Mapped obfuscated class name '{}' to Fabric name '{}'",
                 obfuscatedClassName,
                 fabricClassName);
           }
+          continue;
         }
 
-        // E.g. "METHOD\tfud\t()Lfud;\tR\tmethod_1551"
-        match = FABRIC_MAPPINGS_MEMBER_RE.matcher(line);
+        // E.g. "FIELD\tfjm\t[Lfjm;\tb\tfield_19318" matches ["fjm", "b", "field_19318"]
+        match = FABRIC_MAPPINGS_FIELD_RE.matcher(line);
         if (match.find()) {
-          String memberType = match.group(1);
-          String obfuscatedClassName = match.group(2).replace('/', '.');
-          String obfuscatedMemberName = match.group(3).replace('/', '.');
-          String fabricMemberName = match.group(4);
-          if (memberType.equals("FIELD")) {
-            fabricFieldMap.put(
-                new ClassMemberKey(obfuscatedClassName, obfuscatedMemberName), fabricMemberName);
-            if (debugLogging) {
-              LOGGER.info(
-                  "(debug) Mapped obfuscated field name`{}` of class `{}` to Fabric name" + " `{}`",
-                  obfuscatedMemberName,
-                  obfuscatedClassName,
-                  fabricMemberName);
-            }
-          } else {
-            fabricMethodMap.put(
-                new ClassMemberKey(obfuscatedClassName, obfuscatedMemberName), fabricMemberName);
-            if (debugLogging) {
-              LOGGER.info(
-                  "(debug) Mapped obfuscated method name`{}` of class `{}` to Fabric name"
-                      + " `{}`",
-                  obfuscatedMemberName,
-                  obfuscatedClassName,
-                  fabricMemberName);
-            }
+          String obfuscatedClassName = match.group(1).replace('/', '.');
+          String obfuscatedMemberName = match.group(2).replace('/', '.');
+          String fabricFieldName = match.group(3);
+          fabricFieldMap.put(
+              new ClassMemberKey(obfuscatedClassName, obfuscatedMemberName), fabricFieldName);
+          if (debugLogging) {
+            LOGGER.info(
+                "(debug) Mapped obfuscated field name '{}' of class '{}' to Fabric name" + " '{}'",
+                obfuscatedMemberName,
+                obfuscatedClassName,
+                fabricFieldName);
           }
+          continue;
+        }
+
+        // E.g. "METHOD\tfjm\t(Lfis;[Lfis;DDDDDD)V\ta\tmethod_33662" matches
+        // ["fjm", "Lfis;[Lfis;DDDDDD", "a", "method_33662"]
+        match = FABRIC_MAPPINGS_METHOD_RE.matcher(line);
+        if (match.find()) {
+          String obfuscatedClassName = match.group(1).replace('/', '.');
+          String obfuscatedMethodSignature = match.group(2);
+          String obfuscatedMethodName = match.group(3).replace('/', '.');
+          String fabricMethodName = match.group(4);
+          fabricMethodMap.put(
+              new ObfuscatedMethodKey(
+                  obfuscatedClassName,
+                  new MethodSignature(obfuscatedMethodName, obfuscatedMethodSignature)),
+              fabricMethodName);
+          if (debugLogging) {
+            LOGGER.info(
+                "(debug) Mapped class '{}' method '{}' with signature '{}' to Fabric name '{}'",
+                obfuscatedClassName,
+                obfuscatedMethodName,
+                obfuscatedMethodSignature,
+                fabricMethodName);
+          }
+          continue;
         }
       }
     }

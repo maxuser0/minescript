@@ -25,10 +25,6 @@ public class PyjinnScript {
 
   private static final Script.PyDict gameGlobalDict = new Script.PyDict(new ConcurrentHashMap<>());
 
-  static {
-    Script.setDebugLogger((str, args) -> LOGGER.info(str, args));
-  }
-
   private PyjinnScript() {}
 
   // TODO(maxuser): Merge PyjinnTask into PyjinnJob.
@@ -61,7 +57,7 @@ public class PyjinnScript {
       try {
         callback.function.call(callback.env, scriptValue.get());
       } catch (Exception e) {
-        systemMessageQueue.logException(e);
+        ScriptExceptionHandler.reportException(systemMessageQueue, e);
       }
       return true;
     }
@@ -127,7 +123,7 @@ public class PyjinnScript {
         hasPendingCallbacksAfterExec = !task.callbackMap.isEmpty();
       } catch (Exception e) {
         isRunningScriptGlobals = false;
-        systemMessageQueue.logException(e);
+        ScriptExceptionHandler.reportException(systemMessageQueue, e);
         script.exit(1);
         return;
       }
