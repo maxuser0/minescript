@@ -7,6 +7,22 @@
 - To set up Fabric mappings for Pyjinn scripts see
   [minescript.net/mappings](https://minescript.net/mappings)
 
+## v5.0b2
+
+- Improve errors when Pyjinn can't find method/ctor ([e88a241](https://github.com/maxuser0/minescript/commit/e88a2419f7f7c315b5e0dbbd609e65ca64429158))
+- Improve error message when Python can't be found ([c1ef53d](https://github.com/maxuser0/minescript/commit/c1ef53d3fe9b46f9962cc47b02b7c0979bef5a60))
+- Better message when Pyjinn script throws exception ([a05ec73](https://github.com/maxuser0/minescript/commit/a05ec73b3f06d857b85ef86d32685260b3c4e86a))
+- Fix bug in method mappings for Fabric ([4035ecc](https://github.com/maxuser0/minescript/commit/4035eccddfbfda1cb5901ba4612b97e34375095b))
+- Update Minescript version to 5.0b2, Pyjinn to 0.6 ([6e76d2f](https://github.com/maxuser0/minescript/commit/6e76d2fd26da96b5d47fc4df33d713f77bbf16a0))
+
+### Pyjinn 0.6
+
+- Support << and >> bit-shift ops and hex() function ([8a85253](https://github.com/maxuser0/pyjinn/commit/8a852537e0d66e503e53b46c5ae36215e0e841d4))
+- Improve error messages when no method/ctor found ([df61558](https://github.com/maxuser0/pyjinn/commit/df61558f7bb695084a37abbf1c711999577cff7f))
+- Add debug logging to method selection ([4b12854](https://github.com/maxuser0/pyjinn/commit/4b12854d20e69ef0bb0d78a5ab309c1b7f7430d7))
+- Update Pyjinn version to 0.6 ([151cefe](https://github.com/maxuser0/pyjinn/commit/151cefeb941a71697c02338e4cbc6e01006b1de4))
+
+
 ## v5.0b1
 
 - Pyjinn API change in method type checker ([d583429](https://github.com/maxuser0/minescript/commit/d583429280e3becf367ac4bb7faa7f4a755fcc32))

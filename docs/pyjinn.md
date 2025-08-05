@@ -251,9 +251,32 @@ X * Y
 X / Y
 X ** Y
 X % Y
+X << Y  # since Pyjinn 0.6
+X >> Y  # since Pyjinn 0.6
+
+# Built-in functions:
+abs(X)
+bool(X)
+chr(INT)
+enumerate(ITERABLE)
+float(X)
+globals()
+hex(X)
+int(X)
+len(ITERABLE)
+list(ITERABLE)
+max(X, Y, ...)
+min(X, Y, ...)
+ord(STR)
+print(...)
+range(...)
+round(X)
+str(X)
+tuple(ITERABLE)
+type(X)
 
 # Index/Slice operations:
-X[FROM]
+X[INDEX]
 X[FROM:]
 X[:TO]
 X[:]
@@ -356,13 +379,13 @@ for VAR in ITERABLE:
   ...
   break
   ...
-  continue  # since 5.0b1
+  continue  # since Pyjinn 0.5
 
 while CONDITION:
   ...
   break
   ...
-  continue  # since 5.0b1
+  continue  # since Pyjinn 0.5
 
 try:
   ...
@@ -383,7 +406,7 @@ def FUNCTION_NAME(...):
 
 ### Python 3.x features not supported by Pyjinn
 
-Language features **NOT** supported in Minescript 5.0b1 / Pyjinn 0.5:
+Language features **NOT** supported in Minescript 5.0b2 / Pyjinn 0.6:
 
 - Python standard library (except for some basics in `sys` module: `sys.argv`,
   `sys.version`, `sys.stdout`, `sys.stderr`)
@@ -395,7 +418,7 @@ Language features **NOT** supported in Minescript 5.0b1 / Pyjinn 0.5:
   supported)
 - `else` blocks following `for` and `while` blocks
 - generators and `yield` statement
-- threading, asyncio, and async/await syntax (API for asynchronous execution under development in 5.0 beta)
+- threading, asyncio, and async/await syntax (Java `Thread` is supported instead)
 - inheritance
 - `with` statement
 - `match` statement (Python 3.10+)
