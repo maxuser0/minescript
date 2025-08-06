@@ -1,0 +1,53 @@
+#!python
+# SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
+# SPDX-License-Identifier: GPL-3.0-only
+
+# WARNING: This file is generated from the Minescript jar file. This file will
+# be overwritten automatically when Minescript updates to a new version. If you
+# make edits to this file, make sure to save a backup copy when upgrading to a
+# new version of Minescript.
+
+r"""eval v5.0 distributed via Minescript jar file
+
+Usage:
+  \eval <pyjinnCode> [<line2> [<line3> ...]]
+
+Executes <pyjinnCode> (and optional subsequent lines
+<line2>, <line3>, etc) as Pyjinn statements.
+
+Functions from minescript.pyj are available automatically without
+qualification.
+
+Examples:
+  Print information about nearby entities to the chat screen:
+  \eval "entities()"
+
+  Print the names of nearby entities to the chat screen:
+  \eval "for e in entities(): echo(e['name'])"
+
+  Take a screenshot after 3 seconds:
+  \eval "set_timeout(screenshot, 3000)"
+"""
+
+from system.pyj.minescript import *
+import system.pyj.sys as sys
+
+Minescript = JavaClass("net.minescript.common.Minescript")
+
+source = "\n".join(tuple(sys.argv[1:]))
+if not source:
+  print("Usage: eval SOURCE_CODE")
+else:
+  if "\n" not in source and not source.startswith("print("):
+    source = f"print({source}, file=sys.stderr)"
+
+  script = Minescript.loadPyjinnScript(["<argv>.pyj"].getJavaList(), source)
+
+  # Copy script config and variables from this launcher script to the embedded script.
+  script.redirectStdout(__script__.stdout)
+  script.redirectStderr(__script__.stderr)
+  for name in __script__.vars.keys():
+    script.vars[name] = __script__.vars[name]
+  script.atExit(lambda status: __script__.exit(status))
+
+  script.exec()

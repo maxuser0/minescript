@@ -40,4 +40,13 @@ neoForge {
     }
 }
 
+repositories {
+    mavenLocal()
+}
+
+dependencies {
+    jarJar('org.pyjinn:pyjinn-lib:0.6:all')
+    additionalRuntimeClasspath('org.pyjinn:pyjinn-lib:0.6:all')
+}
+
 sourceSets.main.resources { srcDir 'src/generated/resources' }

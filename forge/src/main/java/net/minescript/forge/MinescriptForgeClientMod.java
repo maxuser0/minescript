@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
+// SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
 package net.minescript.forge;
@@ -13,7 +13,7 @@ import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.level.ChunkEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.eventbus.api.listener.SubscribeEvent;
 import net.minecraftforge.fml.LogicalSide;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
@@ -42,9 +42,8 @@ public class MinescriptForgeClientMod {
   public static class ClientEvents {
     @SubscribeEvent
     public static void onKeyboardKeyPressedEvent(ScreenEvent.KeyPressed event) {
-      if (Minescript.onKeyboardKeyPressed(event.getScreen(), event.getKeyCode())) {
-        event.setCanceled(true);
-      }
+      Minescript.onKeyboardKeyPressed(event.getScreen(), event.getKeyCode());
+      return; // TODO(maxuser): can no longer cancel
     }
 
     @SubscribeEvent
@@ -57,7 +56,7 @@ public class MinescriptForgeClientMod {
       } else if ((key == ENTER_KEY || key == config.secondaryEnterKeyCode())
           && action == Constants.KEY_ACTION_DOWN
           && Minescript.onKeyboardKeyPressed(screen, key)) {
-        event.setCanceled(true);
+        return; // TODO(maxuser): can no longer cancel
       }
     }
 

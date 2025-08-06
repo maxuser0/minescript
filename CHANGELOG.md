@@ -1,5 +1,150 @@
 # Changelog
 
+## Docs
+
+- For Pyjinn integration with Java and language compatibility with Python see
+  [minescript.net/pyjinn](https://minescript.net/pyjinn)
+- To set up Fabric mappings for Pyjinn scripts see
+  [minescript.net/mappings](https://minescript.net/mappings)
+
+## v5.0b2
+
+- Improve errors when Pyjinn can't find method/ctor ([e88a241](https://github.com/maxuser0/minescript/commit/e88a2419f7f7c315b5e0dbbd609e65ca64429158))
+- Improve error message when Python can't be found ([c1ef53d](https://github.com/maxuser0/minescript/commit/c1ef53d3fe9b46f9962cc47b02b7c0979bef5a60))
+- Better message when Pyjinn script throws exception ([a05ec73](https://github.com/maxuser0/minescript/commit/a05ec73b3f06d857b85ef86d32685260b3c4e86a))
+- Fix bug in method mappings for Fabric ([4035ecc](https://github.com/maxuser0/minescript/commit/4035eccddfbfda1cb5901ba4612b97e34375095b))
+- Update Minescript version to 5.0b2, Pyjinn to 0.6 ([6e76d2f](https://github.com/maxuser0/minescript/commit/6e76d2fd26da96b5d47fc4df33d713f77bbf16a0))
+
+### Pyjinn 0.6
+
+- Support << and >> bit-shift ops and hex() function ([8a85253](https://github.com/maxuser0/pyjinn/commit/8a852537e0d66e503e53b46c5ae36215e0e841d4))
+- Improve error messages when no method/ctor found ([df61558](https://github.com/maxuser0/pyjinn/commit/df61558f7bb695084a37abbf1c711999577cff7f))
+- Add debug logging to method selection ([4b12854](https://github.com/maxuser0/pyjinn/commit/4b12854d20e69ef0bb0d78a5ab309c1b7f7430d7))
+- Update Pyjinn version to 0.6 ([151cefe](https://github.com/maxuser0/pyjinn/commit/151cefeb941a71697c02338e4cbc6e01006b1de4))
+
+
+## v5.0b1
+
+- Pyjinn API change in method type checker ([d583429](https://github.com/maxuser0/minescript/commit/d583429280e3becf367ac4bb7faa7f4a755fcc32))
+- Support Outer.Nested class syntax with mappings ([268f8b1](https://github.com/maxuser0/minescript/commit/268f8b16b8709c2dcb09aeed7948b6796324ce3c))
+- Fix mappings for nested classes and enums ([0732f77](https://github.com/maxuser0/minescript/commit/0732f775526fcf64958b39e204d0f8ee76c1fc55))
+- Unify use of mappings across Python and Pyjinn ([c8e909d](https://github.com/maxuser0/minescript/commit/c8e909d5a9c428bf6e7dd7980bf7ba7a03607305))
+- Fix minescript.pyj to use valid Python syntax ([782c5a2](https://github.com/maxuser0/minescript/commit/782c5a2882c05a6f413e4d6354c9b45b858555f9))
+- Support passing non-JSON objects to Pyjinn events ([8abfa8f](https://github.com/maxuser0/minescript/commit/8abfa8ff9358d1c193b8434e1dcd61d544acbaf0))
+- Make `__script__.vars["game"]` threadsafe ([394c25a](https://github.com/maxuser0/minescript/commit/394c25a49ec72b76b0ef71108945bf19ca9789b4))
+- Support "world" event for connect/disconnect ([0c2d139](https://github.com/maxuser0/minescript/commit/0c2d1392eb5b600c1c50aa6f63d2511c12a18a6f))
+- Refactor event handling into EventDispatcher class ([6e63e6b](https://github.com/maxuser0/minescript/commit/6e63e6ba0da758ca540a3403f730827415a1d0f4))
+- Normalize event listener registration logic ([3325e66](https://github.com/maxuser0/minescript/commit/3325e662edbda7d8eda91ea57b36be73d4e86492))
+- Provide global game state shared by Pyjinn scripts ([06dffbc](https://github.com/maxuser0/minescript/commit/06dffbcc014be0bd074c43c681f18ead987042ea))
+
+### Pyjinn 0.5
+
+- Fix method resolution to check superclasses ([81d840a](https://github.com/maxuser0/pyjinn/commit/81d840aac4dd928a9145662b61eb5ff87f2dc836))
+- Remove java.vendor, build.timestamp from version ([1f56d6f](https://github.com/maxuser0/pyjinn/commit/1f56d6f232c034b4ce606d23a208dbfecf0c80ac))
+- Support Java array on rhs of `in` operator ([3ec7633](https://github.com/maxuser0/pyjinn/commit/3ec76330fbd14dd12736b49a5725285e6c75ddd6))
+- Support Outer.Nested class syntax ([29f988c](https://github.com/maxuser0/pyjinn/commit/29f988c8d318993a8829fded2635714615bfb4cf))
+- Fix handling of int/long hex constants ([94c28f3](https://github.com/maxuser0/pyjinn/commit/94c28f36e9ab4d92ef7bda211a383c7dad8844c6))
+- Refactor TypeChecker methods for easier reuse ([8f42a73](https://github.com/maxuser0/pyjinn/commit/8f42a73a78047016ef99465d575fa0548c7e57dc))
+- Promote functional params for calls of Java ctors ([0383c7a](https://github.com/maxuser0/pyjinn/commit/0383c7a4d3107a9c5da026b5360daaf4561b05be))
+- Support multi-threaded scripts, fix stack traces ([08955c4](https://github.com/maxuser0/pyjinn/commit/08955c4aea9cf9514775ec310468e4de40ff03c6))
+- Update Pyjinn version to 0.5 ([4198082](https://github.com/maxuser0/pyjinn/commit/41980829965da80ecc6a25771c920ec6ca8aaf2c))
+- Simplify implementation of slice expression parser ([456a4b1](https://github.com/maxuser0/pyjinn/commit/456a4b198a39050fdbefe2cce9b2fe125b813248))
+- Fix slice parser to respect blank slice values ([817e8e2](https://github.com/maxuser0/pyjinn/commit/817e8e226c20d623c76324a07bc49e2a8c22664e))
+- Fix handling of int/long hex constants ([94c28f3](https://github.com/maxuser0/pyjinn/commit/94c28f36e9ab4d92ef7bda211a383c7dad8844c6))
+- Refactor TypeChecker methods for easier reuse ([8f42a73](https://github.com/maxuser0/pyjinn/commit/8f42a73a78047016ef99465d575fa0548c7e57dc))
+- Promote functional params for calls of Java ctors ([0383c7a](https://github.com/maxuser0/pyjinn/commit/0383c7a4d3107a9c5da026b5360daaf4561b05be))
+- Support multi-threaded scripts, fix stack traces ([08955c4](https://github.com/maxuser0/pyjinn/commit/08955c4aea9cf9514775ec310468e4de40ff03c6))
+- Update Pyjinn version to 0.5 ([4198082](https://github.com/maxuser0/pyjinn/commit/41980829965da80ecc6a25771c920ec6ca8aaf2c))
+- Simplify implementation of slice expression parser ([456a4b1](https://github.com/maxuser0/pyjinn/commit/456a4b198a39050fdbefe2cce9b2fe125b813248))
+- Fix slice parser to respect blank slice values ([817e8e2](https://github.com/maxuser0/pyjinn/commit/817e8e226c20d623c76324a07bc49e2a8c22664e))
+- Implement 'continue' statement inside loops ([0a91f61](https://github.com/maxuser0/pyjinn/commit/0a91f61a6677a6da9e82b46c19a2c7823aad0fe7))
+
+
+## v5.0a4
+
+- Built-in `eval` script is now implemented using Pyjinn (`eval.pyj`); Python eval command is now
+  available as `pyeval`
+- Introduce `set_interval()` and `set_timeout()` which behave similiarly to `setInterval()` and
+  `setTimeout()` in JavaScript:
+  - `set_interval(callback: Callable[..., None], timer_millis: int, *args) -> int`
+  - `set_timeout(callback: Callable[..., None], timer_millis: int, *args) -> int`
+- Introduce `remove_event_listener()` which cancels listeners using the int ID returned from
+  `add_event_listener()`, `set_interval()`, and `set_timeout()`:
+  - `add_event_listener(event_type: str, callback: Callable[..., None], **args) -> int`
+  - `remove_event_listener(listener_id: int) -> bool`
+- Basic support for `sys` module in Pyjinn scripts and stderr output:
+  - `sys.argv, sys.exit(status=None), sys.version, sys.stdout, sys.stderr`
+  - `print(..., file=sys.stderr)`
+- Support for output redirection of Pyjinn scripts:
+  - `\eval 'print("Send this message to other players via chat.")' > chat`
+- Scripts can explicitly import the Pyjinn version of the Minescript standard library
+  - for simple IDE integration (e.g. VSCode) use the module name relative to the `minescript` dir:
+    - `import system.pyj.minescript`
+    - `import system.pyj.minescript as m`
+    - `from system.pyj.minescript import *`
+  - for simpler imports and consistency with existing Python scripts you can use the short module name:
+    - `import minescript`
+    - `import minescript as m`
+    - `from minescript import *`
+- If there are no imports of `minescript` or `system.pyj.minescript` in the main script, it is
+  imported implicitly as:
+  - `from system.pyj.minescript import *`
+
+## v5.0a3
+
+Support for event listeners in Pyjinn scripts for these events:
+
+- tick, render, key, mouse, chat, outgoing_chat_intercept, add_entity, block_update, explosion, take_item, damage, chunk
+
+e.g.
+
+```
+frames = 0
+def on_render(event):
+  global frames
+  frames += 1
+  if frames % 1000 == 0:
+    print(f"Rendered {frames} frames.")
+
+add_event_listener("render", on_render)
+```
+
+Support for Minescript functions in Pyjinn scripts using the same API and syntax as Python scripts:
+
+- execute, echo, echo_json, chat, log, screenshot, job_info, player_name, player_position, player_hand_items, player_inventory, player_inventory_select_slot, press_key_bind, player_press_forward, player_press_backward, player_press_left, player_press_right, player_press_jump, player_press_sprint, player_press_sneak, player_press_pick_item, player_press_use, player_press_attack, player_press_swap_hands, player_press_drop, player_orientation, player_set_orientation, player_get_targeted_block, player_get_targeted_entity, player_health, player, players, entities, version_info, world_info, getblock, getblocklist, screen_name, show_chat_screen, append_chat_history, chat_input, set_chat_input, container_get_items, player_look_at
+
+## v5.0a2
+
+This is the first step in calling Minescript script functions from
+Pyjinn scripts, for example:
+
+```
+# pyjinn_test.pyj
+
+Minescript = JavaClass("net.minescript.common.Minescript")
+
+def call(func_name, args):
+  return Minescript.call(func_name, args.getJavaList())
+
+print(call("player_get_targeted_block", [20]))
+print(call("world_info", []))
+print("minescript version:", call("version_info", []).get("minescript"))
+call("echo", ["hello?"])
+call("echo_json", ['{"text": "hello", "color": "green"}'])
+call("execute", ["time set day"])
+```
+
+## v5.0a1
+
+**WARNING:** This is a pre-release version with features that are incomplete and APIs are subject to change and compatibility with the final release is not guaranteed.
+
+Support for integrated [Pyjinn](https://github.com/maxuser0/pyjinn) interpreter. Files placed in the `minescript` directory ending in `.pyj` and written with Python syntax are interpreted without the need for an external Python installation. Minescript API functions are not yet supported from Pyjinn scripts. Java code can be run from scripts similar to Python scripts with Minescript 4.0 using [`lib_java.py`](https://minescript.net/sdm_downloads/lib_java-v2/).
+
+
+## v4.1
+
+- fixes to type hints in function signatures in `minescript.py` for improved integration with IDEs ([b2e8490](https://github.com/maxuser0/minescript/commit/b2e84901ccc2971bb0486fbe56df4f748499c848))
+
 ## v4.0
 
 ### Major changes

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
+# SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: GPL-3.0-only
 
 # WARNING: This file is generated from the Minescript jar file. This file will
@@ -6,7 +6,7 @@
 # make edits to this file, make sure to save a backup copy when upgrading to a
 # new version of Minescript.
 
-r"""paste v4.0 distributed via Minescript jar file
+r"""paste v5.0 distributed via Minescript jar file
 
 Requires:
   minescript v3.0

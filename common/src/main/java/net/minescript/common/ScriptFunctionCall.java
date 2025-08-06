@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
+// SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
 package net.minescript.common;
@@ -307,6 +307,35 @@ public class ScriptFunctionCall {
         stringList.add(element.toString());
       }
       return stringList;
+    }
+
+    /** Returns map of */
+    public Map<String, Object> getStringKeyMap(int argPos) {
+      var object = args.get(argPos);
+      if (!(object instanceof Map<?, ?> map)) {
+        throw new IllegalArgumentException(
+            expectedArgsNames == null
+                ? String.format(
+                    "`%s` expected arg %d to be string map but got: %s",
+                    functionName, argPos + 1, object)
+                : String.format(
+                    "`%s` expected %s to be string map but got: %s",
+                    functionName, expectedArgsNames[argPos], object));
+      }
+      // Validate that all keys are strings.
+      for (var key : map.keySet()) {
+        if (!(key instanceof String)) {
+          throw new IllegalArgumentException(
+              expectedArgsNames == null
+                  ? String.format(
+                      "`%s` expected arg %d to be map keyed by strings but found key '%s': %s",
+                      functionName, argPos + 1, key, object)
+                  : String.format(
+                      "`%s` expected %s to be map keyed by strings but found key '%s': %s",
+                      functionName, expectedArgsNames[argPos], key, object));
+        }
+      }
+      return (Map<String, Object>) map;
     }
 
     /** Converts arg at argPos to a map of strings, using .toString() on elements as needed. */

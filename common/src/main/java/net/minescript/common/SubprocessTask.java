@@ -1,17 +1,19 @@
-// SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
+// SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
 package net.minescript.common;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.concurrent.TimeUnit;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -43,6 +45,16 @@ public class SubprocessTask implements Task {
           "Cannot run \"{}\" because execution is not configured for \"{}\" files.",
           command.scriptPath(),
           command.fileExtension());
+      return -1;
+    }
+    if (!Files.exists(Paths.get(exec.command()[0]))) {
+      jobControl.log(
+          "Cannot run \"{}\" because command \"{}\" does not exist. Check your config at"
+              + " minescript{}config.txt and see documentation at:"
+              + " https://minescript.net/docs/#configuration",
+          command.command()[0],
+          exec.command()[0],
+          File.separator);
       return -1;
     }
 
@@ -121,19 +133,19 @@ public class SubprocessTask implements Task {
   }
 
   @Override
-  public boolean sendResponse(long functionCallId, JsonElement returnValue, boolean finalReply) {
+  public boolean sendResponse(long functionCallId, ScriptValue returnValue, boolean finalReply) {
     if (!canRespond()) {
       LOGGER.warn(
           "Subprocess unresponsive to response from funcCallId {} for job {}: {}",
           functionCallId,
           jobControl,
-          returnValue);
+          returnValue.get());
       return false;
     }
     try {
       var response = new JsonObject();
       response.addProperty("fcid", functionCallId);
-      response.add("retval", returnValue);
+      response.add("retval", returnValue.toJson());
       if (finalReply) {
         response.addProperty("conn", "close");
       }
@@ -152,7 +164,7 @@ public class SubprocessTask implements Task {
   }
 
   @Override
-  public boolean sendException(long functionCallId, ExceptionInfo exception) {
+  public boolean sendException(long functionCallId, Exception exception) {
     if (!canRespond()) {
       LOGGER.warn(
           "Subprocess unresponsive to exception from funcCallId {} for job {}: {}",
@@ -165,7 +177,7 @@ public class SubprocessTask implements Task {
       var response = new JsonObject();
       response.addProperty("fcid", functionCallId);
       response.addProperty("conn", "close");
-      var json = GSON.toJsonTree(exception);
+      var json = GSON.toJsonTree(ExceptionInfo.fromException(exception));
       LOGGER.warn("Translating Java exception as JSON: {}", json);
       response.add("except", json);
 

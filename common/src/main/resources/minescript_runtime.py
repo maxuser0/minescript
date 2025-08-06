@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
+# SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: GPL-3.0-only
 
 # WARNING: This file is generated from the Minescript jar file. This file will
@@ -6,7 +6,7 @@
 # make edits to this file, make sure to save a backup copy when upgrading to a
 # new version of Minescript.
 
-"""minescript_runtime v4.0 distributed via Minescript jar file
+"""minescript_runtime v5.0 distributed via Minescript jar file
 
 Usage: import minescript_runtime  # from Python script
 
@@ -377,8 +377,8 @@ def _ScriptServiceLoopImpl():
     try:
       json_input = stdin_readline()
       if not json_input:
-        debug_log("minescript_runtime.py: stdin reached EOF, exiting script service loop")
-        break
+        debug_log("minescript_runtime.py: stdin reached EOF, terminating script with os._exit()")
+        os._exit(1)
       reply = json.loads(json_input)
       if _is_debug:
         debug_log("Parsed json reply:", reply)

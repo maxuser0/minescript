@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
+# SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: GPL-3.0-only
 
 r"""minescript_test v4.0 from https://github.com/maxuser0/minescript
@@ -234,12 +234,6 @@ def await_loaded_region_test():
 
 @test
 def player_hand_items_test():
-  try:
-    minescript.options.legacy_dict_return_values = True
-    expect_equal(list, type(minescript.player_hand_items()))
-  finally:
-    minescript.options.legacy_dict_return_values = False
-
   expect_equal(minescript.HandItems, type(minescript.player_hand_items()))
 
 

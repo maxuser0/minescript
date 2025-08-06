@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
+// SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
 package net.minescript.common;
@@ -10,7 +10,7 @@ import net.minecraft.world.level.LevelAccessor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-public class ChunkLoadEventListener implements Job.Operation {
+public class ChunkLoadEventListener implements JobControl.Operation {
   private static final Logger LOGGER = LogManager.getLogger();
 
   interface DoneCallback {
@@ -76,7 +76,7 @@ public class ChunkLoadEventListener implements Job.Operation {
 
   @Override
   public synchronized void cancel() {
-    onFinished(/*success=*/ false, /*removeFromListeners=*/ true);
+    onFinished(/* success= */ false, /* removeFromListeners= */ true);
   }
 
   public synchronized void updateChunkStatuses() {
@@ -119,7 +119,7 @@ public class ChunkLoadEventListener implements Job.Operation {
       LOGGER.info("listener chunk loaded for level {}: {} {}", levelHashCode, chunkX, chunkZ);
       numUnloadedChunks--;
       if (numUnloadedChunks == 0) {
-        onFinished(/*success=*/ true, /*removeFromListeners=*/ false);
+        onFinished(/* success= */ true, /* removeFromListeners= */ false);
         return true;
       }
     }
@@ -145,7 +145,7 @@ public class ChunkLoadEventListener implements Job.Operation {
 
   public synchronized boolean checkFullyLoaded() {
     if (numUnloadedChunks == 0) {
-      onFinished(/*success=*/ true, /*removeFromListeners=*/ true);
+      onFinished(/* success= */ true, /* removeFromListeners= */ true);
       return true;
     } else {
       return false;

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
+// SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
 package net.minescript.neoforge;
@@ -45,7 +45,7 @@ public class MinescriptNeoForgeClientMod {
       if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_LEVEL) {
         return;
       }
-      Minescript.onRenderWorld();
+      Minescript.onRenderWorld(event);
     }
 
     @SubscribeEvent

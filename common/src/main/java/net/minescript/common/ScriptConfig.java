@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
+// SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
 package net.minescript.common;
@@ -53,6 +53,12 @@ public class ScriptConfig {
                 commandPath.stream()
                     .map(p -> minescriptDir.resolve(p).toString())
                     .collect(Collectors.toList()));
+
+    // Configure ".pyj" as the built-in file type for Pyjinn scripts.
+    // TODO(maxuser): Prevent ".pyj" from being overwritten by user configuration.
+    var commandPattern = ImmutableList.of("{command}", "{args}");
+    var environmentVars = ImmutableList.<String>of();
+    configureFileType(new CommandConfig(".pyj", commandPattern, environmentVars));
   }
 
   public void setCommandPath(List<Path> commandPath) {

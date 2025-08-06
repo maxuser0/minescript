@@ -1,10 +1,9 @@
-// SPDX-FileCopyrightText: © 2022-2024 Greg Christiana <maxuser@minescript.net>
+// SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
 package net.minescript.common;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -13,6 +12,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minescript.common.dataclasses.EntityData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -49,14 +49,14 @@ public class EntityExporter {
     this.includeNbt = includeNbt;
   }
 
-  public JsonArray export(Iterable<? extends Entity> entities) {
-    var result = entitiesToJsonArray(entities);
+  public EntityData[] export(Iterable<? extends Entity> entities) {
+    var result = exportEntities(entities);
     clear();
     return result;
   }
 
-  public JsonObject export(Entity entity) {
-    var result = entityToJsonObject(entity);
+  public EntityData export(Entity entity) {
+    var result = exportEntity(entity);
     clear();
     return result;
   }
@@ -66,13 +66,13 @@ public class EntityExporter {
     entitiesToExport.clear();
   }
 
-  private JsonArray entitiesToJsonArray(Iterable<? extends Entity> entities) {
-    var jsonEntities = new JsonArray();
+  private EntityData[] exportEntities(Iterable<? extends Entity> entities) {
+    var jsonEntities = new ArrayList<EntityData>();
 
     // Export top-level entities.
     for (var entity : entities) {
       try {
-        jsonEntities.add(entityToJsonObject(entity));
+        jsonEntities.add(exportEntity(entity));
       } catch (DuplicateEntityException e) {
         LOGGER.error("Ignoring duplicate entity while exporting to JSON: {}", e.getMessage());
       }
@@ -83,15 +83,15 @@ public class EntityExporter {
     // themselves exported.
     for (var entity : entitiesToExport.values()) {
       try {
-        jsonEntities.add(entityToJsonObject(entity));
+        jsonEntities.add(exportEntity(entity));
       } catch (DuplicateEntityException e) {
         LOGGER.error("Ignoring duplicate entity while exporting to JSON: {}", e.getMessage());
       }
     }
-    return jsonEntities;
+    return jsonEntities.toArray(EntityData[]::new);
   }
 
-  private JsonObject entityToJsonObject(Entity entity) {
+  private EntityData exportEntity(Entity entity) {
     String uuid = entity.getUUID().toString();
     if (exportedEntityUuids.contains(uuid)) {
       throw new DuplicateEntityException(uuid);
@@ -105,16 +105,16 @@ public class EntityExporter {
     }
 
     var minecraft = Minecraft.getInstance();
-    var jsonEntity = new JsonObject();
-    jsonEntity.addProperty("name", entity.getName().getString());
-    jsonEntity.addProperty("type", entity.getType().toString());
-    jsonEntity.addProperty("uuid", uuid);
-    jsonEntity.addProperty("id", entity.getId());
+    var entityData = new EntityData();
+    entityData.name = entity.getName().getString();
+    entityData.type = entity.getType().toString();
+    entityData.uuid = uuid;
+    entityData.id = entity.getId();
     if (entity instanceof LivingEntity livingEntity) {
-      jsonEntity.addProperty("health", livingEntity.getHealth());
+      entityData.health = livingEntity.getHealth();
     }
     if (entity == minecraft.player) {
-      jsonEntity.addProperty("local", true);
+      entityData.local = true;
     }
 
     var v = entity.getDeltaMovement();
@@ -123,44 +123,41 @@ public class EntityExporter {
     double y = entity.getY();
     double z = entity.getZ();
 
-    var position = new JsonArray();
-    position.add(x);
-    position.add(y);
-    position.add(z);
-    jsonEntity.add("position", position);
+    entityData.position[0] = x;
+    entityData.position[1] = y;
+    entityData.position[2] = z;
 
     final double epsilon = 0.0001;
     if (positionInterpolation > epsilon
         && (Math.abs(v.x) > epsilon || Math.abs(v.y) > epsilon || Math.abs(v.z) > epsilon)) {
-      var lerpPosition = new JsonArray();
-      lerpPosition.add(x + v.x * positionInterpolation);
-      lerpPosition.add(y + v.y * positionInterpolation);
-      lerpPosition.add(z + v.z * positionInterpolation);
-      jsonEntity.add("lerp_position", lerpPosition);
+      entityData.lerp_position =
+          new double[] {
+            x + v.x * positionInterpolation,
+            y + v.y * positionInterpolation,
+            z + v.z * positionInterpolation
+          };
     }
 
-    jsonEntity.addProperty("yaw", entity.getYRot());
-    jsonEntity.addProperty("pitch", entity.getXRot());
+    entityData.yaw = entity.getYRot();
+    entityData.pitch = entity.getXRot();
 
-    var velocity = new JsonArray();
-    velocity.add(v.x);
-    velocity.add(v.y);
-    velocity.add(v.z);
-    jsonEntity.add("velocity", velocity);
+    entityData.velocity[0] = v.x;
+    entityData.velocity[1] = v.y;
+    entityData.velocity[2] = v.z;
 
     if (!entity.getPassengers().isEmpty()) {
-      var jsonPassengers = new JsonArray();
+      var jsonPassengers = new ArrayList<String>();
       for (var passenger : entity.getPassengers()) {
         jsonPassengers.add(passenger.getUUID().toString());
       }
-      jsonEntity.add("passengers", jsonPassengers);
+      entityData.passengers = jsonPassengers.toArray(String[]::new);
     }
 
     if (includeNbt) {
       var nbt = new CompoundTag();
-      jsonEntity.addProperty("nbt", entity.saveWithoutId(nbt).toString());
+      entityData.nbt = entity.saveWithoutId(nbt).toString();
     }
 
-    return jsonEntity;
+    return entityData;
   }
 }
