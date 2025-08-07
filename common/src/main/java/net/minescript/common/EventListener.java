@@ -18,7 +18,7 @@ class EventListener implements JobControl.Operation {
   private State state = State.IDLE;
   private boolean suspended = false;
   private Runnable doneCallback;
-  private Optional<Predicate<Object>> filter;
+  private Optional<Predicate<Object>> filter = Optional.empty();
 
   public enum State {
     IDLE,
