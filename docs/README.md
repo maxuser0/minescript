@@ -5,7 +5,6 @@ Table of contents:
 - [In-game commands](#in-game-commands)
     - [Command basics](#command-basics)
     - [Built-in commands](#built-in-commands)
-    - [Advanced commands](#advanced-commands)
 - [Configuration](#configuration)
 - [Python API](#python-api)
     - [Script input](#script-input)
