@@ -860,7 +860,7 @@ public class Minescript {
 
   private static JobManager jobs = new JobManager();
 
-  private static SystemMessageQueue systemMessageQueue = new SystemMessageQueue();
+  public static final SystemMessageQueue systemMessageQueue = new SystemMessageQueue();
 
   public static Script loadPyjinnScript(List<String> scriptCommand, String scriptCode)
       throws Exception {
@@ -1076,7 +1076,7 @@ public class Minescript {
     return Optional.of(blockType + blockAttrs);
   }
 
-  private static void readBlocks(
+  public static void readBlocks(
       int x0,
       int y0,
       int z0,
@@ -1092,10 +1092,6 @@ public class Minescript {
     }
 
     Level level = minecraft.level;
-
-    int playerX = (int) player.getX();
-    int playerY = (int) player.getY();
-    int playerZ = (int) player.getZ();
 
     int xMin = Math.min(x0, x1);
     int yMin = Math.max(Math.min(y0, y1), level.getMinY());
@@ -1129,8 +1125,6 @@ public class Minescript {
       }
     }
 
-    int numBlocks = 0;
-
     for (int x = xMin; x <= xMax; ++x) {
       for (int y = yMin; y <= yMax; ++y) {
         for (int z = zMin; z <= zMax; ++z) {
@@ -1139,7 +1133,6 @@ public class Minescript {
             Optional<String> block = blockStateToString(blockState);
             if (block.isPresent()) {
               blockConsumer.setblock(x, y, z, block.get());
-              numBlocks++;
             } else {
               systemMessageQueue.logUserError(
                   "Unexpected BlockState format: {}", blockState.toString());
@@ -2238,7 +2231,6 @@ public class Minescript {
   }
 
   static void processMessage(Message message) {
-    var minecraft = Minecraft.getInstance();
     switch (message.type()) {
       case MINECRAFT_COMMAND:
         processMinecraftCommand(message.value());
