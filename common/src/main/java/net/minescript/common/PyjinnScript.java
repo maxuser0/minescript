@@ -294,7 +294,7 @@ public class PyjinnScript {
     script.redirectStdout(s -> LOGGER.info("[{} stdout] {}", scriptShortName, s));
     script.redirectStderr(s -> LOGGER.info("[{} stderr] {}", scriptShortName, s));
 
-    JsonElement scriptAst = PyjinnParser.parse(scriptCode);
+    JsonElement scriptAst = PyjinnParser.parse(scriptFilename, scriptCode);
     script.parse(scriptAst, scriptFilename);
     return script;
   }
