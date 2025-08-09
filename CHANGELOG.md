@@ -19,6 +19,7 @@
 
 ### Pyjinn 0.7
 
+- Force class loading on eval of JavaClass() ([7c52a81](https://github.com/maxuser0/pyjinn/commit/7c52a81f4bf40807f8053e68932ec1bf8210e01b))
 - Support zombie callback handler for exited scripts ([b51d949](https://github.com/maxuser0/pyjinn/commit/b51d949e62e3f0a353f947425a079dfe574905d2))
 - Make PyTuple and PyList streamable with stream() ([5a5fa7a](https://github.com/maxuser0/pyjinn/commit/5a5fa7a4b5864ec863cd52eb0f67675a9b271b00))
 - Output filename, line num for Pyjinn syntax errors ([7e4c292](https://github.com/maxuser0/pyjinn/commit/7e4c2921167bc0dcd36c2038e89e5dc24f7fadaa))
