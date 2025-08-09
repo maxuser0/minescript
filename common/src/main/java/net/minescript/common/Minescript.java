@@ -2317,10 +2317,7 @@ public class Minescript {
       } else if (screen instanceof ReceivingLevelScreen) {
         name = "Progress";
       } else {
-        // The class name is not descriptive in production builds where symbols
-        // are obfuscated, but using the class name allows callers to
-        // differentiate untitled screen types from each other.
-        name = screen.getClass().getName();
+        name = mappingsLoader.get().getPrettyClassName(screen.getClass().getName());
       }
     }
     return Optional.of(name);
