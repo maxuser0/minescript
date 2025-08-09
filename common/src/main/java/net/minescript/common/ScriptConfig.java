@@ -58,7 +58,8 @@ public class ScriptConfig {
     // TODO(maxuser): Prevent ".pyj" from being overwritten by user configuration.
     var commandPattern = ImmutableList.of("{command}", "{args}");
     var environmentVars = ImmutableList.<String>of();
-    configureFileType(new CommandConfig(".pyj", commandPattern, environmentVars));
+    configureFileType(
+        new CommandConfig(".pyj", commandPattern, environmentVars), /* createsSubprocess= */ false);
   }
 
   public void setCommandPath(List<Path> commandPath) {
@@ -189,7 +190,7 @@ public class ScriptConfig {
 
   public record CommandConfig(String extension, List<String> command, List<String> environment) {}
 
-  public void configureFileType(CommandConfig commandConfig) {
+  public void configureFileType(CommandConfig commandConfig, boolean createsSubprocess) {
     Preconditions.checkNotNull(commandConfig.extension);
     Preconditions.checkArgument(
         commandConfig.extension.startsWith("."),
@@ -198,7 +199,12 @@ public class ScriptConfig {
 
     var fileTypeConfig =
         new FileTypeConfig(
-            CommandBuilder.create(commandConfig.command, () -> escapeCommandDoubleQuotes),
+            CommandBuilder.create(
+                commandConfig.command,
+                // Escape double quotes only if this command creates a subprocess (which requires
+                // the OS shell) and this system is configured to escape double quotes (by default,
+                // only Windows).
+                () -> createsSubprocess && escapeCommandDoubleQuotes),
             commandConfig.environment == null
                 ? new String[0]
                 : commandConfig.environment.stream()

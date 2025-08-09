@@ -42,9 +42,10 @@ if "Pyjinn" not in sys.version:
     time: float
 
 
-System = JavaClass("java.lang.System")
+_System = JavaClass("java.lang.System")
 Minescript = JavaClass("net.minescript.common.Minescript")
-
+BlockPack = JavaClass("net.minescript.common.pyjinn.BlockPack")
+BlockPacker = JavaClass("net.minescript.common.pyjinn.BlockPacker")
 
 def __mcall__(name: str, args):
   return Minescript.call(__script__.vars["job"], 0, name, args.getJavaList())
@@ -683,11 +684,11 @@ def player_look_at(x: float, y: float, z: float):
 
 def set_interval(callback: Callable[[], None], timer_millis: int, *args) -> int:
   listener_id = -1
-  activation_time = System.currentTimeMillis() + timer_millis
+  activation_time = _System.currentTimeMillis() + timer_millis
 
   def on_render(event):
     nonlocal activation_time, listener_id
-    now = System.currentTimeMillis()
+    now = _System.currentTimeMillis()
     if now >= activation_time:
       try:
         call_finished = False
@@ -704,11 +705,11 @@ def set_interval(callback: Callable[[], None], timer_millis: int, *args) -> int:
 
 def set_timeout(callback: Callable[[], None], timer_millis: int, *args) -> int:
   listener_id = -1
-  activation_time = System.currentTimeMillis() + timer_millis
+  activation_time = _System.currentTimeMillis() + timer_millis
 
   def on_render(event):
     nonlocal listener_id
-    now = System.currentTimeMillis()
+    now = _System.currentTimeMillis()
     if now >= activation_time:
       try:
         callback(*args)
