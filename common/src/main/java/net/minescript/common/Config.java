@@ -332,7 +332,7 @@ public class Config {
         final String python;
         if (System.getProperty("os.name").startsWith("Windows")) {
           python =
-              value.startsWith("%userprofile%\\")
+              value.contains("%userprofile%")
                   ? value.replace("%userprofile%", System.getProperty("user.home"))
                   : value;
         } else {
@@ -359,7 +359,7 @@ public class Config {
         try {
           var commandConfig =
               new ScriptConfig.CommandConfig(".py", commandPattern, environmentVars);
-          scriptConfig.configureFileType(commandConfig);
+          scriptConfig.configureFileType(commandConfig, /* createsSubprocess= */ true);
           reportInfo(out, "Setting config var: {} = \"{}\" ({})", name, value, commandConfig);
           pythonLocation = python;
         } catch (Exception e) {
@@ -372,7 +372,7 @@ public class Config {
         commands.add(value);
         try {
           var commandConfig = GSON.fromJson(value, ScriptConfig.CommandConfig.class);
-          scriptConfig.configureFileType(commandConfig);
+          scriptConfig.configureFileType(commandConfig, /* createsSubprocess= */ true);
           reportInfo(out, "Configured script execution for \"{}\"", commandConfig);
         } catch (Exception e) {
           reportError(out, "Failed to configure script execution: {}", e.toString());

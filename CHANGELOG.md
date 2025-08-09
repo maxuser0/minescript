@@ -7,7 +7,27 @@
 - To set up Fabric mappings for Pyjinn scripts see
   [minescript.net/mappings](https://minescript.net/mappings)
 
-## v5.0b2
+## Minescript 5.0b3
+
+- Define zombie callback handler for Pyjinn scripts ([d088278](https://github.com/maxuser0/minescript/commit/d0882788c1a5850a546e14a817f1727ab4c02dc1))
+- Fix bug in Pyjinn commands with quotes on Windows ([7698fea](https://github.com/maxuser0/minescript/commit/7698fea14ef8a23bcd3a686ed2233652ac81f5e9))
+- Support BlockPack, BlockPacker from Pyjinn scripts ([e37cb05](https://github.com/maxuser0/minescript/commit/e37cb053559608ccaee19e92c60e29d310d2e589))
+- Pass script filename for errors from parser ([30f93c9](https://github.com/maxuser0/minescript/commit/30f93c9c6584a48ae43291b98bd32cd5cc7d38a1))
+- Fix bug in outgoing chat interceptor with no args ([f10419b](https://github.com/maxuser0/minescript/commit/f10419bc71cea1a04d4efb882d79cf89c842176e))
+- Fix bug in eval.pyj for Windows that causes errors ([241f0cc](https://github.com/maxuser0/minescript/commit/241f0cc001d2d10045844fec74de350c1ac0895b))
+- Update Minescript to 5.0b3, Pyjinn to 0.7 ([7f8cec5](https://github.com/maxuser0/minescript/commit/7f8cec5642867867813a4ba4a77cefe842b6bcfc))
+
+### Pyjinn 0.7
+
+- Force class loading on eval of JavaClass() ([7c52a81](https://github.com/maxuser0/pyjinn/commit/7c52a81f4bf40807f8053e68932ec1bf8210e01b))
+- Support zombie callback handler for exited scripts ([b51d949](https://github.com/maxuser0/pyjinn/commit/b51d949e62e3f0a353f947425a079dfe574905d2))
+- Make PyTuple and PyList streamable with stream() ([5a5fa7a](https://github.com/maxuser0/pyjinn/commit/5a5fa7a4b5864ec863cd52eb0f67675a9b271b00))
+- Output filename, line num for Pyjinn syntax errors ([7e4c292](https://github.com/maxuser0/pyjinn/commit/7e4c2921167bc0dcd36c2038e89e5dc24f7fadaa))
+- Load class from JavaClass() at eval time ([da1aff3](https://github.com/maxuser0/pyjinn/commit/da1aff35e210d80fbf3f099cc3d3d99f26ef426f))
+- Update Pyjinn version to 0.7 ([cf7f5ac](https://github.com/maxuser0/pyjinn/commit/cf7f5ac61856d80136e8a01f60bd1df48a041bb6))
+
+
+## Minescript 5.0b2
 
 - Improve errors when Pyjinn can't find method/ctor ([e88a241](https://github.com/maxuser0/minescript/commit/e88a2419f7f7c315b5e0dbbd609e65ca64429158))
 - Improve error message when Python can't be found ([c1ef53d](https://github.com/maxuser0/minescript/commit/c1ef53d3fe9b46f9962cc47b02b7c0979bef5a60))
@@ -23,7 +43,7 @@
 - Update Pyjinn version to 0.6 ([151cefe](https://github.com/maxuser0/pyjinn/commit/151cefeb941a71697c02338e4cbc6e01006b1de4))
 
 
-## v5.0b1
+## Minescript 5.0b1
 
 - Pyjinn API change in method type checker ([d583429](https://github.com/maxuser0/minescript/commit/d583429280e3becf367ac4bb7faa7f4a755fcc32))
 - Support Outer.Nested class syntax with mappings ([268f8b1](https://github.com/maxuser0/minescript/commit/268f8b16b8709c2dcb09aeed7948b6796324ce3c))
@@ -60,7 +80,7 @@
 - Implement 'continue' statement inside loops ([0a91f61](https://github.com/maxuser0/pyjinn/commit/0a91f61a6677a6da9e82b46c19a2c7823aad0fe7))
 
 
-## v5.0a4
+## Minescript 5.0a4
 
 - Built-in `eval` script is now implemented using Pyjinn (`eval.pyj`); Python eval command is now
   available as `pyeval`
@@ -90,7 +110,7 @@
   imported implicitly as:
   - `from system.pyj.minescript import *`
 
-## v5.0a3
+## Minescript 5.0a3
 
 Support for event listeners in Pyjinn scripts for these events:
 
@@ -113,7 +133,7 @@ Support for Minescript functions in Pyjinn scripts using the same API and syntax
 
 - execute, echo, echo_json, chat, log, screenshot, job_info, player_name, player_position, player_hand_items, player_inventory, player_inventory_select_slot, press_key_bind, player_press_forward, player_press_backward, player_press_left, player_press_right, player_press_jump, player_press_sprint, player_press_sneak, player_press_pick_item, player_press_use, player_press_attack, player_press_swap_hands, player_press_drop, player_orientation, player_set_orientation, player_get_targeted_block, player_get_targeted_entity, player_health, player, players, entities, version_info, world_info, getblock, getblocklist, screen_name, show_chat_screen, append_chat_history, chat_input, set_chat_input, container_get_items, player_look_at
 
-## v5.0a2
+## Minescript 5.0a2
 
 This is the first step in calling Minescript script functions from
 Pyjinn scripts, for example:
@@ -134,7 +154,7 @@ call("echo_json", ['{"text": "hello", "color": "green"}'])
 call("execute", ["time set day"])
 ```
 
-## v5.0a1
+## Minescript 5.0a1
 
 **WARNING:** This is a pre-release version with features that are incomplete and APIs are subject to change and compatibility with the final release is not guaranteed.
 
