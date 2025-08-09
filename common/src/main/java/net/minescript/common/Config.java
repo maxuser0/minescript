@@ -332,7 +332,7 @@ public class Config {
         final String python;
         if (System.getProperty("os.name").startsWith("Windows")) {
           python =
-              value.startsWith("%userprofile%\\")
+              value.contains("%userprofile%")
                   ? value.replace("%userprofile%", System.getProperty("user.home"))
                   : value;
         } else {
