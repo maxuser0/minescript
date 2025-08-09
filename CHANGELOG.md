@@ -9,6 +9,9 @@
 
 ## Minescript 5.0b3
 
+- Fix Windows bug that can't find python from config ([c22718d](https://github.com/maxuser0/minescript/commit/c22718d45eabc5be2343508d48278d0f21b0b9a6))
+- Relax replacement of %userprofile% in Windows path ([1500290](https://github.com/maxuser0/minescript/commit/15002900c323d5ce3642b95e8e8769e13f378496))
+- Use official class names of screens from mappings ([bb90005](https://github.com/maxuser0/minescript/commit/bb900051e931ba6f324d9c0ad6764ef9de6948e7))
 - Define zombie callback handler for Pyjinn scripts ([d088278](https://github.com/maxuser0/minescript/commit/d0882788c1a5850a546e14a817f1727ab4c02dc1))
 - Fix bug in Pyjinn commands with quotes on Windows ([7698fea](https://github.com/maxuser0/minescript/commit/7698fea14ef8a23bcd3a686ed2233652ac81f5e9))
 - Support BlockPack, BlockPacker from Pyjinn scripts ([e37cb05](https://github.com/maxuser0/minescript/commit/e37cb053559608ccaee19e92c60e29d310d2e589))
@@ -19,6 +22,7 @@
 
 ### Pyjinn 0.7
 
+- Fix type() for objects/classes defined in Pyjinn ([de6ff69](https://github.com/maxuser0/pyjinn/commit/de6ff69c3347e23fcf86e0113b1eea838743970f))
 - Force class loading on eval of JavaClass() ([7c52a81](https://github.com/maxuser0/pyjinn/commit/7c52a81f4bf40807f8053e68932ec1bf8210e01b))
 - Support zombie callback handler for exited scripts ([b51d949](https://github.com/maxuser0/pyjinn/commit/b51d949e62e3f0a353f947425a079dfe574905d2))
 - Make PyTuple and PyList streamable with stream() ([5a5fa7a](https://github.com/maxuser0/pyjinn/commit/5a5fa7a4b5864ec863cd52eb0f67675a9b271b00))
