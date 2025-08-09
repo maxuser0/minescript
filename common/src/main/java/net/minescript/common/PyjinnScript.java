@@ -293,6 +293,18 @@ public class PyjinnScript {
     String scriptShortName = Paths.get(scriptFilename).getFileName().toString();
     script.redirectStdout(s -> LOGGER.info("[{} stdout] {}", scriptShortName, s));
     script.redirectStderr(s -> LOGGER.info("[{} stderr] {}", scriptShortName, s));
+    script.setZombieCallbackHandler(
+        (String scriptName, String callable, int count) -> {
+          if (count == 1 || count % 1000 == 0) {
+            LOGGER.warn(
+                "[{} zombie] Invocation of {} (count: {}) defined in script that already"
+                    + " exited: {}",
+                scriptShortName,
+                callable,
+                count,
+                scriptName);
+          }
+        });
 
     JsonElement scriptAst = PyjinnParser.parse(scriptFilename, scriptCode);
     script.parse(scriptAst, scriptFilename);
