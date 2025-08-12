@@ -226,16 +226,16 @@ public class Minescript {
     new File(execDir.toString()).mkdirs();
 
     copyJarResourceToFile("version.txt", systemDir, FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("minescript.py", libDir, FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("minescript_runtime.py", libDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/lib/minescript.py", libDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile(
-        "minescript.pyj", pyjDir, "minescript.py", FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("sys.pyj", pyjDir, "sys.py", FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("help.py", execDir, FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("copy_blocks.py", execDir, FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("paste.py", execDir, FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("eval.pyj", execDir, FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("pyeval.py", execDir, FileOverwritePolicy.OVERWRITTE);
+        "system/lib/minescript_runtime.py", libDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/pyj/minescript.py", pyjDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/pyj/sys.py", pyjDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/exec/help.py", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/exec/copy_blocks.py", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/exec/paste.py", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/exec/eval.pyj", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/exec/pyeval.py", execDir, FileOverwritePolicy.OVERWRITTE);
   }
 
   private static void deleteMinescriptFile(Path dir, String fileName) {
@@ -377,8 +377,10 @@ public class Minescript {
 
   /** Copies resource from jar to a same-named file in the minescript dir.. */
   private static void copyJarResourceToFile(
-      String resourceName, Path dir, FileOverwritePolicy overwritePolicy) {
-    copyJarResourceToFile(resourceName, dir, resourceName, overwritePolicy);
+      String resourcePath, Path dir, FileOverwritePolicy overwritePolicy) {
+    // The rhs expression works even when '/' isn't found, because -1 + 1 = 0.
+    String filename = resourcePath.substring(resourcePath.lastIndexOf('/') + 1);
+    copyJarResourceToFile(resourcePath, dir, filename, overwritePolicy);
   }
 
   /** Copies resource from jar to a file in the minescript dir. */
