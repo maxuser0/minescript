@@ -669,6 +669,103 @@ def container_get_items() -> List[ItemStack]:
   return __mcall__("container_get_items", [])
 
 
+def container_open(x: int, y: int, z: int) -> bool:
+  """Opens a container at the specified block position.
+  
+  Args:
+    x: x coordinate of the container block
+    y: y coordinate of the container block
+    z: z coordinate of the container block
+  
+  Returns:
+    True if a container was opened, False otherwise.
+  
+  Since: v5.0
+  """
+  return __mcall__("container_open", [x, y, z])
+
+
+def container_close() -> bool:
+  """Closes the currently open container.
+  
+  Returns:
+    True if a container was closed, False otherwise.
+  
+  Since: v5.0
+  """
+  return __mcall__("container_close", [])
+
+
+def container_click_slot(slot: int, button: int = 0, shift: bool = False) -> bool:
+  """Clicks a slot in the open container.
+  
+  Args:
+    slot: slot index to click
+    button: mouse button (0=left, 1=right, 2=middle)
+    shift: whether to hold shift (for quick move)
+  
+  Returns:
+    True if the click was successful, False otherwise.
+  
+  Since: v5.0
+  """
+  return __mcall__("container_click_slot", [slot, button, shift])
+
+
+def container_swap_slots(slot1: int, slot2: int) -> bool:
+  """Swaps items between two slots in the open container.
+  
+  Args:
+    slot1: first slot index
+    slot2: second slot index
+  
+  Returns:
+    True if the swap was successful, False otherwise.
+  
+  Since: v5.0
+  """
+  return __mcall__("container_swap_slots", [slot1, slot2])
+
+
+def container_get_slot(slot: int) -> Optional[ItemStack]:
+  """Gets the item in a specific container slot.
+  
+  Args:
+    slot: slot index to query
+  
+  Returns:
+    ItemStack if the slot contains an item, None otherwise.
+  
+  Since: v5.0
+  """
+  return __mcall__("container_get_slot", [slot])
+
+
+def container_get_info() -> Optional[Dict[str, Any]]:
+  """Gets information about the currently open container.
+  
+  Returns:
+    Dictionary containing container info (id, slot_count, title, etc.), None if no container is open.
+  
+  Since: v5.0
+  """
+  return __mcall__("container_get_info", [])
+
+
+def container_find_item(item_id: str) -> List[int]:
+  """Finds all slots containing items matching the given ID or name.
+  
+  Args:
+    item_id: partial item ID or name to search for
+  
+  Returns:
+    List of slot indices containing matching items.
+  
+  Since: v5.0
+  """
+  return __mcall__("container_find_item", [item_id])
+
+
 def player_look_at(x: float, y: float, z: float):
   """Rotates the camera to look at a position.
 
