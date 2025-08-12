@@ -233,7 +233,7 @@ public class PyjinnScript {
       for (Path dir : importDirs) {
         Path path = dir.resolve(relativeImportPath);
         if (Files.exists(path)) {
-          LOGGER.info("Resovled import of {} to {}", name, path);
+          LOGGER.info("Resolved import of {} to {}", name, path);
           return path;
         }
       }
