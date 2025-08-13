@@ -345,7 +345,7 @@ public class ObfuscatedNameMappings implements NameMappings {
 
   public static Optional<ObfuscatedNameMappings> loadFromFiles(
       String modLoaderName, String mcVersion) throws IOException {
-    Path mappingsVersionPath = Paths.get("minescript", "mappings", mcVersion);
+    Path mappingsVersionPath = Paths.get("minescript", "system", "mappings", mcVersion);
     Files.createDirectories(mappingsVersionPath);
 
     Path officialMappingsPath = mappingsVersionPath.resolve("client.txt");

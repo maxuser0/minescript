@@ -1,4 +1,3 @@
-#!python
 # SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: GPL-3.0-only
 
@@ -9,7 +8,9 @@
 
 """sys v5.0 distributed via Minescript jar file
 
-Minescript sys module for Pyjinn scripts.
+Minescript sys module for Pyjinn scripts, modeled after the Python json module.
+The Python standard library is licensed under the Python Software Foundation License Agreement
+(PSFL).
 """
 
 _System = JavaClass("java.lang.System")

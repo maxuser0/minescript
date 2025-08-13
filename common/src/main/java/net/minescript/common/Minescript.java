@@ -231,9 +231,13 @@ public class Minescript {
         "system/lib/minescript_runtime.py", libDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/pyj/minescript.py", pyjDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/pyj/sys.py", pyjDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/pyj/json.py", pyjDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/pyj/pathlib.py", pyjDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/exec/help.py", execDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/exec/copy_blocks.py", execDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/exec/paste.py", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile(
+        "system/exec/install_mappings.pyj", execDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/exec/eval.pyj", execDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/exec/pyeval.py", execDir, FileOverwritePolicy.OVERWRITTE);
   }
