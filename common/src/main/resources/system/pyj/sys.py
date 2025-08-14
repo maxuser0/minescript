@@ -8,7 +8,7 @@
 
 """sys v5.0 distributed via Minescript jar file
 
-Minescript sys module for Pyjinn scripts, modeled after the Python json module.
+Minescript sys module for Pyjinn scripts, modeled after the Python sys module.
 The Python standard library is licensed under the Python Software Foundation License Agreement
 (PSFL).
 """

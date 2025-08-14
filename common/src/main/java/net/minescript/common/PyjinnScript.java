@@ -158,10 +158,8 @@ public class PyjinnScript {
 
     @Override
     public void requestKill() {
-      // Note that atExit() is called directly (not through script.exit()) when the sciript job is
-      // killed by the user.
       super.requestKill();
-      atExit(128);
+      script.exit(128);
     }
 
     @Override
@@ -295,7 +293,7 @@ public class PyjinnScript {
     script.redirectStderr(s -> LOGGER.info("[{} stderr] {}", scriptShortName, s));
     script.setZombieCallbackHandler(
         (String scriptName, String callable, int count) -> {
-          if (count == 1 || count % 1000 == 0) {
+          if (count == 1 || count % 10000 == 0) {
             LOGGER.warn(
                 "[{} zombie] Invocation of {} (count: {}) defined in script that already"
                     + " exited: {}",
