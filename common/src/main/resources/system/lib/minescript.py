@@ -2585,6 +2585,28 @@ def java_assign(dest: JavaHandle, source: JavaHandle):
 
 java_assign = ScriptFunction("java_assign", java_assign)
 
+def java_field_names(klass: JavaHandle) -> List[str]:
+  """Returns a list of fields names for the class referenced by handle `klass`.
+
+  If mappings are installed, official field names are returned.
+
+  Since: v5.0
+  """
+  return (klass,)
+
+java_field_names = ScriptFunction("java_field_names", java_field_names)
+
+def java_method_names(klass: JavaHandle) -> List[str]:
+  """Returns a list of methods names for the class referenced by handle `klass`.
+
+  If mappings are installed, official method names are returned.
+
+  Since: v5.0
+  """
+  return (klass,)
+
+java_method_names = ScriptFunction("java_method_names", java_method_names)
+
 def java_release(*targets: List[JavaHandle]):
   """Releases Java reference(s) referred to by `targets`.
   Since: v4.0

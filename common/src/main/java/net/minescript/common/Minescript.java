@@ -3586,6 +3586,40 @@ public class Minescript {
           return OPTIONAL_JSON_NULL;
         }
 
+      case "java_field_names":
+        {
+          args.expectSize(1);
+          var object = job.objects.getById(args.getStrictLong(0));
+          if (object instanceof Class<?> klass) {
+            var array = new JsonArray();
+            mappingsLoader.get().getPrettyFieldNames(klass).stream().forEach(array::add);
+            return Optional.of(array);
+          } else {
+            throw new IllegalArgumentException(
+                String.format(
+                    "Expected arg to java_field_names to be a handle to a Java"
+                        + " Class but got `%s` instead: %s",
+                    object.getClass().getName(), object));
+          }
+        }
+
+      case "java_method_names":
+        {
+          args.expectSize(1);
+          var object = job.objects.getById(args.getStrictLong(0));
+          if (object instanceof Class<?> klass) {
+            var array = new JsonArray();
+            mappingsLoader.get().getPrettyMethodNames(klass).stream().forEach(array::add);
+            return Optional.of(array);
+          } else {
+            throw new IllegalArgumentException(
+                String.format(
+                    "Expected arg to java_method_names to be a handle to a Java"
+                        + " Class but got `%s` instead: %s",
+                    object.getClass().getName(), object));
+          }
+        }
+
       case "java_release":
         for (var arg : args.rawArgs()) {
           // For convenience, don't complain if a script attempts to release ID 0 which represents
