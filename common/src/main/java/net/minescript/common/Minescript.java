@@ -227,6 +227,7 @@ public class Minescript {
 
     copyJarResourceToFile("version.txt", systemDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/lib/minescript.py", libDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/lib/java.py", libDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile(
         "system/lib/minescript_runtime.py", libDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/pyj/minescript.py", pyjDir, FileOverwritePolicy.OVERWRITTE);
@@ -240,6 +241,7 @@ public class Minescript {
         "system/exec/install_mappings.pyj", execDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/exec/eval.pyj", execDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/exec/pyeval.py", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/exec/pyinterpreter.py", execDir, FileOverwritePolicy.OVERWRITTE);
   }
 
   private static void deleteMinescriptFile(Path dir, String fileName) {
