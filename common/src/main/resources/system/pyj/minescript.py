@@ -236,7 +236,7 @@ def press_key_bind(key_mapping_name: str, pressed: bool):
 
   Since: v4.0
   """
-  return __mcall__("press_key_bind", [key_mapping_name, pressed])
+  return set_timeout(lambda: __mcall__("press_key_bind", [key_mapping_name, pressed]), 0)
 
 
 def player_press_forward(pressed: bool):
@@ -247,7 +247,7 @@ def player_press_forward(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_forward", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_forward", [pressed]), 0)
 
 
 def player_press_backward(pressed: bool):
@@ -258,7 +258,7 @@ def player_press_backward(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_backward", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_backward", [pressed]), 0)
 
 
 def player_press_left(pressed: bool):
@@ -269,7 +269,7 @@ def player_press_left(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_left", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_left", [pressed]), 0)
 
 
 def player_press_right(pressed: bool):
@@ -280,7 +280,7 @@ def player_press_right(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_right", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_right", [pressed]), 0)
 
 
 def player_press_jump(pressed: bool):
@@ -291,7 +291,7 @@ def player_press_jump(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_jump", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_jump", [pressed]), 0)
 
 
 def player_press_sprint(pressed: bool):
@@ -302,7 +302,7 @@ def player_press_sprint(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_sprint", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_sprint", [pressed]), 0)
 
 
 def player_press_sneak(pressed: bool):
@@ -313,7 +313,7 @@ def player_press_sneak(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_sneak", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_sneak", [pressed]), 0)
 
 
 def player_press_pick_item(pressed: bool):
@@ -324,7 +324,7 @@ def player_press_pick_item(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_pick_item", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_pick_item", [pressed]), 0)
 
 
 def player_press_use(pressed: bool):
@@ -335,7 +335,7 @@ def player_press_use(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_use", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_use", [pressed]), 0)
 
 
 def player_press_attack(pressed: bool):
@@ -346,7 +346,7 @@ def player_press_attack(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_attack", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_attack", [pressed]), 0)
 
 
 def player_press_swap_hands(pressed: bool):
@@ -357,7 +357,7 @@ def player_press_swap_hands(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_swap_hands", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_swap_hands", [pressed]), 0)
 
 
 def player_press_drop(pressed: bool):
@@ -368,7 +368,7 @@ def player_press_drop(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_drop", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_drop", [pressed]), 0)
 
 
 def player_orientation() -> List[float]:
