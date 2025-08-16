@@ -42,6 +42,7 @@ if "Pyjinn" not in sys.version:
 
 
 _System = JavaClass("java.lang.System")
+Exception = JavaClass("java.lang.Exception")
 Minescript = JavaClass("net.minescript.common.Minescript")
 BlockPack = JavaClass("net.minescript.common.pyjinn.BlockPack")
 BlockPacker = JavaClass("net.minescript.common.pyjinn.BlockPacker")
@@ -717,3 +718,47 @@ def set_timeout(callback: Callable[[], None], timer_millis: int, *args) -> int:
 
   listener_id = add_event_listener("render", on_render)
   return listener_id
+
+class ManagedCallback:
+  """Wrapper for managing callbacks passed to Java APIs.
+
+  Example:
+    ```
+    callback = ManagedCallback(on_hud_render)
+    HudRenderCallback.EVENT.register(HudRenderCallback(callback))
+
+    # Cancel after 1 second (1000 milliseconds):
+    set_timeout(callback.cancel, 1000)
+    ```
+  """
+
+  def __init__(self, callback, cancel_on_exception=True, default_value=None):
+    """Creates a managed callback.
+
+    Args:
+      callback: a callable function or object to manage
+      cancel_on_exception: if the callback raises an exception, cancel the callback
+      default_value: value to return immediately if callback is called after being canceled
+    """
+    self.callback = callback
+    self.cancel_on_exception = cancel_on_exception
+    self.default_value = default_value
+    self.canceled = False
+    self.listener = add_event_listener("tick", lambda e: None)
+
+  def cancel(self):
+    """Cancels the callback, returning `default_value` if it continues to be called."""
+    self.canceled = True
+    remove_event_listener(self.listener)
+
+  def __call__(self, *args):
+    """Calls this callback, checking for cancellation."""
+    if self.canceled:
+      return self.default_value
+    try:
+      return self.callback(*args)
+    except Exception as e:
+      Minescript.reportException(e)
+      if self.cancel_on_exception:
+        self.cancel()
+      return self.default_value

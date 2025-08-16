@@ -3975,6 +3975,10 @@ public class Minescript {
     }
   }
 
+  public static void reportException(Throwable e) {
+    ScriptExceptionHandler.reportException(systemMessageQueue, e);
+  }
+
   public static void processMessageQueue(
       boolean processSystemMessages, Function<JobControl, Message> jobMessageQueue) {
     var minecraft = Minecraft.getInstance();
