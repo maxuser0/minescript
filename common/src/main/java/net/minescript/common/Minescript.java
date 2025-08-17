@@ -26,7 +26,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -3450,14 +3449,15 @@ public class Minescript {
           for (int i = 0; i < params.length; ++i) {
             params[i] = job.objects.getById(args.getStrictLong(i + 1));
           }
+          Class<?>[] paramTypes = Script.TypeChecker.getTypes(params);
           Optional<Constructor<?>> ctor =
               Script.TypeChecker.findBestMatchingConstructor(
-                  klass.type(), params, /* diagnostics= */ null);
+                  klass.type(), paramTypes, /* diagnostics= */ null);
           if (ctor.isEmpty()) {
             // Re-run type checker with same args but with error diagnostics for creating exception.
             var diagnostics =
                 new Script.TypeChecker.Diagnostics(mappingsLoader.get()::getPrettyClassName);
-            Script.TypeChecker.findBestMatchingConstructor(klass.type(), params, diagnostics);
+            Script.TypeChecker.findBestMatchingConstructor(klass.type(), paramTypes, diagnostics);
             throw diagnostics.createTruncatedException();
           }
           var result = ctor.get().newInstance(params);
@@ -3481,16 +3481,17 @@ public class Minescript {
           for (int i = 0; i < params.length; ++i) {
             params[i] = job.objects.getById(args.getStrictLong(i + 2));
           }
+          Class<?>[] paramTypes = Script.TypeChecker.getTypes(params);
 
           boolean isStaticMethod = target == null;
           var classForLookup = target == null ? member.type() : target.getClass();
-          Optional<Method> method =
+          var method =
               Script.TypeChecker.findBestMatchingMethod(
                   classForLookup,
                   isStaticMethod,
                   mappingsLoader.get()::getRuntimeMethodNames,
                   member.name(),
-                  params,
+                  paramTypes,
                   /* diagnostics= */ null);
           if (method.isEmpty()) {
             // Re-run type checker with same args but with error diagnostics for creating exception.
@@ -3501,11 +3502,11 @@ public class Minescript {
                 isStaticMethod,
                 mappingsLoader.get()::getRuntimeMethodNames,
                 member.name(),
-                params,
+                paramTypes,
                 diagnostics);
             throw diagnostics.createTruncatedException();
           }
-          var result = method.get().invoke(target, params);
+          var result = method.get().invoke(/* env= */ null, target, params);
           return Optional.of(new JsonPrimitive(job.objects.retain(result)));
         }
 
