@@ -42,7 +42,6 @@ if "Pyjinn" not in sys.version:
 
 
 _System = JavaClass("java.lang.System")
-Exception = JavaClass("java.lang.Exception")
 Minescript = JavaClass("net.minescript.common.Minescript")
 BlockPack = JavaClass("net.minescript.common.pyjinn.BlockPack")
 BlockPacker = JavaClass("net.minescript.common.pyjinn.BlockPacker")

@@ -9,7 +9,6 @@ The Python standard library is licensed under the Python Software Foundation Lic
 """
 
 _Array = JavaClass("java.lang.reflect.Array")
-_Exception = JavaClass("java.lang.Exception")
 _JsonParser = JavaClass("com.google.gson.JsonParser")
 
 def loads(data: str) -> any:
@@ -28,7 +27,7 @@ def _from_json(element):
     elif primitive.isBoolean():
       return primitive.getAsBoolean()
     else:
-      raise _Exception(f"Unknown JSON primitive type: {primitive}")
+      raise Exception(f"Unknown JSON primitive type: {primitive}")
   elif element.isJsonArray():
     array = element.getAsJsonArray()
     result = []
@@ -44,4 +43,4 @@ def _from_json(element):
       result[key] = _from_json(value)
     return result
   else:
-    raise _Exception(f"Unknown JSON element type: {element}")
+    raise Exception(f"Unknown JSON element type: {element}")

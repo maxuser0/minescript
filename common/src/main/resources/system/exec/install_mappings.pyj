@@ -17,7 +17,6 @@ from system.pyj.minescript import *
 from system.pyj.pathlib import Path
 
 Array = JavaClass("java.lang.reflect.Array")
-Exception = JavaClass("java.lang.Exception")
 Files = JavaClass("java.nio.file.Files")
 Minescript = JavaClass("net.minescript.common.Minescript")
 OpenOption = JavaClass("java.nio.file.OpenOption")
