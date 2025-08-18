@@ -25,7 +25,6 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.lang.reflect.Constructor;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -3450,7 +3449,7 @@ public class Minescript {
             params[i] = job.objects.getById(args.getStrictLong(i + 1));
           }
           Class<?>[] paramTypes = Script.TypeChecker.getTypes(params);
-          Optional<Constructor<?>> ctor =
+          var ctor =
               Script.TypeChecker.findBestMatchingConstructor(
                   klass.type(), paramTypes, /* diagnostics= */ null);
           if (ctor.isEmpty()) {
@@ -3460,7 +3459,7 @@ public class Minescript {
             Script.TypeChecker.findBestMatchingConstructor(klass.type(), paramTypes, diagnostics);
             throw diagnostics.createTruncatedException();
           }
-          var result = ctor.get().newInstance(params);
+          var result = ctor.get().newInstance(/* env= */ null, params);
           return Optional.of(new JsonPrimitive(job.objects.retain(result)));
         }
 

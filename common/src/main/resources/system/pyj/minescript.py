@@ -47,7 +47,7 @@ BlockPack = JavaClass("net.minescript.common.pyjinn.BlockPack")
 BlockPacker = JavaClass("net.minescript.common.pyjinn.BlockPacker")
 
 def __mcall__(name: str, args):
-  return Minescript.call(__script__.vars["job"], 0, name, args.getJavaList())
+  return Minescript.call(__script__.vars["job"], 0, name, JavaList(args))
 
 
 def execute(command: str):

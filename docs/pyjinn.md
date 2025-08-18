@@ -141,22 +141,27 @@ print(java_list.size())
 
 Get Java List from Pyjinn list (does not make a copy):
 ```
-[1, 2, 3].getJavaList()
+JavaList([1, 2, 3])
 ```
 
-Get Java array from Pyjinn tuple (does not make a copy):
+Get Java array from Pyjinn tuple:
 ```
-(1, 2, 3).getJavaArray()
+JavaArray((1, 2, 3))
 ```
 
 Java arrays and iterables are automatically treated as Pyjinn sequences:
 ```
-java_array = (1, 2, 3).getJavaArray()  # type of java_array is Object[]
+int_tuple = (1, 2, 3)
+java_array = JavaArray(int_tuple)  # type of java_array is Object[]
 for x in java_array:
   print(x)
 
 # Applies Python slice syntax to Object[]:
 print(java_array[-2:])
+
+# Convert tuple to a Java array of a specific type:
+Integer = JavaClass("java.lang.Integer")
+java_int_array = JavaArray(int_tuple, Integer.TYPE)  # type of java_int_array is int[]
 ```
 
 Pyjinn functions passed to methods with a parameter type that's a Java interface are automatically
@@ -165,7 +170,7 @@ takes a `Function<>` and `Stream::filter` takes a `Predicate<>`. Here, Pyjinn `l
 are passed to those Java methods to square the input number and filter for the resulting values that
 are even numbers:
 ```
-java_list = [x for x in range(10)].getJavaList()
+java_list = JavaList([x for x in range(10)])
 print(
     java_list.stream()
         .map(lambda x: x * x)
