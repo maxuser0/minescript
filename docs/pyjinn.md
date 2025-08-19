@@ -530,6 +530,7 @@ Language features currently **NOT** supported by Pyjinn:
   are supported)
 - user-defined decorators
 - Python-style metaclasses
+- floor division operator: `//`
 
 #### str
 
