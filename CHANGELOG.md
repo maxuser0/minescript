@@ -7,6 +7,36 @@
 - To set up Fabric mappings for Pyjinn scripts see
   [minescript.net/mappings](https://minescript.net/mappings)
 
+## Minescript 5.0b4
+
+- Update Pyjinn docs with JavaString and more ([a25de73](https://github.com/maxuser0/minescript/commit/a25de73e03b297c9748dcf96ddb4ab4e9f58dd77))
+- Update to new Pyjinn APIs for JavaArray, JavaList ([a6bcf16](https://github.com/maxuser0/minescript/commit/a6bcf16db6f35782f948b674cf664faeabfc73d0))
+- Use built-in Exception type in Pyjinn scripts ([ad06521](https://github.com/maxuser0/minescript/commit/ad065217f6c7b42c0a901db2d052e7c3f4dc059e))
+- Update type-checking for java_call_method ([3b02372](https://github.com/maxuser0/minescript/commit/3b02372d891082490dd9dec02cd83619e26bc370))
+- ManagedCallback for callbacks passed to Java APIs ([0311b8a](https://github.com/maxuser0/minescript/commit/0311b8a18655358e7e7265c986a88e15ca5cc7cb))
+- Fix bug in key binds for Pyjinn scripts on Windows ([34d27d9](https://github.com/maxuser0/minescript/commit/34d27d90a5d4023650cc2e87e485349128255b48))
+- Add java.py library and pyinterpreter.py script ([ab6bfb5](https://github.com/maxuser0/minescript/commit/ab6bfb548da7f7ea6817c03d8c34af567cbf8057))
+- Support listing official Java class member names ([0f5f1cd](https://github.com/maxuser0/minescript/commit/0f5f1cd00ae836670cdfbaf18fb9fcfc9907fc00))
+- Halt Pyjinn script when killed by \killjob command ([57c1689](https://github.com/maxuser0/minescript/commit/57c1689d5c3ad372e94b0b71019c93833c7f7255))
+- Add `install_mappings` script ([418afa3](https://github.com/maxuser0/minescript/commit/418afa353d4ceb2b32e01f9066ef35c12a61ca67))
+- Include more licensing information in mod jar ([2cbb467](https://github.com/maxuser0/minescript/commit/2cbb467d08dc6e8244b5e30df10e6ff189b68305))
+- Relocate jar resources to match output paths ([413996e](https://github.com/maxuser0/minescript/commit/413996e594d09105dfe34020d933c82ab50aeb9a))
+- Fix NullPointerException when printing exception ([1b04c12](https://github.com/maxuser0/minescript/commit/1b04c120edd7ec30d457004dd759c70d3d20a8bf))
+- Fix typo in log info message: s/Resovled/Resolved/ ([4017bc3](https://github.com/maxuser0/minescript/commit/4017bc3d109b55bb430ea6a5e0d4814849dfbdbe))
+
+### Pyjinn 0.8
+
+- Implement sum() built-in function ([7352443](https://github.com/maxuser0/pyjinn/commit/73524433ae55e79c5db69406ae52728d00b73962))
+- str methods: strip, lstrip, rstrip, find, replace ([8664e41](https://github.com/maxuser0/pyjinn/commit/8664e413ad9f83873ede538acf707bbdaf896b5a))
+- JavaArray/JavaList/JavaMap/JavaString, str funcs ([61cf1c8](https://github.com/maxuser0/pyjinn/commit/61cf1c8e1689bc2c7b27cf8d0bd6ce0cd4ab86b8))
+- Make Exception a Pyjinn built-in type ([636843f](https://github.com/maxuser0/pyjinn/commit/636843f843a233a1b4efb9f7254b038718575ae4))
+- Fix str.split(); overhaul method lookup mechanism ([4f6d91d](https://github.com/maxuser0/pyjinn/commit/4f6d91d2f266b25320298c4efa1c3bf95b81195c))
+- Support callable Pyjinn objects with `__call__()` ([ef5cb7b](https://github.com/maxuser0/pyjinn/commit/ef5cb7b663b26cb977c905ba7384e0968ee6fce8))
+- Fix bug in `from x import *` that imports `__name__` ([1359db5](https://github.com/maxuser0/pyjinn/commit/1359db5f3ad672dea119f90c221ce9e58811014a))
+- Fix % operator for floating point and negative lhs ([5d6d75b](https://github.com/maxuser0/pyjinn/commit/5d6d75be293b3a9c26a521d9122199f459681e0a))
+- Ensure Class<?> and JavaClass instances are 1:1 ([4305ed2](https://github.com/maxuser0/pyjinn/commit/4305ed2c5eca750da5a37a2b8a2796e7b3f0954f))
+
+
 ## Minescript 5.0b3
 
 - Fix Windows bug that can't find python from config ([c22718d](https://github.com/maxuser0/minescript/commit/c22718d45eabc5be2343508d48278d0f21b0b9a6))
