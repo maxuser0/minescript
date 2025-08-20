@@ -112,11 +112,6 @@ public class PyjinnScript {
       setState(JobState.RUNNING);
 
       try {
-        script.vars.__setitem__("job", this);
-        script.vars.__setitem__("game", gameGlobalDict);
-        script.redirectStdout(this::processStdout);
-        script.redirectStderr(this::processStderr);
-        script.atExit(this::atExit);
         isRunningScriptGlobals = true;
         script.exec();
         isRunningScriptGlobals = false;
@@ -168,22 +163,17 @@ public class PyjinnScript {
     }
   }
 
-  public static Job createJob(
+  public static PyjinnJob createJob(
       int jobId,
       ScriptConfig.BoundCommand boundCommand,
+      String[] command,
+      String scriptCode,
       Config config,
       SystemMessageQueue systemMessageQueue,
       NameMappings nameMappings,
       Runnable doneCallback)
       throws Exception {
-    var execCommand = config.scriptConfig().getExecutableCommand(boundCommand);
-
-    var script =
-        loadScript(
-            execCommand.command(),
-            Files.readString(Paths.get(execCommand.command()[0])),
-            nameMappings);
-
+    var script = loadScript(command, scriptCode, nameMappings);
     var job =
         new PyjinnJob(
             jobId,
@@ -193,6 +183,12 @@ public class PyjinnScript {
             config,
             systemMessageQueue,
             doneCallback);
+
+    script.vars.__setitem__("job", job);
+    script.vars.__setitem__("game", gameGlobalDict);
+    script.redirectStdout(job::processStdout);
+    script.redirectStderr(job::processStderr);
+    script.atExit(job::atExit);
 
     return job;
   }

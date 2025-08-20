@@ -42,6 +42,7 @@ from minescript import (
   java_to_string,
   log,
   script_loop,
+  ScriptFunction,
 )
 from minescript_runtime import debug_log
 from dataclasses import dataclass
@@ -527,3 +528,22 @@ def callAsyncScriptFunction(func_name: str, *args) -> JavaFuture:
     `JavaFuture` that will hold the return value of the async funcion when complete.
   """
   return JavaFuture(java_call_script_function.as_async(func_name, *[to_java_type(a) for a in args]))
+
+
+def _eval_pyjinn_script(script_code: str):
+  return (script_code,)
+
+_eval_pyjinn_script = ScriptFunction("eval_pyjinn_script", _eval_pyjinn_script)
+
+def eval_pyjinn_script(script_code: str):
+  """Creates a Pyjinn script.
+
+  Args:
+    script_code: Pyjinn source code
+
+  Returns:
+    new Java object of type org.pyjinn.interpreter.Script
+
+  Since: v5.0
+  """
+  return JavaObject(_eval_pyjinn_script(script_code))

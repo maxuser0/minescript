@@ -687,7 +687,7 @@ public class Minescript {
   }
 
   static class ScheduledTaskList implements JobControl.Operation {
-    private final Job.ExternalJob job;
+    private final Job.SubprocessJob job;
     private final String name;
     private final List<?> tasks;
     private final Runnable doneCallback;
@@ -695,7 +695,7 @@ public class Minescript {
     private boolean suspended = false;
 
     public ScheduledTaskList(
-        Job.ExternalJob job, String name, List<?> tasks, Runnable doneCallback) {
+        Job.SubprocessJob job, String name, List<?> tasks, Runnable doneCallback) {
       this.job = job;
       this.name = name;
       this.tasks = tasks;
@@ -767,13 +767,17 @@ public class Minescript {
 
     private final Deque<UndoableAction> undoStack = new ArrayDeque<>();
 
-    public void createInternalJob(ScriptConfig.BoundCommand command, List<Token> nextCommand) {
+    public void createPyjinnJob(ScriptConfig.BoundCommand command, List<Token> nextCommand) {
       try {
+        var execCommand = config.scriptConfig().getExecutableCommand(command);
+        String scriptCode = Files.readString(Paths.get(execCommand.command()[0]));
         int jobId = allocateJobId();
         var job =
             PyjinnScript.createJob(
                 jobId,
                 command,
+                execCommand.command(),
+                scriptCode,
                 config,
                 systemMessageQueue,
                 mappingsLoader.get(),
@@ -785,10 +789,32 @@ public class Minescript {
       }
     }
 
-    public void createExternalJob(ScriptConfig.BoundCommand command, List<Token> nextCommand) {
+    public Script createPyjinnScript(ScriptConfig.BoundCommand parentCommand, String scriptCode)
+        throws Exception {
+      String[] childCommandArray = new String[] {"eval_pyjinn_script"};
+      var childCommand =
+          new ScriptConfig.BoundCommand(
+              parentCommand.scriptPath(), childCommandArray, parentCommand.redirects());
       int jobId = allocateJobId();
       var job =
-          new Job.ExternalJob(
+          PyjinnScript.createJob(
+              jobId,
+              childCommand,
+              childCommandArray,
+              scriptCode,
+              config,
+              systemMessageQueue,
+              mappingsLoader.get(),
+              () -> finishJob(jobId, /* nextCommand= */ List.of()));
+      jobMap.put(job.jobId(), job);
+      job.start();
+      return job.script();
+    }
+
+    public void createSubprocessJob(ScriptConfig.BoundCommand command, List<Token> nextCommand) {
+      int jobId = allocateJobId();
+      var job =
+          new Job.SubprocessJob(
               jobId,
               command,
               new SubprocessTask(config),
@@ -830,7 +856,7 @@ public class Minescript {
       // TODO(maxuser): Migrate undo to Job.InternalJob.
       int jobId = allocateJobId();
       var undoJob =
-          new Job.ExternalJob(
+          new Job.SubprocessJob(
               jobId,
               new ScriptConfig.BoundCommand(
                   null, undo.derivativeCommand(), ScriptRedirect.Pair.DEFAULTS),
@@ -1470,14 +1496,14 @@ public class Minescript {
 
       if (commandPath.getFileName().toString().toLowerCase().endsWith(".pyj")) {
         try {
-          jobs.createInternalJob(boundCommand, nextCommand);
+          jobs.createPyjinnJob(boundCommand, nextCommand);
         } catch (Exception e) {
           systemMessageQueue.logException(e);
         }
         return;
       }
 
-      jobs.createExternalJob(boundCommand, nextCommand);
+      jobs.createSubprocessJob(boundCommand, nextCommand);
 
     } catch (RuntimeException e) {
       systemMessageQueue.logException(e);
@@ -2336,7 +2362,7 @@ public class Minescript {
   private static final Optional<JsonElement> OPTIONAL_JSON_TRUE = Optional.of(JSON_TRUE);
 
   public static void processScriptFunction(
-      Job.ExternalJob job, String functionName, long funcCallId, List<?> parsedArgs) {
+      Job.SubprocessJob job, String functionName, long funcCallId, List<?> parsedArgs) {
     var funcCall = new ScriptFunctionCall(functionName, parsedArgs);
     try {
       Optional<JsonElement> response = runExternalScriptFunction(job, funcCallId, funcCall);
@@ -3049,7 +3075,7 @@ public class Minescript {
 
   /** Returns a JSON response if a script function is called. */
   private static Optional<JsonElement> runExternalScriptFunction(
-      Job.ExternalJob job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
+      Job.SubprocessJob job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
     final String functionName = functionCall.name();
     final ScriptFunctionCall.ArgList args = functionCall.args();
 
@@ -3634,6 +3660,14 @@ public class Minescript {
         }
         return OPTIONAL_JSON_NULL;
 
+      case "eval_pyjinn_script":
+        {
+          args.expectSize(1);
+          String scriptCode = args.getString(0);
+          var script = jobs.createPyjinnScript(job.boundCommand(), scriptCode);
+          return Optional.of(new JsonPrimitive(job.objects.retain(script)));
+        }
+
       case "run_tasks":
         return Optional.of(runTasks(job, args.rawArgs()));
 
@@ -3708,7 +3742,7 @@ public class Minescript {
   }
 
   private static JsonElement scheduleTasks(
-      Job.ExternalJob job,
+      Job.SubprocessJob job,
       long funcCallId,
       Map<JobOperationId, ScheduledTaskList> taskLists,
       List<?> tasks)
@@ -3737,7 +3771,7 @@ public class Minescript {
     SKIP_TASKS // The remaining tasks in the list are skipped.
   }
 
-  private static JsonElement runTasks(Job.ExternalJob job, List<?> tasks) throws Exception {
+  private static JsonElement runTasks(Job.SubprocessJob job, List<?> tasks) throws Exception {
     var taskValues = new HashMap<Long, Supplier<Object>>();
     JsonElement tasksResult = JsonNull.INSTANCE;
     TaskFlowControl[] flowControl = {TaskFlowControl.NORMAL_FLOW};
@@ -3766,7 +3800,7 @@ public class Minescript {
 
   // flowControl is an array of length 1 to allow an output value without altering the return type.
   private static JsonElement runTask(
-      Job.ExternalJob job,
+      Job.SubprocessJob job,
       List<?> argList,
       Map<Long, Supplier<Object>> taskValues,
       TaskFlowControl[] flowControl)
@@ -3997,7 +4031,7 @@ public class Minescript {
       }
       for (var job : jobs.getMap().values()) {
         if (job.state() == JobState.RUNNING || job.state() == JobState.DONE) {
-          if (job instanceof Job.ExternalJob externalJob) {
+          if (job instanceof Job.SubprocessJob externalJob) {
             try {
               Message message = jobMessageQueue.apply(externalJob);
               if (message != null) {

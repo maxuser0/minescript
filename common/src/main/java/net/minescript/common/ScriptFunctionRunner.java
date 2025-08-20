@@ -6,5 +6,5 @@ package net.minescript.common;
 import java.util.List;
 
 public interface ScriptFunctionRunner {
-  void run(Job.ExternalJob job, String functionName, long funcCallId, List<?> parsedArgs);
+  void run(Job.SubprocessJob job, String functionName, long funcCallId, List<?> parsedArgs);
 }
