@@ -25,6 +25,7 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.lang.reflect.Array;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -781,6 +782,7 @@ public class Minescript {
                 config,
                 systemMessageQueue,
                 mappingsLoader.get(),
+                /* autoExit= */ true,
                 () -> finishJob(jobId, nextCommand));
         jobMap.put(job.jobId(), job);
         job.start();
@@ -789,14 +791,17 @@ public class Minescript {
       }
     }
 
-    public Script createPyjinnScript(ScriptConfig.BoundCommand parentCommand, String scriptCode)
+    public Script createPyjinnSubjob(Job.SubprocessJob parentJob, long opId, String scriptCode)
         throws Exception {
-      String[] childCommandArray = new String[] {"eval_pyjinn_script"};
+      var parentCommand = parentJob.boundCommand();
+      String scriptName =
+          "eval_pyjinn_script(): job[%d] script[%d]".formatted(parentJob.jobId(), opId);
+      String[] childCommandArray = new String[] {scriptName};
       var childCommand =
           new ScriptConfig.BoundCommand(
               parentCommand.scriptPath(), childCommandArray, parentCommand.redirects());
       int jobId = allocateJobId();
-      var job =
+      var scriptJob =
           PyjinnScript.createJob(
               jobId,
               childCommand,
@@ -805,10 +810,45 @@ public class Minescript {
               config,
               systemMessageQueue,
               mappingsLoader.get(),
+              /* autoExit= */ false,
               () -> finishJob(jobId, /* nextCommand= */ List.of()));
-      jobMap.put(job.jobId(), job);
-      job.start();
-      return job.script();
+      jobMap.put(scriptJob.jobId(), scriptJob);
+      parentJob.addOperation(opId, new PyjinnScriptOperation(scriptName, scriptJob));
+      scriptJob.start();
+      return scriptJob.script();
+    }
+
+    private class PyjinnScriptOperation implements Job.Operation {
+      private final String name;
+      private final PyjinnScript.PyjinnJob job;
+      private final AtomicBoolean done = new AtomicBoolean(false);
+
+      PyjinnScriptOperation(String name, PyjinnScript.PyjinnJob job) {
+        this.name = name;
+        this.job = job;
+        job.script().atExit(status -> done.set(true));
+      }
+
+      @Override
+      public String name() {
+        return name;
+      }
+
+      @Override
+      public void suspend() {
+        job.suspend();
+      }
+
+      @Override
+      public boolean resumeAndCheckDone() {
+        job.resume();
+        return done.get();
+      }
+
+      @Override
+      public void cancel() {
+        job.script().exit(0);
+      }
     }
 
     public void createSubprocessJob(ScriptConfig.BoundCommand command, List<Token> nextCommand) {
@@ -3598,6 +3638,69 @@ public class Minescript {
           return Optional.of(new JsonPrimitive(job.objects.retain(result)));
         }
 
+      case "java_new_array":
+        {
+          if (args.size() == 0) {
+            throw new IllegalArgumentException("java_new_array has 1 required arg but got no args");
+          }
+          Object argId0 = job.objects.getById(args.getStrictLong(0));
+          if (argId0 instanceof Class<?> clazz) {
+            int arraySize = args.size() - 1;
+            Object specificArray = Array.newInstance(clazz, arraySize);
+            if (clazz.isPrimitive()) {
+              if (clazz == byte.class) {
+                for (int i = 0; i < arraySize; ++i) {
+                  Array.setByte(
+                      specificArray, i, (Byte) job.objects.getById(args.getStrictLong(i + 1)));
+                }
+              } else if (clazz == int.class) {
+                for (int i = 0; i < arraySize; ++i) {
+                  Array.setInt(
+                      specificArray, i, (Integer) job.objects.getById(args.getStrictLong(i + 1)));
+                }
+              } else if (clazz == long.class) {
+                for (int i = 0; i < arraySize; ++i) {
+                  Array.setLong(
+                      specificArray, i, (Long) job.objects.getById(args.getStrictLong(i + 1)));
+                }
+              } else if (clazz == float.class) {
+                for (int i = 0; i < arraySize; ++i) {
+                  Array.setFloat(
+                      specificArray, i, (Float) job.objects.getById(args.getStrictLong(i + 1)));
+                }
+              } else if (clazz == double.class) {
+                for (int i = 0; i < arraySize; ++i) {
+                  Array.setDouble(
+                      specificArray, i, (Double) job.objects.getById(args.getStrictLong(i + 1)));
+                }
+              } else if (clazz == char.class) {
+                for (int i = 0; i < arraySize; ++i) {
+                  Array.setChar(
+                      specificArray, i, (Character) job.objects.getById(args.getStrictLong(i + 1)));
+                }
+              } else if (clazz == short.class) {
+                for (int i = 0; i < arraySize; ++i) {
+                  Array.setShort(
+                      specificArray, i, (Short) job.objects.getById(args.getStrictLong(i + 1)));
+                }
+              } else {
+                throw new IllegalArgumentException(
+                    "Unexpected primitive type '%s' passed as first param to java_new_array"
+                        .formatted(clazz.getName()));
+              }
+            } else {
+              for (int i = 0; i < arraySize; ++i) {
+                Array.set(specificArray, i, job.objects.getById(args.getStrictLong(i + 1)));
+              }
+            }
+            return Optional.of(new JsonPrimitive(job.objects.retain(specificArray)));
+          } else {
+            throw new IllegalArgumentException(
+                "Expected first arg to java_new_array to be a Java class (Class<?>) but got %s"
+                    .formatted(argId0 == null ? "null" : argId0.getClass().getName()));
+          }
+        }
+
       case "java_to_string":
         {
           args.expectSize(1);
@@ -3664,7 +3767,7 @@ public class Minescript {
         {
           args.expectSize(1);
           String scriptCode = args.getString(0);
-          var script = jobs.createPyjinnScript(job.boundCommand(), scriptCode);
+          var script = jobs.createPyjinnSubjob(job, funcCallId, scriptCode);
           return Optional.of(new JsonPrimitive(job.objects.retain(script)));
         }
 

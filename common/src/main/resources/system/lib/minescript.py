@@ -2565,6 +2565,22 @@ def java_array_index(array: JavaHandle, i: int) -> Union[JavaHandle, None]:
 
 java_array_index = ScriptFunction("java_array_index", java_array_index)
 
+def java_new_array(element_type: JavaHandle, *elements: List[JavaHandle]) -> JavaHandle:
+  """Creates a new Java array of the given element type with the given elements.
+
+  Args:
+    element_type: handle to Java class (Class<?>) to use for the new array's type
+    elements: handles to Java objects to populate the new array
+
+  Returns:
+    handle to new Java array.
+
+  Since: v5.0
+  """
+  return (element_type, *elements)
+
+java_new_array = ScriptFunction("java_new_array", java_new_array)
+
 def java_to_string(target: JavaHandle) -> str:
   """Returns Python string from calling `target.toString()` in Java.
   Since: v4.0

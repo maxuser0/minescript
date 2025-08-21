@@ -36,6 +36,7 @@ from minescript import (
   java_float,
   java_int,
   java_member,
+  java_new_array,
   java_new_instance,
   java_release,
   java_string,
@@ -165,7 +166,7 @@ class Float:
   def __str__(self):
     return f"{self.value}f"
 
-def to_java_type(value):
+def to_java_handle(value):
   if value is None:
     return _null_id
 
@@ -186,7 +187,7 @@ def to_java_type(value):
     raise ValueError(f"Python type {type(value)} not convertible to Java: {value}")
 
 
-def from_java_type(java_id: JavaHandle):
+def from_java_handle(java_id: JavaHandle):
   # TODO(maxuser): Run most of these calls in script_loop, but not java_to_string when uncertain
   # that it's a primitive type.
   with AutoReleasePool() as auto:
@@ -238,7 +239,7 @@ class JavaRef:
 class JavaObject:
   """Python representation of a Java object."""
 
-  def __init__(self, target_id: JavaHandle, ref: JavaRef = None):
+  def __init__(self, target_id: JavaHandle, ref: JavaRef = None, is_script: bool = False):
     """Constructs a Python handle to a Java object given a `JavaHandle`. """
     self.id = target_id
     if ref is None:
@@ -248,6 +249,7 @@ class JavaObject:
       self.ref = ref
     self._class_id = None
     self.is_array = None
+    self.is_script = is_script
 
   def __repr__(self):
     class_name = _get_class_info(self.get_class_id()).class_name()
@@ -317,12 +319,13 @@ class JavaObject:
       return a `JavaBoundMember` equivalent to the Java expression
       `this::methodName`.
     """
-    binding = JavaBoundMember(self.get_class_id(), self.id, name, ref=self.ref)
+    binding = JavaBoundMember(
+        self.get_class_id(), self.id, name, ref=self.ref, script=self if self.is_script else None)
     if name not in java_field_names(self.get_class_id()):
       return binding
     try:
       field = java_access_field(self.id, binding.member_id)
-      return from_java_type(field)
+      return from_java_handle(field)
     except Exception as e:
       debug_log(f"lib_java.py: caught exception accessing field `{name}`: {e}")
       return binding
@@ -357,20 +360,22 @@ class JavaObject:
       `TypeError` if this isn't an array.
     """
     if self._is_array():
-      return from_java_type(java_array_index(self.id, i))
+      return from_java_handle(java_array_index(self.id, i))
     else:
       raise TypeError(f"object {self.id} is not subscriptable")
 
 
 class JavaBoundMember:
   """Representation of a Java method reference in Python."""
-  def __init__(self, target_class_id: JavaHandle, target, name: str, ref: JavaRef = None):
+  def __init__(self, target_class_id: JavaHandle, target, name: str, ref: JavaRef = None, script: JavaObject = None):
     """Member that's bound to a target object, representing a field or method.
 
     Args:
       target_class_id: Java object ID of enclosing class for this member
       target: either Java object ID of the target through which this member is accessed
       name: name of this member
+      ref: JavaRef to manage reference lifetime (optional)
+      script: Pyjinn Script object for accessing and calling script functions (optional)
     """
     self.ref = ref
     if ref is not None:
@@ -379,7 +384,13 @@ class JavaBoundMember:
     self.target_class_id = target_class_id
     self.target = target
     self.member_name = name
-    self.member_id = _find_java_member(target_class_id, name)
+    self.script = script
+    if script is not None and name == "getFunction":
+      self.member_id = None
+      self.script_get_var_as_func = JavaBoundMember(target_class_id, target, "getVariable", ref, script)
+    else:
+      self.member_id = _find_java_member(target_class_id, name)
+      self.script_get_var_as_func = None
   
   def __del__(self):
     if self.ref is not None:
@@ -395,9 +406,18 @@ class JavaBoundMember:
     Returns:
       A Python primitive (bool, int, float, str) if applicable, otherwise a JavaObject.
     """
-    result = java_call_method(self.target, self.member_id,
-      *[to_java_type(a) for a in args])
-    return from_java_type(result)
+    if self.script_get_var_as_func is None:
+      result = java_call_method(self.target, self.member_id,
+        *[to_java_handle(a) for a in args])
+      return from_java_handle(result)
+    elif len(args) == 1 and type(args[0]) is str:
+      func = self.script_get_var_as_func(args[0])
+      def call_func(*params):
+        args_array = JavaObject(java_new_array(Object_id, *[to_java_handle(p) for p in params]))
+        return func.call(self.script.mainModule().globals(), args_array)
+      return call_func
+    else:
+      raise Exception(f"Script.getFunction() requires 1 str args but got {args}")
 
 
 class JavaInt(JavaObject):
@@ -433,7 +453,7 @@ class JavaClassType(JavaObject):
     """Returns `True` if this class represents a Java enum type."""
     if self._is_enum is None:
       with AutoReleasePool() as auto:
-        self._is_enum = from_java_type(auto(java_call_method(self.id, Class_isEnum_id)))
+        self._is_enum = from_java_handle(auto(java_call_method(self.id, Class_isEnum_id)))
     return self._is_enum
 
   def __getattr__(self, name):
@@ -461,7 +481,7 @@ class JavaClassType(JavaObject):
       return binding
     try:
       field = java_access_field(self.id, binding.member_id)
-      return from_java_type(field)
+      return from_java_handle(field)
     except Exception as e:
       debug_log(f"lib_java.py: caught exception accessing field `{name}`: {e}")
       return binding
@@ -475,7 +495,7 @@ class JavaClassType(JavaObject):
     if self.ctor is None:
       self.ctor = JavaObject(java_ctor(self.id))
 
-    return JavaObject(java_new_instance(self.ctor.id, *[to_java_type(a) for a in args]))
+    return JavaObject(java_new_instance(self.ctor.id, *[to_java_handle(a) for a in args]))
 
 
 def JavaClass(name: str) -> JavaClassType:
@@ -498,7 +518,7 @@ def callScriptFunction(func_name: str, *args) -> JavaObject:
   Returns:
     The return value of the given script function as a Python primitive type or JavaObject.
   """
-  return from_java_type(java_call_script_function(func_name, *[to_java_type(a) for a in args]))
+  return from_java_handle(java_call_script_function(func_name, *[to_java_handle(a) for a in args]))
 
 class JavaFuture:
   """Java value that will become available in the future when an async function completes."""
@@ -515,7 +535,7 @@ class JavaFuture:
     Returns:
       Python primitive value or JavaObject returned from the async function upon completion.
     """
-    return from_java_type(self.future.wait(timeout=timeout))
+    return from_java_handle(self.future.wait(timeout=timeout))
 
 def callAsyncScriptFunction(func_name: str, *args) -> JavaFuture:
   """Calls the given Minescript script function asynchronously.
@@ -527,7 +547,7 @@ def callAsyncScriptFunction(func_name: str, *args) -> JavaFuture:
   Returns:
     `JavaFuture` that will hold the return value of the async funcion when complete.
   """
-  return JavaFuture(java_call_script_function.as_async(func_name, *[to_java_type(a) for a in args]))
+  return JavaFuture(java_call_script_function.as_async(func_name, *[to_java_handle(a) for a in args]))
 
 
 def _eval_pyjinn_script(script_code: str):
@@ -546,4 +566,4 @@ def eval_pyjinn_script(script_code: str):
 
   Since: v5.0
   """
-  return JavaObject(_eval_pyjinn_script(script_code))
+  return JavaObject(_eval_pyjinn_script(script_code), is_script=True)

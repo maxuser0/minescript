@@ -78,6 +78,7 @@ public class PyjinnScript {
 
     private final Script script;
     private final PyjinnTask task;
+    private final boolean autoExit;
     private long nextFcallId = ASYNC_FCALL_START_ID;
     private boolean isRunningScriptGlobals = false;
     private boolean hasPendingCallbacksAfterExec = false;
@@ -90,6 +91,7 @@ public class PyjinnScript {
         Script script,
         Config config,
         SystemMessageQueue systemMessageQueue,
+        boolean autoExit,
         Runnable doneCallback) {
       super(
           jobId,
@@ -99,8 +101,9 @@ public class PyjinnScript {
           systemMessageQueue,
           Minescript::processMessage,
           doneCallback);
-      this.script = script;
       this.task = task;
+      this.script = script;
+      this.autoExit = autoExit;
     }
 
     Script script() {
@@ -123,7 +126,7 @@ public class PyjinnScript {
         return;
       }
 
-      if (!hasPendingCallbacksAfterExec) {
+      if (autoExit && !hasPendingCallbacksAfterExec) {
         script.exit(0);
       }
     }
@@ -171,6 +174,7 @@ public class PyjinnScript {
       Config config,
       SystemMessageQueue systemMessageQueue,
       NameMappings nameMappings,
+      boolean autoExit,
       Runnable doneCallback)
       throws Exception {
     var script = loadScript(command, scriptCode, nameMappings);
@@ -182,6 +186,7 @@ public class PyjinnScript {
             script,
             config,
             systemMessageQueue,
+            autoExit,
             doneCallback);
 
     script.vars.__setitem__("job", job);
@@ -384,7 +389,7 @@ public class PyjinnScript {
           if (removedListener != null) {
             // If this is the last listener being removed and the job is no longer running global
             // statements, then kill the job.
-            if (job.task.callbackMap.isEmpty() && !job.isRunningScriptGlobals) {
+            if (job.autoExit && job.task.callbackMap.isEmpty() && !job.isRunningScriptGlobals) {
               script.exit(0);
             }
             return true;
