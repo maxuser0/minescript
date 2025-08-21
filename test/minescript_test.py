@@ -20,6 +20,7 @@ among the tests.
 """
 
 import minescript
+import java
 import os
 import queue
 import re
@@ -124,6 +125,38 @@ def test(test_func):
 
 
 # BEGIN TESTS
+
+pyjinn_source = r"""
+Minecraft = JavaClass("net.minecraft.client.Minecraft")
+
+def get_fps() -> int:
+  return Minecraft.getInstance().getFps()
+
+def get_player_name() -> str:
+  return Minecraft.getInstance().player.getName().getString()
+
+def get_num_jobs() -> int:
+  return len(job_info())
+"""
+
+@test
+def pyjinn_test():
+  script = java.eval_pyjinn_script(pyjinn_source)
+
+  get_fps = script.getFunction("get_fps")
+  fps = get_fps()
+  expect_equal(type(fps), int)
+  expect_gt(fps, 0)
+  expect_lt(fps, 1000)
+  
+  get_player_name = script.getFunction("get_player_name")
+  expect_equal(get_player_name(), minescript.player_name())
+  
+  get_num_jobs = script.getFunction("get_num_jobs")
+  expect_equal(get_num_jobs(), len(minescript.job_info()))
+
+  script.exit()
+
 
 @test
 def chat_test():
