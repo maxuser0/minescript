@@ -770,14 +770,12 @@ public class Minescript {
 
     public void createPyjinnJob(ScriptConfig.BoundCommand command, List<Token> nextCommand) {
       try {
-        var execCommand = config.scriptConfig().getExecutableCommand(command);
-        String scriptCode = Files.readString(Paths.get(execCommand.command()[0]));
+        String scriptCode = Files.readString(command.scriptPath());
         int jobId = allocateJobId();
         var job =
             PyjinnScript.createJob(
                 jobId,
                 command,
-                execCommand.command(),
                 scriptCode,
                 config,
                 systemMessageQueue,
@@ -794,18 +792,15 @@ public class Minescript {
     public Script createPyjinnSubjob(Job.SubprocessJob parentJob, long opId, String scriptCode)
         throws Exception {
       var parentCommand = parentJob.boundCommand();
-      String scriptName =
-          "eval_pyjinn_script(): job[%d] script[%d]".formatted(parentJob.jobId(), opId);
-      String[] childCommandArray = new String[] {scriptName};
+      String scriptName = "eval_pyjinn_script.%d.%d".formatted(parentJob.jobId(), opId);
       var childCommand =
           new ScriptConfig.BoundCommand(
-              parentCommand.scriptPath(), childCommandArray, parentCommand.redirects());
+              parentCommand.scriptPath(), new String[] {scriptName}, parentCommand.redirects());
       int jobId = allocateJobId();
       var scriptJob =
           PyjinnScript.createJob(
               jobId,
               childCommand,
-              childCommandArray,
               scriptCode,
               config,
               systemMessageQueue,
