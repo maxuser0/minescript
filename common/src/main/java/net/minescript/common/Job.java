@@ -26,7 +26,7 @@ import org.apache.logging.log4j.Logger;
 public abstract class Job implements JobControl {
 
   // TODO(maxuser): Move ExternalJob to its own file.
-  public static class ExternalJob extends Job {
+  public static class SubprocessJob extends Job {
     private final ScriptFunctionRunner scriptFunctionRunner;
     private Thread thread;
     public final ResourceTracker<Object> objects;
@@ -38,7 +38,7 @@ public abstract class Job implements JobControl {
     // - script system call: "?mnsc:0 X exit! []"
     private static final String FUNCTION_PREFIX = "?mnsc:";
 
-    public ExternalJob(
+    public SubprocessJob(
         int jobId,
         ScriptConfig.BoundCommand command,
         Task task,

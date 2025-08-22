@@ -12,5 +12,9 @@ public interface NameMappings {
 
   String getRuntimeFieldName(Class<?> clazz, String prettyFieldName);
 
+  Set<String> getPrettyFieldNames(Class<?> clazz);
+
   Set<String> getRuntimeMethodNames(Class<?> clazz, String prettyMethodName);
+
+  Set<String> getPrettyMethodNames(Class<?> clazz);
 }

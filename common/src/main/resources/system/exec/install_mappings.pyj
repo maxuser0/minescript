@@ -1,0 +1,198 @@
+#!python
+# SPDX-FileCopyrightText: © 2024-2025 Greg Christiana <maxuser@minescript.net>
+# SPDX-License-Identifier: GPL-3.0-only
+
+r"""install_mappings v5.0 distributed via Minescript jar file
+
+Based on mappings_downloader.py by RazrCraft.
+
+Simple tool to automatically download Mojang and Fabric (Intermediary) 
+mappings directly to the folder where Minescript needs them, and reload
+them into Minescript.
+"""
+
+import system.pyj.json as json
+import system.pyj.sys as sys
+from system.pyj.minescript import *
+from system.pyj.pathlib import Path
+
+Array = JavaClass("java.lang.reflect.Array")
+Files = JavaClass("java.nio.file.Files")
+Minescript = JavaClass("net.minescript.common.Minescript")
+OpenOption = JavaClass("java.nio.file.OpenOption")
+Runnable = JavaClass("java.lang.Runnable")
+StandardOpenOption = JavaClass("java.nio.file.StandardOpenOption")
+String = JavaClass("java.lang.String")
+Thread = JavaClass("java.lang.Thread")
+URL = JavaClass("java.net.URL")
+
+
+def write_data_to_file(data: str, path: Path):
+  options = Array.newInstance(type(OpenOption), 1)
+  options[0] = StandardOpenOption.CREATE
+  Files.writeString(path.java_path, data, options)
+
+
+def report(*args):
+  set_timeout(lambda: print(*args, file=sys.stderr), 0)
+    
+
+mc_version = ""
+mappings_dir = Path("minescript/system/mappings")
+
+# Loaded data
+version_manifest_data = None
+version_data = None
+mojang_mappings = None
+
+def download_data(url: str):
+  """Downloads data and returns it as a string"""
+  try:
+    report(f"Downloading: {url}")
+    return String(URL(url).openStream().readAllBytes())
+  except Exception as e:
+    report(f"Error downloading {url}: {e}")
+    return None
+
+def load_version_manifest() -> bool:
+  """Loads or downloads the version manifest"""
+  global version_manifest_data
+  
+  url: str = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
+  version_manifest_json = download_data(url)
+  if not version_manifest_json:
+    return False
+  
+  try:
+    version_manifest_data = json.loads(version_manifest_json)
+    return True
+  except Exception as e:
+    report(f"Error loading version manifest: {e}")
+    return False
+
+def download_mojang_mappings(version: str) -> bool:
+  """Downloads the data for a specific version"""
+  global version_data
+  global mojang_mappings
+
+  mojang_mappings_file = mappings_dir.joinpath(f"{version}/client.txt")
+    
+  if mojang_mappings_file.exists():
+    report(f"{mojang_mappings_file.path} already exists.")
+    return True
+  
+  if not load_version_manifest():
+    report("Error downloading version manifest.")
+    sys.exit(1)
+
+  if not version_manifest_data:
+    report("Error loading version data. Can't find version manifest.")
+    return False
+  
+  # Find the version in the manifest
+  version_info = None
+  for v in version_manifest_data.get("versions", []): # type: ignore
+    if v.get("id") == version:
+      version_info = v
+      break
+  
+  if not version_info:
+    report(f"Version {version} not found in the manifest")
+    return False
+  
+  # Download the version JSON file
+  version_url = version_info.get("url")
+  
+  version_json = download_data(version_url)
+  if not version_json:
+    return False
+  
+  # Load version data
+  try:
+    version_data = json.loads(version_json)
+  except Exception as e:
+    report(f"Error loading version data: {e}")
+    return False
+  
+  # Download Mojang mappings
+  downloads = version_data.get("downloads", {})
+  mojang_mappings = downloads.get("client_mappings")
+
+  if mojang_mappings:
+    mappings_url = mojang_mappings.get("url")
+    version_dir = mappings_dir.joinpath(version)
+    version_dir.mkdir(exist_ok=True)
+    mojang_mappings_file = mappings_dir.joinpath(f"{version}/client.txt")
+    
+    if not mojang_mappings_file.exists():
+      mappings_data = download_data(mappings_url)
+      if not mappings_data:
+        return False
+      write_data_to_file(mappings_data, mojang_mappings_file)
+      report(f"Saved Mojang official mappings to: {mojang_mappings_file.path}")
+      return True
+  
+  return False
+  
+def download_intermediay_mappings(version: str) -> bool:
+  # Download Fabric (Intermediary) mappings
+  intermediary_url = f"https://raw.githubusercontent.com/FabricMC/intermediary/master/mappings/{version}.tiny"
+  intermediary_file = mappings_dir.joinpath(f"{version}/{version}.tiny")
+  
+  if not intermediary_file.exists():
+    intermediary_data = download_data(intermediary_url)
+    if not intermediary_data:
+      return False
+    write_data_to_file(intermediary_data, intermediary_file)
+    report(f"Saved Fabric intermediary mappings to: {intermediary_file.path}")
+  else:
+    report(f"{intermediary_file.path} already exists.")
+  
+  return True
+
+# Callback that keeps the script job alive until it's removed.
+keep_alive = set_interval(lambda: None, 1000)
+
+
+def reloadMappings():
+  Minescript.reloadMappings()
+  report(f"Sucessfully reloaded mappings.")
+
+
+def main():
+  global mc_version
+  global mappings_dir
+  succeeded = False
+
+  try:
+    mc_version = version_info().minecraft
+    report(f"Minecraft {mc_version} detected")
+    mappings_dir = Path("minescript/system/mappings")
+    mappings_dir.mkdir(exist_ok=True)
+    
+    if mc_version == "":
+      report("Error: Version not given.")
+      sys.exit(1)
+      
+    report("Searching and downloading mapping data...")
+    
+    if not download_mojang_mappings(mc_version):
+      report("Error downloading Mojang mappings.")
+      sys.exit(1)
+    
+    if not download_intermediay_mappings(mc_version):
+      report("Error downloading Fabric (Intermadiary) mappings.")
+      sys.exit(1)
+
+    # The loading of the mappings is not thread-safe. So schedule the reload on the main thread.
+    set_timeout(reloadMappings, 0)
+    succeeded = True
+  finally:
+    if not succeeded:
+      report("Download failed. See details at: logs/latest.log")
+
+    # Let the script exit by removing the only registered listener.
+    remove_event_listener(keep_alive)
+
+thread = Thread(Runnable(main))
+thread.start()
