@@ -141,15 +141,21 @@ public class PyjinnScript {
       try {
         handlingExit = true;
         if (exitCode != null && exitCode.intValue() != 0) {
-          systemMessageQueue.logUserError(
-              jobSummaryWithStatus("Exited with error code " + exitCode));
+          // Don't print messages on exit of a child job because it's managed by its parent.
+          if (parentJobId().isEmpty()) {
+            systemMessageQueue.logUserError(
+                jobSummaryWithStatus("Exited with error code " + exitCode));
+          }
         } else if (hasPendingCallbacksAfterExec) {
           // Log an info message about the script exits successfully only if the task had pending
           // callbacks immediately after running all global statements.
           if (state() != JobState.KILLED) {
             setState(JobState.DONE);
           }
-          systemMessageQueue.logUserInfo(toString());
+          // Don't print messages on exit of a child job because it's managed by its parent.
+          if (parentJobId().isEmpty()) {
+            systemMessageQueue.logUserInfo(toString());
+          }
         }
       } finally {
         close();
