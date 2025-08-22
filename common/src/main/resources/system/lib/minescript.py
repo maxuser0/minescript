@@ -46,7 +46,7 @@ class MinescriptRuntimeOptions:
 options = MinescriptRuntimeOptions()
 
 
-def execute(command: str, _as_task=False):
+def execute(command: str):
   """Executes the given command.
 
   If `command` is prefixed by a backslash, it's treated as Minescript command,
@@ -57,14 +57,14 @@ def execute(command: str, _as_task=False):
 
   Since: v2.1
   """
-  if not _as_task and not isinstance(command, str):
+  if not isinstance(command, str):
     raise TypeError("Argument must be a string.")
   return (command,)
 
-execute = NoReturnScriptFunction("execute", execute, conditional_task_arg=True)
+execute = NoReturnScriptFunction("execute", execute)
 
 
-def echo(*messages, _as_task=False):
+def echo(*messages):
   """Echoes plain-text messages to the chat.
 
   Echoed messages are visible only to the local player.
@@ -76,12 +76,9 @@ def echo(*messages, _as_task=False):
 
   Since: v2.0
   """
-  if _as_task:
-    return messages
-  else:
-    return (" ".join([str(m) for m in messages]),)
+  return (" ".join([str(m) for m in messages]),)
 
-echo = NoReturnScriptFunction("echo", echo, conditional_task_arg=True)
+echo = NoReturnScriptFunction("echo", echo)
 
 
 def echo_json(json_text):
@@ -102,7 +99,7 @@ def echo_json(json_text):
 echo_json = NoReturnScriptFunction("echo_json", echo_json)
 
 
-def chat(*messages, _as_task=False):
+def chat(*messages):
   """Sends messages to the chat.
 
   If `messages[0]` is a str starting with a slash or backslash, automatically
@@ -115,15 +112,12 @@ def chat(*messages, _as_task=False):
 
   Since: v2.0
   """
-  if _as_task:
-    return messages
-  else:
-    return (" ".join([str(m) for m in messages]),)
+  return (" ".join([str(m) for m in messages]),)
 
-chat = NoReturnScriptFunction("chat", chat, conditional_task_arg=True)
+chat = NoReturnScriptFunction("chat", chat)
 
 
-def log(*messages, _as_task=False):
+def log(*messages):
   """Sends messages to latest.log.
 
   Update in v4.0:
@@ -131,12 +125,9 @@ def log(*messages, _as_task=False):
 
   Since: v3.0
   """
-  if _as_task:
-    return messages
-  else:
-    return (" ".join([str(m) for m in messages]),)
+  return (" ".join([str(m) for m in messages]),)
 
-log = NoReturnScriptFunction("log", log, conditional_task_arg=True)
+log = NoReturnScriptFunction("log", log)
 
 
 def screenshot(filename: str=None):
@@ -1103,142 +1094,6 @@ def set_default_executor(executor: minescript_runtime.FunctionExecutor):
   Since: v4.0
   """
   minescript_runtime._default_executor = executor
-
-
-@dataclass
-class Task(minescript_runtime.BasicTask):
-  """Executable task that allows multiple operations to execute on the same executor cycle."""
-
-  @staticmethod
-  def as_list(*values):
-    """Creates a task that returns the given values as a list."""
-    return Task(
-        Task._get_next_fcallid(), "as_list",
-        Task._get_immediate_args(values), Task._get_deferred_args(values))
-
-  @staticmethod
-  def get_index(array, index):
-    """Creates a task that looks up an array by index."""
-    return Task(
-        Task._get_next_fcallid(), "get_index",
-        Task._get_immediate_args((array, index)), Task._get_deferred_args((array, index)))
-
-  @staticmethod
-  def get_attr(obj, attr):
-    """Creates a task that looks up a map/dict by key."""
-    return Task(
-        Task._get_next_fcallid(), "get_attr",
-        Task._get_immediate_args((obj, attr)), Task._get_deferred_args((obj, attr)))
-
-  @staticmethod
-  def contains(container, element):
-    """Creates a task that checks if a container (map, list, or string) contains an element."""
-    return Task(
-        Task._get_next_fcallid(), "contains",
-        Task._get_immediate_args((container, element)),
-        Task._get_deferred_args((container, element)))
-
-  @staticmethod
-  def as_int(*numbers):
-    """Creates a task that converts a floating-point number to int."""
-    return Task(
-        Task._get_next_fcallid(), "as_int",
-        Task._get_immediate_args(numbers), Task._get_deferred_args(numbers))
-
-  @staticmethod
-  def negate(condition):
-    """Creates a task that negates a boolean value."""
-    return Task(
-        Task._get_next_fcallid(), "negate",
-        Task._get_immediate_args((condition,)), Task._get_deferred_args((condition,)))
-
-  @staticmethod
-  def is_null(value):
-    """Creates a task that checks a value against null or `None`."""
-    return Task(
-        Task._get_next_fcallid(), "is_null",
-        Task._get_immediate_args((value,)), Task._get_deferred_args((value,)))
-
-  @staticmethod
-  def skip_if(condition):
-    """Creates a task that skips the remainder of the task list if `condition` is true."""
-    return Task(
-        Task._get_next_fcallid(), "skip_if",
-        Task._get_immediate_args((condition,)), Task._get_deferred_args((condition,)))
-
-
-def run_tasks(tasks: List[Task]):
-  """Runs tasks so that multiple tasks can be run on the same executor cycle."""
-  for i, arg in enumerate(tasks):
-    if not isinstance(arg, minescript_runtime.BasicTask):
-      raise ValueError(
-          f"All args to `run_tasks` must be tasks, but arg {i} is {arg} (type `{type(arg)}`)")
-
-  serialized_tasks = [
-    (task.fcallid, task.func_name, task.immediate_args, task.deferred_args) for task in tasks
-  ]
-
-  if tasks:
-    result = await_script_function("run_tasks", serialized_tasks)
-    return tasks[-1].result_transform(result)
-  else:
-    return None
-
-
-def schedule_tick_tasks(tasks: List[Task]) -> int:
-  """Schedules a list of tasks to run every cycle of the tick loop.
-
-  Returns:
-    ID of scheduled task list which can be passed to `cancel_scheduled_tasks(task_list_id)`.
-
-  Since: v4.0
-  """
-  for i, arg in enumerate(tasks):
-    if not isinstance(arg, minescript_runtime.BasicTask):
-      raise ValueError(
-          "All args to `schedule_tick_tasks` must be tasks, "
-          f"but arg {i} is {arg} (type `{type(arg)}`)")
-
-  serialized_tasks = [
-    (task.fcallid, task.func_name, task.immediate_args, task.deferred_args) for task in tasks
-  ]
-
-  return await_script_function("schedule_tick_tasks", serialized_tasks)
-
-
-def schedule_render_tasks(tasks: List[Task]) -> int:
-  """Schedules a list of tasks to run every cycle of the render loop.
-
-  Returns:
-    ID of scheduled task list which can be passed to `cancel_scheduled_tasks(task_list_id)`.
-
-  Since: v4.0
-  """
-  for i, arg in enumerate(tasks):
-    if not isinstance(arg, minescript_runtime.BasicTask):
-      raise ValueError(
-          "All args to `schedule_render_tasks` must be tasks, "
-          f"but arg {i} is {arg} (type `{type(arg)}`)")
-
-  serialized_tasks = [
-    (task.fcallid, task.func_name, task.immediate_args, task.deferred_args) for task in tasks
-  ]
-
-  return await_script_function("schedule_render_tasks", serialized_tasks)
-
-
-def cancel_scheduled_tasks(task_list_id: int) -> bool:
-  """Cancels a scheduled task list for the currently running job.
-
-  Args:
-    task_list_id: ID of task list returned from `schedule_tick_tasks()` or `schedule_render_tasks`.
-
-  Returns:
-    `True` if `task_list_id` was successfully cancelled, `False` otherwise.
-
-  Since: v4.0
-  """
-  return await_script_function("cancel_scheduled_tasks", (task_list_id,))
 
 
 @dataclass

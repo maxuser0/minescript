@@ -7,7 +7,6 @@ import static net.minescript.common.CommandSyntax.parseCommand;
 import static net.minescript.common.CommandSyntax.quoteCommand;
 import static net.minescript.common.CommandSyntax.quoteString;
 
-import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.gson.Gson;
@@ -35,7 +34,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -50,7 +48,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import net.minecraft.SharedConstants;
@@ -684,63 +681,6 @@ public class Minescript {
           systemMessageQueue.logException(e);
         }
       }
-    }
-  }
-
-  static class ScheduledTaskList implements JobControl.Operation {
-    private final Job.SubprocessJob job;
-    private final String name;
-    private final List<?> tasks;
-    private final Runnable doneCallback;
-    private long lastReportedErrorTime; // Throttle error reporting so as to not spam logs or chat.
-    private boolean suspended = false;
-
-    public ScheduledTaskList(
-        Job.SubprocessJob job, String name, List<?> tasks, Runnable doneCallback) {
-      this.job = job;
-      this.name = name;
-      this.tasks = tasks;
-      this.doneCallback = doneCallback;
-      this.lastReportedErrorTime = System.currentTimeMillis();
-    }
-
-    public void run() {
-      if (suspended) {
-        return;
-      }
-
-      try {
-        runTasks(job, tasks);
-      } catch (Exception e) {
-        long time = System.currentTimeMillis();
-        if (time - lastReportedErrorTime > 5000) {
-          lastReportedErrorTime = time;
-          systemMessageQueue.logException(
-              e, String.format("Error from scheduled %s: %s", name, e.toString()));
-        }
-      }
-    }
-
-    @Override
-    public String name() {
-      return name;
-    }
-
-    @Override
-    public void suspend() {
-      suspended = true;
-    }
-
-    @Override
-    public boolean resumeAndCheckDone() {
-      suspended = false;
-      return false; // Never done until cancelled.
-    }
-
-    @Override
-    public void cancel() {
-      LOGGER.info("Cancelling ScheduledTaskList: `{}`", name);
-      doneCallback.run();
     }
   }
 
@@ -1646,10 +1586,6 @@ public class Minescript {
   }
 
   public static void onRenderWorld(Object context) {
-    for (var taskList : renderTaskLists.values()) {
-      taskList.run();
-    }
-
     // Process render event listeners from Pyjinn scripts.
     ScriptValue eventValue = null;
     for (var entry : renderEventListeners.entrySet()) {
@@ -2107,9 +2043,6 @@ public class Minescript {
 
   private static Map<JobOperationId, ChunkLoadEventListener> chunkLoadEventListeners =
       new ConcurrentHashMap<JobOperationId, ChunkLoadEventListener>();
-
-  private static Map<JobOperationId, ScheduledTaskList> tickTaskLists = new ConcurrentHashMap<>();
-  private static Map<JobOperationId, ScheduledTaskList> renderTaskLists = new ConcurrentHashMap<>();
 
   private static Optional<Predicate<Object>> getOutgoingChatInterceptFilter(
       Map<String, Object> listenerArgs) {
@@ -3117,7 +3050,6 @@ public class Minescript {
     switch (functionName) {
       case "register_event_listener":
         {
-          functionCall.expectNotRunningAsTask();
           args.expectArgs("event_name", "kwargs");
           String eventName = args.getString(0);
           var kwargs = args.getStringKeyMap(1);
@@ -3127,7 +3059,6 @@ public class Minescript {
 
       case "start_event_listener":
         {
-          functionCall.expectNotRunningAsTask();
           args.expectArgs("event_name", "listener_id");
           String eventName = args.getString(0);
           long listenerId = args.getStrictLong(1);
@@ -3424,7 +3355,6 @@ public class Minescript {
 
       case "await_loaded_region":
         {
-          functionCall.expectNotRunningAsTask();
           args.expectSize(4);
           int arg0 = args.getStrictInt(0);
           int arg1 = args.getStrictInt(1);
@@ -3766,22 +3696,6 @@ public class Minescript {
           return Optional.of(new JsonPrimitive(job.objects.retain(script)));
         }
 
-      case "run_tasks":
-        return Optional.of(runTasks(job, args.rawArgs()));
-
-      case "schedule_tick_tasks":
-        return Optional.of(scheduleTasks(job, funcCallId, tickTaskLists, args.rawArgs()));
-
-      case "schedule_render_tasks":
-        return Optional.of(scheduleTasks(job, funcCallId, renderTaskLists, args.rawArgs()));
-
-      case "cancel_scheduled_tasks":
-        {
-          args.expectArgs("task_list_id");
-          long opId = args.getStrictLong(0);
-          return Optional.of(new JsonPrimitive(job.cancelOperation(opId)));
-        }
-
       case "flush":
         args.expectSize(0);
         return OPTIONAL_JSON_TRUE;
@@ -3839,199 +3753,6 @@ public class Minescript {
     return Optional.of(runScriptFunction(job, funcCallId, functionCall).toJson());
   }
 
-  private static JsonElement scheduleTasks(
-      Job.SubprocessJob job,
-      long funcCallId,
-      Map<JobOperationId, ScheduledTaskList> taskLists,
-      List<?> tasks)
-      throws Exception {
-    var jobOpId = new JobOperationId(job.jobId(), funcCallId);
-    if (taskLists.containsKey(jobOpId)) {
-      throw new IllegalStateException(
-          String.format("Task ID %d already scheduled for job %d", funcCallId, job.jobId()));
-    }
-
-    var scheduledTaskList =
-        new ScheduledTaskList(
-            job,
-            String.format(
-                "TaskList command=%s job=%d id=%d len=%d",
-                job.boundCommand().command()[0], job.jobId(), funcCallId, tasks.size()),
-            tasks,
-            () -> taskLists.remove(jobOpId));
-    taskLists.put(jobOpId, scheduledTaskList);
-    job.addOperation(funcCallId, scheduledTaskList);
-    return new JsonPrimitive(funcCallId);
-  }
-
-  enum TaskFlowControl {
-    NORMAL_FLOW, // Control flows sequentially from one task to the next in a list.
-    SKIP_TASKS // The remaining tasks in the list are skipped.
-  }
-
-  private static JsonElement runTasks(Job.SubprocessJob job, List<?> tasks) throws Exception {
-    var taskValues = new HashMap<Long, Supplier<Object>>();
-    JsonElement tasksResult = JsonNull.INSTANCE;
-    TaskFlowControl[] flowControl = {TaskFlowControl.NORMAL_FLOW};
-    for (var task : tasks) {
-      var args = (List<?>) task;
-      var result = runTask(job, args, taskValues, flowControl);
-      taskValues.put(
-          ScriptFunctionCall.ArgList.getStrictLongValue(args.get(0)).getAsLong(),
-          Suppliers.memoize(
-              () -> {
-                // Gson doesn't appear to offer a way to parse JsonElement directly to a POJO. The
-                // workaround used here is to put the JsonElement into a JsonArray, then parse that
-                // as generic ArrayList and pull out the first element as Object.
-                var array = new JsonArray();
-                array.add(result);
-                return GSON.fromJson(array, ArrayList.class).get(0);
-              }));
-      tasksResult = result;
-      if (flowControl[0] == TaskFlowControl.SKIP_TASKS) {
-        break;
-      }
-    }
-    // Return the result of the last executed task.
-    return tasksResult;
-  }
-
-  // flowControl is an array of length 1 to allow an output value without altering the return type.
-  private static JsonElement runTask(
-      Job.SubprocessJob job,
-      List<?> argList,
-      Map<Long, Supplier<Object>> taskValues,
-      TaskFlowControl[] flowControl)
-      throws Exception {
-    var args = new ScriptFunctionCall.ArgList("runTask", argList);
-    long funcCallId = args.getStrictLong(0);
-    String funcName = args.getString(1);
-
-    List resolvedArgs = (List) args.get(2);
-    List<?> deferredArgs = (List<?>) args.get(3);
-
-    for (int i = 0; i < deferredArgs.size(); ++i) {
-      Object arg = deferredArgs.get(i);
-      if (arg != null) {
-        long taskId = ScriptFunctionCall.ArgList.getStrictLongValue(arg).getAsLong();
-        if (!taskValues.containsKey(taskId)) {
-          throw new IllegalArgumentException(
-              String.format(
-                  "Task `%s` accessed uninitialized result of Task ID %d", funcName, taskId));
-        }
-        resolvedArgs.set(i, taskValues.get(taskId).get());
-      }
-    }
-
-    switch (funcName) {
-      case "as_list":
-        return GSON.toJsonTree(resolvedArgs);
-
-      case "get_attr":
-        {
-          var map = (Map) resolvedArgs.get(0);
-          var attr = resolvedArgs.get(1);
-          return GSON.toJsonTree(map.get(attr));
-        }
-
-      case "get_index":
-        {
-          var list = (List) resolvedArgs.get(0);
-          var index = ScriptFunctionCall.ArgList.getStrictIntValue(resolvedArgs.get(1));
-          if (index.isEmpty()) {
-            throw new IllegalArgumentException(
-                "Expected second arg to `get_index` to be int but got: " + resolvedArgs.get(1));
-          }
-          return GSON.toJsonTree(list.get(index.getAsInt()));
-        }
-
-      case "contains":
-        {
-          var container = resolvedArgs.get(0);
-          var element = resolvedArgs.get(1);
-          final boolean found;
-          if (container instanceof List list) {
-            found = list.contains(element);
-          } else if (container instanceof Map map) {
-            found = map.containsKey(element);
-          } else if (container instanceof String string) {
-            found = string.contains(element.toString());
-          } else {
-            throw new IllegalArgumentException(
-                String.format(
-                    "Expected first arg (container) to be List, Map, or String but got: %s (%s)",
-                    container, container.getClass().getName()));
-          }
-          return new JsonPrimitive(found);
-        }
-
-      case "as_int":
-        {
-          var arg = resolvedArgs.get(0);
-          if (arg instanceof List list) {
-            var ints = new JsonArray();
-            for (int i = 0; i < list.size(); ++i) {
-              var item = list.get(i);
-              OptionalDouble number = ScriptFunctionCall.ArgList.getDoubleValue(item);
-              if (number.isEmpty()) {
-                throw new IllegalArgumentException(
-                    String.format(
-                        "Expected arg to `as_int` to be a number or list of numbers but got `%s` at"
-                            + " index `%d`",
-                        item, i));
-              }
-              ints.add((int) number.getAsDouble());
-            }
-            return ints;
-          } else {
-            OptionalDouble number = ScriptFunctionCall.ArgList.getDoubleValue(arg);
-            if (number.isEmpty()) {
-              throw new IllegalArgumentException(
-                  "Expected arg to `as_int` to be a number or list of numbers but got: " + arg);
-            }
-            return new JsonPrimitive((int) number.getAsDouble());
-          }
-        }
-
-      case "negate":
-        {
-          var arg = resolvedArgs.get(0);
-          if (arg instanceof Boolean condition) {
-            return new JsonPrimitive(!condition);
-          } else {
-            throw new IllegalArgumentException(
-                "Expected arg to `negate` to be a boolean but got: " + arg);
-          }
-        }
-
-      case "is_null":
-        {
-          var arg = resolvedArgs.get(0);
-          return new JsonPrimitive(arg == null);
-        }
-
-      case "skip_if":
-        {
-          var arg = resolvedArgs.get(0);
-          if (arg instanceof Boolean condition) {
-            if (condition) {
-              flowControl[0] = TaskFlowControl.SKIP_TASKS;
-            }
-            return new JsonPrimitive(condition);
-          } else {
-            throw new IllegalArgumentException(
-                "Expected arg to `negate` to be a boolean but got: " + arg);
-          }
-        }
-
-      default:
-        var embeddedFuncCall = new ScriptFunctionCall(funcName, resolvedArgs);
-        embeddedFuncCall.setRunningAsTask();
-        return runExternalScriptFunction(job, funcCallId, embeddedFuncCall)
-            .orElse(JsonNull.INSTANCE);
-    }
-  }
-
   private record ClassConstructor(Class<?> type) {}
 
   private record ClassMember(Class<?> type, String name) {}
@@ -4071,10 +3792,6 @@ public class Minescript {
   }
 
   public static void onClientWorldTick() {
-    for (var taskList : tickTaskLists.values()) {
-      taskList.run();
-    }
-
     // Process tick event listeners from Pyjinn scripts.
     ScriptValue eventValue = null;
     for (var entry : tickEventListeners.entrySet()) {
