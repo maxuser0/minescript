@@ -10,9 +10,12 @@ import com.google.common.collect.ImmutableSet;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -31,7 +34,7 @@ public class ObfuscatedNameMappings implements NameMappings {
   // e.g. "net.minecraft.client.Minecraft" -> "fud"
   private final BiMap<String, String> officialToObfuscatedClassMap = HashBiMap.create();
 
-  // Map: [obfuscatedClassName, officialFieldName] -> obfuscateFieldName
+  // Map: [obfuscatedClassName, officialFieldName] -> obfuscatedFieldName
   private final Map<ClassMemberKey, String> officialFieldMap = new HashMap<>();
 
   private record MethodSignature(String methodName, String signature) {}
@@ -64,20 +67,20 @@ public class ObfuscatedNameMappings implements NameMappings {
   private final HashMultimap<ObfuscatedMethodKey, String> fabricMethodMap = HashMultimap.create();
 
   // Map: officialClassName -> fabricClassName
-  private final Map<String, String> officialToFabricClassMap = new ConcurrentHashMap<>();
+  private final Map<String, String> officialToFabricClassCache = new ConcurrentHashMap<>();
 
   // Map: fabricClassName -> officialClassName
   // (officialToFabricClassMap and fabricToOfficialClassMap could be BiMap inversions of each
   // other, but if a caller passes in a pretty name when a runtime name is expected, or vice versa,
   // the maps could get into inconsistent states and throw an exception. So, keep the maps
   // independent.)
-  private final Map<String, String> fabricToOfficialClassMap = new ConcurrentHashMap<>();
+  private final Map<String, String> fabricToOfficialClassCache = new ConcurrentHashMap<>();
 
   // Map: [fabricClassName, officialFieldName] -> fabricFieldName
-  private final Map<ClassMemberKey, String> runtimeFieldMap = new ConcurrentHashMap<>();
+  private final Map<ClassMemberKey, String> runtimeFieldCache = new ConcurrentHashMap<>();
 
   // Map: [fabricClassName, officialMethodName] -> Set(fabricMethodNames)]
-  private final Map<ClassMemberKey, ImmutableSet<String>> runtimeMethodMap =
+  private final Map<ClassMemberKey, ImmutableSet<String>> runtimeMethodCache =
       new ConcurrentHashMap<>();
 
   private record ClassMemberKey(String className, String memberName) {}
@@ -86,7 +89,8 @@ public class ObfuscatedNameMappings implements NameMappings {
 
   @Override
   public String getRuntimeClassName(String prettyClassName) {
-    return officialToFabricClassMap.computeIfAbsent(prettyClassName, this::computeRuntimeClassName);
+    return officialToFabricClassCache.computeIfAbsent(
+        prettyClassName, this::computeRuntimeClassName);
   }
 
   private String computeRuntimeClassName(String prettyClassName) {
@@ -104,7 +108,8 @@ public class ObfuscatedNameMappings implements NameMappings {
 
   @Override
   public String getPrettyClassName(String runtimeClassName) {
-    return fabricToOfficialClassMap.computeIfAbsent(runtimeClassName, this::computePrettyClassName);
+    return fabricToOfficialClassCache.computeIfAbsent(
+        runtimeClassName, this::computePrettyClassName);
   }
 
   private String computePrettyClassName(String runtimeClassName) {
@@ -124,7 +129,7 @@ public class ObfuscatedNameMappings implements NameMappings {
   @Override
   public String getRuntimeFieldName(Class<?> clazz, String prettyFieldName) {
     var cacheKey = new ClassMemberKey(clazz.getName(), prettyFieldName);
-    return runtimeFieldMap.computeIfAbsent(
+    return runtimeFieldCache.computeIfAbsent(
         cacheKey,
         ignoreKey -> {
           Optional<String> optFabricFieldName =
@@ -155,9 +160,34 @@ public class ObfuscatedNameMappings implements NameMappings {
   }
 
   @Override
+  public Set<String> getPrettyFieldNames(Class<?> clazz) {
+    var fieldNames = new HashSet<String>();
+    getPrettyFieldNamesRecurse(clazz, fieldNames);
+    return fieldNames;
+  }
+
+  private void getPrettyFieldNamesRecurse(Class<?> clazz, HashSet<String> fieldNames) {
+    String obfuscatedClassName = fabricToObfuscatedClassMap.get(clazz.getName());
+    if (obfuscatedClassName == null) {
+      Arrays.stream(clazz.getFields()).map(Field::getName).forEach(fieldNames::add);
+      return; // No need to recurse since getFields() captures superclasses and interfaces.
+    }
+
+    officialFieldMap.keySet().stream()
+        .filter(key -> key.className().equals(obfuscatedClassName))
+        .map(key -> key.memberName())
+        .forEach(fieldNames::add);
+
+    if (clazz.getSuperclass() != null) {
+      getPrettyFieldNamesRecurse(clazz.getSuperclass(), fieldNames);
+    }
+    Arrays.stream(clazz.getInterfaces()).forEach(i -> getPrettyFieldNamesRecurse(i, fieldNames));
+  }
+
+  @Override
   public Set<String> getRuntimeMethodNames(Class<?> clazz, String prettyMethodName) {
     var cacheKey = new ClassMemberKey(clazz.getName(), prettyMethodName);
-    return runtimeMethodMap.computeIfAbsent(
+    return runtimeMethodCache.computeIfAbsent(
         cacheKey,
         ignoreKey -> {
           Set<String> fabricMethodNames = getFabricMethodNamesUncached(clazz, prettyMethodName, "");
@@ -181,6 +211,31 @@ public class ObfuscatedNameMappings implements NameMappings {
           }
           return ImmutableSet.copyOf(fabricMethodNames);
         });
+  }
+
+  @Override
+  public Set<String> getPrettyMethodNames(Class<?> clazz) {
+    var methodNames = new HashSet<String>();
+    getPrettyMethodNamesRecurse(clazz, methodNames);
+    return methodNames;
+  }
+
+  private void getPrettyMethodNamesRecurse(Class<?> clazz, HashSet<String> methodNames) {
+    String obfuscatedClassName = fabricToObfuscatedClassMap.get(clazz.getName());
+    if (obfuscatedClassName == null) {
+      Arrays.stream(clazz.getMethods()).map(Method::getName).forEach(methodNames::add);
+      return; // No need to recurse since getMethods() captures superclasses and interfaces.
+    }
+
+    obficialMethodNameToObfuscatedSigMethodMap.keySet().stream()
+        .filter(key -> key.className().equals(obfuscatedClassName))
+        .map(key -> key.memberName())
+        .forEach(methodNames::add);
+
+    if (clazz.getSuperclass() != null) {
+      getPrettyMethodNamesRecurse(clazz.getSuperclass(), methodNames);
+    }
+    Arrays.stream(clazz.getInterfaces()).forEach(i -> getPrettyMethodNamesRecurse(i, methodNames));
   }
 
   private Optional<String> getFabricFieldNameUncached(
@@ -345,7 +400,7 @@ public class ObfuscatedNameMappings implements NameMappings {
 
   public static Optional<ObfuscatedNameMappings> loadFromFiles(
       String modLoaderName, String mcVersion) throws IOException {
-    Path mappingsVersionPath = Paths.get("minescript", "mappings", mcVersion);
+    Path mappingsVersionPath = Paths.get("minescript", "system", "mappings", mcVersion);
     Files.createDirectories(mappingsVersionPath);
 
     Path officialMappingsPath = mappingsVersionPath.resolve("client.txt");

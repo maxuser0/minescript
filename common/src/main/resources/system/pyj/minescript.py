@@ -1,4 +1,3 @@
-#!python
 # SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: GPL-3.0-only
 
@@ -48,7 +47,7 @@ BlockPack = JavaClass("net.minescript.common.pyjinn.BlockPack")
 BlockPacker = JavaClass("net.minescript.common.pyjinn.BlockPacker")
 
 def __mcall__(name: str, args):
-  return Minescript.call(__script__.vars["job"], 0, name, args.getJavaList())
+  return Minescript.call(__script__.vars["job"], 0, name, JavaList(args))
 
 
 def execute(command: str):
@@ -237,7 +236,7 @@ def press_key_bind(key_mapping_name: str, pressed: bool):
 
   Since: v4.0
   """
-  return __mcall__("press_key_bind", [key_mapping_name, pressed])
+  return set_timeout(lambda: __mcall__("press_key_bind", [key_mapping_name, pressed]), 0)
 
 
 def player_press_forward(pressed: bool):
@@ -248,7 +247,7 @@ def player_press_forward(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_forward", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_forward", [pressed]), 0)
 
 
 def player_press_backward(pressed: bool):
@@ -259,7 +258,7 @@ def player_press_backward(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_backward", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_backward", [pressed]), 0)
 
 
 def player_press_left(pressed: bool):
@@ -270,7 +269,7 @@ def player_press_left(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_left", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_left", [pressed]), 0)
 
 
 def player_press_right(pressed: bool):
@@ -281,7 +280,7 @@ def player_press_right(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_right", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_right", [pressed]), 0)
 
 
 def player_press_jump(pressed: bool):
@@ -292,7 +291,7 @@ def player_press_jump(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_jump", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_jump", [pressed]), 0)
 
 
 def player_press_sprint(pressed: bool):
@@ -303,7 +302,7 @@ def player_press_sprint(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_sprint", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_sprint", [pressed]), 0)
 
 
 def player_press_sneak(pressed: bool):
@@ -314,7 +313,7 @@ def player_press_sneak(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_sneak", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_sneak", [pressed]), 0)
 
 
 def player_press_pick_item(pressed: bool):
@@ -325,7 +324,7 @@ def player_press_pick_item(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_pick_item", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_pick_item", [pressed]), 0)
 
 
 def player_press_use(pressed: bool):
@@ -336,7 +335,7 @@ def player_press_use(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_use", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_use", [pressed]), 0)
 
 
 def player_press_attack(pressed: bool):
@@ -347,7 +346,7 @@ def player_press_attack(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_attack", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_attack", [pressed]), 0)
 
 
 def player_press_swap_hands(pressed: bool):
@@ -358,7 +357,7 @@ def player_press_swap_hands(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_swap_hands", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_swap_hands", [pressed]), 0)
 
 
 def player_press_drop(pressed: bool):
@@ -369,7 +368,7 @@ def player_press_drop(pressed: bool):
 
   Since: v2.1
   """
-  return __mcall__("player_press_drop", [pressed])
+  return set_timeout(lambda: __mcall__("player_press_drop", [pressed]), 0)
 
 
 def player_orientation() -> List[float]:
@@ -718,3 +717,47 @@ def set_timeout(callback: Callable[[], None], timer_millis: int, *args) -> int:
 
   listener_id = add_event_listener("render", on_render)
   return listener_id
+
+class ManagedCallback:
+  """Wrapper for managing callbacks passed to Java APIs.
+
+  Example:
+    ```
+    callback = ManagedCallback(on_hud_render)
+    HudRenderCallback.EVENT.register(HudRenderCallback(callback))
+
+    # Cancel after 1 second (1000 milliseconds):
+    set_timeout(callback.cancel, 1000)
+    ```
+  """
+
+  def __init__(self, callback, cancel_on_exception=True, default_value=None):
+    """Creates a managed callback.
+
+    Args:
+      callback: a callable function or object to manage
+      cancel_on_exception: if the callback raises an exception, cancel the callback
+      default_value: value to return immediately if callback is called after being canceled
+    """
+    self.callback = callback
+    self.cancel_on_exception = cancel_on_exception
+    self.default_value = default_value
+    self.canceled = False
+    self.listener = add_event_listener("tick", lambda e: None)
+
+  def cancel(self):
+    """Cancels the callback, returning `default_value` if it continues to be called."""
+    self.canceled = True
+    remove_event_listener(self.listener)
+
+  def __call__(self, *args):
+    """Calls this callback, checking for cancellation."""
+    if self.canceled:
+      return self.default_value
+    try:
+      return self.callback(*args)
+    except Exception as e:
+      Minescript.reportException(e)
+      if self.cancel_on_exception:
+        self.cancel()
+      return self.default_value

@@ -78,6 +78,7 @@ public class PyjinnScript {
 
     private final Script script;
     private final PyjinnTask task;
+    private final boolean autoExit;
     private long nextFcallId = ASYNC_FCALL_START_ID;
     private boolean isRunningScriptGlobals = false;
     private boolean hasPendingCallbacksAfterExec = false;
@@ -90,6 +91,7 @@ public class PyjinnScript {
         Script script,
         Config config,
         SystemMessageQueue systemMessageQueue,
+        boolean autoExit,
         Runnable doneCallback) {
       super(
           jobId,
@@ -99,8 +101,9 @@ public class PyjinnScript {
           systemMessageQueue,
           Minescript::processMessage,
           doneCallback);
-      this.script = script;
       this.task = task;
+      this.script = script;
+      this.autoExit = autoExit;
     }
 
     Script script() {
@@ -112,11 +115,6 @@ public class PyjinnScript {
       setState(JobState.RUNNING);
 
       try {
-        script.vars.__setitem__("job", this);
-        script.vars.__setitem__("game", gameGlobalDict);
-        script.redirectStdout(this::processStdout);
-        script.redirectStderr(this::processStderr);
-        script.atExit(this::atExit);
         isRunningScriptGlobals = true;
         script.exec();
         isRunningScriptGlobals = false;
@@ -128,7 +126,7 @@ public class PyjinnScript {
         return;
       }
 
-      if (!hasPendingCallbacksAfterExec) {
+      if (autoExit && !hasPendingCallbacksAfterExec) {
         script.exit(0);
       }
     }
@@ -158,10 +156,8 @@ public class PyjinnScript {
 
     @Override
     public void requestKill() {
-      // Note that atExit() is called directly (not through script.exit()) when the sciript job is
-      // killed by the user.
       super.requestKill();
-      atExit(128);
+      script.exit(128);
     }
 
     @Override
@@ -170,22 +166,18 @@ public class PyjinnScript {
     }
   }
 
-  public static Job createJob(
+  public static PyjinnJob createJob(
       int jobId,
       ScriptConfig.BoundCommand boundCommand,
+      String[] command,
+      String scriptCode,
       Config config,
       SystemMessageQueue systemMessageQueue,
       NameMappings nameMappings,
+      boolean autoExit,
       Runnable doneCallback)
       throws Exception {
-    var execCommand = config.scriptConfig().getExecutableCommand(boundCommand);
-
-    var script =
-        loadScript(
-            execCommand.command(),
-            Files.readString(Paths.get(execCommand.command()[0])),
-            nameMappings);
-
+    var script = loadScript(command, scriptCode, nameMappings);
     var job =
         new PyjinnJob(
             jobId,
@@ -194,7 +186,14 @@ public class PyjinnScript {
             script,
             config,
             systemMessageQueue,
+            autoExit,
             doneCallback);
+
+    script.vars.__setitem__("job", job);
+    script.vars.__setitem__("game", gameGlobalDict);
+    script.redirectStdout(job::processStdout);
+    script.redirectStderr(job::processStderr);
+    script.atExit(job::atExit);
 
     return job;
   }
@@ -233,7 +232,7 @@ public class PyjinnScript {
       for (Path dir : importDirs) {
         Path path = dir.resolve(relativeImportPath);
         if (Files.exists(path)) {
-          LOGGER.info("Resovled import of {} to {}", name, path);
+          LOGGER.info("Resolved import of {} to {}", name, path);
           return path;
         }
       }
@@ -295,7 +294,7 @@ public class PyjinnScript {
     script.redirectStderr(s -> LOGGER.info("[{} stderr] {}", scriptShortName, s));
     script.setZombieCallbackHandler(
         (String scriptName, String callable, int count) -> {
-          if (count == 1 || count % 1000 == 0) {
+          if (count == 1 || count % 10000 == 0) {
             LOGGER.warn(
                 "[{} zombie] Invocation of {} (count: {}) defined in script that already"
                     + " exited: {}",
@@ -390,7 +389,7 @@ public class PyjinnScript {
           if (removedListener != null) {
             // If this is the last listener being removed and the job is no longer running global
             // statements, then kill the job.
-            if (job.task.callbackMap.isEmpty() && !job.isRunningScriptGlobals) {
+            if (job.autoExit && job.task.callbackMap.isEmpty() && !job.isRunningScriptGlobals) {
               script.exit(0);
             }
             return true;

@@ -6,7 +6,7 @@
 - [Pyjinn in Minescript 5.0](#pyjinn-in-minescript-50)
 - [Java Integration](#java-integration)
 - [Python Language Features](#python-language-features)
-- [Python 3.x features not supported by Pyjinn](#python-3x-features-not-supported-by-pyjinn)
+- [Python 3.x feature support](#python-3x-feature-support)
 
 ### What is Pyjinn?
 
@@ -98,16 +98,19 @@ if "Pyjinn" not in sys.version:
 
 ### Java Integration
 
-Import Java classes with `JavaClass()` which takes a string literal.
-Java classes are resolved at script parse time, not script execution time.
+
+#### JavaClass
+
+Import Java classes with `JavaClass()` which takes a string literal:
 
 ```
 List = JavaClass("java.util.List")
 ```
 
 `JavaClass` is Pyjinn's wrapper around a Java `Class<?>` and provides access to the class's
-constructors and static methods using function-call and method-call syntax. This is different from
-`Class<?>` instances which are metaclasses that provide access to reflection information.
+constructors using function-call syntax and static methods using method-call syntax. This is
+different from `Class<?>` instances which are metaclasses that provide access to reflection
+information. Calling `type()` on a `JavaClass` returns the Java metaclass (e.g. `String.class`).
 
 ```
 print(JavaClass("java.lang.String"))
@@ -127,37 +130,73 @@ print(type(42).MAX_VALUE)
 
 print(type(42)(99))
 # prints equivalent of `new Integer(99)`: 99
+
+print(type(Integer))
+# prints the metaclass Integer.class: class java.lang.Integer
+
+print(Integer.TYPE)
+# prints the int.class primitive type: int
 ```
+
+#### Calling static and non-static Java methods
 
 Call static method of Java class:
 ```
+List = JavaClass("java.util.List")
 java_list = List.of(1, 2, 3)
 ```
 
-Call method of Java object:
+Call non-static method of Java object:
 ```
 print(java_list.size())
+
+# Also available in Python-compatible form: len(java_list)
 ```
 
-Get Java List from Pyjinn list (does not make a copy):
+#### JavaList
+
+Get Java List from Pyjinn list (does **not** make a copy of the list or its elements):
 ```
-[1, 2, 3].getJavaList()
+java_list = JavaList([1, 2, 3])
 ```
 
-Get Java array from Pyjinn tuple (does not make a copy):
+#### JavaArray
+
+Get Java array (`Object[]`) from Pyjinn tuple:
 ```
-(1, 2, 3).getJavaArray()
+my_tuple = (1, 2, 3, "foo", "bar")
+java_array = JavaArray(my_tuple)
+print(len(java_array))  # Equivalent to the java code: java_array.length
 ```
 
-Java arrays and iterables are automatically treated as Pyjinn sequences:
+Java arrays and iterables are automatically treated as Pyjinn sequences and support slice notation:
 ```
-java_array = (1, 2, 3).getJavaArray()  # type of java_array is Object[]
+int_tuple = (1, 2, 3)
+java_array = JavaArray(int_tuple)  # type of java_array is Object[]
 for x in java_array:
   print(x)
 
-# Applies Python slice syntax to Object[]:
+# Applies Python slice syntax to a Java array and returns a
+# new Java array of the same type:
 print(java_array[-2:])
 ```
+
+Convert tuple to a Java array of a specific type, e.g. `int[]`, by passing a type as the second
+argument:
+```
+Integer = JavaClass("java.lang.Integer")
+
+# Equivalent to this Java code:
+# int[] java_int_array = new int[] { 1, 2, 3 };
+java_int_array = JavaArray((1, 2, 3), Integer.TYPE)
+
+print(type(java_int_array))  # prints: JavaClass("[I")
+```
+
+When converting a Pyjinn tuple to a Java array of a specific type, all elements of the tuple need to
+be assignable to the requested array type.
+
+#### Implementing Java interfaces in Pyjinn
 
 Pyjinn functions passed to methods with a parameter type that's a Java interface are automatically
 converted to implementations of that interface. In this example, `Stream::map` is a Java method that
@@ -165,7 +204,7 @@ takes a `Function<>` and `Stream::filter` takes a `Predicate<>`. Here, Pyjinn `l
 are passed to those Java methods to square the input number and filter for the resulting values that
 are even numbers:
 ```
-java_list = [x for x in range(10)].getJavaList()
+java_list = JavaList([x for x in range(10)])
 print(
     java_list.stream()
         .map(lambda x: x * x)
@@ -181,6 +220,64 @@ Runnable = JavaClass("java.lang.Runnable")
 x = Runnable(lambda: print("hello!"))
 x.run()  # prints: hello!
 ```
+
+#### Strings
+
+String objects in Pyjinn (e.g. `"this is a test"`) are instances of `java.lang.String`. Some
+Python-compatible methods can be called on Pyjinn strings (see [Python 3.x feature support:
+str](#str)), as well as the ~50 methods available to `java.lang.String`.
+
+Pyjinn strings support Python slice operations:
+```
+s = "foobarbaz"
+print(s[0])  # prints: f
+print(s[-1])  # prints: z
+print(s[3:])  # prints: barbaz
+print(s[3:6])  # prints: bar
+```
+
+Although `String` is a `final` class in Java that cannot be subclassed, Pyjinn strings act as though
+they're a subclass of `String`, extended with some Python-specific methods. (They're not actually a
+subclass of `String`, there's just logic built into the interpreter to allow additional methods to
+be called on `String` objects in Pyjinn scripts.)
+```
+# Python-compatible call to str.startswith():
+print("foo".startswith("o", 1))  # prints: True
+
+# Java call to String.startsWith() (note the different capitalization):
+print("foo".startsWith("f"))  # prints: True
+```
+
+Some string methods like `split()` have the same name across Python and Java but with different
+behavior.  For Pyjinn string methods that have Python-compatible behavior and there's a Java
+`String` method with the same name, Pyjinn strings by default behave like they do in Python. In rare
+cases where a script needs to access Java `String` functionality that conflicts with the
+Python-compatible `str` behavior, the Java behavior can be accessed by wrapping the string in
+`JavaString()`:
+```
+s = "this is a test"
+
+# Call Python-compatible str.split():
+print(s.split())  # prints: ["this", "is", "a", "test"]
+
+# Call Java String.split() which takes a regular expression:
+print(JavaString(s).split(r'\s+'))  # prints: ["this", "is", "a", "test"]
+```
+
+Although the return value of `JavaString(...)` gives access to all the Java methods of
+`java.lang.String` (without any of the Python-compatible methods), its runtime type is
+`org.pyjinn.interpreter.JavaString`.
+
+Both Pyjinn strings and `JavaString` objects can be passed without any explicit conversion to Java
+methods that expect `java.lang.String`. In the rare case that a `JavaString` needs to be converted
+explicitly back to `String`, a script can call its `toString()` method:
+```
+s = "foo"
+print(s is JavaString(s).toString())  # prints: True
+```
+
+`JavaString` is an advanced usage that should not be necessary in most scripts.
+
 
 ### Python Language Features
 
@@ -404,14 +501,16 @@ def FUNCTION_NAME(...):
     ...
 ```
 
-### Python 3.x features not supported by Pyjinn
+### Python 3.x feature support
 
-Language features **NOT** supported in Minescript 5.0b2 / Pyjinn 0.6:
+This section is current through Minescript 5.0b4 and Pyjinn 0.8.
+
+#### Langauage features
+
+Language features currently **NOT** supported by Pyjinn:
 
 - Python standard library (except for some basics in `sys` module: `sys.argv`,
   `sys.version`, `sys.stdout`, `sys.stderr`)
-- some `str` methods (strings in Pyjinn are `java.lang.String` augmented with
-  these common methods: `startswith()`, `endswith()`, and `join()`)
 - `**kwargs` on caller side and callee side of a function call (but individual keyword args are
   supported, e.g. `print("foo", file=sys.stderr)`)
 - `dict(k1=v1, k2=v2, ...)` syntax for constructing a dictionary (but `{k1: v1, k2: v2, ...}` is
@@ -431,4 +530,151 @@ Language features **NOT** supported in Minescript 5.0b2 / Pyjinn 0.6:
   are supported)
 - user-defined decorators
 - Python-style metaclasses
+- floor division operator: `//`
+
+#### str
+
+- `class str` (runtime type is `java.lang.String`)
+  - `endswith(prefix: str, start: int = None, end: int = None) -> bool`
+  - `find(sub: str, start: int = None, end: int = None) -> int`
+  - `join(iterable) -> str`
+  - `lower() -> str`
+  - `lstrip(chars: str = None) -> str`
+  - `replace(old: str, new: str, count: int = -1) -> str`
+  - `rstrip(chars: str = None) -> str`
+  - `split(sep: str = None, maxsplit: int = -1)`
+  - `startswith(prefix: str, start: int = None, end: int = None) -> bool`
+  - `strip(chars: str = None) -> str`
+  - `upper() -> str`
+  - plus ~50 methods from `java.lang.String` (see [Java Integration: Strings](#strings))
+
+#### tuple
+
+- `class tuple` (runtime type is `org.pyjinn.interpreter.Script.PyTuple`)
+  - `__add__(value) -> tuple`
+  - `__contains__(key) -> bool`
+  - `__eq__(value) -> bool`
+  - `__ne__(value) -> bool`
+  - `__len__() -> int`
+  - `__getitem__(key)`
+  - `count(value) -> int`
+  - `index(value) -> int`
+
+#### list
+
+- `class list` (runtime type is `org.pyjinn.interpreter.Script.PyList`)
+  - `__add__(value) -> list`
+  - `__contains__(key) -> bool`
+  - `__delitem__(key)`
+  - `__eq__(value) -> bool`
+  - `__ne__(value) -> bool`
+  - `__iadd__(value)`
+  - `__len__() -> int`
+  - `__getitem__(key)`
+  - `__setitem__(key, value)`
+  - `append(object)`
+  - `clear()`
+  - `copy() -> list`
+  - `count(value) -> int`
+  - `extend(iterable)`
+  - `index(value) -> int`
+  - `insert(index: int, object)`
+  - `pop()`
+  - `pop(index: int)`
+  - `remove(value)`
+  - `reverse()`
+  - `sort()`
+
+#### dict
+
+- `class dict` (runtime type is `org.pyjinn.interpreter.Script.PyDict`)
+  - `items() -> iterable`
+  - `keys() -> iterable`
+  - `values() -> iterable`
+  - `__len__() -> int`
+  - `get(key)`
+  - `get(key, default_value)`
+  - `setdefault(key)`
+  - `setdefault(key, default_value)`
+  - `__getitem__(key)`
+  - `__setitem__(key, value)`
+  - `__contains__(key) -> bool`
+  - `__delitem__(key)`
+
+
+#### Built-in functions
+
+Status of built-in function support in Pyjinn:
+
+- `abs()` - yes
+- `aiter()` - no
+- `all()` - no
+- `anext()` - no
+- `any()` - no
+- `ascii()` - no
+- `bin()` - no
+- `bool()` - yes
+- `breakpoint()` - no
+- `bytearray()` - no
+- `bytes()` - no
+- `callable()` - no
+- `chr()` - yes
+- `classmethod()` - yes
+- `compile()` - no
+- `complex()` - no
+- `delattr()` - no
+- `dict()` - yes
+- `dir()` - no
+- `divmod()` - no
+- `enumerate()` - yes
+- `eval()` - no
+- `exec()` - no
+- `filter()` - no
+- `float()` - yes
+- `format()` - no
+- `frozenset()` - no
+- `getattr()` - no
+- `globals()` - yes
+- `hasattr()` - no
+- `hash()` - no
+- `help()` - no
+- `hex()` - yes
+- `id()` - no
+- `input()` - no
+- `int()` - yes
+- `isinstance()` - no
+- `issubclass()` - no
+- `iter()` - no
+- `len()` - yes (supported for both Python-compatible types and Java iterable types)
+- `list()` - yes
+- `locals()` - no
+- `map()` - no
+- `max()` - yes
+- `memoryview()` - no
+- `min()` - yes
+- `next()` - no
+- `object()` - no
+- `oct()` - no
+- `open()` - no
+- `ord()` - yes
+- `pow()` - no
+- `print()` - yes
+- `property()` - no
+- `range()` - yes
+- `repr()` - no
+- `reversed()` - no
+- `round()` - yes
+- `set()` - no
+- `setattr()` - no
+- `slice()` - no
+- `sorted()` - no
+- `staticmethod()` - yes
+- `str()` - yes
+- `sum()` - yes
+- `super()` - no
+- `tuple()` - yes
+- `type()` - yes
+- `vars()` - no
+- `zip()` - no
+- `__import__()` - no
 

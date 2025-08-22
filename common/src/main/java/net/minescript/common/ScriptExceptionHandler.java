@@ -24,6 +24,9 @@ class ScriptExceptionHandler {
     for (int i = frames.length - 1; i >= 0; --i) {
       var frame = frames[i];
       var filename = frame.getFileName();
+      if (filename == null) {
+        continue;
+      }
       if (filename.toLowerCase().endsWith(".py") || filename.toLowerCase().endsWith(".pyj")) {
         out.append("  File \"%s\", line %d\n".formatted(filename, frame.getLineNumber()));
       }

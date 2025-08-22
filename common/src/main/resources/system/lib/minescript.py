@@ -2565,6 +2565,22 @@ def java_array_index(array: JavaHandle, i: int) -> Union[JavaHandle, None]:
 
 java_array_index = ScriptFunction("java_array_index", java_array_index)
 
+def java_new_array(element_type: JavaHandle, *elements: List[JavaHandle]) -> JavaHandle:
+  """Creates a new Java array of the given element type with the given elements.
+
+  Args:
+    element_type: handle to Java class (Class<?>) to use for the new array's type
+    elements: handles to Java objects to populate the new array
+
+  Returns:
+    handle to new Java array.
+
+  Since: v5.0
+  """
+  return (element_type, *elements)
+
+java_new_array = ScriptFunction("java_new_array", java_new_array)
+
 def java_to_string(target: JavaHandle) -> str:
   """Returns Python string from calling `target.toString()` in Java.
   Since: v4.0
@@ -2584,6 +2600,28 @@ def java_assign(dest: JavaHandle, source: JavaHandle):
   return (dest, source)
 
 java_assign = ScriptFunction("java_assign", java_assign)
+
+def java_field_names(klass: JavaHandle) -> List[str]:
+  """Returns a list of fields names for the class referenced by handle `klass`.
+
+  If mappings are installed, official field names are returned.
+
+  Since: v5.0
+  """
+  return (klass,)
+
+java_field_names = ScriptFunction("java_field_names", java_field_names)
+
+def java_method_names(klass: JavaHandle) -> List[str]:
+  """Returns a list of methods names for the class referenced by handle `klass`.
+
+  If mappings are installed, official method names are returned.
+
+  Since: v5.0
+  """
+  return (klass,)
+
+java_method_names = ScriptFunction("java_method_names", java_method_names)
 
 def java_release(*targets: List[JavaHandle]):
   """Releases Java reference(s) referred to by `targets`.

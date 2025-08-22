@@ -25,8 +25,7 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
+import java.lang.reflect.Array;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -226,16 +225,22 @@ public class Minescript {
     new File(execDir.toString()).mkdirs();
 
     copyJarResourceToFile("version.txt", systemDir, FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("minescript.py", libDir, FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("minescript_runtime.py", libDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/lib/minescript.py", libDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/lib/java.py", libDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile(
-        "minescript.pyj", pyjDir, "minescript.py", FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("sys.pyj", pyjDir, "sys.py", FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("help.py", execDir, FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("copy_blocks.py", execDir, FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("paste.py", execDir, FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("eval.pyj", execDir, FileOverwritePolicy.OVERWRITTE);
-    copyJarResourceToFile("pyeval.py", execDir, FileOverwritePolicy.OVERWRITTE);
+        "system/lib/minescript_runtime.py", libDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/pyj/minescript.py", pyjDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/pyj/sys.py", pyjDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/pyj/json.py", pyjDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/pyj/pathlib.py", pyjDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/exec/help.py", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/exec/copy_blocks.py", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/exec/paste.py", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile(
+        "system/exec/install_mappings.pyj", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/exec/eval.pyj", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/exec/pyeval.py", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/exec/pyinterpreter.py", execDir, FileOverwritePolicy.OVERWRITTE);
   }
 
   private static void deleteMinescriptFile(Path dir, String fileName) {
@@ -377,8 +382,10 @@ public class Minescript {
 
   /** Copies resource from jar to a same-named file in the minescript dir.. */
   private static void copyJarResourceToFile(
-      String resourceName, Path dir, FileOverwritePolicy overwritePolicy) {
-    copyJarResourceToFile(resourceName, dir, resourceName, overwritePolicy);
+      String resourcePath, Path dir, FileOverwritePolicy overwritePolicy) {
+    // The rhs expression works even when '/' isn't found, because -1 + 1 = 0.
+    String filename = resourcePath.substring(resourcePath.lastIndexOf('/') + 1);
+    copyJarResourceToFile(resourcePath, dir, filename, overwritePolicy);
   }
 
   /** Copies resource from jar to a file in the minescript dir. */
@@ -681,7 +688,7 @@ public class Minescript {
   }
 
   static class ScheduledTaskList implements JobControl.Operation {
-    private final Job.ExternalJob job;
+    private final Job.SubprocessJob job;
     private final String name;
     private final List<?> tasks;
     private final Runnable doneCallback;
@@ -689,7 +696,7 @@ public class Minescript {
     private boolean suspended = false;
 
     public ScheduledTaskList(
-        Job.ExternalJob job, String name, List<?> tasks, Runnable doneCallback) {
+        Job.SubprocessJob job, String name, List<?> tasks, Runnable doneCallback) {
       this.job = job;
       this.name = name;
       this.tasks = tasks;
@@ -761,16 +768,21 @@ public class Minescript {
 
     private final Deque<UndoableAction> undoStack = new ArrayDeque<>();
 
-    public void createInternalJob(ScriptConfig.BoundCommand command, List<Token> nextCommand) {
+    public void createPyjinnJob(ScriptConfig.BoundCommand command, List<Token> nextCommand) {
       try {
+        var execCommand = config.scriptConfig().getExecutableCommand(command);
+        String scriptCode = Files.readString(Paths.get(execCommand.command()[0]));
         int jobId = allocateJobId();
         var job =
             PyjinnScript.createJob(
                 jobId,
                 command,
+                execCommand.command(),
+                scriptCode,
                 config,
                 systemMessageQueue,
                 mappingsLoader.get(),
+                /* autoExit= */ true,
                 () -> finishJob(jobId, nextCommand));
         jobMap.put(job.jobId(), job);
         job.start();
@@ -779,10 +791,70 @@ public class Minescript {
       }
     }
 
-    public void createExternalJob(ScriptConfig.BoundCommand command, List<Token> nextCommand) {
+    public Script createPyjinnSubjob(Job.SubprocessJob parentJob, long opId, String scriptCode)
+        throws Exception {
+      var parentCommand = parentJob.boundCommand();
+      String scriptName =
+          "eval_pyjinn_script(): job[%d] script[%d]".formatted(parentJob.jobId(), opId);
+      String[] childCommandArray = new String[] {scriptName};
+      var childCommand =
+          new ScriptConfig.BoundCommand(
+              parentCommand.scriptPath(), childCommandArray, parentCommand.redirects());
+      int jobId = allocateJobId();
+      var scriptJob =
+          PyjinnScript.createJob(
+              jobId,
+              childCommand,
+              childCommandArray,
+              scriptCode,
+              config,
+              systemMessageQueue,
+              mappingsLoader.get(),
+              /* autoExit= */ false,
+              () -> finishJob(jobId, /* nextCommand= */ List.of()));
+      jobMap.put(scriptJob.jobId(), scriptJob);
+      parentJob.addOperation(opId, new PyjinnScriptOperation(scriptName, scriptJob));
+      scriptJob.start();
+      return scriptJob.script();
+    }
+
+    private class PyjinnScriptOperation implements Job.Operation {
+      private final String name;
+      private final PyjinnScript.PyjinnJob job;
+      private final AtomicBoolean done = new AtomicBoolean(false);
+
+      PyjinnScriptOperation(String name, PyjinnScript.PyjinnJob job) {
+        this.name = name;
+        this.job = job;
+        job.script().atExit(status -> done.set(true));
+      }
+
+      @Override
+      public String name() {
+        return name;
+      }
+
+      @Override
+      public void suspend() {
+        job.suspend();
+      }
+
+      @Override
+      public boolean resumeAndCheckDone() {
+        job.resume();
+        return done.get();
+      }
+
+      @Override
+      public void cancel() {
+        job.script().exit(0);
+      }
+    }
+
+    public void createSubprocessJob(ScriptConfig.BoundCommand command, List<Token> nextCommand) {
       int jobId = allocateJobId();
       var job =
-          new Job.ExternalJob(
+          new Job.SubprocessJob(
               jobId,
               command,
               new SubprocessTask(config),
@@ -824,7 +896,7 @@ public class Minescript {
       // TODO(maxuser): Migrate undo to Job.InternalJob.
       int jobId = allocateJobId();
       var undoJob =
-          new Job.ExternalJob(
+          new Job.SubprocessJob(
               jobId,
               new ScriptConfig.BoundCommand(
                   null, undo.derivativeCommand(), ScriptRedirect.Pair.DEFAULTS),
@@ -1464,14 +1536,14 @@ public class Minescript {
 
       if (commandPath.getFileName().toString().toLowerCase().endsWith(".pyj")) {
         try {
-          jobs.createInternalJob(boundCommand, nextCommand);
+          jobs.createPyjinnJob(boundCommand, nextCommand);
         } catch (Exception e) {
           systemMessageQueue.logException(e);
         }
         return;
       }
 
-      jobs.createExternalJob(boundCommand, nextCommand);
+      jobs.createSubprocessJob(boundCommand, nextCommand);
 
     } catch (RuntimeException e) {
       systemMessageQueue.logException(e);
@@ -2330,7 +2402,7 @@ public class Minescript {
   private static final Optional<JsonElement> OPTIONAL_JSON_TRUE = Optional.of(JSON_TRUE);
 
   public static void processScriptFunction(
-      Job.ExternalJob job, String functionName, long funcCallId, List<?> parsedArgs) {
+      Job.SubprocessJob job, String functionName, long funcCallId, List<?> parsedArgs) {
     var funcCall = new ScriptFunctionCall(functionName, parsedArgs);
     try {
       Optional<JsonElement> response = runExternalScriptFunction(job, funcCallId, funcCall);
@@ -3043,7 +3115,7 @@ public class Minescript {
 
   /** Returns a JSON response if a script function is called. */
   private static Optional<JsonElement> runExternalScriptFunction(
-      Job.ExternalJob job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
+      Job.SubprocessJob job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
     final String functionName = functionCall.name();
     final ScriptFunctionCall.ArgList args = functionCall.args();
 
@@ -3442,17 +3514,18 @@ public class Minescript {
           for (int i = 0; i < params.length; ++i) {
             params[i] = job.objects.getById(args.getStrictLong(i + 1));
           }
-          Optional<Constructor<?>> ctor =
+          Class<?>[] paramTypes = Script.TypeChecker.getTypes(params);
+          var ctor =
               Script.TypeChecker.findBestMatchingConstructor(
-                  klass.type(), params, /* diagnostics= */ null);
+                  klass.type(), paramTypes, /* diagnostics= */ null);
           if (ctor.isEmpty()) {
             // Re-run type checker with same args but with error diagnostics for creating exception.
             var diagnostics =
                 new Script.TypeChecker.Diagnostics(mappingsLoader.get()::getPrettyClassName);
-            Script.TypeChecker.findBestMatchingConstructor(klass.type(), params, diagnostics);
+            Script.TypeChecker.findBestMatchingConstructor(klass.type(), paramTypes, diagnostics);
             throw diagnostics.createTruncatedException();
           }
-          var result = ctor.get().newInstance(params);
+          var result = ctor.get().newInstance(/* env= */ null, params);
           return Optional.of(new JsonPrimitive(job.objects.retain(result)));
         }
 
@@ -3473,16 +3546,17 @@ public class Minescript {
           for (int i = 0; i < params.length; ++i) {
             params[i] = job.objects.getById(args.getStrictLong(i + 2));
           }
+          Class<?>[] paramTypes = Script.TypeChecker.getTypes(params);
 
           boolean isStaticMethod = target == null;
           var classForLookup = target == null ? member.type() : target.getClass();
-          Optional<Method> method =
+          var method =
               Script.TypeChecker.findBestMatchingMethod(
                   classForLookup,
                   isStaticMethod,
                   mappingsLoader.get()::getRuntimeMethodNames,
                   member.name(),
-                  params,
+                  paramTypes,
                   /* diagnostics= */ null);
           if (method.isEmpty()) {
             // Re-run type checker with same args but with error diagnostics for creating exception.
@@ -3493,11 +3567,11 @@ public class Minescript {
                 isStaticMethod,
                 mappingsLoader.get()::getRuntimeMethodNames,
                 member.name(),
-                params,
+                paramTypes,
                 diagnostics);
             throw diagnostics.createTruncatedException();
           }
-          var result = method.get().invoke(target, params);
+          var result = method.get().invoke(/* env= */ null, target, params);
           return Optional.of(new JsonPrimitive(job.objects.retain(result)));
         }
 
@@ -3564,6 +3638,69 @@ public class Minescript {
           return Optional.of(new JsonPrimitive(job.objects.retain(result)));
         }
 
+      case "java_new_array":
+        {
+          if (args.size() == 0) {
+            throw new IllegalArgumentException("java_new_array has 1 required arg but got no args");
+          }
+          Object argId0 = job.objects.getById(args.getStrictLong(0));
+          if (argId0 instanceof Class<?> clazz) {
+            int arraySize = args.size() - 1;
+            Object specificArray = Array.newInstance(clazz, arraySize);
+            if (clazz.isPrimitive()) {
+              if (clazz == byte.class) {
+                for (int i = 0; i < arraySize; ++i) {
+                  Array.setByte(
+                      specificArray, i, (Byte) job.objects.getById(args.getStrictLong(i + 1)));
+                }
+              } else if (clazz == int.class) {
+                for (int i = 0; i < arraySize; ++i) {
+                  Array.setInt(
+                      specificArray, i, (Integer) job.objects.getById(args.getStrictLong(i + 1)));
+                }
+              } else if (clazz == long.class) {
+                for (int i = 0; i < arraySize; ++i) {
+                  Array.setLong(
+                      specificArray, i, (Long) job.objects.getById(args.getStrictLong(i + 1)));
+                }
+              } else if (clazz == float.class) {
+                for (int i = 0; i < arraySize; ++i) {
+                  Array.setFloat(
+                      specificArray, i, (Float) job.objects.getById(args.getStrictLong(i + 1)));
+                }
+              } else if (clazz == double.class) {
+                for (int i = 0; i < arraySize; ++i) {
+                  Array.setDouble(
+                      specificArray, i, (Double) job.objects.getById(args.getStrictLong(i + 1)));
+                }
+              } else if (clazz == char.class) {
+                for (int i = 0; i < arraySize; ++i) {
+                  Array.setChar(
+                      specificArray, i, (Character) job.objects.getById(args.getStrictLong(i + 1)));
+                }
+              } else if (clazz == short.class) {
+                for (int i = 0; i < arraySize; ++i) {
+                  Array.setShort(
+                      specificArray, i, (Short) job.objects.getById(args.getStrictLong(i + 1)));
+                }
+              } else {
+                throw new IllegalArgumentException(
+                    "Unexpected primitive type '%s' passed as first param to java_new_array"
+                        .formatted(clazz.getName()));
+              }
+            } else {
+              for (int i = 0; i < arraySize; ++i) {
+                Array.set(specificArray, i, job.objects.getById(args.getStrictLong(i + 1)));
+              }
+            }
+            return Optional.of(new JsonPrimitive(job.objects.retain(specificArray)));
+          } else {
+            throw new IllegalArgumentException(
+                "Expected first arg to java_new_array to be a Java class (Class<?>) but got %s"
+                    .formatted(argId0 == null ? "null" : argId0.getClass().getName()));
+          }
+        }
+
       case "java_to_string":
         {
           args.expectSize(1);
@@ -3580,6 +3717,40 @@ public class Minescript {
           return OPTIONAL_JSON_NULL;
         }
 
+      case "java_field_names":
+        {
+          args.expectSize(1);
+          var object = job.objects.getById(args.getStrictLong(0));
+          if (object instanceof Class<?> klass) {
+            var array = new JsonArray();
+            mappingsLoader.get().getPrettyFieldNames(klass).stream().forEach(array::add);
+            return Optional.of(array);
+          } else {
+            throw new IllegalArgumentException(
+                String.format(
+                    "Expected arg to java_field_names to be a handle to a Java"
+                        + " Class but got `%s` instead: %s",
+                    object.getClass().getName(), object));
+          }
+        }
+
+      case "java_method_names":
+        {
+          args.expectSize(1);
+          var object = job.objects.getById(args.getStrictLong(0));
+          if (object instanceof Class<?> klass) {
+            var array = new JsonArray();
+            mappingsLoader.get().getPrettyMethodNames(klass).stream().forEach(array::add);
+            return Optional.of(array);
+          } else {
+            throw new IllegalArgumentException(
+                String.format(
+                    "Expected arg to java_method_names to be a handle to a Java"
+                        + " Class but got `%s` instead: %s",
+                    object.getClass().getName(), object));
+          }
+        }
+
       case "java_release":
         for (var arg : args.rawArgs()) {
           // For convenience, don't complain if a script attempts to release ID 0 which represents
@@ -3591,6 +3762,14 @@ public class Minescript {
           }
         }
         return OPTIONAL_JSON_NULL;
+
+      case "eval_pyjinn_script":
+        {
+          args.expectSize(1);
+          String scriptCode = args.getString(0);
+          var script = jobs.createPyjinnSubjob(job, funcCallId, scriptCode);
+          return Optional.of(new JsonPrimitive(job.objects.retain(script)));
+        }
 
       case "run_tasks":
         return Optional.of(runTasks(job, args.rawArgs()));
@@ -3666,7 +3845,7 @@ public class Minescript {
   }
 
   private static JsonElement scheduleTasks(
-      Job.ExternalJob job,
+      Job.SubprocessJob job,
       long funcCallId,
       Map<JobOperationId, ScheduledTaskList> taskLists,
       List<?> tasks)
@@ -3695,7 +3874,7 @@ public class Minescript {
     SKIP_TASKS // The remaining tasks in the list are skipped.
   }
 
-  private static JsonElement runTasks(Job.ExternalJob job, List<?> tasks) throws Exception {
+  private static JsonElement runTasks(Job.SubprocessJob job, List<?> tasks) throws Exception {
     var taskValues = new HashMap<Long, Supplier<Object>>();
     JsonElement tasksResult = JsonNull.INSTANCE;
     TaskFlowControl[] flowControl = {TaskFlowControl.NORMAL_FLOW};
@@ -3724,7 +3903,7 @@ public class Minescript {
 
   // flowControl is an array of length 1 to allow an output value without altering the return type.
   private static JsonElement runTask(
-      Job.ExternalJob job,
+      Job.SubprocessJob job,
       List<?> argList,
       Map<Long, Supplier<Object>> taskValues,
       TaskFlowControl[] flowControl)
@@ -3933,6 +4112,10 @@ public class Minescript {
     }
   }
 
+  public static void reportException(Throwable e) {
+    ScriptExceptionHandler.reportException(systemMessageQueue, e);
+  }
+
   public static void processMessageQueue(
       boolean processSystemMessages, Function<JobControl, Message> jobMessageQueue) {
     var minecraft = Minecraft.getInstance();
@@ -3951,7 +4134,7 @@ public class Minescript {
       }
       for (var job : jobs.getMap().values()) {
         if (job.state() == JobState.RUNNING || job.state() == JobState.DONE) {
-          if (job instanceof Job.ExternalJob externalJob) {
+          if (job instanceof Job.SubprocessJob externalJob) {
             try {
               Message message = jobMessageQueue.apply(externalJob);
               if (message != null) {
