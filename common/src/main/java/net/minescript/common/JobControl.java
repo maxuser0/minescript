@@ -3,11 +3,14 @@
 
 package net.minescript.common;
 
+import java.util.Optional;
 import java.util.Queue;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 
 public interface JobControl {
   int jobId();
+
+  Optional<Integer> parentJobId();
 
   ScriptConfig.BoundCommand boundCommand();
 

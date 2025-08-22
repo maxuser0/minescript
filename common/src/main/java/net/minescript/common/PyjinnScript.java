@@ -86,6 +86,7 @@ public class PyjinnScript {
 
     public PyjinnJob(
         int jobId,
+        Optional<Integer> parentJobId,
         ScriptConfig.BoundCommand command,
         PyjinnTask task,
         Script script,
@@ -95,6 +96,7 @@ public class PyjinnScript {
         Runnable doneCallback) {
       super(
           jobId,
+          parentJobId,
           command,
           task,
           config,
@@ -168,6 +170,7 @@ public class PyjinnScript {
 
   public static PyjinnJob createJob(
       int jobId,
+      Optional<Integer> parentJobId,
       ScriptConfig.BoundCommand boundCommand,
       String scriptCode,
       Config config,
@@ -180,6 +183,7 @@ public class PyjinnScript {
     var job =
         new PyjinnJob(
             jobId,
+            parentJobId,
             boundCommand,
             new PyjinnTask(systemMessageQueue),
             script,

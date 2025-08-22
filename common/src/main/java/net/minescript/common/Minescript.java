@@ -715,6 +715,7 @@ public class Minescript {
         var job =
             PyjinnScript.createJob(
                 jobId,
+                /* parentJobId= */ Optional.empty(),
                 command,
                 scriptCode,
                 config,
@@ -740,6 +741,7 @@ public class Minescript {
       var scriptJob =
           PyjinnScript.createJob(
               jobId,
+              Optional.of(parentJob.jobId()),
               childCommand,
               scriptCode,
               config,
@@ -791,6 +793,7 @@ public class Minescript {
       var job =
           new Job.SubprocessJob(
               jobId,
+              /* parentJobId= */ Optional.empty(),
               command,
               new SubprocessTask(config),
               config,
@@ -828,11 +831,12 @@ public class Minescript {
         }
       }
 
-      // TODO(maxuser): Migrate undo to Job.InternalJob.
+      // TODO(maxuser): Migrate undo to Job.InprocessJob.
       int jobId = allocateJobId();
       var undoJob =
           new Job.SubprocessJob(
               jobId,
+              /* parentJobId= */ Optional.empty(),
               new ScriptConfig.BoundCommand(
                   null, undo.derivativeCommand(), ScriptRedirect.Pair.DEFAULTS),
               new UndoTask(undo),
@@ -945,13 +949,15 @@ public class Minescript {
     return result.toString();
   }
 
-  private static void listJobs() {
+  private static void listJobs(boolean allJobs) {
     if (jobs.getMap().isEmpty()) {
       systemMessageQueue.logUserInfo("There are no jobs running.");
       return;
     }
     for (var job : jobs.getMap().values()) {
-      systemMessageQueue.logUserInfo(job.toString());
+      if (allJobs || job.parentJobId().isEmpty()) {
+        systemMessageQueue.logUserInfo(job.toString());
+      }
     }
   }
 
@@ -1197,7 +1203,7 @@ public class Minescript {
         return true;
       case "jobs":
         systemMessageQueue.logUserInfo("{} (built-in command)", command);
-        systemMessageQueue.logUserInfo("Usage: \\jobs");
+        systemMessageQueue.logUserInfo("Usage: \\jobs [all]");
         systemMessageQueue.logUserInfo("Lists currently running (or suspended) script jobs.");
         return true;
       case "suspend":
@@ -1297,8 +1303,10 @@ public class Minescript {
           break;
 
         case "jobs":
-          if (checkParamTypes(command)) {
-            listJobs();
+          boolean noParams = checkParamTypes(command);
+          boolean allParam = checkParamTypes(command, ParamType.STRING) && command[1].equals("all");
+          if (noParams || allParam) {
+            listJobs(allParam);
           } else {
             systemMessageQueue.logUserError(
                 "Expected no params, instead got `{}`", getParamsAsString(command));
@@ -2878,9 +2886,10 @@ public class Minescript {
                             j.boundCommand().command(),
                             path == null ? null : path.toString(),
                             j.state().name(),
+                            j.parentJobId().orElse(null),
                             j == job));
                   });
-          return ScriptValue.of(result.toArray(JobInfo[]::new));
+          return ScriptValue.ofNullables(result.toArray(JobInfo[]::new));
         }
 
       case "append_chat_history":

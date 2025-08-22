@@ -150,7 +150,8 @@ class JobInfo:
   command: List[str]
   source: str
   status: str
-  self: bool = False
+  parent_job_id: Union[int, None]
+  self: bool
 
 def job_info() -> List[JobInfo]:
   """Return info about active Minescript jobs.

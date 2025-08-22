@@ -4,6 +4,7 @@
 package net.minescript.common;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonPrimitive;
@@ -44,6 +45,11 @@ public class ScriptValue {
 
   public static <T> ScriptValue of(T[] value) {
     return new ScriptValue(value, () -> new Gson().toJsonTree(value));
+  }
+
+  public static <T> ScriptValue ofNullables(T[] value) {
+    return new ScriptValue(
+        value, () -> new GsonBuilder().serializeNulls().create().toJsonTree(value));
   }
 
   public static ScriptValue fromJson(JsonElement value) {
