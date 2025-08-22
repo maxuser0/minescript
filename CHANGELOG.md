@@ -7,6 +7,16 @@
 - To set up Fabric mappings for Pyjinn scripts see
   [minescript.net/mappings](https://minescript.net/mappings)
 
+## Minescript 5.0b5
+
+- List child jobs with `\jobs all`, hide otherwise ([fdeab5f](https://github.com/maxuser0/minescript/commit/fdeab5f589567ba09502dc294f93db3e2b1fff03))
+- Fix missing JobInfo.self returned from job_info() ([f733d2e](https://github.com/maxuser0/minescript/commit/f733d2e508f4dd4a8715a1cbf994c37f8d46c5c2))
+- Update Minescript version to 5.0b5 ([63c993c](https://github.com/maxuser0/minescript/commit/63c993cb23084491e79b30ef73b3e88febdb3712))
+- Remove obsolete Task support given embedded Pyjinn ([877aa2a](https://github.com/maxuser0/minescript/commit/877aa2a3d666832ebd0a1edfd174bc0ea5aa13d1))
+- Fix bug in embedded Pyjinn scripts on Windows ([ba2c188](https://github.com/maxuser0/minescript/commit/ba2c1888096cd019e4b2d329b9efc9955d2666dd))
+- Add pyjinn_test() to minescript_test.py ([836b685](https://github.com/maxuser0/minescript/commit/836b68570c980adea50d1a526f5b911b8a56854e))
+
+
 ## Minescript 5.0b4
 
 - Improve integration of Pyjinn embedded in Python ([86820d8](https://github.com/maxuser0/minescript/commit/86820d8a43f9815a3371298deaab86eaba1b299d))
