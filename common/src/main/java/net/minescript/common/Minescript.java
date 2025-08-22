@@ -732,7 +732,7 @@ public class Minescript {
     public Script createPyjinnSubjob(Job.SubprocessJob parentJob, long opId, String scriptCode)
         throws Exception {
       var parentCommand = parentJob.boundCommand();
-      String scriptName = "eval_pyjinn_script.%d.%d".formatted(parentJob.jobId(), opId);
+      String scriptName = "eval_pyjinn_script-%d-%d".formatted(parentJob.jobId(), opId);
       var childCommand =
           new ScriptConfig.BoundCommand(
               parentCommand.scriptPath(), new String[] {scriptName}, parentCommand.redirects());
@@ -2878,7 +2878,7 @@ public class Minescript {
                             j.boundCommand().command(),
                             path == null ? null : path.toString(),
                             j.state().name(),
-                            j == job ? Boolean.valueOf(true) : null));
+                            j == job));
                   });
           return ScriptValue.of(result.toArray(JobInfo[]::new));
         }

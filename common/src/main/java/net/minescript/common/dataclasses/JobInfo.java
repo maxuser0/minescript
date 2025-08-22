@@ -8,13 +8,13 @@ import com.google.gson.JsonElement;
 import net.minescript.common.Jsonable;
 
 public class JobInfo extends Jsonable {
-  public int job_id;
-  public String[] command;
-  public String source;
-  public String status;
-  public Boolean self;
+  public final int job_id;
+  public final String[] command;
+  public final String source;
+  public final String status;
+  public final Boolean self;
 
-  public JobInfo(int job_id, String[] command, String source, String status, Boolean self) {
+  public JobInfo(int job_id, String[] command, String source, String status, boolean self) {
     this.job_id = job_id;
     this.command = command;
     this.source = source;
