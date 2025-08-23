@@ -9,6 +9,8 @@
 
 ## Minescript 5.0b5
 
+- Update docs for Minescript 5.0 and Pyjinn ([75a2815](https://github.com/maxuser0/minescript/commit/75a28157216374b5b9d668a0b3e46d459b5ea665))
+- Suppress chat messages about exit of child jobs ([7bdf4de](https://github.com/maxuser0/minescript/commit/7bdf4de704dada599e7b3974524dc31aa1099e17))
 - List child jobs with `\jobs all`, hide otherwise ([fdeab5f](https://github.com/maxuser0/minescript/commit/fdeab5f589567ba09502dc294f93db3e2b1fff03))
 - Fix missing JobInfo.self returned from job_info() ([f733d2e](https://github.com/maxuser0/minescript/commit/f733d2e508f4dd4a8715a1cbf994c37f8d46c5c2))
 - Update Minescript version to 5.0b5 ([63c993c](https://github.com/maxuser0/minescript/commit/63c993cb23084491e79b30ef73b3e88febdb3712))
