@@ -282,45 +282,13 @@ def await_script_function(
   return future_value.wait()
 
 
-@dataclass
-class BasicTask:
-  fcallid: int
-  func_name: str
-  immediate_args: Tuple[Any, ...]
-  deferred_args: Tuple[Any, ...]
-  result_transform: Callable[[Any], Any] = _identity_fn
-
-  @staticmethod
-  def _get_next_fcallid():
-    return get_next_fcallid()
-
-  @staticmethod
-  def _get_immediate_args(args):
-    return [None if isinstance(arg, BasicTask) else arg for arg in args]
-
-  @staticmethod
-  def _get_deferred_args(args):
-    return [arg.fcallid if isinstance(arg, BasicTask) else None for arg in args]
-
-
 class BasicScriptFunction:
-  def __init__(self, name, args_func, conditional_task_arg=False):
+  def __init__(self, name, args_func):
     self.name = name
     self.args_func = args_func
     self.required_executor = None
     self.default_executor = None
-    self.conditional_task_arg = conditional_task_arg
     self.result_transform = _always_none_fn
-
-  def as_task(self, *args, **kwargs):
-    fcallid = get_next_fcallid()
-    if self.conditional_task_arg:
-      kwargs["_as_task"] = True
-    args_list = self.args_func(*args, **kwargs)
-    immediate_args = BasicTask._get_immediate_args(args_list)
-    deferred_args = BasicTask._get_deferred_args(args_list)
-    return BasicTask(
-        fcallid, self.name, immediate_args, deferred_args, self.result_transform)
 
   def set_default_executor(self, executor: FunctionExecutor):
     self.default_executor = executor
@@ -347,8 +315,8 @@ class ScriptFunction(BasicScriptFunction):
 
 
 class NoReturnScriptFunction(BasicScriptFunction):
-  def __init__(self, name, args_func, conditional_task_arg=False):
-    super().__init__(name, args_func, conditional_task_arg=conditional_task_arg)
+  def __init__(self, name, args_func):
+    super().__init__(name, args_func)
 
   def __call__(self, *args, **kwargs):
     call_noreturn_function(

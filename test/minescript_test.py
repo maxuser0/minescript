@@ -20,6 +20,7 @@ among the tests.
 """
 
 import minescript
+import java
 import os
 import queue
 import re
@@ -124,6 +125,38 @@ def test(test_func):
 
 
 # BEGIN TESTS
+
+pyjinn_source = r"""
+Minecraft = JavaClass("net.minecraft.client.Minecraft")
+
+def get_fps() -> int:
+  return Minecraft.getInstance().getFps()
+
+def get_player_name() -> str:
+  return Minecraft.getInstance().player.getName().getString()
+
+def get_num_jobs() -> int:
+  return len(job_info())
+"""
+
+@test
+def pyjinn_test():
+  script = java.eval_pyjinn_script(pyjinn_source)
+
+  get_fps = script.getFunction("get_fps")
+  fps = get_fps()
+  expect_equal(type(fps), int)
+  expect_gt(fps, 0)
+  expect_lt(fps, 1000)
+  
+  get_player_name = script.getFunction("get_player_name")
+  expect_equal(get_player_name(), minescript.player_name())
+  
+  get_num_jobs = script.getFunction("get_num_jobs")
+  expect_equal(get_num_jobs(), len(minescript.job_info()))
+
+  script.exit()
+
 
 @test
 def chat_test():
@@ -244,21 +277,11 @@ def player_inventory_test():
 
 @test
 def player_test():
-  # run_tasks(...) guarantees that all tasks are executed on the same game tick.
-  tasks = [
-      minescript.player_name.as_task(),
-      minescript.player_position.as_task(),
-      minescript.player_orientation.as_task(),
-      minescript.players.as_task(nbt=True),
-      minescript.entities.as_task(nbt=True)
-  ]
-  tasks.append(minescript.Task.as_list(*tasks))
-  name, (x, y, z), (yaw, pitch), players, entities = minescript.run_tasks(tasks)
-
-  # Task.as_list() leaves entity data as raw dicts rather than auto-converting them to EntityData.
-  # So convert to EntityData manually.
-  players = [minescript.EntityData(**p) for p in players]
-  entities = [minescript.EntityData(**e) for e in entities]
+  name = minescript.player_name()
+  x, y, z = minescript.player_position()
+  yaw, pitch = minescript.player_orientation()
+  players = minescript.players(nbt=True)
+  entities = minescript.entities(nbt=True)
 
   players_with_my_name = [
       (p.name, p.position, p.yaw, p.pitch) for p in filter(lambda p: p.name == name,
@@ -478,54 +501,6 @@ def java_test():
   value, type_ = do_operator(Numbers_lessThan, minescript.java_int(7), minescript.java_float(22))
   expect_equal(value, "true")
   expect_equal(type_, "java.lang.Boolean")
-
-
-@test
-def player_task_test():
-  tasks = []
-
-  def append(task):
-    tasks.append(task)
-    return task
-
-  player = append(minescript.player.as_task())
-  position = append(minescript.Task.get_attr(player, "position"))
-  x = append(minescript.Task.get_index(position, 0))
-  x = append(minescript.Task.as_int(x))
-  y = append(minescript.Task.get_index(position, 1))
-  y = append(minescript.Task.as_int(y))
-  z = append(minescript.Task.get_index(position, 2))
-  z = append(minescript.Task.as_int(z))
-  echo = append(minescript.echo.as_task("Player position:", x, y, z))
-  append(minescript.Task.as_list(x, y, z))
-
-  result = minescript.run_tasks(tasks)
-  expect_message(f"Player position: {result[0]} {result[1]} {result[2]}")
-
-
-@test
-def container_task_test():
-  tasks = []
-
-  def append(task):
-    tasks.append(task)
-    return task
-
-  append(minescript.Task.as_list(
-      append(minescript.Task.contains([1, 2, 3], 2)),
-      append(minescript.Task.contains([1, 2, 3], 4)),
-      append(minescript.Task.contains({"x":1, "y":2}, "x")),
-      append(minescript.Task.contains({"x":1, "y":2}, "z")),
-      append(minescript.Task.contains("123", "2")),
-      append(minescript.Task.contains("123", "4"))))
-
-  result = minescript.run_tasks(tasks)
-  expect_true(result[0])
-  expect_false(result[1])
-  expect_true(result[2])
-  expect_false(result[3])
-  expect_true(result[4])
-  expect_false(result[5])
 
 
 # END TESTS

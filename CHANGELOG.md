@@ -7,8 +7,22 @@
 - To set up Fabric mappings for Pyjinn scripts see
   [minescript.net/mappings](https://minescript.net/mappings)
 
+## Minescript 5.0b5
+
+- Update docs for Minescript 5.0 and Pyjinn ([75a2815](https://github.com/maxuser0/minescript/commit/75a28157216374b5b9d668a0b3e46d459b5ea665))
+- Suppress chat messages about exit of child jobs ([7bdf4de](https://github.com/maxuser0/minescript/commit/7bdf4de704dada599e7b3974524dc31aa1099e17))
+- List child jobs with `\jobs all`, hide otherwise ([fdeab5f](https://github.com/maxuser0/minescript/commit/fdeab5f589567ba09502dc294f93db3e2b1fff03))
+- Fix missing JobInfo.self returned from job_info() ([f733d2e](https://github.com/maxuser0/minescript/commit/f733d2e508f4dd4a8715a1cbf994c37f8d46c5c2))
+- Update Minescript version to 5.0b5 ([63c993c](https://github.com/maxuser0/minescript/commit/63c993cb23084491e79b30ef73b3e88febdb3712))
+- Remove obsolete Task support given embedded Pyjinn ([877aa2a](https://github.com/maxuser0/minescript/commit/877aa2a3d666832ebd0a1edfd174bc0ea5aa13d1))
+- Fix bug in embedded Pyjinn scripts on Windows ([ba2c188](https://github.com/maxuser0/minescript/commit/ba2c1888096cd019e4b2d329b9efc9955d2666dd))
+- Add pyjinn_test() to minescript_test.py ([836b685](https://github.com/maxuser0/minescript/commit/836b68570c980adea50d1a526f5b911b8a56854e))
+
+
 ## Minescript 5.0b4
 
+- Improve integration of Pyjinn embedded in Python ([86820d8](https://github.com/maxuser0/minescript/commit/86820d8a43f9815a3371298deaab86eaba1b299d))
+- Support running Pyjinn code within Python scripts ([fc2eb1b](https://github.com/maxuser0/minescript/commit/fc2eb1beb4dea3f41ed53a0d4004f6f4458bb83a))
 - Update Pyjinn docs with JavaString and more ([a25de73](https://github.com/maxuser0/minescript/commit/a25de73e03b297c9748dcf96ddb4ab4e9f58dd77))
 - Update to new Pyjinn APIs for JavaArray, JavaList ([a6bcf16](https://github.com/maxuser0/minescript/commit/a6bcf16db6f35782f948b674cf664faeabfc73d0))
 - Use built-in Exception type in Pyjinn scripts ([ad06521](https://github.com/maxuser0/minescript/commit/ad065217f6c7b42c0a901db2d052e7c3f4dc059e))
@@ -26,6 +40,8 @@
 
 ### Pyjinn 0.8
 
+- Add Script.exit() overload for implicit success ([96078b3](https://github.com/maxuser0/pyjinn/commit/96078b38c989356c6d54211ff8704a52c7a6084d))
+- Add convenience methods to Script: get/setVariable ([d4c98d0](https://github.com/maxuser0/pyjinn/commit/d4c98d0293ea8bd310b97a69923851736e91cec1))
 - Implement sum() built-in function ([7352443](https://github.com/maxuser0/pyjinn/commit/73524433ae55e79c5db69406ae52728d00b73962))
 - str methods: strip, lstrip, rstrip, find, replace ([8664e41](https://github.com/maxuser0/pyjinn/commit/8664e413ad9f83873ede538acf707bbdaf896b5a))
 - JavaArray/JavaList/JavaMap/JavaString, str funcs ([61cf1c8](https://github.com/maxuser0/pyjinn/commit/61cf1c8e1689bc2c7b27cf8d0bd6ce0cd4ab86b8))
