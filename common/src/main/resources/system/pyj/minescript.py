@@ -14,31 +14,27 @@ Minescript standard library for Pyjinn scripts.
 import system.pyj.sys as sys
 
 if "Pyjinn" not in sys.version:
-  def JavaClass(name: str) -> Any:
-    raise NotImplementedError("JavaClass is implemented in Java for Pyjinn scripts")
-
-  def add_event_listener(event_type: str, callback: Callable[[Any], None], **args) -> int:
-    raise NotImplementedError("add_event_listener is implemented in Java for Pyjinn scripts")
-
-  def remove_event_listener(listener_id: int) -> bool:
-    raise NotImplementedError("remove_event_listener is implemented in Java for Pyjinn scripts")
-  
-  # This import is mainly for IDEs to have access to the Python definitions of dataclasses that are
+  # This import is for giving IDEs access to the Python definitions of dataclasses that are
   # not needed by Pyjinn scripts because they access the Java objects directly.
   from system.lib.minescript import *
-  from typing import Any, List, Set, Dict, Tuple, Optional, Callable, Union
+  from typing import List, Callable, Union
   __script__ = None
 
-  @dataclass
-  class RenderEvent:
-    type: str  # "render"
-    context: Any  # Render context provided by the mod loader.
-    time: float
+  def JavaClass(name: str):
+    """Pyjinn built-in function."""
+    raise NotImplementedError("JavaClass is implemented in Java for Pyjinn scripts")
 
-  @dataclass
-  class TickEvent:
-    type: str  # "tick"
-    time: float
+  def JavaList(a_list: List[Any]):
+    """Pyjinn built-in function."""
+    raise NotImplementedError("JavaList is implemented in Java for Pyjinn scripts")
+
+  def JavaArray(a_tuple: Tuple[Any, ...], clazz=None):
+    """Pyjinn built-in function."""
+    raise NotImplementedError("JavaArray is implemented in Java for Pyjinn scripts")
+
+  def JavaString(string: str):
+    """Pyjinn built-in function."""
+    raise NotImplementedError("JavaString is implemented in Java for Pyjinn scripts")
 
 
 _System = JavaClass("java.lang.System")

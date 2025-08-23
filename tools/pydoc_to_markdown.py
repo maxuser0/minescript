@@ -14,6 +14,7 @@ from typing import Any, List, Set, Dict, Tuple, Optional, Callable
 FUNCTION_RE = re.compile(r"^def ([a-zA-Z_0-9]+)(.*)")
 DATACLASS_RE = re.compile(r"^@dataclass")
 CLASS_RE = re.compile(r"^class ([a-zA-Z_0-9]+)")
+CONDITIONAL_RE = re.compile(r"^if ")
 DATACLASS_FIELD_RE = re.compile(r"^ +([a-zA-Z_0-9]+) *: *([a-zA-Z_0-9.]+)")
 METHOD_RE = re.compile(r"^  def ([a-zA-Z_0-9]+)(.*)")
 METHOD_DECORATION_RE = re.compile(r"^  (@(static|class)method)$")
@@ -198,6 +199,13 @@ def process_pydoc(code_entity: CodeEntity, anchors: Dict[str, str]):
       else:
         print(line)
     print()
+
+    for name, link in sorted(anchors.items(), key=lambda k: k[0].lower()):
+      if "." in name or name.startswith("_"):
+        continue
+      print(f"- [`{name}`](#{link})")
+    print()
+
     return
 
   prefix = ""
@@ -262,6 +270,7 @@ def parse_code_entities() -> List[CodeEntity]:
   class_member = None
   method_decoration = None
   pydoc = None
+  global_conditional = False
 
   # List of pairs of code entity and its pydoc string.
   entities: List[CodeEntity] = []
@@ -269,6 +278,7 @@ def parse_code_entities() -> List[CodeEntity]:
   line_num = 0
   for line in sys.stdin.readlines():
     line_num += 1
+
     if pydoc is not None:
       m = END_TRIPLE_QUOTE.match(line)
       if m:
@@ -286,6 +296,20 @@ def parse_code_entities() -> List[CodeEntity]:
       else:
         pydoc += line
       continue
+    
+    # If line isn't strictly whitespace and doesn't start with spaces, then break out of global
+    # conditional. This needs to be checked before CONDITIONAL_RE because the "if" line itself is
+    # outdented.
+    if line.strip() and line[:2] != "  ":
+      global_conditional = False
+
+    m = CONDITIONAL_RE.match(line)
+    if m:
+      global_conditional = True
+
+    if global_conditional:
+      # Outdent the contents of the conditional. Assumes 2-space indent throughout.
+      line = line.lstrip("  ")
 
     m = BEGIN_TRIPLE_QUOTE.match(line)
     if m:
@@ -379,6 +403,7 @@ def parse_code_entities() -> List[CodeEntity]:
 
 
 def print_markdown(entities: List[CodeEntity]):
+  # Dict from entity's name to its link text.
   anchors: Dict[str, str] = {}
   for entity in entities:
     if entity:

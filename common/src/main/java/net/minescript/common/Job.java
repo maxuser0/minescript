@@ -13,6 +13,7 @@ import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -25,7 +26,7 @@ import org.apache.logging.log4j.Logger;
 
 public abstract class Job implements JobControl {
 
-  // TODO(maxuser): Move ExternalJob to its own file.
+  // TODO(maxuser): Move SubprocessJob to its own file.
   public static class SubprocessJob extends Job {
     private final ScriptFunctionRunner scriptFunctionRunner;
     private Thread thread;
@@ -40,13 +41,14 @@ public abstract class Job implements JobControl {
 
     public SubprocessJob(
         int jobId,
+        Optional<Integer> parentJobId,
         ScriptConfig.BoundCommand command,
         Task task,
         Config config,
         SystemMessageQueue systemMessageQueue,
         ScriptFunctionRunner scriptFunctionRunner,
         Runnable doneCallback) {
-      super(jobId, command, task, config, systemMessageQueue, null, doneCallback);
+      super(jobId, parentJobId, command, task, config, systemMessageQueue, null, doneCallback);
 
       this.scriptFunctionRunner = scriptFunctionRunner;
       this.objects = new ResourceTracker<>(Object.class, jobId, config);
@@ -168,7 +170,8 @@ public abstract class Job implements JobControl {
   private static final Logger LOGGER = LogManager.getLogger();
   private static final Gson GSON = new GsonBuilder().serializeNulls().create();
 
-  public final int jobId;
+  protected final int jobId;
+  protected final Optional<Integer> parentJobId;
   protected final ScriptConfig.BoundCommand command;
   protected final Task task;
   protected final Config config;
@@ -186,6 +189,7 @@ public abstract class Job implements JobControl {
 
   protected Job(
       int jobId,
+      Optional<Integer> parentJobId,
       ScriptConfig.BoundCommand command,
       Task task,
       Config config,
@@ -193,6 +197,7 @@ public abstract class Job implements JobControl {
       Consumer<Message> messageConsumer,
       Runnable doneCallback) {
     this.jobId = jobId;
+    this.parentJobId = parentJobId;
     this.command = command;
     this.task = task;
     this.config = config;
@@ -444,6 +449,11 @@ public abstract class Job implements JobControl {
   }
 
   @Override
+  public Optional<Integer> parentJobId() {
+    return parentJobId;
+  }
+
+  @Override
   public final String jobSummary() {
     return jobSummaryWithStatus("");
   }
@@ -454,7 +464,12 @@ public abstract class Job implements JobControl {
       displayCommand = displayCommand.substring(0, 61) + "...";
     }
     return String.format(
-        "[%d] %s%s%s", jobId, status, status.isEmpty() ? "" : ": ", displayCommand);
+        "[%d%s] %s%s%s",
+        jobId,
+        parentJobId.map(id -> ", parent=%d".formatted(id)).orElse(""),
+        status,
+        status.isEmpty() ? "" : ": ",
+        displayCommand);
   }
 
   @Override

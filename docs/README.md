@@ -6,11 +6,11 @@ Table of contents:
     - [Command basics](#command-basics)
     - [Built-in commands](#built-in-commands)
 - [Configuration](#configuration)
+- [Pyjinn](#pyjinn)
 - [Python API](#python-api)
     - [Script input](#script-input)
     - [Script output](#script-output)
     - [Script functions](#script-functions)
-    - [Script tasks](#script-tasks)
     - [Async script functions](#async-script-functions)
     - [minescript module](#minescript-module)
 
@@ -114,9 +114,14 @@ from one world into another.
 See [\copy](#copy).
 
 #### jobs
-*Usage:* `\jobs`
+*Usage:* `\jobs [all]`
 
 Lists the currently running Minescript jobs.
+
+`\jobs` with no arguments list all jobs that are not managed by a parent job.
+
+`\jobs all` lists all jobs, including child jobs, e.g. Pyjinn scripts embedded within a parent
+Python job. See: [Pyjinn: Embedding Pyjinn in Python scripts](pyjinn.md#embedding-pyjinn-in-python-scripts)
 
 #### suspend
 *Usage:* `\suspend  [JOB_ID]`
@@ -236,6 +241,12 @@ Config variable names:
 - `stderr_chat_ignore_pattern` - regular expression for ignoring lines of output from stderr of
   scripts. Default is the empty string: `"^$"`. This can be useful for Python installations that
   have spammy stderr output when running from Minescript.
+
+## Pyjinn
+
+**Pyjinn** is Minescript's integrated interpreter that's based on Python syntax.
+See [Pyjinn docs](pyjinn.md) for details.
+
 
 ## Python API
 
@@ -394,8 +405,8 @@ The space after `>` is optional:
 
 ### Script functions
 
-Script functions imported from  [`minescript.py`](#minescript-module) can be called as functions, as
-[tasks](#script-tasks), or [asynchronously](#async-script-functions).
+Script functions imported from  [`minescript.py`](#minescript-module) can be called as functions
+or [asynchronously](#async-script-functions).
 
 When called directly, e.g. `minescript.screenshot("my_screenshot.png")`, script functions are
 implemented in Java and typically return after the function has finished executing in Java. (A
@@ -439,50 +450,11 @@ individual script functions by default.
 Setting an executor for a script function affects only the calls of that function within that script
 job. Concurrently running script jobs can set different executors for the same script function.
 
-### Script tasks
+_**Note:** Script tasks using `<script_function>.as_task()`, `run_tasks()`, `schedule_tick_tasks()`,
+and `schedule_render_tasks()` have been removed in Minescript 5.0 because their functionality is
+redundant with and less expressive than embedded Pyjinn scripts. For embedding Pyjinn scripts within
+Python scripts see: [Pyjinn: Embedding Pyjinn in Python scripts](pyjinn.md#embedding-pyjinn-in-python-scripts)_
 
-A task list allows a sequence of script functions to be called efficiently on a Java executor by
-batching script function calls to avoid successive roundtrips between Python and Java. A task is
-created by calling `.as_task(...)` on a script function, e.g. `minescript.echo.as_task("Hello!")`.
-
-Creating a task does not actually call the script function, but instead creates a *description* of a
-script function to be called, possibly with specific args, at some later point.
-
-A *task list* is created by adding tasks to a Python list. Return values from tasks earlier in the
-list (which are not actual return values from script functions, but descriptions of return values of
-future invocations) can be passed as args to tasks later in the list, e.g:
-
-```
-import minescript
-
-tasks = []
-def add_task(task):
-  tasks.append(task)
-  return task
-
-player = add_task(minescript.player.as_task())
-player_name = add_task(minescript.Task.get_attr(player, "name"))
-add_task(minescript.echo.as_task("Player name is:"))
-add_task(minescript.echo.as_task(player_name))
-
-# Runs the task list in a single cycle of the default executor (by default this is the render loop):
-minescript.run_tasks(tasks)
-
-# Runs the task list on the tick loop:
-with minescript.tick_loop:
-  minescript.run_tasks(tasks)
-```
-
-Tasks can be run immediately with [`run_tasks`](#run_tasks) or scheduled to run repeatedly on every
-cycle of an executor with [`schedule_tick_tasks`](#schedule_tick_tasks) or
-[`schedule_render_tasks`](#schedule_render_tasks). Scheduled tasks can be cancelled with
-[`cancel_scheduled_tasks`](#cancel_scheduled_tasks). (There is no script function for scheduling
-tasks on the `script_loop`. While the same effect can be achieved by calling
-[`run_tasks`](#run_tasks) in a tight `while` loop within `with script_loop: ...` in your script,
-given the high frequency of the `script_loop` executor which can run thousands of times per second,
-you probably don't want to do this.)
-
-See [Task](#task) for documentation of task-related script functions.
 
 ### Async script functions
 
@@ -547,9 +519,114 @@ while True:
 
 *Usage:* `import minescript  # from Python script`
 
-User-friendly API for scripts to make function calls into the
-Minescript mod.  This module should be imported by other
-scripts and not run directly.
+This module contains APIs for scripts to call into the Minescript mod. It should be imported by
+scripts as a library and not run directly.
+
+APIs in this module are compatible with both Python and Pyjinn scripts unless `"Compatibility:"`
+is specified.
+
+- [`add_event_listener`](#add_event_listener)
+- [`AddEntityEvent`](#addentityevent)
+- [`append_chat_history`](#append_chat_history)
+- [`await_loaded_region`](#await_loaded_region)
+- [`BlockPack`](#blockpack)
+- [`BlockPacker`](#blockpacker)
+- [`BlockPackerException`](#blockpackerexception)
+- [`BlockPos`](#blockpos)
+- [`BlockUpdateEvent`](#blockupdateevent)
+- [`chat`](#chat)
+- [`chat_input`](#chat_input)
+- [`ChatEvent`](#chatevent)
+- [`ChatEventListener`](#chateventlistener)
+- [`ChunkEvent`](#chunkevent)
+- [`combine_rotations`](#combine_rotations)
+- [`container_get_items`](#container_get_items)
+- [`DamageEvent`](#damageevent)
+- [`echo`](#echo)
+- [`echo_json`](#echo_json)
+- [`entities`](#entities)
+- [`EntityData`](#entitydata)
+- [`EventQueue`](#eventqueue)
+- [`execute`](#execute)
+- [`ExplosionEvent`](#explosionevent)
+- [`flush`](#flush)
+- [`getblock`](#getblock)
+- [`getblocklist`](#getblocklist)
+- [`HandItems`](#handitems)
+- [`ItemStack`](#itemstack)
+- [`java_access_field`](#java_access_field)
+- [`java_array_index`](#java_array_index)
+- [`java_array_length`](#java_array_length)
+- [`java_assign`](#java_assign)
+- [`java_bool`](#java_bool)
+- [`java_call_method`](#java_call_method)
+- [`java_call_script_function`](#java_call_script_function)
+- [`java_class`](#java_class)
+- [`java_ctor`](#java_ctor)
+- [`java_double`](#java_double)
+- [`java_field_names`](#java_field_names)
+- [`java_float`](#java_float)
+- [`java_int`](#java_int)
+- [`java_long`](#java_long)
+- [`java_member`](#java_member)
+- [`java_method_names`](#java_method_names)
+- [`java_new_array`](#java_new_array)
+- [`java_new_instance`](#java_new_instance)
+- [`java_release`](#java_release)
+- [`java_string`](#java_string)
+- [`java_to_string`](#java_to_string)
+- [`job_info`](#job_info)
+- [`JobInfo`](#jobinfo)
+- [`KeyEvent`](#keyevent)
+- [`KeyEventListener`](#keyeventlistener)
+- [`log`](#log)
+- [`MinescriptRuntimeOptions`](#minescriptruntimeoptions)
+- [`MouseEvent`](#mouseevent)
+- [`player`](#player)
+- [`player_get_targeted_block`](#player_get_targeted_block)
+- [`player_get_targeted_entity`](#player_get_targeted_entity)
+- [`player_hand_items`](#player_hand_items)
+- [`player_health`](#player_health)
+- [`player_inventory`](#player_inventory)
+- [`player_inventory_select_slot`](#player_inventory_select_slot)
+- [`player_inventory_slot_to_hotbar`](#player_inventory_slot_to_hotbar)
+- [`player_look_at`](#player_look_at)
+- [`player_name`](#player_name)
+- [`player_orientation`](#player_orientation)
+- [`player_position`](#player_position)
+- [`player_press_attack`](#player_press_attack)
+- [`player_press_backward`](#player_press_backward)
+- [`player_press_drop`](#player_press_drop)
+- [`player_press_forward`](#player_press_forward)
+- [`player_press_jump`](#player_press_jump)
+- [`player_press_left`](#player_press_left)
+- [`player_press_pick_item`](#player_press_pick_item)
+- [`player_press_right`](#player_press_right)
+- [`player_press_sneak`](#player_press_sneak)
+- [`player_press_sprint`](#player_press_sprint)
+- [`player_press_swap_hands`](#player_press_swap_hands)
+- [`player_press_use`](#player_press_use)
+- [`player_set_orientation`](#player_set_orientation)
+- [`players`](#players)
+- [`press_key_bind`](#press_key_bind)
+- [`remove_event_listener`](#remove_event_listener)
+- [`RenderEvent`](#renderevent)
+- [`Rotation`](#rotation)
+- [`Rotations`](#rotations)
+- [`screen_name`](#screen_name)
+- [`screenshot`](#screenshot)
+- [`set_chat_input`](#set_chat_input)
+- [`set_default_executor`](#set_default_executor)
+- [`show_chat_screen`](#show_chat_screen)
+- [`TakeItemEvent`](#takeitemevent)
+- [`TargetedBlock`](#targetedblock)
+- [`TickEvent`](#tickevent)
+- [`Vector3f`](#vector3f)
+- [`version_info`](#version_info)
+- [`VersionInfo`](#versioninfo)
+- [`world_info`](#world_info)
+- [`WorldEvent`](#worldevent)
+- [`WorldInfo`](#worldinfo)
 
 #### BlockPos
 Tuple representing `(x: int, y: int, z: int)` position in block space.
@@ -558,6 +635,9 @@ Tuple representing `(x: int, y: int, z: int)` position in block space.
 Tuple representing `(x: float, y: float, z: float)` position or offset in 3D space.
 
 #### MinescriptRuntimeOptions
+Minscript module options.
+
+Compatibility: Python only.
 
 ```
   legacy_dict_return_values: bool = False  # set to `True` to emulate behavior before v4.0
@@ -633,7 +713,7 @@ Since: v3.0
 
 
 #### screenshot
-*Usage:* <code>screenshot(filename=None)</code>
+*Usage:* <code>screenshot(filename: str=None)</code>
 
 Takes a screenshot, similar to pressing the F2 key.
 
@@ -652,7 +732,8 @@ Since: v2.1
   command: List[str]
   source: str
   status: str
-  self: bool = False
+  parent_job_id: Union[int, None]
+  self: bool
 ```
 
 #### job_info
@@ -662,7 +743,7 @@ Return info about active Minescript jobs.
 
 *Returns:*
 
-- [`JobInfo`](#jobinfo).  For the  enclosing job, `JobInfo.self` is `True`.
+- [`JobInfo`](#jobinfo).  For the enclosing job, `JobInfo.self` is `True`.
 
 Since: v4.0
 
@@ -671,6 +752,8 @@ Since: v4.0
 *Usage:* <code>flush()</code>
 
 Wait for all previously issued script commands from this job to complete.
+
+Compatibility: Python only.
 
 Since: v2.1
 
@@ -962,19 +1045,19 @@ Since: v2.1
 
 
 #### player_orientation
-*Usage:* <code>player_orientation()</code>
+*Usage:* <code>player_orientation() -> List[float]</code>
 
 Gets the local player's orientation.
 
 *Returns:*
 
-- (yaw: float, pitch: float) as angles in degrees
+- [yaw: float, pitch: float] as angles in degrees
 
 Since: v2.1
 
 
 #### player_set_orientation
-*Usage:* <code>player_set_orientation(yaw: float, pitch: float)</code>
+*Usage:* <code>player_set_orientation(yaw: float, pitch: float) -> bool</code>
 
 Sets the local player's orientation.
 
@@ -1000,7 +1083,7 @@ Since: v2.1
 ```
 
 #### player_get_targeted_block
-*Usage:* <code>player_get_targeted_block(max_distance: float = 20)</code>
+*Usage:* <code>player_get_targeted_block(max_distance: float = 20) -> Union[TargetedBlock, None]</code>
 
 Gets info about the nearest block, if any, in the local player's crosshairs.
 
@@ -1033,11 +1116,11 @@ Since: v3.0
   health: float = None
   local: bool = None  # `True` if this the local player
   passengers: List[str] = None  # UUIDs of passengers as strings
-  nbt: Dict[str, Any] = None
+  nbt: str = None
 ```
 
 #### player_get_targeted_entity
-*Usage:* <code>player_get_targeted_entity(max_distance: float = 20, nbt: bool = False) -> [EntityData](#entitydata)</code>
+*Usage:* <code>player_get_targeted_entity(max_distance: float = 20, nbt: bool = False) -> Union[EntityData, None]</code>
 
 Gets the entity targeted in the local player's crosshairs, if any.
 
@@ -1063,7 +1146,7 @@ Since: v3.1
 
 
 #### player
-*Usage:* <code>player(\*, nbt: bool = False)</code>
+*Usage:* <code>player(\*, nbt: bool = False) -> [EntityData](#entitydata)</code>
 
 Gets attributes for the local player.
 
@@ -1080,7 +1163,7 @@ Since: v4.0
 
 
 #### players
-*Usage:* <code>players(\*, nbt: bool = False, uuid: str = None, name: str = None, position: [Vector3f](#vector3f) = None, offset: [Vector3f](#vector3f) = None, min_distance: float = None, max_distance: float = None, sort: str = None, limit: int = None)</code>
+*Usage:* <code>players(\*, nbt: bool = False, uuid: str = None, name: str = None, position: [Vector3f](#vector3f) = None, offset: [Vector3f](#vector3f) = None, min_distance: float = None, max_distance: float = None, sort: str = None, limit: int = None) -> List[EntityData]</code>
 
 Gets a list of nearby players and their attributes.
 
@@ -1115,7 +1198,7 @@ Since: v2.1
 
 
 #### entities
-*Usage:* <code>entities(\*, nbt: bool = False, uuid: str = None, name: str = None, type: str = None, position: [Vector3f](#vector3f) = None, offset: [Vector3f](#vector3f) = None, min_distance: float = None, max_distance: float = None, sort: str = None, limit: int = None)</code>
+*Usage:* <code>entities(\*, nbt: bool = False, uuid: str = None, name: str = None, type: str = None, position: [Vector3f](#vector3f) = None, offset: [Vector3f](#vector3f) = None, min_distance: float = None, max_distance: float = None, sort: str = None, limit: int = None) -> List[EntityData]</code>
 
 Gets a list of nearby entities and their attributes.
 
@@ -1160,6 +1243,7 @@ Since: v2.1
   os_name: str
   os_version: str
   minecraft_class_name: str
+  pyjinn: str
 ```
 
 #### version_info
@@ -1255,6 +1339,8 @@ Waits for chunks to load in the region from (x1, z1) to (x2, z2).
 - `x1, z1, x2, z2`: bounds of the region for awaiting loaded chunks
 - `timeout`: if specified, timeout in seconds to wait for the region to load
 
+Compatibility: Python only.
+
 Update in v4.0:
   Removed `done_callback` arg. Call now always blocks until region is loaded.
 
@@ -1270,93 +1356,7 @@ Default value is `minescript.render_loop`.
 
 - `executor`: one of `minescript.tick_loop`, `minescript.render_loop`, or `minescript.script_loop`
 
-Since: v4.0
-
-
-#### Task
-Executable task that allows multiple operations to execute on the same executor cycle.
-
-#### Task.as_list
-*Usage:* <code>@staticmethod Task.as_list(\*values)</code>
-
-Creates a task that returns the given values as a list.
-
-#### Task.get_index
-*Usage:* <code>@staticmethod Task.get_index(array, index)</code>
-
-Creates a task that looks up an array by index.
-
-#### Task.get_attr
-*Usage:* <code>@staticmethod Task.get_attr(obj, attr)</code>
-
-Creates a task that looks up a map/dict by key.
-
-#### Task.contains
-*Usage:* <code>@staticmethod Task.contains(container, element)</code>
-
-Creates a task that checks if a container (map, list, or string) contains an element.
-
-#### Task.as_int
-*Usage:* <code>@staticmethod Task.as_int(\*numbers)</code>
-
-Creates a task that converts a floating-point number to int.
-
-#### Task.negate
-*Usage:* <code>@staticmethod Task.negate(condition)</code>
-
-Creates a task that negates a boolean value.
-
-#### Task.is_null
-*Usage:* <code>@staticmethod Task.is_null(value)</code>
-
-Creates a task that checks a value against null or `None`.
-
-#### Task.skip_if
-*Usage:* <code>@staticmethod Task.skip_if(condition)</code>
-
-Creates a task that skips the remainder of the task list if `condition` is true.
-
-#### run_tasks
-*Usage:* <code>run_tasks(tasks: List[Task])</code>
-
-Runs tasks so that multiple tasks can be run on the same executor cycle.
-
-#### schedule_tick_tasks
-*Usage:* <code>schedule_tick_tasks(tasks: List[Task]) -> int</code>
-
-Schedules a list of tasks to run every cycle of the tick loop.
-
-*Returns:*
-
-- ID of scheduled task list which can be passed to [`cancel_scheduled_tasks(task_list_id)`](#cancel_scheduled_tasks).
-
-Since: v4.0
-
-
-#### schedule_render_tasks
-*Usage:* <code>schedule_render_tasks(tasks: List[Task]) -> int</code>
-
-Schedules a list of tasks to run every cycle of the render loop.
-
-*Returns:*
-
-- ID of scheduled task list which can be passed to [`cancel_scheduled_tasks(task_list_id)`](#cancel_scheduled_tasks).
-
-Since: v4.0
-
-
-#### cancel_scheduled_tasks
-*Usage:* <code>cancel_scheduled_tasks(task_list_id: int)</code>
-
-Cancels a scheduled task list for the currently running job.
-
-*Args:*
-
-- `task_list_id`: ID of task list returned from [`schedule_tick_tasks()`](#schedule_tick_tasks) or [`schedule_render_tasks`](#schedule_render_tasks).
-
-*Returns:*
-
-- `True` if `task_list_id` was successfully cancelled, `False` otherwise.
+Compatibility: Python only.
 
 Since: v4.0
 
@@ -1460,6 +1460,14 @@ Mouse event data.
   z_max: int
 ```
 
+#### WorldEvent
+
+```
+  type: str
+  time: float
+  connected: bool
+```
+
 #### EventQueue
 Queue for managing events.
 
@@ -1474,6 +1482,8 @@ with EventQueue() as event_queue:
     if event.type == EventType.CHAT and "knock knock" in event.message.lower():
       echo("Who's there?")
 ```
+
+Compatibility: Python only.
 
 Since: v4.0
 
@@ -1674,6 +1684,32 @@ with EventQueue() as event_queue:
 ```
 
 
+#### EventQueue.register_world_listener
+*Usage:* <code>EventQueue.register_world_listener()</code>
+
+Registers listener for `EventType.WORLD` events as [`WorldEvent`](#worldevent).
+
+Script jobs are automatically terminated when the user's game client disconnects from a world
+unless the script has an active "world" listener registered. All script jobs, including ones
+with "world" listeners, are terminated when the game client exits.
+
+*Example:*
+
+```
+with EventQueue() as event_queue:
+  event_queue.register_world_listener()
+  while True:
+    event = event_queue.get()
+    if event.type == EventType.WORLD:
+      if event.connected:
+        log(f"Connected to world {world_info().name}.")
+      else:
+        log("Disconnected from world.")
+```
+
+Since: v5.0
+
+
 #### EventQueue.get
 *Usage:* <code>EventQueue.get(block: bool = True, timeout: float = None) -> Any</code>
 
@@ -1699,6 +1735,8 @@ Gets the next event in the queue.
 
 Deprecated listener for keyboard events. Use [`EventQueue.register_key_listener`](#eventqueueregister_key_listener) instead.
 
+Compatibility: Python only.
+
 Update in v4.0:
   Deprecated in favor of [`EventQueue.register_key_listener`](#eventqueueregister_key_listener).
 
@@ -1712,6 +1750,8 @@ Deprecated listener for chat message events.
 
 Use `EventQueue.register_chat_message_listener` instead.
 
+Compatibility: Python only.
+
 Update in v4.0:
   Deprecated in favor of `EventQueue.register_chat_message_listener`.
 
@@ -1719,7 +1759,7 @@ Since: v3.2
 
 
 #### screen_name
-*Usage:* <code>screen_name() -> str</code>
+*Usage:* <code>screen_name() -> Union[str, None]</code>
 
 Gets the current GUI screen name, if there is one.
 
@@ -1731,7 +1771,7 @@ Since: v3.2
 
 
 #### show_chat_screen
-*Usage:* <code>show_chat_screen(show: bool, prompt: str = None) -> str</code>
+*Usage:* <code>show_chat_screen(show: bool, prompt: str = None) -> bool</code>
 
 Shows or hides the chat screen.
 
@@ -1756,7 +1796,7 @@ Since: v4.0
 
 
 #### chat_input
-*Usage:* <code>chat_input()</code>
+*Usage:* <code>chat_input() -> List[Union[str, int]]</code>
 
 Gets state of chat input text.
 
@@ -1972,6 +2012,9 @@ Serializes this BlockPack into a base64-encoded string.
 
 Frees this BlockPack to be garbage collected.
 
+#### BlockPackerException
+Exception thrown from failed [`BlockPack`](#blockpack) operations.
+
 #### BlockPacker
 BlockPacker is a mutable collection of blocks.
 
@@ -2067,6 +2110,8 @@ If running Minecraft with unobfuscated Java symbols:
 If running Minecraft with obfuscated symbols, `name` must be the fully qualified and obfuscated
 class name.
 
+Compatibility: Python only.
+
 Since: v4.0
 
 
@@ -2074,6 +2119,9 @@ Since: v4.0
 *Usage:* <code>java_string(s: str) -> JavaHandle</code>
 
 Returns handle to a Java String.
+
+Compatibility: Python only.
+
 Since: v4.0
 
 
@@ -2081,6 +2129,9 @@ Since: v4.0
 *Usage:* <code>java_double(d: float) -> JavaHandle</code>
 
 Returns handle to a Java Double.
+
+Compatibility: Python only.
+
 Since: v4.0
 
 
@@ -2088,6 +2139,9 @@ Since: v4.0
 *Usage:* <code>java_float(f: float) -> JavaHandle</code>
 
 Returns handle to a Java Float.
+
+Compatibility: Python only.
+
 Since: v4.0
 
 
@@ -2095,6 +2149,9 @@ Since: v4.0
 *Usage:* <code>java_long(l: int) -> JavaHandle</code>
 
 Returns handle to a Java Long.
+
+Compatibility: Python only.
+
 Since: v4.0
 
 
@@ -2102,6 +2159,9 @@ Since: v4.0
 *Usage:* <code>java_int(i: int) -> JavaHandle</code>
 
 Returns handle to a Java Integer
+
+Compatibility: Python only.
+
 Since: v4.0
 
 
@@ -2109,17 +2169,22 @@ Since: v4.0
 *Usage:* <code>java_bool(b: bool) -> JavaHandle</code>
 
 Returns handle to a Java Boolean.
+
+Compatibility: Python only.
+
 Since: v4.0
 
 
 #### java_ctor
-*Usage:* <code>java_ctor(clss: JavaHandle)</code>
+*Usage:* <code>java_ctor(klass: JavaHandle)</code>
 
 Returns handle to a constructor set for the given class handle.
 
 *Args:*
 
-- `clss`: Java class handle returned from [`java_class`](#java_class)
+- `klass`: Java class handle returned from [`java_class`](#java_class)
+
+Compatibility: Python only.
 
 Since: v4.0
 
@@ -2138,23 +2203,32 @@ Creates new Java instance.
 
 - handle to newly created Java object.
 
+Compatibility: Python only.
+
 Since: v4.0
 
 
 #### java_member
-*Usage:* <code>java_member(clss: JavaHandle, name: str) -> JavaHandle</code>
+*Usage:* <code>java_member(klass: JavaHandle, name: str) -> JavaHandle</code>
 
 Gets Java member(s) matching `name`.
+
+*Args:*
+
+- `klass`: Java class handle returned from [`java_class`](#java_class) to look up member within
+- `name`: name of member to look up within `klass`
 
 *Returns:*
 
 - Java member object for use with [`java_access_field`](#java_access_field) or [`java_call_method`](#java_call_method).
 
+Compatibility: Python only.
+
 Since: v4.0
 
 
 #### java_access_field
-*Usage:* <code>java_access_field(target: JavaHandle, field: JavaHandle) -> JavaHandle</code>
+*Usage:* <code>java_access_field(target: JavaHandle, field: JavaHandle) -> Union[JavaHandle, None]</code>
 
 Accesses a field on a target Java object.
 
@@ -2167,11 +2241,13 @@ Accesses a field on a target Java object.
 
 - Handle to Java object returned from field access, or `None` if `null`.
 
+Compatibility: Python only.
+
 Since: v4.0
 
 
 #### java_call_method
-*Usage:* <code>java_call_method(target: JavaHandle, method: JavaHandle, \*args: List[JavaHandle]) -> JavaHandle</code>
+*Usage:* <code>java_call_method(target: JavaHandle, method: JavaHandle, \*args: List[JavaHandle]) -> Union[JavaHandle, None]</code>
 
 Invokes a method on a target Java object.
 
@@ -2184,6 +2260,8 @@ Invokes a method on a target Java object.
 *Returns:*
 
 - handle to Java object returned from method call, or `None` if `null`.
+
+Compatibility: Python only.
 
 Since: v4.0
 
@@ -2202,6 +2280,8 @@ Calls the requested script function with Java params.
 
 - handle to Java object (`Optional<JsonElement>`) returned from the script function.
 
+Compatibility: Python only.
+
 Since: v4.0
 
 
@@ -2209,11 +2289,14 @@ Since: v4.0
 *Usage:* <code>java_array_length(array: JavaHandle) -> int</code>
 
 Returns length of Java array as Python integer.
+
+Compatibility: Python only.
+
 Since: v4.0
 
 
 #### java_array_index
-*Usage:* <code>java_array_index(array: JavaHandle, i: int) -> JavaHandle</code>
+*Usage:* <code>java_array_index(array: JavaHandle, i: int) -> Union[JavaHandle, None]</code>
 
 Gets indexed element of Java array handle.
 
@@ -2226,13 +2309,37 @@ Gets indexed element of Java array handle.
 
 - handle to object at `array[i]` in Java, or `None` if `null`.
 
+Compatibility: Python only.
+
 Since: v4.0
+
+
+#### java_new_array
+*Usage:* <code>java_new_array(element_type: JavaHandle, \*elements: List[JavaHandle]) -> JavaHandle</code>
+
+Creates a new Java array of the given element type with the given elements.
+
+*Args:*
+
+- `element_type`: handle to Java class (Class<?>) to use for the new array's type
+- `elements`: handles to Java objects to populate the new array
+
+*Returns:*
+
+- handle to new Java array.
+
+Compatibility: Python only.
+
+Since: v5.0
 
 
 #### java_to_string
 *Usage:* <code>java_to_string(target: JavaHandle) -> str</code>
 
 Returns Python string from calling `target.toString()` in Java.
+
+Compatibility: Python only.
+
 Since: v4.0
 
 
@@ -2244,13 +2351,70 @@ Reassigns `dest` to reference the object referenced by `source`.
 Upon success, both `dest` and `source` reference the same Java object that was initially
 referenced by `source`.
 
+Compatibility: Python only.
+
 Since: v4.0
+
+
+#### java_field_names
+*Usage:* <code>java_field_names(klass: JavaHandle) -> List[str]</code>
+
+Returns a list of fields names for the class referenced by handle `klass`.
+
+If mappings are installed, official field names are returned.
+
+Compatibility: Python only.
+
+Since: v5.0
+
+
+#### java_method_names
+*Usage:* <code>java_method_names(klass: JavaHandle) -> List[str]</code>
+
+Returns a list of methods names for the class referenced by handle `klass`.
+
+If mappings are installed, official method names are returned.
+
+Compatibility: Python only.
+
+Since: v5.0
 
 
 #### java_release
 *Usage:* <code>java_release(\*targets: List[JavaHandle])</code>
 
 Releases Java reference(s) referred to by `targets`.
+
+Compatibility: Python only.
+
 Since: v4.0
 
+
+#### add_event_listener
+*Usage:* <code>add_event_listener(event_type: str, callback: Callable[[Any], None], \*\*args) -> int</code>
+
+Adds an event listener with the given callback and args.
+
+  Compatibility: Pyjinn only.
+  
+
+#### remove_event_listener
+*Usage:* <code>remove_event_listener(listener_id: int) -> bool</code>
+
+Removes an event listener previously added using [`add_event_listener()`](#add_event_listener).
+
+  Compatibility: Pyjinn only.
+  
+
+#### RenderEvent
+Render event for use with callback to [`add_event_listener()`](#add_event_listener).
+
+  Compatibility: Pyjinn only.
+  
+
+#### TickEvent
+Tick event for use with callback to [`add_event_listener()`](#add_event_listener).
+
+  Compatibility: Pyjinn only.
+  
 

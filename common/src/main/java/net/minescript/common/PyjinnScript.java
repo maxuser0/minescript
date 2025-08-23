@@ -86,6 +86,7 @@ public class PyjinnScript {
 
     public PyjinnJob(
         int jobId,
+        Optional<Integer> parentJobId,
         ScriptConfig.BoundCommand command,
         PyjinnTask task,
         Script script,
@@ -95,6 +96,7 @@ public class PyjinnScript {
         Runnable doneCallback) {
       super(
           jobId,
+          parentJobId,
           command,
           task,
           config,
@@ -139,15 +141,21 @@ public class PyjinnScript {
       try {
         handlingExit = true;
         if (exitCode != null && exitCode.intValue() != 0) {
-          systemMessageQueue.logUserError(
-              jobSummaryWithStatus("Exited with error code " + exitCode));
+          // Don't print messages on exit of a child job because it's managed by its parent.
+          if (parentJobId().isEmpty()) {
+            systemMessageQueue.logUserError(
+                jobSummaryWithStatus("Exited with error code " + exitCode));
+          }
         } else if (hasPendingCallbacksAfterExec) {
           // Log an info message about the script exits successfully only if the task had pending
           // callbacks immediately after running all global statements.
           if (state() != JobState.KILLED) {
             setState(JobState.DONE);
           }
-          systemMessageQueue.logUserInfo(toString());
+          // Don't print messages on exit of a child job because it's managed by its parent.
+          if (parentJobId().isEmpty()) {
+            systemMessageQueue.logUserInfo(toString());
+          }
         }
       } finally {
         close();
@@ -168,8 +176,8 @@ public class PyjinnScript {
 
   public static PyjinnJob createJob(
       int jobId,
+      Optional<Integer> parentJobId,
       ScriptConfig.BoundCommand boundCommand,
-      String[] command,
       String scriptCode,
       Config config,
       SystemMessageQueue systemMessageQueue,
@@ -177,10 +185,11 @@ public class PyjinnScript {
       boolean autoExit,
       Runnable doneCallback)
       throws Exception {
-    var script = loadScript(command, scriptCode, nameMappings);
+    var script = loadScript(boundCommand.command(), scriptCode, nameMappings);
     var job =
         new PyjinnJob(
             jobId,
+            parentJobId,
             boundCommand,
             new PyjinnTask(systemMessageQueue),
             script,
@@ -245,7 +254,7 @@ public class PyjinnScript {
     public void onExecModule(Script.Module module) {
       LOGGER.info("Running Minescript module handler for Pyjinn module: {}", module.name());
       // The canonical module name is the filename relative to the Minecraft dir without the ".py"
-      // extension and dots dir separators replaced with dots.
+      // extension and dir separators replaced with dots.
       if (module.name().equals("minescript.system.pyj.minescript")) {
         LOGGER.info("Adding built-in functions to Minescript Pyjinn module");
         module.globals().setVariable("add_event_listener", new AddEventListener());
@@ -268,9 +277,14 @@ public class PyjinnScript {
     }
   }
 
-  public static Script loadScript(
-      String[] scriptCommand, String scriptCode, NameMappings nameMappings) throws Exception {
-    String scriptFilename = scriptCommand[0];
+  public static Script loadScript(String[] argv, String scriptCode, NameMappings nameMappings)
+      throws Exception {
+    final String scriptFilename;
+    if (argv[0].toLowerCase().endsWith(".pyj")) {
+      scriptFilename = argv[0];
+    } else {
+      scriptFilename = argv[0] + ".pyj";
+    }
 
     var moduleHandler = new MinescriptModuleHandler();
     var script =
@@ -284,24 +298,22 @@ public class PyjinnScript {
             nameMappings::getRuntimeMethodNames);
 
     script.vars.__setitem__("sys_version", Script.versionInfo().toString());
-    script.vars.__setitem__("sys_argv", scriptCommand);
+    script.vars.__setitem__("sys_argv", argv);
 
     // When a script is created for a PyjinnJob, the script's stdout and stderr will be redirected
     // to the chat. But by default, log the output in case this script isn't running within a
     // PyjinnJob.
-    String scriptShortName = Paths.get(scriptFilename).getFileName().toString();
-    script.redirectStdout(s -> LOGGER.info("[{} stdout] {}", scriptShortName, s));
-    script.redirectStderr(s -> LOGGER.info("[{} stderr] {}", scriptShortName, s));
+    script.redirectStdout(s -> LOGGER.info("[{} stdout] {}", scriptFilename, s));
+    script.redirectStderr(s -> LOGGER.info("[{} stderr] {}", scriptFilename, s));
     script.setZombieCallbackHandler(
-        (String scriptName, String callable, int count) -> {
+        (String zombieScriptName, String callable, int count) -> {
           if (count == 1 || count % 10000 == 0) {
             LOGGER.warn(
-                "[{} zombie] Invocation of {} (count: {}) defined in script that already"
+                "[zombie callback] Invocation of {} (count: {}) defined in script that already"
                     + " exited: {}",
-                scriptShortName,
                 callable,
                 count,
-                scriptName);
+                zombieScriptName);
           }
         });
 
