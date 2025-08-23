@@ -3089,7 +3089,7 @@ public class Minescript {
         }
 
       case "player_look_at": // Look at x, y, z
-          {
+        {
           args.expectSize(3);
           double x = args.getDouble(0);
           double y = args.getDouble(1);
