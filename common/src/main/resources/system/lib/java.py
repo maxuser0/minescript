@@ -210,18 +210,6 @@ def from_java_handle(java_id: JavaHandle):
     else:
       return JavaObject(java_id)
 
-def _promote_primitive_types(type_id: JavaHandle) -> JavaHandle:
-  type_name = _get_class_info(type_id).class_name()
-  if type_name == "boolean":
-    return Boolean_id
-  if type_name == "int":
-    return Integer_id
-  if type_name == "float":
-    return Float_id
-  if type_name == "double":
-    return Double_id
-  return type_id
-
 class JavaRef:
   def __init__(self, id: JavaHandle):
     self.id = id

@@ -9,7 +9,11 @@ import markdown
 import re
 import sys
 
+# If True, rewrite doc link(s) to drop ".md". Otherwise replace ".md" with ".html".
+local_html_output = "--local" in sys.argv
+
 html_heading_re = re.compile(r"<h[0-9]>([^<]*)</h[0-9]>")
+url_rewrite_re = re.compile(r'(<a\s+href="[^"]+)\.md(#.*)?(">)')
 
 md_input = sys.stdin.read()
 html_output = markdown.markdown(md_input, extensions=["fenced_code"])
@@ -33,6 +37,12 @@ for line in html_output.splitlines():
         '<a href="https://github.com/maxuser0/minescript/blob/main/docs/README.md">GitHub</a>'
         '.</i></p>')
 
+  # Rewrite markdown links to web link.
+  if local_html_output:
+    line = re.sub(url_rewrite_re, r'\1.html\2\3', line)
+  else:
+    line = re.sub(url_rewrite_re, r'\1\2\3', line)
+  
   line = line.replace("\\", "&#92;")
   print(line)
   prev_line = line

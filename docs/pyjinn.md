@@ -96,6 +96,70 @@ if "Pyjinn" not in sys.version:
   raise ImportError(f"Module '{__name__}' requires a Pyjinn interpreter.")
 ```
 
+
+#### Embedding Pyjinn in Python scripts
+
+Minescript's pre-installed `java` library for Python (`minescript/system/lib/java.py`) supports
+embedding Pyjinn scripts within Python scripts to access their global variables and functions.
+
+For example, the Python script below uses `java.eval_pyjinn_script(...)` to embed a Pyjinn script
+that defines:
+
+- global variable `x`
+- global function `print_x()` that prints the value of `x`
+- global function `get_fps(units: str)` that returns the current frames per second with the given units
+
+_**Note:**_ The script below accesses Java code (`net.minecraft.client.Minecraft`) which may be
+using name mappings. For details see: [Mappings](mappings.md). **tl;dr:** If you're using the Fabric
+mod, install the mappings by running `\install_mappings` before running the script below.
+
+```
+# pyjinn_in_python_example.py
+
+import java
+# or: import system.lib.java as java
+
+script = java.eval_pyjinn_script(r"""
+x = 42
+def print_x():
+  print(f"x from Pyjinn = {x}")
+
+Minecraft = JavaClass("net.minecraft.client.Minecraft")
+
+def get_fps(units: str) -> str:
+  return f"{Minecraft.getInstance().getFps()} {units}"
+""")
+
+get_fps = script.getFunction("get_fps")
+print("fps:", get_fps("frames per second"))
+
+print(f"x from Python = {script.getVariable('x')}")
+
+print_x = script.getFunction("print_x")
+print_x()
+script.setVariable("x", 99)
+print_x()
+```
+
+Chat output:
+
+```
+fps: 101 frames per second
+x from Python = 42
+x from Pyjinn = 42
+x from Pyjinn = 99
+```
+
+The Python script accesses globals from the Pyjinn script:
+
+- accesses functions using `script.getFunction(function_name: str)`
+- gets the value of a global variable using `script.getVariable(variable_name: str)`
+- sets the value of a global variable using `script.setVariable(variable_name: str, value: Any)`
+
+Supported global variable types include `bool`, `float`, `int`, `str`, and references to Java
+objects.
+
+
 ### Java Integration
 
 
