@@ -463,7 +463,7 @@ def command_parse_test():
 
 
 @test
-def java_test():
+def java_functions_test():
   JavaHandle = minescript.JavaHandle
   object_class = minescript.java_class("java.lang.Object")
   class_class = minescript.java_class("java.lang.Class")
@@ -501,6 +501,20 @@ def java_test():
   value, type_ = do_operator(Numbers_lessThan, minescript.java_int(7), minescript.java_float(22))
   expect_equal(value, "true")
   expect_equal(type_, "java.lang.Boolean")
+
+@test
+def java_library_test():
+  Minescript = java.JavaClass("net.minescript.common.Minescript")
+  expect_equal(type(Minescript), java.JavaClassType)
+  expect_equal(type(Minescript.mappingsLoader), java.JavaObject)
+
+  Minecraft = java.JavaClass("net.minecraft.client.Minecraft")
+  expect_equal(type(Minecraft.getInstance().getFps()), int)
+
+  player_name = minescript.player_name()
+  java_player_name = Minecraft.getInstance().player.getName().getString()
+  expect_equal(type(java_player_name), str)
+  expect_equal(java_player_name, player_name)
 
 
 # END TESTS

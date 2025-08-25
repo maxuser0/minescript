@@ -465,7 +465,7 @@ class JavaClassType(JavaObject):
         return result
 
     binding = JavaBoundMember(self.id, _null_id, name)
-    if name not in java_field_names(self.get_class_id()):
+    if name not in java_field_names(self.id):
       return binding
     try:
       field = java_access_field(self.id, binding.member_id)
