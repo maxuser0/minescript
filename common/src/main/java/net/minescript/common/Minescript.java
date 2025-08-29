@@ -731,10 +731,10 @@ public class Minescript {
       }
     }
 
-    public Script createPyjinnSubjob(Job.SubprocessJob parentJob, long opId, String scriptCode)
+    public Script createPyjinnSubjob(
+        Job.SubprocessJob parentJob, long opId, String scriptName, String scriptCode)
         throws Exception {
       var parentCommand = parentJob.boundCommand();
-      String scriptName = "eval_pyjinn_script-%d-%d".formatted(parentJob.jobId(), opId);
       var childCommand =
           new ScriptConfig.BoundCommand(
               parentCommand.scriptPath(), new String[] {scriptName}, parentCommand.redirects());
@@ -3700,9 +3700,10 @@ public class Minescript {
 
       case "eval_pyjinn_script":
         {
-          args.expectSize(1);
-          String scriptCode = args.getString(0);
-          var script = jobs.createPyjinnSubjob(job, funcCallId, scriptCode);
+          args.expectSize(2);
+          String scriptName = args.getString(0);
+          String scriptCode = args.getString(1);
+          var script = jobs.createPyjinnSubjob(job, funcCallId, scriptName, scriptCode);
           return Optional.of(new JsonPrimitive(job.objects.retain(script)));
         }
 

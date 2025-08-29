@@ -6,9 +6,6 @@ r"""java v5.0 distributed via Minescript jar file
 Library for using Java reflection from Python, wrapping
 the low-level Java API script functions (`java_*`).
 
-Requires:
-  minescript v5.0
-
 Example:
 ```
 from minescript import echo
@@ -58,6 +55,24 @@ for func in (
 
 
 class AutoReleasePool:
+  """Context manager for managing Java references in Python using `with` blocks.
+  
+  Example:
+    ```
+    import minescript
+    from java import *
+    with AutoReleasePool() as auto:
+      Object_class = auto(java_class("java.lang.Object"))
+      Object_hashCode = auto(java_member(Object_class, "hashCode"))
+      hello_string = auto(java_string("hello"))
+      hash_value  = auto(java_call_method(hello_string, Object_hashCode))
+      minescript.echo(java_to_string(hash_value))
+    ```
+
+    All the Java references captured with `auto()` in the example are released when
+    the `with` block above exits, automatically calling [`java_release()`](#java_release).
+  """
+  
   def __init__(self):
     self.refs = []
 
@@ -538,20 +553,39 @@ def callAsyncScriptFunction(func_name: str, *args) -> JavaFuture:
   return JavaFuture(java_call_script_function.as_async(func_name, *[to_java_handle(a) for a in args]))
 
 
-def _eval_pyjinn_script(script_code: str):
-  return (script_code,)
+def _eval_pyjinn_script(script_name: str, script_code: str):
+  return (script_name, script_code)
 
 _eval_pyjinn_script = ScriptFunction("eval_pyjinn_script", _eval_pyjinn_script)
 
-def eval_pyjinn_script(script_code: str):
-  """Creates a Pyjinn script.
+def eval_pyjinn_script(script_code: str) -> JavaObject:
+  """Creates a Pyjinn script given source code as a string.
+
+  See: [Embedding Pyjinn in Python scripts](pyjinn.md#embedding-pyjinn-in-python-scripts)
 
   Args:
     script_code: Pyjinn source code
 
   Returns:
-    new Java object of type org.pyjinn.interpreter.Script
+    new Java object of type `org.pyjinn.interpreter.Script`
 
   Since: v5.0
   """
-  return JavaObject(_eval_pyjinn_script(script_code), is_script=True)
+  return JavaObject(_eval_pyjinn_script("__eval_pyjinn_script__", script_code), is_script=True)
+
+def import_pyjinn_script(pyj_filename: str):
+  """Imports a Pyjinn script from a `.pyj` file.
+
+  See: [Embedding Pyjinn in Python scripts](pyjinn.md#embedding-pyjinn-in-python-scripts)
+
+  Args:
+    pyj_filename: name a of `.pyj` file containing Pyjinn code to import
+
+  Returns:
+    new Java object of type `org.pyjinn.interpreter.Script`
+
+  Since: v5.0
+  """
+  with open(pyj_filename, 'r', encoding='utf-8') as pyj_file:
+    script_code = pyj_file.read()
+    return JavaObject(_eval_pyjinn_script(pyj_filename, script_code), is_script=True)
