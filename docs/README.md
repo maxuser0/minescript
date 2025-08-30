@@ -876,6 +876,7 @@ is specified.
 - [`KeyEvent`](#keyevent)
 - [`KeyEventListener`](#keyeventlistener)
 - [`log`](#log)
+- [`ManagedCallback`](#managedcallback)
 - [`MinescriptRuntimeOptions`](#minescriptruntimeoptions)
 - [`MouseEvent`](#mouseevent)
 - [`player`](#player)
@@ -913,6 +914,8 @@ is specified.
 - [`screenshot`](#screenshot)
 - [`set_chat_input`](#set_chat_input)
 - [`set_default_executor`](#set_default_executor)
+- [`set_interval`](#set_interval)
+- [`set_timeout`](#set_timeout)
 - [`show_chat_screen`](#show_chat_screen)
 - [`TakeItemEvent`](#takeitemevent)
 - [`TargetedBlock`](#targetedblock)
@@ -2707,10 +2710,78 @@ Render event for use with callback to [`add_event_listener()`](#add_event_listen
 
   Compatibility: Pyjinn only.
   
+```
+  type: str  # "render"
+  context: Any  # Render context provided by the mod loader.
+  time: float
+```
 
 #### TickEvent
 Tick event for use with callback to [`add_event_listener()`](#add_event_listener).
 
   Compatibility: Pyjinn only.
   
+```
+  type: str  # "tick"
+  time: float
+```
+
+#### set_timeout
+*Usage:* <code>set_timeout(callback: Callable[..., None], timer_millis: int, \*args) -> int</code>
+
+Schedules `callback` to be invoked once after `timer_millis` milliseconds.
+  
+  Returns:
+    an integer ID for the callback which can be canceled with [`remove_event_listener()`](#remove_event_listener).
+
+  Compatibility: Pyjinn only.
+  
+
+#### set_interval
+*Usage:* <code>set_interval(callback: Callable[..., None], timer_millis: int, \*args) -> int</code>
+
+Schedules `callback` to be invoked every `timer_millis` milliseconds.
+  
+  Returns:
+    an integer ID for the callback which can be canceled with [`remove_event_listener()`](#remove_event_listener).
+
+  Compatibility: Pyjinn only.
+  
+
+#### ManagedCallback
+Wrapper for managing callbacks passed to Java APIs.
+
+  Example:
+
+  ```
+  callback = ManagedCallback(on_hud_render)
+  HudRenderCallback.EVENT.register(HudRenderCallback(callback))
+
+  # Cancel after 1 second (1000 milliseconds):
+  set_timeout(callback.cancel, 1000)
+  ```
+
+  Compatibility: Pyjinn only.
+  
+
+#### ManagedCallback.\_\_init\_\_
+*Usage:* <code>ManagedCallback(callback, cancel_on_exception=True, default_value=None)</code>
+
+Creates a managed callback.
+
+  Args:
+- `  callback`: a callable function or object to manage
+- `  cancel_on_exception`: if the callback raises an exception, cancel the callback
+- `  default_value`: value to return immediately if callback is called after being canceled
+  
+
+#### ManagedCallback.cancel
+*Usage:* <code>ManagedCallback.cancel()</code>
+
+Cancels the callback, returning `default_value` if it continues to be called.
+
+#### ManagedCallback.\_\_call\_\_
+*Usage:* <code>ManagedCallback.\_\_call\_\_(\*args)</code>
+
+Calls this callback, checking for cancellation.
 
