@@ -178,6 +178,9 @@ class Float:
 
   value: float
 
+  def __bool__(self):
+    return bool(self.value)
+
   def __str__(self):
     return f"{self.value}f"
 
@@ -202,7 +205,7 @@ def to_java_handle(value):
     raise ValueError(f"Python type {type(value)} not convertible to Java: {value}")
 
 
-def from_java_handle(java_id: JavaHandle):
+def from_java_handle(java_id: JavaHandle, java_object=None):
   # TODO(maxuser): Run most of these calls in script_loop, but not java_to_string when uncertain
   # that it's a primitive type.
   with AutoReleasePool() as auto:
@@ -222,10 +225,14 @@ def from_java_handle(java_id: JavaHandle):
       return float(java_to_string(java_id))
     elif java_type == "java.lang.String":
       return java_to_string(java_id)
+    elif java_object is not None:
+      return java_object
     else:
       return JavaObject(java_id)
 
 class JavaRef:
+  """Reference counter for Java objects referenced from Python."""
+  
   def __init__(self, id: JavaHandle):
     self.id = id
     self.count = 1
@@ -349,6 +356,17 @@ class JavaObject:
       return java_array_length(self.id)
     else:
       raise TypeError(f"object {self.id} has no len()")
+
+  def __bool__(self) -> int:
+    """Returns False if the Java reference is null."""
+    value = from_java_handle(self.id, java_object=self)
+    if value in (None, False, 0, 0., ""):
+      return False
+    if type(value) is Float:
+      return bool(value)
+    if self._is_array():
+      return java_array_length(self.id) != 0
+    return True
 
   def __getitem__(self, i: int):
     """If this JavaObject represents a Java array, returns `array[i]`.
