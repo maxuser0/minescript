@@ -410,6 +410,7 @@ X + Y
 X - Y
 X * Y
 X / Y
+X // Y  # since Pyjinn 0.9
 X ** Y
 X % Y
 X << Y  # since Pyjinn 0.6
@@ -594,7 +595,6 @@ Language features currently **NOT** supported by Pyjinn:
   are supported)
 - user-defined decorators
 - Python-style metaclasses
-- floor division operator: `//`
 
 #### str
 
