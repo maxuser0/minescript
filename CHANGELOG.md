@@ -7,6 +7,35 @@
 - To set up Fabric mappings for Pyjinn scripts see
   [minescript.net/mappings](https://minescript.net/mappings)
 
+## Minescript 5.0b6
+
+- Update docs for Minescript 5.0b6 and Pyjinn 0.9 ([9cfaf63](https://github.com/maxuser0/minescript/commit/9cfaf63a45e23813ff4fab9631c8dbc11cb8ee70))
+- Add test for `atexit.register/unregister()` ([ac3492f](https://github.com/maxuser0/minescript/commit/ac3492f8691252ab440dcd960a217df0147c8b74))
+- `**args` in `set_timeout, set_interval, atexit.register` ([edeb1dc](https://github.com/maxuser0/minescript/commit/edeb1dcbec9e55cb2aafdba47792ef62e510a47e))
+- Support `atexit.unregister(func)` ([0f42a21](https://github.com/maxuser0/minescript/commit/0f42a21db495d65c780a45c4c761367eb432f288))
+- Support `bool()` operator for `JavaObject` ([9807573](https://github.com/maxuser0/minescript/commit/980757315f8951230733a836c39fce1cd5d51716))
+- Update Pyjinn docs with support for `//` operator ([fa6a536](https://github.com/maxuser0/minescript/commit/fa6a5363568c2a44330a757d4374758001edfdaf))
+- Docs for `set_timeout, set_interval, ManagedCallback` ([dccfcc5](https://github.com/maxuser0/minescript/commit/dccfcc52050af998ecaa8e4ff359914ad363804b))
+- Add `import_pyjinn_script()` to java.py library ([d3076bb](https://github.com/maxuser0/minescript/commit/d3076bbe627fa1d9959635a83b470851cfe75f60))
+- Support `atexit.register(func, *args)` in Pyjinn ([df2f4fb](https://github.com/maxuser0/minescript/commit/df2f4fb42efae35af93c178d848d09806950fbe5))
+- Update Pyjinn version to 0.9 ([82a83b0](https://github.com/maxuser0/minescript/commit/82a83b014a646664dd6a9201de7741f47ff067fb))
+- Fix bug in java.py for accessing static fields ([ec25ff7](https://github.com/maxuser0/minescript/commit/ec25ff794d1bb57e80720f71794fb31cef192e4a))
+- Update Minescript version to 5.0b6 ([89a876b](https://github.com/maxuser0/minescript/commit/89a876bf7a90c1e544ffc0ff3b0be4ff6df6cf9d))
+
+### Pyjinn 0.9
+
+- General improvements to handling of `**kwargs` ([025115c](https://github.com/maxuser0/pyjinn/commit/025115c46d7d1b59246ace86a191f278d3cec2b6))
+- Support unregistering `atexit` callbacks ([c80beec](https://github.com/maxuser0/pyjinn/commit/c80beec8c1cc77a3f3ef693f04cde893404002b1))
+- Support floor div operator in Pyjinn: `x // y` ([90665f0](https://github.com/maxuser0/pyjinn/commit/90665f062728f2130a70545c9efcf71e180b9afc))
+- Support `dict()`, `**args` in func defs and func calls ([6d007e8](https://github.com/maxuser0/pyjinn/commit/6d007e89e7d78e74e2c0da6d00479737b29a818e))
+- Support invocation of nested class constructors ([664ef92](https://github.com/maxuser0/pyjinn/commit/664ef9208eb2b70e500474377c8d65bb6ee51227))
+- Support Pyjinn function passed to nested interface ([da77064](https://github.com/maxuser0/pyjinn/commit/da7706469fb292f70f255e8dca6ebf6e224e3722))
+- Add unittest for one-line while statment ([d31c2f4](https://github.com/maxuser0/pyjinn/commit/d31c2f445ce921f8e6b107af2d1919f76fba497f))
+- Support single-line forms of def, while, for, if ([b27a47d](https://github.com/maxuser0/pyjinn/commit/b27a47d419278ecc370ec0fd5f0038baae782596))
+- Add `__atexit__()` for registering exit callbacks ([85200ab](https://github.com/maxuser0/pyjinn/commit/85200ab1e7a4a0f449cf103d1ad01c61ca739647))
+- Update Pyjinn version to 0.9 ([01fdfc3](https://github.com/maxuser0/pyjinn/commit/01fdfc3c732cae66fcee4f10dbe78701b57ddd28))
+
+
 ## Minescript 5.0b5
 
 - Update docs for Minescript 5.0 and Pyjinn ([75a2815](https://github.com/maxuser0/minescript/commit/75a28157216374b5b9d668a0b3e46d459b5ea665))
