@@ -10,4 +10,8 @@ The Python standard library is licensed under the Python Software Foundation Lic
 
 # TODO(maxuser): Support **kwargs.
 def register(func, *args):
-  __atexit__(lambda: func(*args))
+  __atexit_register__(func, *args)
+  return func
+
+def unregister(func):
+  __atexit_unregister__(func)
