@@ -127,6 +127,11 @@ def test(test_func):
 # BEGIN TESTS
 
 pyjinn_source = r"""
+import sys
+import atexit
+
+value_set_on_exit = JavaArray((None,))
+
 Minecraft = JavaClass("net.minecraft.client.Minecraft")
 
 def get_fps() -> int:
@@ -137,11 +142,21 @@ def get_player_name() -> str:
 
 def get_num_jobs() -> int:
   return len(job_info())
+
+def set_value_on_exit(value):
+  global value_set_on_exit
+  value_set_on_exit[0] = value
+
+atexit.register(set_value_on_exit, value="assigned!")
+
+def cancel_exit_handler():
+  atexit.unregister(set_value_on_exit)
 """
 
 @test
 def pyjinn_test():
   script = java.eval_pyjinn_script(pyjinn_source)
+  value_set_on_exit = script.getVariable("value_set_on_exit")
 
   get_fps = script.getFunction("get_fps")
   fps = get_fps()
@@ -156,6 +171,16 @@ def pyjinn_test():
   expect_equal(get_num_jobs(), len(minescript.job_info()))
 
   script.exit()
+  expect_equal("assigned!", value_set_on_exit[0])
+
+  # Re-run the script, but now with the at-exit handler canceled.
+  script = java.eval_pyjinn_script(pyjinn_source)
+  value_set_on_exit = script.getVariable("value_set_on_exit")
+  cancel_exit_handler = script.getFunction("cancel_exit_handler")
+  cancel_exit_handler()
+  script.exit()
+  expect_equal(None, value_set_on_exit[0])
+
 
 
 @test
