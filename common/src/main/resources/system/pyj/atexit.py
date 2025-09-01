@@ -8,9 +8,8 @@ The Python standard library is licensed under the Python Software Foundation Lic
 (PSFL).
 """
 
-# TODO(maxuser): Support **kwargs.
-def register(func, *args):
-  __atexit_register__(func, *args)
+def register(func, *args, **kwargs):
+  __atexit_register__(func, *args, **kwargs)
   return func
 
 def unregister(func):

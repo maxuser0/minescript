@@ -2593,7 +2593,7 @@ if "Pyjinn" in sys.version:
     type: str  # "tick"
     time: float
 
-  def set_timeout(callback: Callable[..., None], timer_millis: int, *args) -> int:
+  def set_timeout(callback: Callable[..., None], timer_millis: int, *args, **kwargs) -> int:
     """Schedules `callback` to be invoked once after `timer_millis` milliseconds.
     
     Returns:
@@ -2603,7 +2603,7 @@ if "Pyjinn" in sys.version:
     """
     raise NotImplementedError("set_timeout is not compatible with Python")
 
-  def set_interval(callback: Callable[..., None], timer_millis: int, *args) -> int:
+  def set_interval(callback: Callable[..., None], timer_millis: int, *args, **kwargs) -> int:
     """Schedules `callback` to be invoked every `timer_millis` milliseconds.
     
     Returns:
