@@ -588,6 +588,9 @@ Python `float` maps to Java `double`, and Python doesn't have a built-in single-
   value: float
 ```
 
+#### JavaRef
+Reference counter for Java objects referenced from Python.
+
 #### JavaObject
 Python representation of a Java object.
 
@@ -639,6 +642,11 @@ If this JavaObject represents a Java array, returns the length of the array.
 
 Raises `TypeError` if this isn't an array.
 
+
+#### JavaObject.\_\_bool\_\_
+*Usage:* <code>JavaObject.\_\_bool\_\_() -> int</code>
+
+Returns False if the Java reference is null.
 
 #### JavaObject.\_\_getitem\_\_
 *Usage:* <code>JavaObject.\_\_getitem\_\_(i: int)</code>
@@ -2727,7 +2735,7 @@ Tick event for use with callback to [`add_event_listener()`](#add_event_listener
 ```
 
 #### set_timeout
-*Usage:* <code>set_timeout(callback: Callable[..., None], timer_millis: int, \*args) -> int</code>
+*Usage:* <code>set_timeout(callback: Callable[..., None], timer_millis: int, \*args, \*\*kwargs) -> int</code>
 
 Schedules `callback` to be invoked once after `timer_millis` milliseconds.
   
@@ -2738,7 +2746,7 @@ Schedules `callback` to be invoked once after `timer_millis` milliseconds.
   
 
 #### set_interval
-*Usage:* <code>set_interval(callback: Callable[..., None], timer_millis: int, \*args) -> int</code>
+*Usage:* <code>set_interval(callback: Callable[..., None], timer_millis: int, \*args, \*\*kwargs) -> int</code>
 
 Schedules `callback` to be invoked every `timer_millis` milliseconds.
   

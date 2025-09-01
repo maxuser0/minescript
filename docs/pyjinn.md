@@ -35,8 +35,8 @@ Minescript Pyjinn scripts use single-threaded event handling inspired by
 JavaScript:
 
 - `add_event_listener(event_type: str, callback: Callable[..., None], **args) -> int`
-- `set_interval(callback: Callable[..., None], timer_millis: int, *args) -> int`
-- `set_timeout(callback: Callable[..., None], timer_millis: int, *args) -> int`
+- `set_interval(callback: Callable[..., None], timer_millis: int, *args, **kwargs) -> int`
+- `set_timeout(callback: Callable[..., None], timer_millis: int, *args, **kwargs) -> int`
 - `remove_event_listener(listener_id: int) -> bool`
 
 The supported event types are:
@@ -398,8 +398,17 @@ X in Y
 X not in Y
 
 # Call function with an iterable sequence into distinct args:
-X = [1, 2, 3]
-FUNC(*X)  # call as FUNC(1, 2, 3)
+FUNC(*[1, 2, 3])  # call as FUNC(1, 2, 3)
+
+# Convert dict with str keys into keyword arguments to a function:
+# (since Pyjinn 0.9)
+FUNC(**{"K1": V1, "K2": V2, ...}) 
+# equivalent to: FUNC(K1=V1, K2=V2, ...)
+
+# Capture keyword args passed to a function as a dict:
+# (since Pyjinn 0.9)
+def FUNC(**kwargs):
+  ...
 
 # Operators:
 -X  # for numeric types
@@ -420,13 +429,20 @@ X >> Y  # since Pyjinn 0.6
 abs(X)
 bool(X)
 chr(INT)
+dict:
+  dict()
+  dict(DICT_TO_COPY)
+  dict(ITERABLE_OF_PAIRS)  # e.g. dict([(K1, V1), (K2, V2)])
+  dict(K1=V1, K2=V2, ...)
 enumerate(ITERABLE)
 float(X)
 globals()
 hex(X)
 int(X)
 len(ITERABLE)
-list(ITERABLE)
+list:
+  list()
+  list(ITERABLE)
 max(X, Y, ...)
 min(X, Y, ...)
 ord(STR)
@@ -576,10 +592,6 @@ Language features currently **NOT** supported by Pyjinn:
 
 - Python standard library (except for some basics in `sys` module: `sys.argv`,
   `sys.version`, `sys.stdout`, `sys.stderr`)
-- `**kwargs` on caller side and callee side of a function call (but individual keyword args are
-  supported, e.g. `print("foo", file=sys.stderr)`)
-- `dict(k1=v1, k2=v2, ...)` syntax for constructing a dictionary (but `{k1: v1, k2: v2, ...}` is
-  supported)
 - `else` blocks following `for` and `while` blocks
 - generators and `yield` statement
 - threading, asyncio, and async/await syntax (Java `Thread` is supported instead)
