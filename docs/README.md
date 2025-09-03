@@ -12,6 +12,7 @@ Table of contents:
     - [Script output](#script-output)
     - [Script functions](#script-functions)
     - [Async script functions](#async-script-functions)
+    - [java module](#java-module)
     - [minescript module](#minescript-module)
 
 ## In-game commands
@@ -515,6 +516,301 @@ while True:
     minescript.echo("Still waiting for chunks around player to finish loading...")
 ```
 
+
+### java module
+
+Library for using Java reflection from Python, wrapping
+the low-level Java API script functions (`java_*`).
+
+
+*Example:*
+
+```
+from minescript import echo
+from java import JavaClass
+
+Minecraft = JavaClass("net.minecraft.client.Minecraft")
+minecraft = Minecraft.getInstance()
+echo("fps:", minecraft.getFps())
+```
+
+- [`AutoReleasePool`](#autoreleasepool)
+- [`callAsyncScriptFunction`](#callasyncscriptfunction)
+- [`callScriptFunction`](#callscriptfunction)
+- [`eval_pyjinn_script`](#eval_pyjinn_script)
+- [`Float`](#float)
+- [`import_pyjinn_script`](#import_pyjinn_script)
+- [`JavaBoundMember`](#javaboundmember)
+- [`JavaClassType`](#javaclasstype)
+- [`JavaFloat`](#javafloat)
+- [`JavaFuture`](#javafuture)
+- [`JavaInt`](#javaint)
+- [`JavaObject`](#javaobject)
+- [`JavaRef`](#javaref)
+- [`JavaString`](#javastring)
+
+#### AutoReleasePool
+Context manager for managing Java references in Python using `with` blocks.
+
+*Example:*
+
+```
+import minescript
+from java import *
+with AutoReleasePool() as auto:
+  Object_class = auto(java_class("java.lang.Object"))
+  Object_hashCode = auto(java_member(Object_class, "hashCode"))
+  hello_string = auto(java_string("hello"))
+  hash_value  = auto(java_call_method(hello_string, Object_hashCode))
+  minescript.echo(java_to_string(hash_value))
+```
+
+All the Java references captured with `auto()` in the example are released when
+the `with` block above exits, automatically calling [`java_release()`](#java_release).
+
+
+#### AutoReleasePool.\_\_call\_\_
+*Usage:* <code>AutoReleasePool.\_\_call\_\_(ref: JavaHandle) -> JavaHandle</code>
+
+Track `ref` for auto-release when this pool is deleted or goes out of scope.
+
+*Returns:*
+
+- `ref` for convenient wrapping of functions returning a JavaHandle.
+
+
+#### Float
+Wrapper class for mirroring Java `float` in Python.
+
+Python `float` maps to Java `double`, and Python doesn't have a built-in single-precision float.
+
+```
+  value: float
+```
+
+#### JavaObject
+Python representation of a Java object.
+
+#### JavaObject.\_\_init\_\_
+*Usage:* <code>JavaObject(target_id: JavaHandle, ref: [JavaRef](#javaref) = None, is_script: bool = False)</code>
+
+Constructs a Python handle to a Java object given a `JavaHandle`. 
+
+#### JavaObject.toString
+*Usage:* <code>JavaObject.toString() -> str</code>
+
+Returns a `str` representation of `this.toString()` from Java.
+
+#### JavaObject.set_value
+*Usage:* <code>JavaObject.set_value(value: Any)</code>
+
+Sets this JavaObject to reference `value` instead.
+
+`value` can be any of the following types:
+- bool: converted to Java Boolean
+- int: converted to Java Integer
+- Float: converted to Java Float
+- float: converted to Java Double
+- str: converted to Java String
+- JavaObject: this JavaObject will reference the same Java object as `value`
+
+
+#### JavaObject.\_\_getattr\_\_
+*Usage:* <code>JavaObject.\_\_getattr\_\_(name: str)</code>
+
+Accesses the field or method named `name`.
+
+*Args:*
+
+- `name`: name of a field or method on this JavaObject's class
+
+*Returns:*
+
+- If `name` matches a field on this JavaObject's class, then return the
+  value of that field as a Python primitive or new JavaObject. Otherwise
+  return a [`JavaBoundMember`](#javaboundmember) equivalent to the Java expression
+  `this::methodName`.
+
+
+#### JavaObject.\_\_len\_\_
+*Usage:* <code>JavaObject.\_\_len\_\_() -> int</code>
+
+If this JavaObject represents a Java array, returns the length of the array.
+
+Raises `TypeError` if this isn't an array.
+
+
+#### JavaObject.\_\_getitem\_\_
+*Usage:* <code>JavaObject.\_\_getitem\_\_(i: int)</code>
+
+If this JavaObject represents a Java array, returns `array[i]`.
+
+*Args:*
+
+- `i`: index into array from which to get an element
+
+*Returns:*
+
+- `array[i]` as a Python primitive value or JavaObject.
+
+*Raises:*
+
+  `TypeError` if this isn't an array.
+
+
+#### JavaBoundMember
+Representation of a Java method reference in Python.
+
+#### JavaBoundMember.\_\_init\_\_
+*Usage:* <code>JavaBoundMember(target_class_id: JavaHandle, target, name: str, ref: [JavaRef](#javaref) = None, script: [JavaObject](#javaobject) = None)</code>
+
+Member that's bound to a target object, representing a field or method.
+
+*Args:*
+
+- `target_class_id`: Java object ID of enclosing class for this member
+- `target`: either Java object ID of the target through which this member is accessed
+- `name`: name of this member
+- `ref`: JavaRef to manage reference lifetime (optional)
+- `script`: Pyjinn Script object for accessing and calling script functions (optional)
+
+
+#### JavaBoundMember.\_\_call\_\_
+*Usage:* <code>JavaBoundMember.\_\_call\_\_(\*args)</code>
+
+Calls the bound method with the given `args`.
+
+*Returns:*
+
+- A Python primitive (bool, int, float, str) if applicable, otherwise a JavaObject.
+
+
+#### JavaInt
+JavaObject subclass for Java Integer.
+
+#### JavaFloat
+JavaObject subclass for Java Float.
+
+#### JavaString
+JavaObject subclass for Java String.
+
+#### JavaClassType
+JavaObject subclass for Java class objects.
+
+#### JavaClassType.is_enum
+*Usage:* <code>JavaClassType.is_enum()</code>
+
+Returns `True` if this class represents a Java enum type.
+
+#### JavaClassType.\_\_getattr\_\_
+*Usage:* <code>JavaClassType.\_\_getattr\_\_(name)</code>
+
+Accesses the static field or static method named `name` on this Java class.
+
+*Args:*
+
+- `name`: name of a static field or static method on this Java class.
+
+*Returns:*
+
+- If `name` matches a static field on this Java class, then return the value of that field as
+  a new JavaObject. Otherwise return a [`JavaBoundMember`](#javaboundmember) equivalent to the Java expression
+  `ThisClass::staticMethodName`.
+
+
+#### JavaClassType.\_\_call\_\_
+*Usage:* <code>JavaClassType.\_\_call\_\_(\*args)</code>
+
+Calls the constructor for this Java class that takes the given `args`, if applicable.
+
+*Returns:*
+
+- JavaObject representing the newly constructed Java object.
+
+
+#### callScriptFunction
+*Usage:* <code>callScriptFunction(func_name: str, \*args) -> [JavaObject](#javaobject)</code>
+
+Calls the given Minescript script function.
+
+*Args:*
+
+- `func_name`: name of a Minescript script function
+- `args`: args to pass to the given script function
+
+*Returns:*
+
+- The return value of the given script function as a Python primitive type or JavaObject.
+
+
+#### JavaFuture
+Java value that will become available in the future when an async function completes.
+
+#### JavaFuture.wait
+*Usage:* <code>JavaFuture.wait(timeout=None)</code>
+
+Waits for the async function to complete.
+
+*Args:*
+
+- `timeout`: if not `None`, timeout in seconds to wait on the async function to complete
+
+*Returns:*
+
+- Python primitive value or JavaObject returned from the async function upon completion.
+
+
+#### callAsyncScriptFunction
+*Usage:* <code>callAsyncScriptFunction(func_name: str, \*args) -> [JavaFuture](#javafuture)</code>
+
+Calls the given Minescript script function asynchronously.
+
+*Args:*
+
+- `func_name`: name of a Minescript script function
+- `args`: args to pass to the given script function
+
+*Returns:*
+
+- [`JavaFuture`](#javafuture) that will hold the return value of the async funcion when complete.
+
+
+#### eval_pyjinn_script
+*Usage:* <code>eval_pyjinn_script(script_code: str) -> [JavaObject](#javaobject)</code>
+
+Creates a Pyjinn script given source code as a string.
+
+See: [Embedding Pyjinn in Python scripts](pyjinn.md#embedding-pyjinn-in-python-scripts)
+
+*Args:*
+
+- `script_code`: Pyjinn source code
+
+*Returns:*
+
+- new Java object of type `org.pyjinn.interpreter.Script`
+
+Since: v5.0
+
+
+#### import_pyjinn_script
+*Usage:* <code>import_pyjinn_script(pyj_filename: str)</code>
+
+Imports a Pyjinn script from a `.pyj` file.
+
+See: [Embedding Pyjinn in Python scripts](pyjinn.md#embedding-pyjinn-in-python-scripts)
+
+*Args:*
+
+- `pyj_filename`: name a of `.pyj` file containing Pyjinn code to import
+
+*Returns:*
+
+- new Java object of type `org.pyjinn.interpreter.Script`
+
+Since: v5.0
+
+
 ### minescript module
 
 *Usage:* `import minescript  # from Python script`
@@ -580,6 +876,7 @@ is specified.
 - [`KeyEvent`](#keyevent)
 - [`KeyEventListener`](#keyeventlistener)
 - [`log`](#log)
+- [`ManagedCallback`](#managedcallback)
 - [`MinescriptRuntimeOptions`](#minescriptruntimeoptions)
 - [`MouseEvent`](#mouseevent)
 - [`player`](#player)
@@ -617,6 +914,8 @@ is specified.
 - [`screenshot`](#screenshot)
 - [`set_chat_input`](#set_chat_input)
 - [`set_default_executor`](#set_default_executor)
+- [`set_interval`](#set_interval)
+- [`set_timeout`](#set_timeout)
 - [`show_chat_screen`](#show_chat_screen)
 - [`TakeItemEvent`](#takeitemevent)
 - [`TargetedBlock`](#targetedblock)
@@ -2411,10 +2710,78 @@ Render event for use with callback to [`add_event_listener()`](#add_event_listen
 
   Compatibility: Pyjinn only.
   
+```
+  type: str  # "render"
+  context: Any  # Render context provided by the mod loader.
+  time: float
+```
 
 #### TickEvent
 Tick event for use with callback to [`add_event_listener()`](#add_event_listener).
 
   Compatibility: Pyjinn only.
   
+```
+  type: str  # "tick"
+  time: float
+```
+
+#### set_timeout
+*Usage:* <code>set_timeout(callback: Callable[..., None], timer_millis: int, \*args) -> int</code>
+
+Schedules `callback` to be invoked once after `timer_millis` milliseconds.
+  
+  Returns:
+    an integer ID for the callback which can be canceled with [`remove_event_listener()`](#remove_event_listener).
+
+  Compatibility: Pyjinn only.
+  
+
+#### set_interval
+*Usage:* <code>set_interval(callback: Callable[..., None], timer_millis: int, \*args) -> int</code>
+
+Schedules `callback` to be invoked every `timer_millis` milliseconds.
+  
+  Returns:
+    an integer ID for the callback which can be canceled with [`remove_event_listener()`](#remove_event_listener).
+
+  Compatibility: Pyjinn only.
+  
+
+#### ManagedCallback
+Wrapper for managing callbacks passed to Java APIs.
+
+  Example:
+
+  ```
+  callback = ManagedCallback(on_hud_render)
+  HudRenderCallback.EVENT.register(HudRenderCallback(callback))
+
+  # Cancel after 1 second (1000 milliseconds):
+  set_timeout(callback.cancel, 1000)
+  ```
+
+  Compatibility: Pyjinn only.
+  
+
+#### ManagedCallback.\_\_init\_\_
+*Usage:* <code>ManagedCallback(callback, cancel_on_exception=True, default_value=None)</code>
+
+Creates a managed callback.
+
+  Args:
+- `  callback`: a callable function or object to manage
+- `  cancel_on_exception`: if the callback raises an exception, cancel the callback
+- `  default_value`: value to return immediately if callback is called after being canceled
+  
+
+#### ManagedCallback.cancel
+*Usage:* <code>ManagedCallback.cancel()</code>
+
+Cancels the callback, returning `default_value` if it continues to be called.
+
+#### ManagedCallback.\_\_call\_\_
+*Usage:* <code>ManagedCallback.\_\_call\_\_(\*args)</code>
+
+Calls this callback, checking for cancellation.
 

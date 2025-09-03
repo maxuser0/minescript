@@ -173,7 +173,7 @@ def process_pydoc(code_entity: CodeEntity, anchors: Dict[str, str]):
   if type(code_entity) is ModuleEntity:
     # This is the module itself. Get the name from pydoc.
     module_name, version = pydoc.split()[0:2]
-    if module_name == "minescript":
+    if module_name in ("minescript", "java"):
       print(f"### {module_name} module")
     else:
       print(f"### {module_name} {version}")
@@ -307,9 +307,9 @@ def parse_code_entities() -> List[CodeEntity]:
     if m:
       global_conditional = True
 
-    if global_conditional:
-      # Outdent the contents of the conditional. Assumes 2-space indent throughout.
-      line = line.lstrip("  ")
+    if global_conditional and len(line) > 2 and line[:2] == "  ":
+      # Outdent the contents of the conditional.
+      line = line[2:]
 
     m = BEGIN_TRIPLE_QUOTE.match(line)
     if m:

@@ -127,6 +127,11 @@ def test(test_func):
 # BEGIN TESTS
 
 pyjinn_source = r"""
+import sys
+import atexit
+
+value_set_on_exit = JavaArray((None,))
+
 Minecraft = JavaClass("net.minecraft.client.Minecraft")
 
 def get_fps() -> int:
@@ -137,11 +142,21 @@ def get_player_name() -> str:
 
 def get_num_jobs() -> int:
   return len(job_info())
+
+def set_value_on_exit(value):
+  global value_set_on_exit
+  value_set_on_exit[0] = value
+
+atexit.register(set_value_on_exit, value="assigned!")
+
+def cancel_exit_handler():
+  atexit.unregister(set_value_on_exit)
 """
 
 @test
 def pyjinn_test():
   script = java.eval_pyjinn_script(pyjinn_source)
+  value_set_on_exit = script.getVariable("value_set_on_exit")
 
   get_fps = script.getFunction("get_fps")
   fps = get_fps()
@@ -156,6 +171,16 @@ def pyjinn_test():
   expect_equal(get_num_jobs(), len(minescript.job_info()))
 
   script.exit()
+  expect_equal("assigned!", value_set_on_exit[0])
+
+  # Re-run the script, but now with the at-exit handler canceled.
+  script = java.eval_pyjinn_script(pyjinn_source)
+  value_set_on_exit = script.getVariable("value_set_on_exit")
+  cancel_exit_handler = script.getFunction("cancel_exit_handler")
+  cancel_exit_handler()
+  script.exit()
+  expect_equal(None, value_set_on_exit[0])
+
 
 
 @test
@@ -463,7 +488,7 @@ def command_parse_test():
 
 
 @test
-def java_test():
+def java_functions_test():
   JavaHandle = minescript.JavaHandle
   object_class = minescript.java_class("java.lang.Object")
   class_class = minescript.java_class("java.lang.Class")
@@ -501,6 +526,20 @@ def java_test():
   value, type_ = do_operator(Numbers_lessThan, minescript.java_int(7), minescript.java_float(22))
   expect_equal(value, "true")
   expect_equal(type_, "java.lang.Boolean")
+
+@test
+def java_library_test():
+  Minescript = java.JavaClass("net.minescript.common.Minescript")
+  expect_equal(type(Minescript), java.JavaClassType)
+  expect_equal(type(Minescript.mappingsLoader), java.JavaObject)
+
+  Minecraft = java.JavaClass("net.minecraft.client.Minecraft")
+  expect_equal(type(Minecraft.getInstance().getFps()), int)
+
+  player_name = minescript.player_name()
+  java_player_name = Minecraft.getInstance().player.getName().getString()
+  expect_equal(type(java_player_name), str)
+  expect_equal(java_player_name, player_name)
 
 
 # END TESTS
