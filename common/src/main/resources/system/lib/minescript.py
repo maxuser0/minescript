@@ -2593,7 +2593,7 @@ if "Pyjinn" in sys.version:
     type: str  # "tick"
     time: float
 
-  def set_timeout(callback: Callable[..., None], timer_millis: int, *args) -> int:
+  def set_timeout(callback: Callable[..., None], timer_millis: int, *args, **kwargs) -> int:
     """Schedules `callback` to be invoked once after `timer_millis` milliseconds.
     
     Returns:
@@ -2603,7 +2603,7 @@ if "Pyjinn" in sys.version:
     """
     raise NotImplementedError("set_timeout is not compatible with Python")
 
-  def set_interval(callback: Callable[..., None], timer_millis: int, *args) -> int:
+  def set_interval(callback: Callable[..., None], timer_millis: int, *args, **kwargs) -> int:
     """Schedules `callback` to be invoked every `timer_millis` milliseconds.
     
     Returns:
@@ -2612,3 +2612,36 @@ if "Pyjinn" in sys.version:
     Compatibility: Pyjinn only.
     """
     raise NotImplementedError("set_interval is not compatible with Python")
+
+  class ManagedCallback:
+    """Wrapper for managing callbacks passed to Java APIs.
+
+    Example:
+
+    ```
+    callback = ManagedCallback(on_hud_render)
+    HudRenderCallback.EVENT.register(HudRenderCallback(callback))
+
+    # Cancel after 1 second (1000 milliseconds):
+    set_timeout(callback.cancel, 1000)
+    ```
+
+    Compatibility: Pyjinn only.
+    """
+    def __init__(self, callback, cancel_on_exception=True, default_value=None):
+      """Creates a managed callback.
+
+      Args:
+        callback: a callable function or object to manage
+        cancel_on_exception: if the callback raises an exception, cancel the callback
+        default_value: value to return immediately if callback is called after being canceled
+      """
+      raise NotImplementedError("ManagedCallback.__init__ is not compatible with Python")
+
+    def cancel(self):
+      """Cancels the callback, returning `default_value` if it continues to be called."""
+      pass
+
+    def __call__(self, *args):
+      """Calls this callback, checking for cancellation."""
+      pass

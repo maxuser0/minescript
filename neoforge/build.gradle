@@ -45,8 +45,8 @@ repositories {
 }
 
 dependencies {
-    jarJar('org.pyjinn:pyjinn-lib:0.8:all')
-    additionalRuntimeClasspath('org.pyjinn:pyjinn-lib:0.8:all')
+    jarJar('org.pyjinn:pyjinn-lib:0.9:all')
+    additionalRuntimeClasspath('org.pyjinn:pyjinn-lib:0.9:all')
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }

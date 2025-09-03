@@ -677,7 +677,7 @@ def player_look_at(x: float, y: float, z: float):
   return __mcall__("player_look_at", [x, y, z])
 
 
-def set_interval(callback: Callable[[], None], timer_millis: int, *args) -> int:
+def set_interval(callback: Callable[[], None], timer_millis: int, *args, **kwargs) -> int:
   listener_id = -1
   activation_time = _System.currentTimeMillis() + timer_millis
 
@@ -687,7 +687,7 @@ def set_interval(callback: Callable[[], None], timer_millis: int, *args) -> int:
     if now >= activation_time:
       try:
         call_finished = False
-        callback(*args)
+        callback(*args, **kwargs)
         call_finished = True
         activation_time = now + timer_millis
       finally:
@@ -698,7 +698,7 @@ def set_interval(callback: Callable[[], None], timer_millis: int, *args) -> int:
   return listener_id
 
 
-def set_timeout(callback: Callable[[], None], timer_millis: int, *args) -> int:
+def set_timeout(callback: Callable[[], None], timer_millis: int, *args, **kwargs) -> int:
   listener_id = -1
   activation_time = _System.currentTimeMillis() + timer_millis
 
@@ -707,7 +707,7 @@ def set_timeout(callback: Callable[[], None], timer_millis: int, *args) -> int:
     now = _System.currentTimeMillis()
     if now >= activation_time:
       try:
-        callback(*args)
+        callback(*args, **kwargs)
       finally:
         remove_event_listener(listener_id)
 

@@ -6,9 +6,6 @@ r"""java v5.0 distributed via Minescript jar file
 Library for using Java reflection from Python, wrapping
 the low-level Java API script functions (`java_*`).
 
-Requires:
-  minescript v5.0
-
 Example:
 ```
 from minescript import echo
@@ -58,6 +55,24 @@ for func in (
 
 
 class AutoReleasePool:
+  """Context manager for managing Java references in Python using `with` blocks.
+  
+  Example:
+    ```
+    import minescript
+    from java import *
+    with AutoReleasePool() as auto:
+      Object_class = auto(java_class("java.lang.Object"))
+      Object_hashCode = auto(java_member(Object_class, "hashCode"))
+      hello_string = auto(java_string("hello"))
+      hash_value  = auto(java_call_method(hello_string, Object_hashCode))
+      minescript.echo(java_to_string(hash_value))
+    ```
+
+    All the Java references captured with `auto()` in the example are released when
+    the `with` block above exits, automatically calling [`java_release()`](#java_release).
+  """
+  
   def __init__(self):
     self.refs = []
 
@@ -163,6 +178,9 @@ class Float:
 
   value: float
 
+  def __bool__(self):
+    return bool(self.value)
+
   def __str__(self):
     return f"{self.value}f"
 
@@ -187,7 +205,7 @@ def to_java_handle(value):
     raise ValueError(f"Python type {type(value)} not convertible to Java: {value}")
 
 
-def from_java_handle(java_id: JavaHandle):
+def from_java_handle(java_id: JavaHandle, java_object=None):
   # TODO(maxuser): Run most of these calls in script_loop, but not java_to_string when uncertain
   # that it's a primitive type.
   with AutoReleasePool() as auto:
@@ -207,10 +225,14 @@ def from_java_handle(java_id: JavaHandle):
       return float(java_to_string(java_id))
     elif java_type == "java.lang.String":
       return java_to_string(java_id)
+    elif java_object is not None:
+      return java_object
     else:
       return JavaObject(java_id)
 
 class JavaRef:
+  """Reference counter for Java objects referenced from Python."""
+  
   def __init__(self, id: JavaHandle):
     self.id = id
     self.count = 1
@@ -334,6 +356,17 @@ class JavaObject:
       return java_array_length(self.id)
     else:
       raise TypeError(f"object {self.id} has no len()")
+
+  def __bool__(self) -> int:
+    """Returns False if the Java reference is null."""
+    value = from_java_handle(self.id, java_object=self)
+    if value in (None, False, 0, 0., ""):
+      return False
+    if type(value) is Float:
+      return bool(value)
+    if self._is_array():
+      return java_array_length(self.id) != 0
+    return True
 
   def __getitem__(self, i: int):
     """If this JavaObject represents a Java array, returns `array[i]`.
@@ -465,7 +498,7 @@ class JavaClassType(JavaObject):
         return result
 
     binding = JavaBoundMember(self.id, _null_id, name)
-    if name not in java_field_names(self.get_class_id()):
+    if name not in java_field_names(self.id):
       return binding
     try:
       field = java_access_field(self.id, binding.member_id)
@@ -538,20 +571,39 @@ def callAsyncScriptFunction(func_name: str, *args) -> JavaFuture:
   return JavaFuture(java_call_script_function.as_async(func_name, *[to_java_handle(a) for a in args]))
 
 
-def _eval_pyjinn_script(script_code: str):
-  return (script_code,)
+def _eval_pyjinn_script(script_name: str, script_code: str):
+  return (script_name, script_code)
 
 _eval_pyjinn_script = ScriptFunction("eval_pyjinn_script", _eval_pyjinn_script)
 
-def eval_pyjinn_script(script_code: str):
-  """Creates a Pyjinn script.
+def eval_pyjinn_script(script_code: str) -> JavaObject:
+  """Creates a Pyjinn script given source code as a string.
+
+  See: [Embedding Pyjinn in Python scripts](pyjinn.md#embedding-pyjinn-in-python-scripts)
 
   Args:
     script_code: Pyjinn source code
 
   Returns:
-    new Java object of type org.pyjinn.interpreter.Script
+    new Java object of type `org.pyjinn.interpreter.Script`
 
   Since: v5.0
   """
-  return JavaObject(_eval_pyjinn_script(script_code), is_script=True)
+  return JavaObject(_eval_pyjinn_script("__eval_pyjinn_script__", script_code), is_script=True)
+
+def import_pyjinn_script(pyj_filename: str):
+  """Imports a Pyjinn script from a `.pyj` file.
+
+  See: [Embedding Pyjinn in Python scripts](pyjinn.md#embedding-pyjinn-in-python-scripts)
+
+  Args:
+    pyj_filename: name a of `.pyj` file containing Pyjinn code to import
+
+  Returns:
+    new Java object of type `org.pyjinn.interpreter.Script`
+
+  Since: v5.0
+  """
+  with open(pyj_filename, 'r', encoding='utf-8') as pyj_file:
+    script_code = pyj_file.read()
+    return JavaObject(_eval_pyjinn_script(pyj_filename, script_code), is_script=True)

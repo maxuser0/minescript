@@ -41,6 +41,9 @@ else:
   if "\n" not in source and not source.startswith("print("):
     source = f"print({source}, file=sys.stderr)"
 
+  # TODO(maxuser): Manage embedded script as a child job, e.g. using eval_pyjinn_script(), to ensure
+  # that the script's `atexit` listeners are invoked when the script completes regardless of whether
+  # exit() is explicitly called.
   script = Minescript.loadPyjinnScript(JavaList(["__eval__.pyj"]), source)
 
   # Copy script config and variables from this launcher script to the embedded script.
