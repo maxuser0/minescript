@@ -575,7 +575,7 @@ def getblock(x: int, y: int, z: int) -> str:
   Returns:
     block type at (x, y, z) as a string
   """
-  return __mcall__("getblocks", [x, y, z])
+  return __mcall__("getblock", [x, y, z])
 
 
 def getblocklist(positions: List[List[int]]) -> List[str]:
