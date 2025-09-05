@@ -46,9 +46,11 @@ public class BlockPack {
     var blockpacker = new BlockPacker();
 
     var commentsToAdd = (PyDict) kwargs.get("comments");
-    var comments = blockpacker.comments();
-    for (var kvPair : commentsToAdd.items()) {
-      comments.put(kvPair.__getitem__(0).toString(), kvPair.__getitem__(1).toString());
+    if (commentsToAdd != null) {
+      var comments = blockpacker.comments();
+      for (var kvPair : commentsToAdd.items()) {
+        comments.put(kvPair.__getitem__(0).toString(), kvPair.__getitem__(1).toString());
+      }
     }
 
     boolean safetyLimit = (Boolean) kwargs.getOrDefault("safety_limit", true);
