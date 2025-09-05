@@ -757,3 +757,70 @@ class ManagedCallback:
       if self.cancel_on_exception:
         self.cancel()
       return self.default_value
+
+
+Rotation = tuple
+"""Tuple of 9 `int` values representing a flattened, row-major 3x3 rotation matrix."""
+
+
+class Rotations:
+  """Common rotations for use with `BlockPack` and `BlockPacker` methods.
+
+  Since: v3.0
+  """
+
+  IDENTITY: Rotation = (1, 0, 0, 0, 1, 0, 0, 0, 1)
+  """Effectively no rotation."""
+
+  X_90: Rotation = (1, 0, 0, 0, 0, 1, 0, -1, 0)
+  """Rotate 90 degrees about the x axis."""
+
+  X_180: Rotation = (1, 0, 0, 0, -1, 0, 0, 0, -1)
+  """Rotate 180 degrees about the x axis."""
+
+  X_270: Rotation = (1, 0, 0, 0, 0, -1, 0, 1, 0)
+  """Rotate 270 degrees about the x axis."""
+
+  Y_90: Rotation = (0, 0, 1, 0, 1, 0, -1, 0, 0)
+  """Rotate 90 degrees about the y axis."""
+
+  Y_180: Rotation = (-1, 0, 0, 0, 1, 0, 0, 0, -1)
+  """Rotate 180 degrees about the y axis."""
+
+  Y_270: Rotation = (0, 0, -1, 0, 1, 0, 1, 0, 0)
+  """Rotate 270 degrees about the y axis."""
+
+  Z_90: Rotation = (0, 1, 0, -1, 0, 0, 0, 0, 1)
+  """Rotate 90 degrees about the z axis."""
+
+  Z_180: Rotation = (-1, 0, 0, 0, -1, 0, 0, 0, 1)
+  """Rotate 180 degrees about the z axis."""
+
+  Z_270: Rotation = (0, -1, 0, 1, 0, 0, 0, 0, 1)
+  """Rotate 270 degrees about the z axis."""
+
+  INVERT_X: Rotation = (-1, 0, 0, 0, 1, 0, 0, 0, 1)
+  """Invert the x coordinate (multiply by -1)."""
+
+  INVERT_Y: Rotation = (1, 0, 0, 0, -1, 0, 0, 0, 1)
+  """Invert the y coordinate (multiply by -1)."""
+
+  INVERT_Z: Rotation = (1, 0, 0, 0, 1, 0, 0, 0, -1)
+  """Invert the z coordinate (multiply by -1)."""
+
+
+def combine_rotations(rot1: Rotation, rot2: Rotation) -> Rotation:
+  """Combines two rotation matrices into a single rotation matrix.
+
+  Since: v3.0
+  """
+  return (
+      rot1[0] * rot2[0] + rot1[1] * rot2[3] + rot1[2] * rot2[6],
+      rot1[0] * rot2[1] + rot1[1] * rot2[4] + rot1[2] * rot2[7],
+      rot1[0] * rot2[2] + rot1[1] * rot2[5] + rot1[2] * rot2[8],
+      rot1[3] * rot2[0] + rot1[4] * rot2[3] + rot1[5] * rot2[6],
+      rot1[3] * rot2[1] + rot1[4] * rot2[4] + rot1[5] * rot2[7],
+      rot1[3] * rot2[2] + rot1[4] * rot2[5] + rot1[5] * rot2[8],
+      rot1[6] * rot2[0] + rot1[7] * rot2[3] + rot1[8] * rot2[6],
+      rot1[6] * rot2[1] + rot1[7] * rot2[4] + rot1[8] * rot2[7],
+      rot1[6] * rot2[2] + rot1[7] * rot2[5] + rot1[8] * rot2[8])

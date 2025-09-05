@@ -1717,7 +1717,6 @@ class Rotations:
   """Invert the z coordinate (multiply by -1)."""
 
 
-# TODO(maxuser): Move this into Rotations class and rename to compose(...).
 def combine_rotations(rot1: Rotation, rot2: Rotation, /) -> Rotation:
   """Combines two rotation matrices into a single rotation matrix.
 
