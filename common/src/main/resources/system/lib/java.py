@@ -45,7 +45,6 @@ from minescript import (
 from minescript_runtime import debug_log
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Set, Tuple
-import threading
 
 # These script functions should be safe to call on any thread:
 for func in (
@@ -154,6 +153,7 @@ with script_loop:
   Class_getFields_id = _find_java_member(Class_id, "getFields")
   Class_getMethods_id = _find_java_member(Class_id, "getMethods")
   Class_isEnum_id = _find_java_member(Class_id, "isEnum")
+  Class_isAssignableFrom_id =_find_java_member(Class_id, "isAssignableFrom")
 
   Field_id = _find_java_class("java.lang.reflect.Field")
   Field_getType_id = _find_java_member(Field_id, "getType")
@@ -168,6 +168,18 @@ with script_loop:
   Integer_id = _find_java_class("java.lang.Integer")
   Float_id = _find_java_class("java.lang.Float")
   Double_id = _find_java_class("java.lang.Double")
+  Iterable_id = _find_java_class("java.lang.Iterable")
+  Collection_id = _find_java_class("java.util.Collection")
+  Collection_size_id = _find_java_member(Collection_id, "size")
+  Collection_contains_id = _find_java_member(Collection_id, "contains")
+
+  # Support for Pyjinn built-in types:
+  Lengthable_id = _find_java_class("org.pyjinn.interpreter.Script$Lengthable")
+  Lengthable_len_id = _find_java_member(Lengthable_id, "__len__")
+  ItemGetter_id = _find_java_class("org.pyjinn.interpreter.Script$ItemGetter")
+  ItemGetter_getitem_id = _find_java_member(ItemGetter_id, "__getitem__")
+  ItemContainer_id = _find_java_class("org.pyjinn.interpreter.Script$ItemContainer")
+  ItemContainer_contains_id = _find_java_member(ItemContainer_id, "__contains__")
 
 @dataclass
 class Float:
@@ -200,12 +212,22 @@ def to_java_handle(value):
   elif t is str:
     return java_string(value)
   elif isinstance(value, JavaObject):
+    value.ref.increment()
     return value.id
   else:
     raise ValueError(f"Python type {type(value)} not convertible to Java: {value}")
 
 
 def from_java_handle(java_id: JavaHandle, java_object=None):
+  """Converts Java object to a Python object.
+
+  Takes ownership of the `java_id` reference.
+  
+  Args:
+    java_id: handle to a Java object
+    java_object: returned if given and value isn't convertible to a Python primitive
+  """
+  
   # TODO(maxuser): Run most of these calls in script_loop, but not java_to_string when uncertain
   # that it's a primitive type.
   with AutoReleasePool() as auto:
@@ -216,15 +238,15 @@ def from_java_handle(java_id: JavaHandle, java_object=None):
     java_type = java_to_string(
       auto(java_call_method(auto(java_call_method(java_id, Object_getClass_id)), Class_getName_id)))
     if java_type == "java.lang.Boolean":
-      return java_to_string(java_id) == "true"
+      return java_to_string(auto(java_id)) == "true"
     elif java_type == "java.lang.Integer":
-      return int(java_to_string(java_id))
+      return int(java_to_string(auto(java_id)))
     elif java_type == "java.lang.Float":
-      return Float(float(java_to_string(java_id)))
+      return Float(float(java_to_string(auto(java_id))))
     elif java_type == "java.lang.Double":
-      return float(java_to_string(java_id))
+      return float(java_to_string(auto(java_id)))
     elif java_type == "java.lang.String":
-      return java_to_string(java_id)
+      return java_to_string(auto(java_id))
     elif java_object is not None:
       return java_object
     else:
@@ -245,6 +267,32 @@ class JavaRef:
     if self.count <= 0:
       debug_log(f"del JavaRef {self.id}")
       java_release(self.id)
+
+
+class _JavaArrayIter:
+  def __init__(self, java_array: "JavaObject"):
+    self.java_array = java_array
+    self.index = 0
+    self.length = len(java_array)
+
+  def __next__(self):
+    if self.index < self.length:
+      item = self.java_array[self.index]
+      self.index += 1
+      return item
+    else:
+      raise StopIteration
+
+
+class _JavaIterator:
+  def __init__(self, java_object: "JavaObject"):
+    self.iter = java_object.iterator()
+
+  def __next__(self) -> "JavaObject":
+    if not self.iter.hasNext():
+      raise StopIteration
+    return self.iter.next()
+
 
 class JavaObject:
   """Python representation of a Java object."""
@@ -316,6 +364,8 @@ class JavaObject:
   def __del__(self):
     if self.ref is not None:
       self.ref.decrement()
+    if self._class_id is not None:
+      java_release(self._class_id)
 
   def __getattr__(self, name: str):
     """Accesses the field or method named `name`.
@@ -348,14 +398,64 @@ class JavaObject:
     return self.is_array
 
   def __len__(self) -> int:
-    """If this JavaObject represents a Java array, returns the length of the array.
+    """If this JavaObject represents a Java array or container, returns its length.
     
-    Raises `TypeError` if this isn't an array.
+    Raises `TypeError` if this isn't a Java array or container.
     """
     if self._is_array():
       return java_array_length(self.id)
-    else:
-      raise TypeError(f"object {self.id} has no len()")
+
+    with AutoReleasePool() as auto:
+      is_lengthable = from_java_handle(
+          java_call_method(Lengthable_id, Class_isAssignableFrom_id, self.get_class_id()))
+      if is_lengthable:
+        return from_java_handle(java_call_method(self.id, Lengthable_len_id))
+
+    with AutoReleasePool() as auto:
+      is_collection = from_java_handle(
+          java_call_method(Collection_id, Class_isAssignableFrom_id, self.get_class_id()))
+      if is_collection:
+        return from_java_handle(java_call_method(self.id, Collection_size_id))
+
+    raise TypeError(f"object {repr(self)} has no len()")
+
+  def __iter__(self):
+    if self._is_array():
+      return _JavaArrayIter(self)
+
+    with AutoReleasePool() as auto:
+      is_iterable = from_java_handle(
+          java_call_method(Iterable_id, Class_isAssignableFrom_id, self.get_class_id()))
+    if is_iterable:
+      return _JavaIterator(self)
+
+    raise TypeError(f"Java object {repr(self)} it not iterable")
+
+  def __contains__(self, element) -> int:
+    """If this JavaObject represents a Java array or container, returns `True` if it contains `element`.
+    
+    Raises `TypeError` if this isn't a Java array or container.
+    """
+    if self._is_array():
+      length = java_array_length(self.id)
+      for i in range(length):
+        if from_java_handle(java_array_index(self.id, i)) == element:
+          return True
+      return False
+
+    with AutoReleasePool() as auto:
+      is_container = from_java_handle(
+          java_call_method(ItemContainer_id, Class_isAssignableFrom_id, self.get_class_id()))
+      if is_container:
+        return from_java_handle(java_call_method(self.id, ItemContainer_contains_id, auto(to_java_handle(element))))
+    
+    with AutoReleasePool() as auto:
+      is_collection = from_java_handle(
+          java_call_method(Collection_id, Class_isAssignableFrom_id, self.get_class_id()))
+      if is_collection:
+        return from_java_handle(java_call_method(self.id, Collection_contains_id, auto(to_java_handle(element))))
+
+    raise TypeError(f"object {repr(self)} has no len()")
 
   def __bool__(self) -> int:
     """Returns False if the Java reference is null."""
@@ -368,22 +468,28 @@ class JavaObject:
       return java_array_length(self.id) != 0
     return True
 
-  def __getitem__(self, i: int):
-    """If this JavaObject represents a Java array, returns `array[i]`.
+  def __getitem__(self, key):
+    """Returns self[key] as a Python primitive value or JavaObject.
     
     Args:
-      i: index into array from which to get an element
+      key: index or key to lookup in this Java object.
     
     Returns:
-      `array[i]` as a Python primitive value or JavaObject.
+      `self[i]` as a Python primitive value or JavaObject.
     
     Raises:
-      `TypeError` if this isn't an array.
+      `TypeError` if this isn't a subscriptable Java object.
     """
     if self._is_array():
-      return from_java_handle(java_array_index(self.id, i))
-    else:
-      raise TypeError(f"object {self.id} is not subscriptable")
+      return from_java_handle(java_array_index(self.id, key))
+
+    with AutoReleasePool() as auto:
+      is_item_getter = from_java_handle(
+          java_call_method(ItemGetter_id, Class_isAssignableFrom_id, self.get_class_id()))
+      if is_item_getter:
+        return from_java_handle(java_call_method(self.id, ItemGetter_getitem_id, auto(to_java_handle(key))))
+
+    raise TypeError(f"object {self.id} is not subscriptable")
 
 
 class JavaBoundMember:
@@ -409,9 +515,11 @@ class JavaBoundMember:
     if script is not None and name == "getFunction":
       self.member_id = None
       self.script_get_var_as_func = JavaBoundMember(target_class_id, target, "getVariable", ref, script)
+      self.script_env = self.script.mainModule().globals()
     else:
       self.member_id = _find_java_member(target_class_id, name)
       self.script_get_var_as_func = None
+      self.script_env = None
   
   def __del__(self):
     if self.ref is not None:
@@ -427,18 +535,20 @@ class JavaBoundMember:
     Returns:
       A Python primitive (bool, int, float, str) if applicable, otherwise a JavaObject.
     """
-    if self.script_get_var_as_func is None:
-      result = java_call_method(self.target, self.member_id,
-        *[to_java_handle(a) for a in args])
-      return from_java_handle(result)
-    elif len(args) == 1 and type(args[0]) is str:
-      func = self.script_get_var_as_func(args[0])
-      def call_func(*params):
-        args_array = JavaObject(java_new_array(Object_id, *[to_java_handle(p) for p in params]))
-        return func.call(self.script.mainModule().globals(), args_array)
-      return call_func
-    else:
-      raise Exception(f"Script.getFunction() requires 1 str args but got {args}")
+    with AutoReleasePool() as auto:
+      if self.script_get_var_as_func is None:
+        result = java_call_method(self.target, self.member_id,
+          *[auto(to_java_handle(a)) for a in args])
+        return from_java_handle(result)
+      elif len(args) == 1 and type(args[0]) is str:
+        func = self.script_get_var_as_func(args[0])
+        def call_func(*params):
+          with AutoReleasePool() as auto2:
+            args_array = JavaObject(java_new_array(Object_id, *[auto2(to_java_handle(p)) for p in params]))
+            return func.call(self.script_env, args_array)
+        return call_func
+      else:
+        raise Exception(f"Script.getFunction() requires 1 str args but got {args}")
 
 
 class JavaInt(JavaObject):
@@ -473,8 +583,7 @@ class JavaClassType(JavaObject):
   def is_enum(self):
     """Returns `True` if this class represents a Java enum type."""
     if self._is_enum is None:
-      with AutoReleasePool() as auto:
-        self._is_enum = from_java_handle(auto(java_call_method(self.id, Class_isEnum_id)))
+      self._is_enum = from_java_handle(java_call_method(self.id, Class_isEnum_id))
     return self._is_enum
 
   def __getattr__(self, name):
@@ -516,7 +625,8 @@ class JavaClassType(JavaObject):
     if self.ctor is None:
       self.ctor = JavaObject(java_ctor(self.id))
 
-    return JavaObject(java_new_instance(self.ctor.id, *[to_java_handle(a) for a in args]))
+    with AutoReleasePool() as auto:
+      return JavaObject(java_new_instance(self.ctor.id, *[auto(to_java_handle(a)) for a in args]))
 
 
 def JavaClass(name: str) -> JavaClassType:
@@ -539,7 +649,8 @@ def callScriptFunction(func_name: str, *args) -> JavaObject:
   Returns:
     The return value of the given script function as a Python primitive type or JavaObject.
   """
-  return from_java_handle(java_call_script_function(func_name, *[to_java_handle(a) for a in args]))
+  with AutoReleasePool() as auto:
+    return from_java_handle(java_call_script_function(func_name, *[auto(to_java_handle(a)) for a in args]))
 
 class JavaFuture:
   """Java value that will become available in the future when an async function completes."""
@@ -568,7 +679,8 @@ def callAsyncScriptFunction(func_name: str, *args) -> JavaFuture:
   Returns:
     `JavaFuture` that will hold the return value of the async funcion when complete.
   """
-  return JavaFuture(java_call_script_function.as_async(func_name, *[to_java_handle(a) for a in args]))
+  with AutoReleasePool() as auto:
+    return JavaFuture(java_call_script_function.as_async(func_name, *[auto(to_java_handle(a)) for a in args]))
 
 
 def _eval_pyjinn_script(script_name: str, script_code: str):

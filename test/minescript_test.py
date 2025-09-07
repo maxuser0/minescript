@@ -62,6 +62,12 @@ def expect_contains(container, element):
   else:
     raise TestFailure(f"Failed expectation: {element} not in {container}")
 
+def expect_does_not_contain(container, element):
+  if element in container:
+    raise TestFailure(f"Failed expectation: {element} in {container}")
+  else:
+    print_success(f"Success: {element} not in {container}")
+
 def expect_startswith(string, prefix):
   if string.startswith(prefix):
     print_success(f"Success: {repr(string)} starts with {repr(prefix)}")
@@ -134,6 +140,14 @@ value_set_on_exit = JavaArray((None,))
 
 Minecraft = JavaClass("net.minecraft.client.Minecraft")
 
+pyjinn_dict = dict(x="foo", y="bar")
+pyjinn_list = [1, 2, 3]
+pyjinn_tuple = (1, 2, 3)
+pyjinn_str = "This is a test."
+
+java_list = JavaList(pyjinn_list)
+java_array = JavaArray(pyjinn_tuple)
+
 def get_fps() -> int:
   return Minecraft.getInstance().getFps()
 
@@ -166,6 +180,47 @@ def pyjinn_test():
   
   get_player_name = script.getFunction("get_player_name")
   expect_equal(get_player_name(), minescript.player_name())
+
+  with minescript.script_loop:
+    pyjinn_dict = script.getVariable("pyjinn_dict")
+    pyjinn_list = script.getVariable("pyjinn_list")
+    pyjinn_tuple = script.getVariable("pyjinn_tuple")
+    pyjinn_str = script.getVariable("pyjinn_str")
+    expect_equal(3, len(pyjinn_list))
+    expect_equal(3, len(pyjinn_tuple))
+    expect_equal("This is a test.", pyjinn_str)
+    expect_equal("foo", pyjinn_dict["x"])
+    expect_equal("bar", pyjinn_dict["y"])
+
+    java_list = script.getVariable("java_list")
+    java_array = script.getVariable("java_array")
+    expect_equal(3, len(java_list))
+    expect_equal(3, len(java_array))
+
+    for i, elem in enumerate(pyjinn_list):
+      expect_equal(i + 1, elem)
+    for i, elem in enumerate(pyjinn_tuple):
+      expect_equal(i + 1, elem)
+    for i, elem in enumerate(java_list):
+      expect_equal(i + 1, elem)
+    for i, elem in enumerate(java_array):
+      expect_equal(i + 1, elem)
+    
+    for i in range(3):
+      expect_equal(i + 1, pyjinn_list[i])
+    
+    for i in range(3):
+      expect_equal(i + 1, pyjinn_tuple[i])
+
+    expect_contains(pyjinn_list, 1)
+    expect_contains(pyjinn_tuple, 1)
+    expect_contains(java_list, 1)
+    expect_contains(java_array, 1)
+
+    expect_does_not_contain(pyjinn_list, 4)
+    expect_does_not_contain(pyjinn_tuple, 4)
+    expect_does_not_contain(java_list, 4)
+    expect_does_not_contain(java_array, 4)
   
   get_num_jobs = script.getFunction("get_num_jobs")
   expect_equal(get_num_jobs(), len(minescript.job_info()))
