@@ -79,6 +79,8 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minescript.common.CommandSyntax.Token;
+import net.minescript.common.blocks.BlockPositionReader;
+import net.minescript.common.blocks.BlockSequenceReader;
 import net.minescript.common.dataclasses.*;
 import net.minescript.common.events.*;
 import net.minescript.common.mappings.*;
@@ -87,7 +89,7 @@ import org.apache.logging.log4j.Logger;
 import org.pyjinn.interpreter.Script;
 
 public class Minescript {
-  private static final Logger LOGGER = LogManager.getLogger();
+  static final Logger LOGGER = LogManager.getLogger();
 
   public static Config config;
 
@@ -616,10 +618,11 @@ public class Minescript {
       }
       String command = output.value();
       if (command.startsWith("setblock ") && getSetblockCoords(command, coords)) {
-        Optional<String> block =
-            blockStateToString(level.getBlockState(pos.set(coords[0], coords[1], coords[2])));
-        if (block.isPresent()) {
-          if (!addBlockToUndoQueue(coords[0], coords[1], coords[2], block.get())) {
+        String block =
+            BlockPositionReader.getBlockStateString(
+                level, pos.set(coords[0], coords[1], coords[2]));
+        if (block != null) {
+          if (!addBlockToUndoQueue(coords[0], coords[1], coords[2], block)) {
             return;
           }
         }
@@ -633,9 +636,9 @@ public class Minescript {
         for (int x = x0; x <= x1; x++) {
           for (int y = y0; y <= y1; y++) {
             for (int z = z0; z <= z1; z++) {
-              Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, y, z)));
-              if (block.isPresent()) {
-                if (!addBlockToUndoQueue(x, y, z, block.get())) {
+              String block = BlockPositionReader.getBlockStateString(level, pos.set(x, y, z));
+              if (block != null) {
+                if (!addBlockToUndoQueue(x, y, z, block)) {
                   return;
                 }
               }
@@ -1073,23 +1076,6 @@ public class Minescript {
     return true;
   }
 
-  // BlockState#toString() returns a string formatted as:
-  // "Block{minecraft:acacia_button}[face=floor,facing=west,powered=false]"
-  //
-  // BLOCK_STATE_RE helps transform this to:
-  // "minecraft:acacia_button[face=floor,facing=west,powered=false]"
-  private static Pattern BLOCK_STATE_RE = Pattern.compile("^Block\\{([^}]*)\\}(\\[.*\\])?$");
-
-  private static Optional<String> blockStateToString(BlockState blockState) {
-    var match = BLOCK_STATE_RE.matcher(blockState.toString());
-    if (!match.find()) {
-      return Optional.empty();
-    }
-    String blockType = match.group(1);
-    String blockAttrs = match.group(2) == null ? "" : match.group(2);
-    return Optional.of(blockType + blockAttrs);
-  }
-
   public static void readBlocks(
       int x0,
       int y0,
@@ -1131,8 +1117,8 @@ public class Minescript {
     var pos = new BlockPos.MutableBlockPos();
     for (int x = xMin; x <= xMax; x += 16) {
       for (int z = zMin; z <= zMax; z += 16) {
-        Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, 0, z)));
-        if (block.isEmpty() || block.get().equals("minecraft:void_air")) {
+        String block = BlockPositionReader.getBlockStateString(level, pos.set(x, 0, z));
+        if (block == null || block.equals("minecraft:void_air")) {
           throw new IllegalStateException(
               "Not all chunks are loaded within the requested `copy` volume.");
         }
@@ -1144,9 +1130,9 @@ public class Minescript {
         for (int z = zMin; z <= zMax; ++z) {
           BlockState blockState = level.getBlockState(pos.set(x, y, z));
           if (!blockState.isAir()) {
-            Optional<String> block = blockStateToString(blockState);
-            if (block.isPresent()) {
-              blockConsumer.setblock(x, y, z, block.get());
+            String block = BlockPositionReader.blockStateToString(blockState);
+            if (block != null) {
+              blockConsumer.setblock(x, y, z, block);
             } else {
               systemMessageQueue.logUserError(
                   "Unexpected BlockState format: {}", blockState.toString());
@@ -2116,8 +2102,8 @@ public class Minescript {
           // the block can change locally before the BlockUpdate packet is received by the client.
           // Maybe track the current block during mouse and key events via
           // minecraft.getCameraEntity().pick(...). (see player_get_targeted_block())
-          event.old_state = blockStateToString(level.getBlockState(pos)).orElse(null);
-          event.new_state = blockStateToString(newState).orElse(null);
+          event.old_state = BlockPositionReader.getBlockStateString(level, pos);
+          event.new_state = BlockPositionReader.blockStateToString(newState);
           event.time = System.currentTimeMillis() / 1000.;
           eventValue = ScriptValue.of(event);
         }
@@ -2172,9 +2158,10 @@ public class Minescript {
 
           var blockpacker = new BlockPacker();
           for (var pos : toExplode) {
-            blockStateToString(level.getBlockState(pos))
-                .ifPresent(
-                    block -> blockpacker.setblock(pos.getX(), pos.getY(), pos.getZ(), block));
+            String block = BlockPositionReader.getBlockStateString(level, pos);
+            if (block != null) {
+              blockpacker.setblock(pos.getX(), pos.getY(), pos.getZ(), block);
+            }
           }
           String encodedBlockpack = blockpacker.pack().toBase64EncodedString();
 
@@ -2428,47 +2415,19 @@ public class Minescript {
           int arg0 = args.getConvertibleInt(0);
           int arg1 = args.getConvertibleInt(1);
           int arg2 = args.getConvertibleInt(2);
-          Optional<String> block =
-              blockStateToString(level.getBlockState(new BlockPos(arg0, arg1, arg2)));
-          return block.map(ScriptValue::of).orElse(ScriptValue.NULL);
+          String block =
+              BlockPositionReader.getBlockStateString(level, new BlockPos(arg0, arg1, arg2));
+          if (block != null) {
+            return ScriptValue.of(block);
+          } else {
+            return ScriptValue.NULL;
+          }
         }
 
       case "getblocklist":
         {
-          Runnable badArgsResponse =
-              () -> {
-                throw new IllegalArgumentException(
-                    String.format(
-                        "`%s` expected a list of (x, y, z) positions but got: %s",
-                        functionName, args));
-              };
-
           args.expectSize(1);
-          if (!(args.get(0) instanceof List)) {
-            badArgsResponse.run();
-          }
-          List<?> positions = (List<?>) args.get(0);
-          Level level = minecraft.level;
-          var blocks = new ArrayList<String>();
-          var pos = new BlockPos.MutableBlockPos();
-          for (var position : positions) {
-            if (!(position instanceof List)) {
-              badArgsResponse.run();
-            }
-            List<?> coords = (List<?>) position;
-            if (coords.size() != 3
-                || !(coords.get(0) instanceof Number)
-                || !(coords.get(1) instanceof Number)
-                || !(coords.get(2) instanceof Number)) {
-              badArgsResponse.run();
-            }
-            int x = ((Number) coords.get(0)).intValue();
-            int y = ((Number) coords.get(1)).intValue();
-            int z = ((Number) coords.get(2)).intValue();
-            Optional<String> block = blockStateToString(level.getBlockState(pos.set(x, y, z)));
-            blocks.add(block.orElse(null));
-          }
-          return ScriptValue.of(blocks.toArray(String[]::new));
+          return ScriptValue.of(BlockSequenceReader.toStringArray(minecraft.level, args.get(0)));
         }
 
       case "unregister_event_handler":
@@ -2618,14 +2577,14 @@ public class Minescript {
                     blockPos.getY(),
                     blockPos.getZ());
             Level level = minecraft.level;
-            Optional<String> block = blockStateToString(level.getBlockState(blockPos));
+            String block = BlockPositionReader.getBlockStateString(level, blockPos);
             var targetedBlock = new TargetedBlock();
             targetedBlock.position[0] = blockPos.getX();
             targetedBlock.position[1] = blockPos.getY();
             targetedBlock.position[2] = blockPos.getZ();
             targetedBlock.distance = playerDistance;
             targetedBlock.side = hitResult.getDirection().toString();
-            targetedBlock.type = block.orElse(null);
+            targetedBlock.type = block;
             return ScriptValue.of(targetedBlock);
           } else {
             return ScriptValue.NULL;
