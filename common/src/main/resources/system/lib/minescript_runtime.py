@@ -581,7 +581,7 @@ def CheckVersionCompatibility(
           if debug:
             version_str = VersionAsString(actual_version)
             print(
-                f'(debug) module verison previously computed: {name} {version_str}',
+                f'(debug) module version previously computed: {name} {version_str}',
                 file=sys.stderr)
 
         if not actual_version:
