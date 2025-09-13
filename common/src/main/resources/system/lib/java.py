@@ -98,37 +98,6 @@ class AutoReleasePool:
   def __del__(self):
     self.release_all()
 
-class _ClassInfo:
-  def __init__(self, id: JavaHandle):
-      self.id: JavaHandle = id
-      self._class_name = None
-      self._field_names: Set[str] = None
-
-  def class_name(self) -> str:
-    if self._class_name is None:
-      with AutoReleasePool() as auto:
-        jclass_name = auto(java_call_method(self.id, Class_getName_id))
-        self._class_name = java_to_string(jclass_name)
-    return self._class_name
-    
-  def field_names(self) -> Set[str]:
-    if self._field_names is None:
-      field_names = set()
-      with script_loop:
-        with AutoReleasePool() as auto:
-          jfields_array = auto(java_call_method(self.id, Class_getFields_id))
-          for i in range(java_array_length(jfields_array)):
-            jfield = auto(java_array_index(jfields_array, i))
-            jfield_name = auto(java_call_method(jfield, Field_getName_id))
-            field_name = java_to_string(jfield_name)
-            field_names.add(field_name)
-      self._field_names = field_names
-    return self._field_names
-
-
-def _get_class_info(class_id: JavaHandle) -> _ClassInfo:
-  return _ClassInfo(class_id)
-
 
 def _find_java_class(name: str):
   with script_loop:
@@ -168,12 +137,29 @@ with script_loop:
   Integer_id = _find_java_class("java.lang.Integer")
   Float_id = _find_java_class("java.lang.Float")
   Double_id = _find_java_class("java.lang.Double")
+
+  Array_id = _find_java_class("java.lang.reflect.Array")
+  Array_newInstance_id = _find_java_member(Array_id, "newInstance")
+  Array_set_id = _find_java_member(Array_id, "set")
+  Array_get_id = _find_java_member(Array_id, "get")
+  Array_getLength_id = _find_java_member(Array_id, "getLength")
+
   Iterable_id = _find_java_class("java.lang.Iterable")
+
   Collection_id = _find_java_class("java.util.Collection")
   Collection_size_id = _find_java_member(Collection_id, "size")
   Collection_contains_id = _find_java_member(Collection_id, "contains")
 
   # Support for Pyjinn built-in types:
+  PyObject_id = _find_java_class("org.pyjinn.interpreter.Script$PyObject")
+  PyObject_callMethod_id = _find_java_member(PyObject_id, "callMethod")
+  PyObject_type_id = _find_java_member(PyObject_id, "type")
+  PyObject_dict_id = _find_java_member(PyObject_id, "__dict__")
+  PyClass_id = _find_java_class("org.pyjinn.interpreter.Script$PyClass")
+  PyClass_name_id = _find_java_member(PyClass_id, "name")
+  PyDict_id = _find_java_class("org.pyjinn.interpreter.Script$PyDict")
+  PyDict_contains_id = _find_java_member(PyDict_id, "__contains__")
+  PyDict_get_id = _find_java_member(PyDict_id, "get")
   Lengthable_id = _find_java_class("org.pyjinn.interpreter.Script$Lengthable")
   Lengthable_len_id = _find_java_member(Lengthable_id, "__len__")
   ItemGetter_id = _find_java_class("org.pyjinn.interpreter.Script$ItemGetter")
@@ -218,7 +204,7 @@ def to_java_handle(value):
     raise ValueError(f"Python type {type(value)} not convertible to Java: {value}")
 
 
-def from_java_handle(java_id: JavaHandle, java_object=None):
+def from_java_handle(java_id: JavaHandle, java_object=None, script_env: "JavaObject" = None):
   """Converts Java object to a Python object.
 
   Takes ownership of the `java_id` reference.
@@ -226,6 +212,7 @@ def from_java_handle(java_id: JavaHandle, java_object=None):
   Args:
     java_id: handle to a Java object
     java_object: returned if given and value isn't convertible to a Python primitive
+    script_env: JavaObject referencing org.pyjinn.interpreter.Script$Environment, or None
   """
   
   # TODO(maxuser): Run most of these calls in script_loop, but not java_to_string when uncertain
@@ -250,7 +237,7 @@ def from_java_handle(java_id: JavaHandle, java_object=None):
     elif java_object is not None:
       return java_object
     else:
-      return JavaObject(java_id)
+      return JavaObject(java_id, script_env=script_env)
 
 class JavaRef:
   """Reference counter for Java objects referenced from Python."""
@@ -297,7 +284,7 @@ class _JavaIterator:
 class JavaObject:
   """Python representation of a Java object."""
 
-  def __init__(self, target_id: JavaHandle, ref: JavaRef = None, is_script: bool = False):
+  def __init__(self, target_id: JavaHandle, ref: JavaRef = None, is_script: bool = False, script_env: "JavaObject" = None):
     """Constructs a Python handle to a Java object given a `JavaHandle`. """
     self.id = target_id
     if ref is None:
@@ -306,12 +293,13 @@ class JavaObject:
       ref.increment()
       self.ref = ref
     self._class_id = None
+    self._class_name = None
     self.is_array = None
-    self.is_script = is_script
+    self._is_script = is_script
+    self.script_env = script_env
 
   def __repr__(self):
-    class_name = _get_class_info(self.get_class_id()).class_name()
-    return f'JavaObject("{class_name}")'
+    return f'JavaObject("{self.get_class_name()}")'
 
   def toString(self) -> str:
     """Returns a `str` representation of `this.toString()` from Java."""
@@ -321,6 +309,11 @@ class JavaObject:
     if self._class_id is None:
       self._class_id = java_call_method(self.id, Object_getClass_id)
     return self._class_id
+  
+  def get_class_name(self):
+    if self._class_name is None:
+      self._class_name = java_to_string(java_call_method(self.get_class_id(), Class_getName_id))
+    return self._class_name
 
   def set_value(self, value: Any):
     """Sets this JavaObject to reference `value` instead.
@@ -379,10 +372,49 @@ class JavaObject:
       return a `JavaBoundMember` equivalent to the Java expression
       `this::methodName`.
     """
+    return self._getattr_impl(name)
+  
+  def _getattr_impl(self, name: str):
+    is_pyjinn_object = from_java_handle(
+        java_call_method(PyObject_id, Class_isAssignableFrom_id, self.get_class_id()))
+    if is_pyjinn_object:
+      def call_pyjinn_method(*args):
+        with AutoReleasePool() as auto:
+          params = auto(java_call_method(_null_id, Array_newInstance_id, Object_id, auto(java_int(len(args)))))
+          for i, arg in enumerate(args):
+            auto(java_call_method(_null_id, Array_set_id, params, auto(java_int(i)), auto(to_java_handle(arg))))
+          result = auto(java_call_method(
+                  self.id,
+                  PyObject_callMethod_id,
+                  auto(to_java_handle(self.script_env)),
+                  auto(java_string(name)),
+                  params))
+          if from_java_handle(java_call_method(_null_id, Array_getLength_id, result)) > 0:
+            return from_java_handle(java_call_method(_null_id, Array_get_id, result, auto(java_int(0))))
+          else:
+            pyj_type = auto(java_access_field(self.id, PyObject_type_id))
+            type_name = from_java_handle(java_access_field(pyj_type, PyClass_name_id))
+            raise TypeError(f"Pyjinn object of type '{type_name}' has no member named '{name}'")
+
+      # First check if Pyjinn object has a field with the given name.
+      with AutoReleasePool() as auto:
+        pyj_dict = auto(java_access_field(self.id, PyObject_dict_id))
+        jname = auto(java_string(name))
+        if from_java_handle(java_call_method(pyj_dict, PyDict_contains_id, jname)):
+          return from_java_handle(java_call_method(pyj_dict, PyDict_get_id, jname))
+
+      # Fall back to a Pyjinn method.
+      # TODO(maxuser): Check that there's a method with the given name, and throw an exception if
+      # there isn't.
+      return call_pyjinn_method
+
     binding = JavaBoundMember(
-        self.get_class_id(), self.id, name, ref=self.ref, script=self if self.is_script else None)
+        self.get_class_id(), self.id, name, ref=self.ref, script=self if self._is_script else None)
+
+    # TODO(maxuser): Cache field names per class name at script level (not per class ID which is not 1:1 with Java class).
     if name not in java_field_names(self.get_class_id()):
       return binding
+
     try:
       field = java_access_field(self.id, binding.member_id)
       return from_java_handle(field)
@@ -392,9 +424,7 @@ class JavaObject:
 
   def _is_array(self):
     if self.is_array is None:
-      self_class = java_call_method(self.id, Object_getClass_id)
-      classname = java_to_string(java_call_method(self_class, Class_getName_id))
-      self.is_array = classname.startswith("[")
+      self.is_array = self.get_class_name().startswith("[")
     return self.is_array
 
   def __len__(self) -> int:
@@ -539,7 +569,7 @@ class JavaBoundMember:
       if self.script_get_var_as_func is None:
         result = java_call_method(self.target, self.member_id,
           *[auto(to_java_handle(a)) for a in args])
-        return from_java_handle(result)
+        return from_java_handle(result, script_env=self.script_env)
       elif len(args) == 1 and type(args[0]) is str:
         func = self.script_get_var_as_func(args[0])
         def call_func(*params):
