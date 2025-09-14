@@ -100,6 +100,22 @@ class AutoReleasePool:
       return self(java_double(value))
     elif t is str:
       return self(java_string(value))
+    elif t is tuple:
+      with AutoReleasePool() as auto:
+        array = create_java_array(value)
+        pyj_tuple = _get_pyj_tuple()(array)
+        # pyj_tuple's ref won't release this handle because ownership is transfered to this AutoReleasePool.
+        pyj_tuple.ref.increment() 
+        self(pyj_tuple.id)
+        return pyj_tuple.id
+    elif t is list:
+      with AutoReleasePool() as auto:
+        array = create_java_array(value)
+        pyj_list = _get_pyj_list()(_get_java_list().of(array))
+        # pyj_list's ref won't release this handle because ownership is transfered to this AutoReleasePool.
+        pyj_list.ref.increment() 
+        self(pyj_list.id)
+        return pyj_list.id
     elif isinstance(value, JavaObject):
       # Do not add this object's id to this AutoReleasePool because JavaObject managed its own
       # reference count.
@@ -342,15 +358,13 @@ class JavaObject:
     if is_pyjinn_object:
       def call_pyjinn_method(*args):
         with AutoReleasePool() as auto:
-          params = auto(java_call_method(_null_id, Array_newInstance_id, Object_id, auto(java_int(len(args)))))
-          for i, arg in enumerate(args):
-            auto(java_call_method(_null_id, Array_set_id, params, auto(java_int(i)), auto.to_java_handle(arg)))
+          params = create_java_array(args)
           result = auto(java_call_method(
                   self.id,
                   PyObject_callMethod_id,
                   auto.to_java_handle(self.script_env),
                   auto(java_string(name)),
-                  params))
+                  params.id))
           if from_java_handle(java_call_method(_null_id, Array_getLength_id, result)) > 0:
             return from_java_handle(java_call_method(_null_id, Array_get_id, result, auto(java_int(0))))
           else:
@@ -482,6 +496,18 @@ class JavaObject:
         return from_java_handle(java_call_method(self.id, ItemGetter_getitem_id, auto.to_java_handle(key)))
 
     raise TypeError(f"object {self.id} is not subscriptable")
+
+
+def _create_java_array(sequence):
+  with AutoReleasePool() as auto:
+    array = java_call_method(_null_id, Array_newInstance_id, Object_id, auto(java_int(len(sequence))))
+    for i, arg in enumerate(sequence):
+      auto(java_call_method(_null_id, Array_set_id, array, auto(java_int(i)), auto.to_java_handle(arg)))
+    return array
+
+
+def create_java_array(sequence):
+  return JavaObject(_create_java_array(sequence))
 
 
 class JavaBoundMember:
@@ -627,6 +653,30 @@ def JavaClass(name: str) -> JavaClassType:
   # not defined and are therefore handled (incorrectly) by JavaClassType.__getattr__.
   class_id = _find_java_class(name)
   return JavaClassType(name, class_id)
+
+
+_PyjTuple = None
+def _get_pyj_tuple():
+  global _PyjTuple
+  if _PyjTuple is None:
+    _PyjTuple = JavaClass("org.pyjinn.interpreter.Script$PyTuple")
+  return _PyjTuple
+
+
+_PyjList = None
+def _get_pyj_list():
+  global _PyjList
+  if _PyjList is None:
+    _PyjList = JavaClass("org.pyjinn.interpreter.Script$PyList")
+  return _PyjList
+
+
+_JavaList = None
+def _get_java_list():
+  global _JavaList
+  if _JavaList is None:
+    _JavaList = JavaClass("java.util.List")
+  return _JavaList
 
 
 null = JavaObject(0)

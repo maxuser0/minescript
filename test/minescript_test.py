@@ -132,14 +132,8 @@ def test(test_func):
 
 # BEGIN TESTS
 
-pyjinn_source = r"""
-import sys
-import atexit
 
-value_set_on_exit = JavaArray((None,))
-
-Minecraft = JavaClass("net.minecraft.client.Minecraft")
-
+pyjinn_var_source = r"""
 pyjinn_dict = dict(x="foo", y="bar")
 pyjinn_list = [1, 2, 3]
 pyjinn_tuple = (1, 2, 3)
@@ -147,6 +141,84 @@ pyjinn_str = "This is a test."
 
 java_list = JavaList(pyjinn_list)
 java_array = JavaArray(pyjinn_tuple)
+"""
+
+@test
+def pyjinn_var_test():
+  try:
+    script = java.eval_pyjinn_script(pyjinn_var_source)
+
+    with minescript.script_loop:
+      pyjinn_dict = script.getVariable("pyjinn_dict")
+      pyjinn_list = script.getVariable("pyjinn_list")
+      pyjinn_tuple = script.getVariable("pyjinn_tuple")
+      pyjinn_str = script.getVariable("pyjinn_str")
+      expect_equal(3, len(pyjinn_list))
+      expect_equal(3, len(pyjinn_tuple))
+      expect_equal("This is a test.", pyjinn_str)
+      expect_equal("foo", pyjinn_dict["x"])
+      expect_equal("bar", pyjinn_dict["y"])
+
+      java_list = script.getVariable("java_list")
+      java_array = script.getVariable("java_array")
+      expect_equal(3, len(java_list))
+      expect_equal(3, len(java_array))
+
+      for i, elem in enumerate(pyjinn_list):
+        expect_equal(i + 1, elem)
+      for i, elem in enumerate(pyjinn_tuple):
+        expect_equal(i + 1, elem)
+      for i, elem in enumerate(java_list):
+        expect_equal(i + 1, elem)
+      for i, elem in enumerate(java_array):
+        expect_equal(i + 1, elem)
+      
+      for i in range(3):
+        expect_equal(i + 1, pyjinn_list[i])
+      
+      for i in range(3):
+        expect_equal(i + 1, pyjinn_tuple[i])
+
+      expect_contains(pyjinn_list, 1)
+      expect_contains(pyjinn_tuple, 1)
+      expect_contains(java_list, 1)
+      expect_contains(java_array, 1)
+
+      expect_does_not_contain(pyjinn_list, 4)
+      expect_does_not_contain(pyjinn_tuple, 4)
+      expect_does_not_contain(java_list, 4)
+      expect_does_not_contain(java_array, 4)
+
+  finally:
+    script.exit()
+
+
+pyjinn_class_source = r"""
+@dataclass
+class Foo:
+  name: str
+
+  def name_with_suffix(self, suffix):
+    return self.name + suffix
+
+foo = Foo("bar")
+"""
+
+@test
+def pyjinn_class_test():
+  try:
+    script = java.eval_pyjinn_script(pyjinn_class_source)
+
+    foo = script.getVariable("foo")
+    expect_equal("bar", foo.name)
+    expect_equal("barbaz", foo.name_with_suffix("baz"))
+
+  finally:
+    script.exit()
+
+
+pyjinn_func_source = r"""
+Minecraft = JavaClass("net.minecraft.client.Minecraft")
 
 def get_fps() -> int:
   return Minecraft.getInstance().getFps()
@@ -156,6 +228,61 @@ def get_player_name() -> str:
 
 def get_num_jobs() -> int:
   return len(job_info())
+
+def args_to_list(*args):
+  return args
+
+def get_first(sequence):
+  return sequence[0]
+
+def get_type_name(arg):
+  return str(type(arg))
+"""
+
+@test
+def pyjinn_func_test():
+  try:
+    script = java.eval_pyjinn_script(pyjinn_func_source)
+
+    get_fps = script.getFunction("get_fps")
+    fps = get_fps()
+    expect_equal(type(fps), int)
+    expect_gt(fps, 0)
+    expect_lt(fps, 1000)
+    
+    get_player_name = script.getFunction("get_player_name")
+    expect_equal(get_player_name(), minescript.player_name())
+
+    get_num_jobs = script.getFunction("get_num_jobs")
+    expect_equal(get_num_jobs(), len(minescript.job_info()))
+
+    args_to_list = script.getFunction("args_to_list")
+    result = args_to_list(1, 2, "foo")
+    result_tuple = tuple(result)  # convert iterable result to tuple
+    expect_equal(result_tuple, (1, 2, "foo"))
+
+    result = args_to_list([1, [2]], (3, (4,)))
+    expect_equal(result[0][0], 1)
+    expect_equal(result[0][1][0], 2)
+    expect_equal(result[1][0], 3)
+    expect_equal(result[1][1][0], 4)
+
+    get_first = script.getFunction("get_first")
+    expect_equal(get_first(("foo", "bar", "baz")), "foo")
+    expect_equal(get_first(["bar", "baz", "boz"]), "bar")
+
+    get_type_name = script.getFunction("get_type_name")
+    expect_equal(get_type_name((1, 2, 3)), 'JavaClass("org.pyjinn.interpreter.Script$PyTuple")')
+    expect_equal(get_type_name([1, 2, 3]), 'JavaClass("org.pyjinn.interpreter.Script$PyList")')
+
+  finally:
+    script.exit()
+
+
+pyjinn_exit_source = r"""
+import atexit
+
+value_set_on_exit = JavaArray((None,))
 
 def set_value_on_exit(value):
   global value_set_on_exit
@@ -168,74 +295,23 @@ def cancel_exit_handler():
 """
 
 @test
-def pyjinn_test():
-  script = java.eval_pyjinn_script(pyjinn_source)
-  value_set_on_exit = script.getVariable("value_set_on_exit")
+def pyjinn_exit_test():
+  try:
+    script = java.eval_pyjinn_script(pyjinn_exit_source)
+    value_set_on_exit = script.getVariable("value_set_on_exit")
+  finally:
+    script.exit()
+    expect_equal("assigned!", value_set_on_exit[0])
 
-  get_fps = script.getFunction("get_fps")
-  fps = get_fps()
-  expect_equal(type(fps), int)
-  expect_gt(fps, 0)
-  expect_lt(fps, 1000)
-  
-  get_player_name = script.getFunction("get_player_name")
-  expect_equal(get_player_name(), minescript.player_name())
-
-  with minescript.script_loop:
-    pyjinn_dict = script.getVariable("pyjinn_dict")
-    pyjinn_list = script.getVariable("pyjinn_list")
-    pyjinn_tuple = script.getVariable("pyjinn_tuple")
-    pyjinn_str = script.getVariable("pyjinn_str")
-    expect_equal(3, len(pyjinn_list))
-    expect_equal(3, len(pyjinn_tuple))
-    expect_equal("This is a test.", pyjinn_str)
-    expect_equal("foo", pyjinn_dict["x"])
-    expect_equal("bar", pyjinn_dict["y"])
-
-    java_list = script.getVariable("java_list")
-    java_array = script.getVariable("java_array")
-    expect_equal(3, len(java_list))
-    expect_equal(3, len(java_array))
-
-    for i, elem in enumerate(pyjinn_list):
-      expect_equal(i + 1, elem)
-    for i, elem in enumerate(pyjinn_tuple):
-      expect_equal(i + 1, elem)
-    for i, elem in enumerate(java_list):
-      expect_equal(i + 1, elem)
-    for i, elem in enumerate(java_array):
-      expect_equal(i + 1, elem)
-    
-    for i in range(3):
-      expect_equal(i + 1, pyjinn_list[i])
-    
-    for i in range(3):
-      expect_equal(i + 1, pyjinn_tuple[i])
-
-    expect_contains(pyjinn_list, 1)
-    expect_contains(pyjinn_tuple, 1)
-    expect_contains(java_list, 1)
-    expect_contains(java_array, 1)
-
-    expect_does_not_contain(pyjinn_list, 4)
-    expect_does_not_contain(pyjinn_tuple, 4)
-    expect_does_not_contain(java_list, 4)
-    expect_does_not_contain(java_array, 4)
-  
-  get_num_jobs = script.getFunction("get_num_jobs")
-  expect_equal(get_num_jobs(), len(minescript.job_info()))
-
-  script.exit()
-  expect_equal("assigned!", value_set_on_exit[0])
-
-  # Re-run the script, but now with the at-exit handler canceled.
-  script = java.eval_pyjinn_script(pyjinn_source)
-  value_set_on_exit = script.getVariable("value_set_on_exit")
-  cancel_exit_handler = script.getFunction("cancel_exit_handler")
-  cancel_exit_handler()
-  script.exit()
-  expect_equal(None, value_set_on_exit[0])
-
+  try:
+    # Re-run the script, but now with the at-exit handler canceled.
+    script = java.eval_pyjinn_script(pyjinn_exit_source)
+    value_set_on_exit = script.getVariable("value_set_on_exit")
+    cancel_exit_handler = script.getFunction("cancel_exit_handler")
+    cancel_exit_handler()
+  finally:
+    script.exit()
+    expect_equal(None, value_set_on_exit[0])
 
 
 @test
