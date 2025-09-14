@@ -52,6 +52,7 @@ for func in (
     java_field_names, java_float, java_int, java_member, java_release, java_string):
   func.set_required_executor(script_loop)
 
+_null_id = 0
 
 class AutoReleasePool:
   """Context manager for managing Java references in Python using `with` blocks.
@@ -84,6 +85,29 @@ class AutoReleasePool:
     self.refs.append(ref)
     return ref
 
+  def to_java_handle(self, value):
+    if value is None:
+      return _null_id
+
+    t = type(value)
+    if t is bool:
+      return self(java_bool(value))
+    elif t is int:
+      return self(java_int(value))
+    elif t is Float:
+      return self(java_float(value.value))
+    elif t is float:
+      return self(java_double(value))
+    elif t is str:
+      return self(java_string(value))
+    elif isinstance(value, JavaObject):
+      # Do not add this object's id to this AutoReleasePool because JavaObject managed its own
+      # reference count.
+      value.ref.increment()
+      return value.id
+    else:
+      raise ValueError(f"Python type {type(value)} not convertible to Java: {value}")
+
   def release_all(self):
     if self.refs:
       java_release(*self.refs)
@@ -106,8 +130,6 @@ def _find_java_class(name: str):
 def _find_java_member(clss, name: str):
   with script_loop:
     return java_member(clss, name)
-
-_null_id = 0
 
 with script_loop:
   Object_id = _find_java_class("java.lang.Object")
@@ -181,27 +203,6 @@ class Float:
 
   def __str__(self):
     return f"{self.value}f"
-
-def to_java_handle(value):
-  if value is None:
-    return _null_id
-
-  t = type(value)
-  if t is bool:
-    return java_bool(value)
-  elif t is int:
-    return java_int(value)
-  elif t is Float:
-    return java_float(value.value)
-  elif t is float:
-    return java_double(value)
-  elif t is str:
-    return java_string(value)
-  elif isinstance(value, JavaObject):
-    value.ref.increment()
-    return value.id
-  else:
-    raise ValueError(f"Python type {type(value)} not convertible to Java: {value}")
 
 
 def from_java_handle(java_id: JavaHandle, java_object=None, script_env: "JavaObject" = None):
@@ -343,11 +344,11 @@ class JavaObject:
         with AutoReleasePool() as auto:
           params = auto(java_call_method(_null_id, Array_newInstance_id, Object_id, auto(java_int(len(args)))))
           for i, arg in enumerate(args):
-            auto(java_call_method(_null_id, Array_set_id, params, auto(java_int(i)), auto(to_java_handle(arg))))
+            auto(java_call_method(_null_id, Array_set_id, params, auto(java_int(i)), auto.to_java_handle(arg)))
           result = auto(java_call_method(
                   self.id,
                   PyObject_callMethod_id,
-                  auto(to_java_handle(self.script_env)),
+                  auto.to_java_handle(self.script_env),
                   auto(java_string(name)),
                   params))
           if from_java_handle(java_call_method(_null_id, Array_getLength_id, result)) > 0:
@@ -438,13 +439,13 @@ class JavaObject:
       is_container = from_java_handle(
           java_call_method(ItemContainer_id, Class_isAssignableFrom_id, self.get_class_id()))
       if is_container:
-        return from_java_handle(java_call_method(self.id, ItemContainer_contains_id, auto(to_java_handle(element))))
+        return from_java_handle(java_call_method(self.id, ItemContainer_contains_id, auto.to_java_handle(element)))
     
     with AutoReleasePool() as auto:
       is_collection = from_java_handle(
           java_call_method(Collection_id, Class_isAssignableFrom_id, self.get_class_id()))
       if is_collection:
-        return from_java_handle(java_call_method(self.id, Collection_contains_id, auto(to_java_handle(element))))
+        return from_java_handle(java_call_method(self.id, Collection_contains_id, auto.to_java_handle(element)))
 
     raise TypeError(f"object {repr(self)} has no len()")
 
@@ -478,7 +479,7 @@ class JavaObject:
       is_item_getter = from_java_handle(
           java_call_method(ItemGetter_id, Class_isAssignableFrom_id, self.get_class_id()))
       if is_item_getter:
-        return from_java_handle(java_call_method(self.id, ItemGetter_getitem_id, auto(to_java_handle(key))))
+        return from_java_handle(java_call_method(self.id, ItemGetter_getitem_id, auto.to_java_handle(key)))
 
     raise TypeError(f"object {self.id} is not subscriptable")
 
@@ -529,13 +530,13 @@ class JavaBoundMember:
     with AutoReleasePool() as auto:
       if self.script_get_var_as_func is None:
         result = java_call_method(self.target, self.member_id,
-          *[auto(to_java_handle(a)) for a in args])
+          *[auto.to_java_handle(a) for a in args])
         return from_java_handle(result, script_env=self.script_env)
       elif len(args) == 1 and type(args[0]) is str:
         func = self.script_get_var_as_func(args[0])
         def call_func(*params):
           with AutoReleasePool() as auto2:
-            args_array = JavaObject(java_new_array(Object_id, *[auto2(to_java_handle(p)) for p in params]))
+            args_array = JavaObject(java_new_array(Object_id, *[auto2.to_java_handle(p) for p in params]))
             return func.call(self.script_env, args_array)
         return call_func
       else:
@@ -617,7 +618,7 @@ class JavaClassType(JavaObject):
       self.ctor = JavaObject(java_ctor(self.id))
 
     with AutoReleasePool() as auto:
-      return JavaObject(java_new_instance(self.ctor.id, *[auto(to_java_handle(a)) for a in args]))
+      return JavaObject(java_new_instance(self.ctor.id, *[auto.to_java_handle(a) for a in args]))
 
 
 def JavaClass(name: str) -> JavaClassType:
@@ -641,7 +642,7 @@ def callScriptFunction(func_name: str, *args) -> JavaObject:
     The return value of the given script function as a Python primitive type or JavaObject.
   """
   with AutoReleasePool() as auto:
-    return from_java_handle(java_call_script_function(func_name, *[auto(to_java_handle(a)) for a in args]))
+    return from_java_handle(java_call_script_function(func_name, *[auto.to_java_handle(a) for a in args]))
 
 class JavaFuture:
   """Java value that will become available in the future when an async function completes."""
@@ -671,7 +672,7 @@ def callAsyncScriptFunction(func_name: str, *args) -> JavaFuture:
     `JavaFuture` that will hold the return value of the async funcion when complete.
   """
   with AutoReleasePool() as auto:
-    return JavaFuture(java_call_script_function.as_async(func_name, *[auto(to_java_handle(a)) for a in args]))
+    return JavaFuture(java_call_script_function.as_async(func_name, *[auto.to_java_handle(a) for a in args]))
 
 
 def _eval_pyjinn_script(script_name: str, script_code: str):
