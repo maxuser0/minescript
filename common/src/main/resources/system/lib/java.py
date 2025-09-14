@@ -315,42 +315,6 @@ class JavaObject:
       self._class_name = java_to_string(java_call_method(self.get_class_id(), Class_getName_id))
     return self._class_name
 
-  def set_value(self, value: Any):
-    """Sets this JavaObject to reference `value` instead.
-    
-    `value` can be any of the following types:
-    - bool: converted to Java Boolean
-    - int: converted to Java Integer
-    - Float: converted to Java Float
-    - float: converted to Java Double
-    - str: converted to Java String
-    - JavaObject: this JavaObject will reference the same Java object as `value`
-    """
-    if value is None:
-      java_assign(self.id, 0)
-      return
-
-    def set_java_primitive(java_primitive_ctor: Callable[[Any], int], value: Any):
-      jvalue = java_primitive_ctor(value)
-      java_assign(self.id, jvalue)
-      java_release(jvalue)
-
-    t = type(value)
-    if t is bool:
-      set_java_primitive(java_bool, value)
-    elif t is int:
-      set_java_primitive(java_int, value)
-    elif t is Float:
-      set_java_primitive(java_float, value.value)
-    elif t is float:
-      set_java_primitive(java_double, value)
-    elif t is str:
-      set_java_primitive(java_string, value)
-    elif isinstance(value, JavaObject):
-      java_assign(self.value.id, value.id)
-    else:
-      raise ValueError(f"Python type {type(value)} not convertible to Java: {value}")
-
   def __str__(self):
     return java_to_string(self.id)
 
@@ -372,9 +336,6 @@ class JavaObject:
       return a `JavaBoundMember` equivalent to the Java expression
       `this::methodName`.
     """
-    return self._getattr_impl(name)
-  
-  def _getattr_impl(self, name: str):
     is_pyjinn_object = from_java_handle(
         java_call_method(PyObject_id, Class_isAssignableFrom_id, self.get_class_id()))
     if is_pyjinn_object:
