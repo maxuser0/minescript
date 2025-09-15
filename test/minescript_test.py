@@ -232,7 +232,9 @@ def get_num_jobs() -> int:
 def args_to_list(*args):
   return args
 
-def get_first(sequence):
+def get_first(sequence, default=None):
+  if len(sequence) == 0:
+    return default
   return sequence[0]
 
 def get_type_name(arg):
@@ -256,24 +258,28 @@ def pyjinn_func_test():
     get_num_jobs = script.getFunction("get_num_jobs")
     expect_equal(get_num_jobs(), len(minescript.job_info()))
 
-    args_to_list = script.getFunction("args_to_list")
-    result = args_to_list(1, 2, "foo")
-    result_tuple = tuple(result)  # convert iterable result to tuple
-    expect_equal(result_tuple, (1, 2, "foo"))
+    with minescript.script_loop:
+      args_to_list = script.getFunction("args_to_list")
+      result = args_to_list(1, 2, "foo")
+      result_tuple = tuple(result)  # convert iterable result to tuple
+      expect_equal(result_tuple, (1, 2, "foo"))
 
-    result = args_to_list([1, [2]], (3, (4,)))
-    expect_equal(result[0][0], 1)
-    expect_equal(result[0][1][0], 2)
-    expect_equal(result[1][0], 3)
-    expect_equal(result[1][1][0], 4)
+      result = args_to_list([1, [2]], (3, (4,)))
+      expect_equal(result[0][0], 1)
+      expect_equal(result[0][1][0], 2)
+      expect_equal(result[1][0], 3)
+      expect_equal(result[1][1][0], 4)
 
-    get_first = script.getFunction("get_first")
-    expect_equal(get_first(("foo", "bar", "baz")), "foo")
-    expect_equal(get_first(["bar", "baz", "boz"]), "bar")
+      get_first = script.getFunction("get_first")
+      expect_equal(get_first(("foo", "bar", "baz")), "foo")
+      expect_equal(get_first(["bar", "baz", "boz"]), "bar")
 
-    get_type_name = script.getFunction("get_type_name")
-    expect_equal(get_type_name((1, 2, 3)), 'JavaClass("org.pyjinn.interpreter.Script$PyTuple")')
-    expect_equal(get_type_name([1, 2, 3]), 'JavaClass("org.pyjinn.interpreter.Script$PyList")')
+      # Test keyword args.
+      expect_equal(get_first([], default="empty"), "empty")
+
+      get_type_name = script.getFunction("get_type_name")
+      expect_equal(get_type_name((1, 2, 3)), 'JavaClass("org.pyjinn.interpreter.Script$PyTuple")')
+      expect_equal(get_type_name([1, 2, 3]), 'JavaClass("org.pyjinn.interpreter.Script$PyList")')
 
   finally:
     script.exit()

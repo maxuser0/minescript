@@ -101,21 +101,19 @@ class AutoReleasePool:
     elif t is str:
       return self(java_string(value))
     elif t is tuple:
-      with AutoReleasePool() as auto:
-        array = create_java_array(value)
-        pyj_tuple = _get_pyj_tuple()(array)
-        # pyj_tuple's ref won't release this handle because ownership is transfered to this AutoReleasePool.
-        pyj_tuple.ref.increment() 
-        self(pyj_tuple.id)
-        return pyj_tuple.id
+      array = create_java_array(value)
+      pyj_tuple = _get_pyj_tuple()(array)
+      # pyj_tuple's ref won't release this handle because ownership is transfered to this AutoReleasePool.
+      pyj_tuple.ref.increment() 
+      self(pyj_tuple.id)
+      return pyj_tuple.id
     elif t is list:
-      with AutoReleasePool() as auto:
-        array = create_java_array(value)
-        pyj_list = _get_pyj_list()(_get_java_list().of(array))
-        # pyj_list's ref won't release this handle because ownership is transfered to this AutoReleasePool.
-        pyj_list.ref.increment() 
-        self(pyj_list.id)
-        return pyj_list.id
+      array = create_java_array(value)
+      pyj_list = _get_pyj_list()(_get_java_list().of(array))
+      # pyj_list's ref won't release this handle because ownership is transfered to this AutoReleasePool.
+      pyj_list.ref.increment() 
+      self(pyj_list.id)
+      return pyj_list.id
     elif isinstance(value, JavaObject):
       # Do not add this object's id to this AutoReleasePool because JavaObject managed its own
       # reference count.
@@ -188,7 +186,7 @@ with script_loop:
   Collection_size_id = _find_java_member(Collection_id, "size")
   Collection_contains_id = _find_java_member(Collection_id, "contains")
 
-  # Support for Pyjinn built-in types:
+  # Pyjinn built-in types:
   PyObject_id = _find_java_class("org.pyjinn.interpreter.Script$PyObject")
   PyObject_callMethod_id = _find_java_member(PyObject_id, "callMethod")
   PyObject_type_id = _find_java_member(PyObject_id, "type")
@@ -204,6 +202,9 @@ with script_loop:
   ItemGetter_getitem_id = _find_java_member(ItemGetter_id, "__getitem__")
   ItemContainer_id = _find_java_class("org.pyjinn.interpreter.Script$ItemContainer")
   ItemContainer_contains_id = _find_java_member(ItemContainer_id, "__contains__")
+  KeywordArgs_id = _find_java_class("org.pyjinn.interpreter.Script$KeywordArgs")
+  KeywordArgs_ctor_id = java_ctor(KeywordArgs_id)
+  KeywordArgs_put_id = _find_java_member(KeywordArgs_id, "put")
 
 @dataclass
 class Float:
@@ -500,6 +501,7 @@ class JavaObject:
 
 def _create_java_array(sequence):
   with AutoReleasePool() as auto:
+    # No auto-release for `array` because its ownership is managed by the caller.
     array = java_call_method(_null_id, Array_newInstance_id, Object_id, auto(java_int(len(sequence))))
     for i, arg in enumerate(sequence):
       auto(java_call_method(_null_id, Array_set_id, array, auto(java_int(i)), auto.to_java_handle(arg)))
@@ -508,6 +510,25 @@ def _create_java_array(sequence):
 
 def create_java_array(sequence):
   return JavaObject(_create_java_array(sequence))
+
+
+def _create_java_keyword_args(kwargs):
+  if type(kwargs) is not dict:
+    raise TypeError(f"Keyword args must be dict but got '{type(kwargs)}': '{repr(kwargs)[:64]}'")
+
+  with AutoReleasePool() as auto:
+    # No auto-release for `java_kwargs` because its ownership is managed by the caller.
+    java_kwargs = java_new_instance(KeywordArgs_ctor_id)
+    for key, value in kwargs.items():
+      if type(key) is not str:
+        auto(java_kwargs)  # Release this upon error.
+        raise TypeError(f"Keyword arg keys must be string but got '{type(key)}': '{repr(key)[:64]}'")
+      auto(java_call_method(java_kwargs, KeywordArgs_put_id, auto(java_string(key)), auto.to_java_handle(value)))
+    return java_kwargs
+
+
+def create_java_keyword_args(kwargs):
+  return JavaObject(_create_java_keyword_args(kwargs))
 
 
 class JavaBoundMember:
@@ -547,7 +568,7 @@ class JavaBoundMember:
   def __repr__(self):
     return f"(target_class_id={self.target_class_id}, target={self.target}, member_name={self.member_name}, member_id={self.member_id})"
 
-  def __call__(self, *args):
+  def __call__(self, *args, **kwargs):
     """Calls the bound method with the given `args`.
     
     Returns:
@@ -555,14 +576,21 @@ class JavaBoundMember:
     """
     with AutoReleasePool() as auto:
       if self.script_get_var_as_func is None:
+        if kwargs:
+          raise ValueError(f"Java methods do not support keyword args: {kwargs}")
         result = java_call_method(self.target, self.member_id,
           *[auto.to_java_handle(a) for a in args])
         return from_java_handle(result, script_env=self.script_env)
       elif len(args) == 1 and type(args[0]) is str:
         func = self.script_get_var_as_func(args[0])
-        def call_func(*params):
+        def call_func(*params, **kwargs):
           with AutoReleasePool() as auto2:
-            args_array = JavaObject(java_new_array(Object_id, *[auto2.to_java_handle(p) for p in params]))
+            java_params = [auto2.to_java_handle(p) for p in params]
+            if kwargs:
+              java_kwargs = create_java_keyword_args(kwargs)
+              java_kwargs.ref.increment()  # Increment refcount to transfer ownership to auto2.
+              java_params.append(auto2(java_kwargs.id))
+            args_array = JavaObject(java_new_array(Object_id, *java_params))
             return func.call(self.script_env, args_array)
         return call_func
       else:
