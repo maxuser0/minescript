@@ -17,6 +17,8 @@ echo("fps:", minecraft.getFps())
 ```
 """
 
+import os  # chdir, getcwd
+
 from minescript import (
   JavaHandle,
   java_access_field,
@@ -779,13 +781,25 @@ def import_pyjinn_script(pyj_filename: str):
   See: [Embedding Pyjinn in Python scripts](pyjinn.md#embedding-pyjinn-in-python-scripts)
 
   Args:
-    pyj_filename: name a of `.pyj` file containing Pyjinn code to import
+    pyj_filename: name a of `.pyj` file containing Pyjinn code to import; relative filenames are
+        relative to the `minescript` directory.
 
   Returns:
     new Java object of type `org.pyjinn.interpreter.Script`
 
   Since: v5.0
   """
-  with open(pyj_filename, 'r', encoding='utf-8') as pyj_file:
-    script_code = pyj_file.read()
-    return JavaObject(_eval_pyjinn_script(pyj_filename, script_code), is_script=True)
+  original_dir = os.getcwd()
+  cleanup = lambda: None
+  try:
+    # TODO(maxuser): Consider doing chdir in minescript.py so all scripts use minescript as cwd.
+    if os.path.basename(original_dir) != "minescript":
+      cleanup = lambda: os.chdir(original_dir)
+      os.chdir("minescript")
+
+    with open(pyj_filename, 'r', encoding='utf-8') as pyj_file:
+      script_code = pyj_file.read()
+      return JavaObject(_eval_pyjinn_script(pyj_filename, script_code), is_script=True)
+
+  finally:
+    cleanup()
