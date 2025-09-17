@@ -1251,7 +1251,7 @@ class EventQueue:
         echo("Who's there?")
   ```
 
-  Compatibility: Python only.
+  Compatibility: Python only. (See `add_event_listener` for Pyjinn event handling.)
 
   Since: v4.0
   """
@@ -2562,7 +2562,23 @@ if "Pyjinn" in sys.version:
   def add_event_listener(event_type: str, callback: Callable[[Any], None], **args) -> int:
     """Adds an event listener with the given callback and args.
 
-    Compatibility: Pyjinn only.
+    Supported event types:
+    
+    - `"add_entity"` - `AddEntityEvent`
+    - `"block_update"` - `BlockUpdateEvent`
+    - `"chat"` - `ChatEvent`
+    - `"chunk"` - `ChunkEvent`
+    - `"damage"` - `DamageEvent`
+    - `"explosion"` - `ExplosionEvent`
+    - `"key"` - `KeyEvent`
+    - `"mouse"` - `MouseEvent`
+    - `"outgoing_chat_intercept"` - `ChatEvent`
+    - `"render"` - `RenderEvent`
+    - `"take_item"` - `TakeItemEvent`
+    - `"tick"` - `TickEvent`
+    - `"world"` - `WorldEvent`
+
+    Compatibility: Pyjinn only. (See `EventQueue` for Python event handling.)
     """
     raise NotImplementedError("add_event_listener is implemented in Java for Pyjinn scripts")
 

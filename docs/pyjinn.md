@@ -4,6 +4,8 @@
 
 - [What is Pyjinn?](#what-is-pyjinn)
 - [Pyjinn in Minescript 5.0](#pyjinn-in-minescript-50)
+  - [When to use Pyjinn](#when-to-use-pyjinn)
+  - [Embedding Pyjinn in Python scripts](#embedding-pyjinn-in-python-scripts)
 - [Java Integration](#java-integration)
 - [Python Language Features](#python-language-features)
 - [Python 3.x feature support](#python-3x-feature-support)
@@ -42,7 +44,7 @@ JavaScript:
 The supported event types are:
 
 - "tick", "render", "key", "mouse", "chat", "outgoing_chat_intercept", "add_entity",
-  "block_update", "explosion", "take_item", "damage", "chunk"
+  "block_update", "explosion", "take_item", "damage", "chunk", "world"
 
 Scripts can import the Minescript standard library explicitly. For simple IDE integration (e.g.
 VSCode), you can use imports like these:
@@ -95,6 +97,41 @@ import sys
 if "Pyjinn" not in sys.version:
   raise ImportError(f"Module '{__name__}' requires a Pyjinn interpreter.")
 ```
+
+
+#### When to use Pyjinn
+
+Pyjinn is best used in these scenarios:
+
+- Developing scripts that can run on systems that don't have a Python installation.
+- Scripts that need to start quickly and don't use Python standard libraries or third-party
+  Python libraries. (Pyjinn scripts launch faster than Python scripts because Pyjinn scripts run
+  inside the game's Java process rather than spawning a subprocess.)
+- Scripts that require synchronization with game events, such as scripted game rendering which needs
+  to execute arbitrarily complex user-defined script code while blocking the game's render thread.
+
+Python scripts can call into Java code (Minecraft code and any currently loaded mod code, including
+Minescript Java code; see [`java.py` module](README.md#java-module)) and Pyjinn code (see
+[`eval_pyjinn_script()`](README.md#eval_pyjinn_script) and
+[`import_pyjinn_script()`](README.md#import_pyjinn_script)).
+
+Java and Pyjinn can make synchronous calls into each other. This means that each can make a
+function or method call into the other and get a return value on the same Java thread, allowing
+Pyjinn scripts to register callbacks that are invoked during game ticks and game rendering.
+
+Java and Pyjinn cannot call synchronously into Python code; to do so would be make the game stutter
+at best, and unresponsive at worst. While Java code can send events asynchronously via an
+[`EventQueue`](README.md#eventqueue) to Python, the Python code is not synchronized to the game tick
+or rendered frame in Java that triggered the event. For example, a Python script that registers for
+a game event may get called during a later tick than the one that triggered the event.
+
+The following diagram summarizes callability across Python, Pyjinn, and Java. The yellow oval
+represents a Python script process, green ovals represent code running in the game's Java process,
+solid arrows indicate a synchronous function or method call, and dotted arrow indicates an
+asynchronous call:
+
+![Callability across Python, Pyjinn, and Java](python-pyjinn-java-graph.png)
+
 
 
 #### Embedding Pyjinn in Python scripts
