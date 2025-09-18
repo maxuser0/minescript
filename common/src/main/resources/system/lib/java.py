@@ -48,10 +48,10 @@ from minescript_runtime import debug_log
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Set, Tuple
 
-# These script functions should be safe to call on any thread:
+# These script functions are safe to call on any thread:
 for func in (
     java_array_index, java_array_length, java_assign, java_bool, java_class, java_double,
-    java_field_names, java_float, java_int, java_member, java_release, java_string):
+    java_field_names, java_float, java_int, java_member, java_release, java_string, java_new_array):
   func.set_required_executor(script_loop)
 
 _null_id = 0
@@ -103,14 +103,14 @@ class AutoReleasePool:
     elif t is str:
       return self(java_string(value))
     elif t is tuple:
-      array = create_java_array(value)
+      array = create_java_object_array(value)
       pyj_tuple = _get_pyj_tuple()(array)
       # pyj_tuple's ref won't release this handle because ownership is transfered to this AutoReleasePool.
       pyj_tuple.ref.increment() 
       self(pyj_tuple.id)
       return pyj_tuple.id
     elif t is list:
-      array = create_java_array(value)
+      array = create_java_object_array(value)
       pyj_list = _get_pyj_list()(_get_java_list().of(array))
       # pyj_list's ref won't release this handle because ownership is transfered to this AutoReleasePool.
       pyj_list.ref.increment() 
@@ -177,8 +177,6 @@ with script_loop:
   Double_id = _find_java_class("java.lang.Double")
 
   Array_id = _find_java_class("java.lang.reflect.Array")
-  Array_newInstance_id = _find_java_member(Array_id, "newInstance")
-  Array_set_id = _find_java_member(Array_id, "set")
   Array_get_id = _find_java_member(Array_id, "get")
   Array_getLength_id = _find_java_member(Array_id, "getLength")
 
@@ -198,6 +196,8 @@ with script_loop:
   PyDict_id = _find_java_class("org.pyjinn.interpreter.Script$PyDict")
   PyDict_contains_id = _find_java_member(PyDict_id, "__contains__")
   PyDict_get_id = _find_java_member(PyDict_id, "get")
+  ScriptFunction_id = _find_java_class("org.pyjinn.interpreter.Script$Function")
+  ScriptFunction_call_id = _find_java_member(ScriptFunction_id, "call")
   Lengthable_id = _find_java_class("org.pyjinn.interpreter.Script$Lengthable")
   Lengthable_len_id = _find_java_member(Lengthable_id, "__len__")
   ItemGetter_id = _find_java_class("org.pyjinn.interpreter.Script$ItemGetter")
@@ -224,7 +224,7 @@ class Float:
     return f"{self.value}f"
 
 
-def from_java_handle(java_id: JavaHandle, java_object=None, script_env: "JavaObject" = None):
+def from_java_handle(java_id: JavaHandle, java_object=None, script_env: "JavaHandle" = None):
   """Converts Java object to a Python object.
 
   Takes ownership of the `java_id` reference.
@@ -232,7 +232,7 @@ def from_java_handle(java_id: JavaHandle, java_object=None, script_env: "JavaObj
   Args:
     java_id: handle to a Java object
     java_object: returned if given and value isn't convertible to a Python primitive
-    script_env: JavaObject referencing org.pyjinn.interpreter.Script$Environment, or None
+    script_env: JavaHandle referencing org.pyjinn.interpreter.Script$Environment, or None
   """
   
   # TODO(maxuser): Run most of these calls in script_loop, but not java_to_string when uncertain
@@ -304,7 +304,7 @@ class _JavaIterator:
 class JavaObject:
   """Python representation of a Java object."""
 
-  def __init__(self, target_id: JavaHandle, ref: JavaRef = None, is_script: bool = False, script_env: "JavaObject" = None):
+  def __init__(self, target_id: JavaHandle, ref: JavaRef = None, script_env: "JavaHandle" = None):
     """Constructs a Python handle to a Java object given a `JavaHandle`. """
     self.id = target_id
     if ref is None:
@@ -315,8 +315,13 @@ class JavaObject:
     self._class_id = None
     self._class_name = None
     self.is_array = None
-    self._is_script = is_script
     self.script_env = script_env
+    self.owns_script_env = False
+  
+  def set_script_env(self, script_env: "JavaObject"):
+    script_env.ref.increment()  # ownership manually managed by this JavaObject (self).
+    self.script_env = script_env.id
+    self.owns_script_env = True
 
   def __repr__(self):
     return f'JavaObject("{self.get_class_name()}")'
@@ -343,6 +348,8 @@ class JavaObject:
       self.ref.decrement()
     if self._class_id is not None:
       java_release(self._class_id)
+    if self.owns_script_env and self.script_env is not None:
+      java_release(self.script_env)
 
   def __getattr__(self, name: str):
     """Accesses the field or method named `name`.
@@ -356,16 +363,18 @@ class JavaObject:
       return a `JavaBoundMember` equivalent to the Java expression
       `this::methodName`.
     """
-    is_pyjinn_object = from_java_handle(
-        java_call_method(PyObject_id, Class_isAssignableFrom_id, self.get_class_id()))
+    # TODO(maxuser): Consider caching is_pyjinn_object.
+    with script_loop:
+      is_pyjinn_object = from_java_handle(
+          java_call_method(PyObject_id, Class_isAssignableFrom_id, self.get_class_id()))
     if is_pyjinn_object:
       def call_pyjinn_method(*args):
         with AutoReleasePool() as auto:
-          params = create_java_array(args)
+          params = create_java_object_array(args)
           result = auto(java_call_method(
                   self.id,
                   PyObject_callMethod_id,
-                  auto.to_java_handle(self.script_env),
+                  self.script_env,
                   auto(java_string(name)),
                   params.id))
           if from_java_handle(java_call_method(_null_id, Array_getLength_id, result)) > 0:
@@ -388,7 +397,7 @@ class JavaObject:
       return call_pyjinn_method
 
     binding = JavaBoundMember(
-        self.get_class_id(), self.id, name, ref=self.ref, script=self if self._is_script else None)
+        self.get_class_id(), self.id, name, ref=self.ref, script_env=self.script_env)
 
     # TODO(maxuser): Cache field names per class name at script level (not per class ID which is not 1:1 with Java class).
     if name not in java_field_names(self.get_class_id()):
@@ -398,8 +407,33 @@ class JavaObject:
       field = java_access_field(self.id, binding.member_id)
       return from_java_handle(field)
     except Exception as e:
-      debug_log(f"lib_java.py: caught exception accessing field `{name}`: {e}")
+      debug_log(f"java.py: caught exception accessing field `{name}`: {e}")
       return binding
+
+  def __call__(self, *args, **kwargs):
+    """Calls this callable object, if applicable.
+    
+    Returns:
+      Return value of the Pyjinn callable represented by this JavaObject, if applicable.
+    
+    Raises `TypeError` if this isn't a callable Pyjinn object.
+    """
+    # TODO(maxuser): Consider caching is_pyjinn_function.
+    with script_loop:
+      is_pyjinn_function = from_java_handle(
+          java_call_method(ScriptFunction_id, Class_isAssignableFrom_id, self.get_class_id()))
+    if is_pyjinn_function:
+      with AutoReleasePool() as auto:
+        java_params = [auto.to_java_handle(p) for p in args]
+        if kwargs:
+          java_kwargs = auto(_create_java_keyword_args_handle(kwargs))
+          java_params.append(java_kwargs)
+        args_array = auto(java_new_array(Object_id, *java_params))
+        return from_java_handle(
+            java_call_method(self.id, ScriptFunction_call_id, self.script_env, args_array),
+            script_env=self.script_env)
+
+    raise TypeError(f"Expected Pyjinn callable object but got Java object of type '{self.get_class_name()}'")
 
   def _is_array(self):
     if self.is_array is None:
@@ -501,20 +535,12 @@ class JavaObject:
     raise TypeError(f"object {self.id} is not subscriptable")
 
 
-def _create_java_array(sequence):
+def create_java_object_array(sequence) -> JavaObject:
   with AutoReleasePool() as auto:
-    # No auto-release for `array` because its ownership is managed by the caller.
-    array = java_call_method(_null_id, Array_newInstance_id, Object_id, auto(java_int(len(sequence))))
-    for i, arg in enumerate(sequence):
-      auto(java_call_method(_null_id, Array_set_id, array, auto(java_int(i)), auto.to_java_handle(arg)))
-    return array
+    return JavaObject(java_new_array(Object_id, *[auto.to_java_handle(arg) for arg in sequence]))
 
 
-def create_java_array(sequence):
-  return JavaObject(_create_java_array(sequence))
-
-
-def _create_java_keyword_args(kwargs):
+def _create_java_keyword_args_handle(kwargs):
   if type(kwargs) is not dict:
     raise TypeError(f"Keyword args must be dict but got '{type(kwargs)}': '{repr(kwargs)[:64]}'")
 
@@ -529,13 +555,9 @@ def _create_java_keyword_args(kwargs):
     return java_kwargs
 
 
-def create_java_keyword_args(kwargs):
-  return JavaObject(_create_java_keyword_args(kwargs))
-
-
 class JavaBoundMember:
   """Representation of a Java method reference in Python."""
-  def __init__(self, target_class_id: JavaHandle, target, name: str, ref: JavaRef = None, script: JavaObject = None):
+  def __init__(self, target_class_id: JavaHandle, target, name: str, ref: JavaRef = None, script_env: JavaHandle = None):
     """Member that's bound to a target object, representing a field or method.
 
     Args:
@@ -543,7 +565,7 @@ class JavaBoundMember:
       target: either Java object ID of the target through which this member is accessed
       name: name of this member
       ref: JavaRef to manage reference lifetime (optional)
-      script: Pyjinn Script object for accessing and calling script functions (optional)
+      script_env: Pyjinn Script environment, if applicable (optional)
     """
     self.ref = ref
     if ref is not None:
@@ -552,15 +574,8 @@ class JavaBoundMember:
     self.target_class_id = target_class_id
     self.target = target
     self.member_name = name
-    self.script = script
-    if script is not None and name == "getFunction":
-      self.member_id = None
-      self.script_get_var_as_func = JavaBoundMember(target_class_id, target, "getVariable", ref, script)
-      self.script_env = self.script.mainModule().globals()
-    else:
-      self.member_id = _find_java_member(target_class_id, name)
-      self.script_get_var_as_func = None
-      self.script_env = None
+    self.member_id = _find_java_member(target_class_id, name)
+    self.script_env = script_env
   
   def __del__(self):
     if self.ref is not None:
@@ -577,26 +592,9 @@ class JavaBoundMember:
       A Python primitive (bool, int, float, str) if applicable, otherwise a JavaObject.
     """
     with AutoReleasePool() as auto:
-      if self.script_get_var_as_func is None:
-        if kwargs:
-          raise ValueError(f"Java methods do not support keyword args: {kwargs}")
-        result = java_call_method(self.target, self.member_id,
-          *[auto.to_java_handle(a) for a in args])
-        return from_java_handle(result, script_env=self.script_env)
-      elif len(args) == 1 and type(args[0]) is str:
-        func = self.script_get_var_as_func(args[0])
-        def call_func(*params, **kwargs):
-          with AutoReleasePool() as auto2:
-            java_params = [auto2.to_java_handle(p) for p in params]
-            if kwargs:
-              java_kwargs = create_java_keyword_args(kwargs)
-              java_kwargs.ref.increment()  # Increment refcount to transfer ownership to auto2.
-              java_params.append(auto2(java_kwargs.id))
-            args_array = JavaObject(java_new_array(Object_id, *java_params))
-            return func.call(self.script_env, args_array)
-        return call_func
-      else:
-        raise Exception(f"Script.getFunction() requires 1 str args but got {args}")
+      result = java_call_method(
+          self.target, self.member_id, *[auto.to_java_handle(a) for a in args])
+      return from_java_handle(result, script_env=self.script_env)
 
 
 class JavaInt(JavaObject):
@@ -661,7 +659,7 @@ class JavaClassType(JavaObject):
       field = java_access_field(self.id, binding.member_id)
       return from_java_handle(field)
     except Exception as e:
-      debug_log(f"lib_java.py: caught exception accessing field `{name}`: {e}")
+      debug_log(f"java.py: caught exception accessing field `{name}`: {e}")
       return binding
 
   def __call__(self, *args):
@@ -773,7 +771,9 @@ def eval_pyjinn_script(script_code: str) -> JavaObject:
 
   Since: v5.0
   """
-  return JavaObject(_eval_pyjinn_script("__eval_pyjinn_script__", script_code), is_script=True)
+  script = JavaObject(_eval_pyjinn_script("__eval_pyjinn_script__", script_code))
+  script.set_script_env(script.mainModule().globals())
+  return script
 
 def import_pyjinn_script(pyj_filename: str):
   """Imports a Pyjinn script from a `.pyj` file.
@@ -799,7 +799,9 @@ def import_pyjinn_script(pyj_filename: str):
 
     with open(pyj_filename, 'r', encoding='utf-8') as pyj_file:
       script_code = pyj_file.read()
-      return JavaObject(_eval_pyjinn_script(pyj_filename, script_code), is_script=True)
+      script = JavaObject(_eval_pyjinn_script(pyj_filename, script_code))
+      script.set_script_env(script.mainModule().globals())
+      return script
 
   finally:
     cleanup()

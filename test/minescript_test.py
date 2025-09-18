@@ -141,6 +141,8 @@ pyjinn_str = "This is a test."
 
 java_list = JavaList(pyjinn_list)
 java_array = JavaArray(pyjinn_tuple)
+
+x = 99
 """
 
 @test
@@ -189,29 +191,9 @@ def pyjinn_var_test():
       expect_does_not_contain(java_list, 4)
       expect_does_not_contain(java_array, 4)
 
-  finally:
-    script.exit()
-
-
-pyjinn_class_source = r"""
-@dataclass
-class Foo:
-  name: str
-
-  def name_with_suffix(self, suffix):
-    return self.name + suffix
-
-foo = Foo("bar")
-"""
-
-@test
-def pyjinn_class_test():
-  try:
-    script = java.eval_pyjinn_script(pyjinn_class_source)
-
-    foo = script.getVariable("foo")
-    expect_equal("bar", foo.name)
-    expect_equal("barbaz", foo.name_with_suffix("baz"))
+      expect_equal(script.getVariable("x"), 99)
+      script.setVariable("x", 42)
+      expect_equal(script.getVariable("x"), 42)
 
   finally:
     script.exit()
@@ -239,6 +221,10 @@ def get_first(sequence, default=None):
 
 def get_type_name(arg):
   return str(type(arg))
+
+x = 99
+def get_global_x():
+  return x
 """
 
 @test
@@ -246,20 +232,20 @@ def pyjinn_func_test():
   try:
     script = java.eval_pyjinn_script(pyjinn_func_source)
 
-    get_fps = script.getFunction("get_fps")
+    get_fps = script.getVariable("get_fps")
     fps = get_fps()
     expect_equal(type(fps), int)
     expect_gt(fps, 0)
     expect_lt(fps, 1000)
     
-    get_player_name = script.getFunction("get_player_name")
+    get_player_name = script.getVariable("get_player_name")
     expect_equal(get_player_name(), minescript.player_name())
 
-    get_num_jobs = script.getFunction("get_num_jobs")
+    get_num_jobs = script.getVariable("get_num_jobs")
     expect_equal(get_num_jobs(), len(minescript.job_info()))
 
     with minescript.script_loop:
-      args_to_list = script.getFunction("args_to_list")
+      args_to_list = script.getVariable("args_to_list")
       result = args_to_list(1, 2, "foo")
       result_tuple = tuple(result)  # convert iterable result to tuple
       expect_equal(result_tuple, (1, 2, "foo"))
@@ -270,16 +256,70 @@ def pyjinn_func_test():
       expect_equal(result[1][0], 3)
       expect_equal(result[1][1][0], 4)
 
-      get_first = script.getFunction("get_first")
+      get_first = script.getVariable("get_first")
       expect_equal(get_first(("foo", "bar", "baz")), "foo")
       expect_equal(get_first(["bar", "baz", "boz"]), "bar")
 
       # Test keyword args.
       expect_equal(get_first([], default="empty"), "empty")
 
-      get_type_name = script.getFunction("get_type_name")
+      get_type_name = script.getVariable("get_type_name")
       expect_equal(get_type_name((1, 2, 3)), 'JavaClass("org.pyjinn.interpreter.Script$PyTuple")')
       expect_equal(get_type_name([1, 2, 3]), 'JavaClass("org.pyjinn.interpreter.Script$PyList")')
+
+      get_global_x = script.getVariable("get_global_x")
+      expect_equal(get_global_x(), 99)
+
+      script.setVariable("x", 42)
+      expect_equal(get_global_x(), 42)
+
+  finally:
+    script.exit()
+
+
+pyjinn_object_source = r"""
+@dataclass
+class Foo:
+  name: str
+
+  def name_with_suffix(self, suffix):
+    return self.name + suffix
+
+foo = Foo("bar")
+"""
+
+@test
+def pyjinn_object_test():
+  try:
+    script = java.eval_pyjinn_script(pyjinn_object_source)
+
+    foo = script.getVariable("foo")
+    expect_equal("bar", foo.name)
+    expect_equal("barbaz", foo.name_with_suffix("baz"))
+
+  finally:
+    script.exit()
+
+
+pyjinn_class_source = r"""
+@dataclass
+class Foo:
+  name: str
+  x: int = None
+
+  def name_with_suffix(self, suffix):
+    return self.name + suffix
+"""
+
+@test
+def pyjinn_class_test():
+  try:
+    script = java.eval_pyjinn_script(pyjinn_class_source)
+
+    Foo = script.getVariable("Foo")
+    foo = Foo("hello", x=2)
+    expect_equal("hello", foo.name)
+    expect_equal("hellogoodbye", foo.name_with_suffix("goodbye"))
 
   finally:
     script.exit()
@@ -313,7 +353,7 @@ def pyjinn_exit_test():
     # Re-run the script, but now with the at-exit handler canceled.
     script = java.eval_pyjinn_script(pyjinn_exit_source)
     value_set_on_exit = script.getVariable("value_set_on_exit")
-    cancel_exit_handler = script.getFunction("cancel_exit_handler")
+    cancel_exit_handler = script.getVariable("cancel_exit_handler")
     cancel_exit_handler()
   finally:
     script.exit()

@@ -167,12 +167,12 @@ def get_fps(units: str) -> str:
   return f"{Minecraft.getInstance().getFps()} {units}"
 """)
 
-get_fps = script.getFunction("get_fps")
+get_fps = script.getVariable("get_fps")
 print("fps:", get_fps("frames per second"))
 
 print(f"x from Python = {script.getVariable('x')}")
 
-print_x = script.getFunction("print_x")
+print_x = script.getVariable("print_x")
 print_x()
 script.setVariable("x", 99)
 print_x()
@@ -189,7 +189,6 @@ x from Pyjinn = 99
 
 The Python script accesses globals from the Pyjinn script:
 
-- accesses functions using `script.getFunction(function_name: str)`
 - gets the value of a global variable using `script.getVariable(variable_name: str)`
 - sets the value of a global variable using `script.setVariable(variable_name: str, value: Any)`
 
