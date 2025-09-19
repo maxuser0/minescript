@@ -325,6 +325,35 @@ def pyjinn_class_test():
     script.exit()
 
 
+pyjinn_module_source = r"""
+import pyjinn_module_test
+x = 42
+"""
+
+@test
+def pyjinn_module_test():
+  test_module_filename = "pyjinn_module_test.py"
+  with open(os.path.join("minescript", test_module_filename), "w") as f:
+    f.write("y = 99\n")
+
+  try:
+    script = java.eval_pyjinn_script(pyjinn_module_source)
+
+    x = script.module("__main__").globals().get("x")
+    expect_equal(x, 42)
+
+    y = script.module("pyjinn_module_test").globals().get("y")
+    expect_equal(y, 99)
+
+    missing_module = script.module("missing_module")
+    expect_equal(missing_module, None)
+
+  finally:
+    script.exit()
+    if os.path.isfile(test_module_filename):
+      os.remove(test_module_filename)
+
+
 pyjinn_exit_source = r"""
 import atexit
 
