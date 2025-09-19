@@ -304,7 +304,7 @@ class _JavaIterator:
 class JavaObject:
   """Python representation of a Java object."""
 
-  def __init__(self, target_id: JavaHandle, ref: JavaRef = None, script_env: "JavaHandle" = None):
+  def __init__(self, target_id: JavaHandle, ref: JavaRef = None, script_env: JavaHandle = None):
     """Constructs a Python handle to a Java object given a `JavaHandle`. """
     self.id = target_id
     if ref is None:
@@ -316,13 +316,7 @@ class JavaObject:
     self._class_name = None
     self.is_array = None
     self.script_env = script_env
-    self.owns_script_env = False
   
-  def set_script_env(self, script_env: "JavaObject"):
-    script_env.ref.increment()  # ownership manually managed by this JavaObject (self).
-    self.script_env = script_env.id
-    self.owns_script_env = True
-
   def __repr__(self):
     return f'JavaObject("{self.get_class_name()}")'
 
@@ -348,8 +342,6 @@ class JavaObject:
       self.ref.decrement()
     if self._class_id is not None:
       java_release(self._class_id)
-    if self.owns_script_env and self.script_env is not None:
-      java_release(self.script_env)
 
   def __getattr__(self, name: str):
     """Accesses the field or method named `name`.
@@ -758,6 +750,32 @@ def _eval_pyjinn_script(script_name: str, script_code: str):
 
 _eval_pyjinn_script = ScriptFunction("eval_pyjinn_script", _eval_pyjinn_script)
 
+
+class ScriptObject(JavaObject):
+  """
+  Subclass of JavaObject that manages an embedded Pyjinn script.
+  """
+  def __init__(self, target_id: JavaHandle):
+    """Initializes a Pyjinn Script object."""
+    super().__init__(target_id)
+
+  def set_script_env(self, script_env: JavaObject):
+    script_env.ref.increment()  # ownership manually managed by this ScriptObject (self).
+    self.script_env = script_env.id
+
+  def __enter__(self):
+    return self
+  
+  def __exit__(self, exc_type, exc_val, exc_tb):
+    self.exit()
+    return False  # propagate exceptions
+
+  def __del__(self):
+    if self.script_env is not None:
+      java_release(self.script_env)
+    super().__del__()
+
+
 def eval_pyjinn_script(script_code: str) -> JavaObject:
   """Creates a Pyjinn script given source code as a string.
 
@@ -771,7 +789,7 @@ def eval_pyjinn_script(script_code: str) -> JavaObject:
 
   Since: v5.0
   """
-  script = JavaObject(_eval_pyjinn_script("__eval_pyjinn_script__", script_code))
+  script = ScriptObject(_eval_pyjinn_script("__eval_pyjinn_script__", script_code))
   script.set_script_env(script.mainModule().globals())
   return script
 
@@ -799,7 +817,7 @@ def import_pyjinn_script(pyj_filename: str):
 
     with open(pyj_filename, 'r', encoding='utf-8') as pyj_file:
       script_code = pyj_file.read()
-      script = JavaObject(_eval_pyjinn_script(pyj_filename, script_code))
+      script = ScriptObject(_eval_pyjinn_script(pyj_filename, script_code))
       script.set_script_env(script.mainModule().globals())
       return script
 

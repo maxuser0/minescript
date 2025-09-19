@@ -147,9 +147,7 @@ x = 99
 
 @test
 def pyjinn_var_test():
-  try:
-    script = java.eval_pyjinn_script(pyjinn_var_source)
-
+  with java.eval_pyjinn_script(pyjinn_var_source) as script:
     with minescript.script_loop:
       pyjinn_dict = script.get("pyjinn_dict")
       pyjinn_list = script.get("pyjinn_list")
@@ -195,9 +193,6 @@ def pyjinn_var_test():
       script.set("x", 42)
       expect_equal(script.get("x"), 42)
 
-  finally:
-    script.exit()
-
 
 pyjinn_func_source = r"""
 Minecraft = JavaClass("net.minecraft.client.Minecraft")
@@ -229,9 +224,7 @@ def get_global_x():
 
 @test
 def pyjinn_func_test():
-  try:
-    script = java.eval_pyjinn_script(pyjinn_func_source)
-
+  with java.eval_pyjinn_script(pyjinn_func_source) as script:
     get_fps = script.get("get_fps")
     fps = get_fps()
     expect_equal(type(fps), int)
@@ -273,9 +266,6 @@ def pyjinn_func_test():
       script.set("x", 42)
       expect_equal(get_global_x(), 42)
 
-  finally:
-    script.exit()
-
 
 pyjinn_object_source = r"""
 @dataclass
@@ -290,15 +280,10 @@ foo = Foo("bar")
 
 @test
 def pyjinn_object_test():
-  try:
-    script = java.eval_pyjinn_script(pyjinn_object_source)
-
+  with java.eval_pyjinn_script(pyjinn_object_source) as script:
     foo = script.get("foo")
     expect_equal("bar", foo.name)
     expect_equal("barbaz", foo.name_with_suffix("baz"))
-
-  finally:
-    script.exit()
 
 
 pyjinn_class_source = r"""
@@ -313,16 +298,11 @@ class Foo:
 
 @test
 def pyjinn_class_test():
-  try:
-    script = java.eval_pyjinn_script(pyjinn_class_source)
-
+  with java.eval_pyjinn_script(pyjinn_class_source) as script:
     Foo = script.get("Foo")
     foo = Foo("hello", x=2)
     expect_equal("hello", foo.name)
     expect_equal("hellogoodbye", foo.name_with_suffix("goodbye"))
-
-  finally:
-    script.exit()
 
 
 pyjinn_module_source = r"""
@@ -337,19 +317,17 @@ def pyjinn_module_test():
     f.write("y = 99\n")
 
   try:
-    script = java.eval_pyjinn_script(pyjinn_module_source)
+    with java.eval_pyjinn_script(pyjinn_module_source) as script:
+      x = script.module("__main__").globals().get("x")
+      expect_equal(x, 42)
 
-    x = script.module("__main__").globals().get("x")
-    expect_equal(x, 42)
+      y = script.module("pyjinn_module_test").globals().get("y")
+      expect_equal(y, 99)
 
-    y = script.module("pyjinn_module_test").globals().get("y")
-    expect_equal(y, 99)
-
-    missing_module = script.module("missing_module")
-    expect_equal(missing_module, None)
+      missing_module = script.module("missing_module")
+      expect_equal(missing_module, None)
 
   finally:
-    script.exit()
     if os.path.isfile(test_module_filename):
       os.remove(test_module_filename)
 
@@ -371,22 +349,16 @@ def cancel_exit_handler():
 
 @test
 def pyjinn_exit_test():
-  try:
-    script = java.eval_pyjinn_script(pyjinn_exit_source)
+  with java.eval_pyjinn_script(pyjinn_exit_source) as script:
     value_set_on_exit = script.get("value_set_on_exit")
-  finally:
-    script.exit()
-    expect_equal("assigned!", value_set_on_exit[0])
+  expect_equal("assigned!", value_set_on_exit[0])
 
-  try:
-    # Re-run the script, but now with the at-exit handler canceled.
-    script = java.eval_pyjinn_script(pyjinn_exit_source)
+  # Re-run the script, but now with the at-exit handler canceled.
+  with java.eval_pyjinn_script(pyjinn_exit_source) as script:
     value_set_on_exit = script.get("value_set_on_exit")
     cancel_exit_handler = script.get("cancel_exit_handler")
     cancel_exit_handler()
-  finally:
-    script.exit()
-    expect_equal(None, value_set_on_exit[0])
+  expect_equal(None, value_set_on_exit[0])
 
 
 @test
