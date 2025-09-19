@@ -167,14 +167,14 @@ def get_fps(units: str) -> str:
   return f"{Minecraft.getInstance().getFps()} {units}"
 """)
 
-get_fps = script.getVariable("get_fps")
+get_fps = script.get("get_fps")
 print("fps:", get_fps("frames per second"))
 
-print(f"x from Python = {script.getVariable('x')}")
+print(f"x from Python = {script.get('x')}")
 
-print_x = script.getVariable("print_x")
+print_x = script.get("print_x")
 print_x()
-script.setVariable("x", 99)
+script.set("x", 99)
 print_x()
 ```
 
@@ -189,8 +189,8 @@ x from Pyjinn = 99
 
 The Python script accesses globals from the Pyjinn script:
 
-- gets the value of a global variable using `script.getVariable(variable_name: str)`
-- sets the value of a global variable using `script.setVariable(variable_name: str, value: Any)`
+- gets the value of a global variable using `script.get(variable_name: str)`
+- sets the value of a global variable using `script.set(variable_name: str, value: Any)`
 
 Supported global variable types include `bool`, `float`, `int`, `str`, and references to Java
 objects.

@@ -151,18 +151,18 @@ def pyjinn_var_test():
     script = java.eval_pyjinn_script(pyjinn_var_source)
 
     with minescript.script_loop:
-      pyjinn_dict = script.getVariable("pyjinn_dict")
-      pyjinn_list = script.getVariable("pyjinn_list")
-      pyjinn_tuple = script.getVariable("pyjinn_tuple")
-      pyjinn_str = script.getVariable("pyjinn_str")
+      pyjinn_dict = script.get("pyjinn_dict")
+      pyjinn_list = script.get("pyjinn_list")
+      pyjinn_tuple = script.get("pyjinn_tuple")
+      pyjinn_str = script.get("pyjinn_str")
       expect_equal(3, len(pyjinn_list))
       expect_equal(3, len(pyjinn_tuple))
       expect_equal("This is a test.", pyjinn_str)
       expect_equal("foo", pyjinn_dict["x"])
       expect_equal("bar", pyjinn_dict["y"])
 
-      java_list = script.getVariable("java_list")
-      java_array = script.getVariable("java_array")
+      java_list = script.get("java_list")
+      java_array = script.get("java_array")
       expect_equal(3, len(java_list))
       expect_equal(3, len(java_array))
 
@@ -191,9 +191,9 @@ def pyjinn_var_test():
       expect_does_not_contain(java_list, 4)
       expect_does_not_contain(java_array, 4)
 
-      expect_equal(script.getVariable("x"), 99)
-      script.setVariable("x", 42)
-      expect_equal(script.getVariable("x"), 42)
+      expect_equal(script.get("x"), 99)
+      script.set("x", 42)
+      expect_equal(script.get("x"), 42)
 
   finally:
     script.exit()
@@ -232,20 +232,20 @@ def pyjinn_func_test():
   try:
     script = java.eval_pyjinn_script(pyjinn_func_source)
 
-    get_fps = script.getVariable("get_fps")
+    get_fps = script.get("get_fps")
     fps = get_fps()
     expect_equal(type(fps), int)
     expect_gt(fps, 0)
     expect_lt(fps, 1000)
     
-    get_player_name = script.getVariable("get_player_name")
+    get_player_name = script.get("get_player_name")
     expect_equal(get_player_name(), minescript.player_name())
 
-    get_num_jobs = script.getVariable("get_num_jobs")
+    get_num_jobs = script.get("get_num_jobs")
     expect_equal(get_num_jobs(), len(minescript.job_info()))
 
     with minescript.script_loop:
-      args_to_list = script.getVariable("args_to_list")
+      args_to_list = script.get("args_to_list")
       result = args_to_list(1, 2, "foo")
       result_tuple = tuple(result)  # convert iterable result to tuple
       expect_equal(result_tuple, (1, 2, "foo"))
@@ -256,21 +256,21 @@ def pyjinn_func_test():
       expect_equal(result[1][0], 3)
       expect_equal(result[1][1][0], 4)
 
-      get_first = script.getVariable("get_first")
+      get_first = script.get("get_first")
       expect_equal(get_first(("foo", "bar", "baz")), "foo")
       expect_equal(get_first(["bar", "baz", "boz"]), "bar")
 
       # Test keyword args.
       expect_equal(get_first([], default="empty"), "empty")
 
-      get_type_name = script.getVariable("get_type_name")
+      get_type_name = script.get("get_type_name")
       expect_equal(get_type_name((1, 2, 3)), 'JavaClass("org.pyjinn.interpreter.Script$PyTuple")')
       expect_equal(get_type_name([1, 2, 3]), 'JavaClass("org.pyjinn.interpreter.Script$PyList")')
 
-      get_global_x = script.getVariable("get_global_x")
+      get_global_x = script.get("get_global_x")
       expect_equal(get_global_x(), 99)
 
-      script.setVariable("x", 42)
+      script.set("x", 42)
       expect_equal(get_global_x(), 42)
 
   finally:
@@ -293,7 +293,7 @@ def pyjinn_object_test():
   try:
     script = java.eval_pyjinn_script(pyjinn_object_source)
 
-    foo = script.getVariable("foo")
+    foo = script.get("foo")
     expect_equal("bar", foo.name)
     expect_equal("barbaz", foo.name_with_suffix("baz"))
 
@@ -316,7 +316,7 @@ def pyjinn_class_test():
   try:
     script = java.eval_pyjinn_script(pyjinn_class_source)
 
-    Foo = script.getVariable("Foo")
+    Foo = script.get("Foo")
     foo = Foo("hello", x=2)
     expect_equal("hello", foo.name)
     expect_equal("hellogoodbye", foo.name_with_suffix("goodbye"))
@@ -344,7 +344,7 @@ def cancel_exit_handler():
 def pyjinn_exit_test():
   try:
     script = java.eval_pyjinn_script(pyjinn_exit_source)
-    value_set_on_exit = script.getVariable("value_set_on_exit")
+    value_set_on_exit = script.get("value_set_on_exit")
   finally:
     script.exit()
     expect_equal("assigned!", value_set_on_exit[0])
@@ -352,8 +352,8 @@ def pyjinn_exit_test():
   try:
     # Re-run the script, but now with the at-exit handler canceled.
     script = java.eval_pyjinn_script(pyjinn_exit_source)
-    value_set_on_exit = script.getVariable("value_set_on_exit")
-    cancel_exit_handler = script.getVariable("cancel_exit_handler")
+    value_set_on_exit = script.get("value_set_on_exit")
+    cancel_exit_handler = script.get("cancel_exit_handler")
     cancel_exit_handler()
   finally:
     script.exit()
