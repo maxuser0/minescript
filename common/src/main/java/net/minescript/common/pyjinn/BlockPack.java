@@ -112,4 +112,27 @@ public class BlockPack {
   public String export_data() {
     return impl.toBase64EncodedString();
   }
+
+  public interface SetblockConsumer {
+    void setblock(int x, int y, int z, String block);
+  }
+
+  public interface FillConsumer {
+    void fill(int x1, int y1, int z1, int x2, int y2, int z2, String block);
+  }
+
+  public void visit_blocks(SetblockConsumer blockConsumer, FillConsumer fillConsumer) {
+    impl.getBlocks(
+        new net.minescript.common.BlockPack.BlockConsumer() {
+          @Override
+          public void setblock(int x, int y, int z, String block) {
+            blockConsumer.setblock(x, y, z, block);
+          }
+
+          @Override
+          public void fill(int x1, int y1, int z1, int x2, int y2, int z2, String block) {
+            fillConsumer.fill(x1, y1, z1, x2, y2, z2, block);
+          }
+        });
+  }
 }
