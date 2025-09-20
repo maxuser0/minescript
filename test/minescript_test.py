@@ -257,8 +257,8 @@ def pyjinn_func_test():
       expect_equal(get_first([], default="empty"), "empty")
 
       get_type_name = script.get("get_type_name")
-      expect_equal(get_type_name((1, 2, 3)), 'JavaClass("org.pyjinn.interpreter.Script$PyTuple")')
-      expect_equal(get_type_name([1, 2, 3]), 'JavaClass("org.pyjinn.interpreter.Script$PyList")')
+      expect_equal(get_type_name((1, 2, 3)), 'JavaClass("org.pyjinn.interpreter.Script$PyjTuple")')
+      expect_equal(get_type_name([1, 2, 3]), 'JavaClass("org.pyjinn.interpreter.Script$PyjList")')
 
       get_global_x = script.get("get_global_x")
       expect_equal(get_global_x(), 99)
