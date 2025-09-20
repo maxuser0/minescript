@@ -7,7 +7,7 @@ import static net.minescript.common.pyjinn.PyjinnUtil.toNullableIntArray;
 import static net.minescript.common.pyjinn.PyjinnUtil.toRequiredIntArray;
 
 import org.pyjinn.interpreter.Script.KeywordArgs;
-import org.pyjinn.interpreter.Script.PyDict;
+import org.pyjinn.interpreter.Script.PyjDict;
 
 /**
  * BlockPacker is a mutable collection of blocks.
@@ -96,7 +96,7 @@ public class BlockPacker {
    * <p>Returns: a new BlockPack containing a snapshot of blocks from this BlockPacker
    */
   BlockPack pack(KeywordArgs kwargs) {
-    var commentsToAdd = (PyDict) kwargs.get("comments");
+    var commentsToAdd = (PyjDict) kwargs.get("comments");
     var comments = impl.comments();
     for (var kvPair : commentsToAdd.items()) {
       comments.put(kvPair.__getitem__(0).toString(), kvPair.__getitem__(1).toString());

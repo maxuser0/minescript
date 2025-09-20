@@ -5,8 +5,8 @@ package net.minescript.common.pyjinn;
 
 import java.util.Arrays;
 import org.pyjinn.interpreter.Script;
-import org.pyjinn.interpreter.Script.PyList;
-import org.pyjinn.interpreter.Script.PyTuple;
+import org.pyjinn.interpreter.Script.PyjList;
+import org.pyjinn.interpreter.Script.PyjTuple;
 
 public class PyjinnUtil {
 
@@ -18,12 +18,12 @@ public class PyjinnUtil {
   }
 
   public static final int[] toRequiredIntArray(Object object) {
-    if (object instanceof PyList pyList) {
+    if (object instanceof PyjList pyList) {
       return Script.getJavaList(pyList).stream()
           .map(Number.class::cast)
           .mapToInt(Number::intValue)
           .toArray();
-    } else if (object instanceof PyTuple pyTuple) {
+    } else if (object instanceof PyjTuple pyTuple) {
       return Arrays.stream(Script.getJavaArray(pyTuple))
           .map(Number.class::cast)
           .mapToInt(Number::intValue)

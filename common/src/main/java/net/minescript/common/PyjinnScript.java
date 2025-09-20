@@ -23,7 +23,8 @@ import org.pyjinn.parser.PyjinnParser;
 public class PyjinnScript {
   private static final Logger LOGGER = LogManager.getLogger();
 
-  private static final Script.PyDict gameGlobalDict = new Script.PyDict(new ConcurrentHashMap<>());
+  private static final Script.PyjDict gameGlobalDict =
+      new Script.PyjDict(new ConcurrentHashMap<>());
 
   private PyjinnScript() {}
 

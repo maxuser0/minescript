@@ -11,8 +11,8 @@ import net.minescript.common.BlockPacker;
 import net.minescript.common.Message;
 import net.minescript.common.Minescript;
 import org.pyjinn.interpreter.Script.KeywordArgs;
-import org.pyjinn.interpreter.Script.PyDict;
-import org.pyjinn.interpreter.Script.PyTuple;
+import org.pyjinn.interpreter.Script.PyjDict;
+import org.pyjinn.interpreter.Script.PyjTuple;
 
 /**
  * BlockPack is an immutable and serializable collection of blocks.
@@ -45,7 +45,7 @@ public class BlockPack {
 
     var blockpacker = new BlockPacker();
 
-    var commentsToAdd = (PyDict) kwargs.get("comments");
+    var commentsToAdd = (PyjDict) kwargs.get("comments");
     if (commentsToAdd != null) {
       var comments = blockpacker.comments();
       for (var kvPair : commentsToAdd.items()) {
@@ -77,17 +77,17 @@ public class BlockPack {
   }
 
   //  Returns: Tuple[Tuple[int, int, int], Tuple[int, int, int]]
-  public PyTuple block_bounds() {
+  public PyjTuple block_bounds() {
     int[] bounds = impl.blockBounds();
 
-    var minBound = new PyTuple(new Object[] {bounds[0], bounds[1], bounds[2]});
-    var maxBound = new PyTuple(new Object[] {bounds[3], bounds[4], bounds[5]});
+    var minBound = new PyjTuple(new Object[] {bounds[0], bounds[1], bounds[2]});
+    var maxBound = new PyjTuple(new Object[] {bounds[3], bounds[4], bounds[5]});
 
-    return new PyTuple(new Object[] {minBound, maxBound});
+    return new PyjTuple(new Object[] {minBound, maxBound});
   }
 
-  public PyDict comments() {
-    return new PyDict((Map) impl.comments());
+  public PyjDict comments() {
+    return new PyjDict((Map) impl.comments());
   }
 
   public boolean write_world() {

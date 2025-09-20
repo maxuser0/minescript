@@ -187,15 +187,15 @@ with script_loop:
   Collection_contains_id = _find_java_member(Collection_id, "contains")
 
   # Pyjinn built-in types:
-  PyObject_id = _find_java_class("org.pyjinn.interpreter.Script$PyObject")
-  PyObject_callMethod_id = _find_java_member(PyObject_id, "callMethod")
-  PyObject_type_id = _find_java_member(PyObject_id, "type")
-  PyObject_dict_id = _find_java_member(PyObject_id, "__dict__")
-  PyClass_id = _find_java_class("org.pyjinn.interpreter.Script$PyClass")
-  PyClass_name_id = _find_java_member(PyClass_id, "name")
-  PyDict_id = _find_java_class("org.pyjinn.interpreter.Script$PyDict")
-  PyDict_contains_id = _find_java_member(PyDict_id, "__contains__")
-  PyDict_get_id = _find_java_member(PyDict_id, "get")
+  PyjObject_id = _find_java_class("org.pyjinn.interpreter.Script$PyjObject")
+  PyjObject_callMethod_id = _find_java_member(PyjObject_id, "callMethod")
+  PyjObject_type_id = _find_java_member(PyjObject_id, "type")
+  PyjObject_dict_id = _find_java_member(PyjObject_id, "__dict__")
+  PyjClass_id = _find_java_class("org.pyjinn.interpreter.Script$PyjClass")
+  PyjClass_name_id = _find_java_member(PyjClass_id, "name")
+  PyjDict_id = _find_java_class("org.pyjinn.interpreter.Script$PyjDict")
+  PyjDict_contains_id = _find_java_member(PyjDict_id, "__contains__")
+  PyjDict_get_id = _find_java_member(PyjDict_id, "get")
   ScriptFunction_id = _find_java_class("org.pyjinn.interpreter.Script$Function")
   ScriptFunction_call_id = _find_java_member(ScriptFunction_id, "call")
   Lengthable_id = _find_java_class("org.pyjinn.interpreter.Script$Lengthable")
@@ -358,30 +358,30 @@ class JavaObject:
     # TODO(maxuser): Consider caching is_pyjinn_object.
     with script_loop:
       is_pyjinn_object = from_java_handle(
-          java_call_method(PyObject_id, Class_isAssignableFrom_id, self.get_class_id()))
+          java_call_method(PyjObject_id, Class_isAssignableFrom_id, self.get_class_id()))
     if is_pyjinn_object:
       def call_pyjinn_method(*args):
         with AutoReleasePool() as auto:
           params = create_java_object_array(args)
           result = auto(java_call_method(
                   self.id,
-                  PyObject_callMethod_id,
+                  PyjObject_callMethod_id,
                   self.script_env,
                   auto(java_string(name)),
                   params.id))
           if from_java_handle(java_call_method(_null_id, Array_getLength_id, result)) > 0:
             return from_java_handle(java_call_method(_null_id, Array_get_id, result, auto(java_int(0))))
           else:
-            pyj_type = auto(java_access_field(self.id, PyObject_type_id))
-            type_name = from_java_handle(java_access_field(pyj_type, PyClass_name_id))
+            pyj_type = auto(java_access_field(self.id, PyjObject_type_id))
+            type_name = from_java_handle(java_access_field(pyj_type, PyjClass_name_id))
             raise TypeError(f"Pyjinn object of type '{type_name}' has no member named '{name}'")
 
       # First check if Pyjinn object has a field with the given name.
       with AutoReleasePool() as auto:
-        pyj_dict = auto(java_access_field(self.id, PyObject_dict_id))
+        pyj_dict = auto(java_access_field(self.id, PyjObject_dict_id))
         jname = auto(java_string(name))
-        if from_java_handle(java_call_method(pyj_dict, PyDict_contains_id, jname)):
-          return from_java_handle(java_call_method(pyj_dict, PyDict_get_id, jname))
+        if from_java_handle(java_call_method(pyj_dict, PyjDict_contains_id, jname)):
+          return from_java_handle(java_call_method(pyj_dict, PyjDict_get_id, jname))
 
       # Fall back to a Pyjinn method.
       # TODO(maxuser): Check that there's a method with the given name, and throw an exception if
@@ -679,7 +679,7 @@ _PyjTuple = None
 def _get_pyj_tuple():
   global _PyjTuple
   if _PyjTuple is None:
-    _PyjTuple = JavaClass("org.pyjinn.interpreter.Script$PyTuple")
+    _PyjTuple = JavaClass("org.pyjinn.interpreter.Script$PyjTuple")
   return _PyjTuple
 
 
@@ -687,7 +687,7 @@ _PyjList = None
 def _get_pyj_list():
   global _PyjList
   if _PyjList is None:
-    _PyjList = JavaClass("org.pyjinn.interpreter.Script$PyList")
+    _PyjList = JavaClass("org.pyjinn.interpreter.Script$PyjList")
   return _PyjList
 
 
