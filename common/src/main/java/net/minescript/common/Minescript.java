@@ -230,6 +230,7 @@ public class Minescript {
         "system/lib/minescript_runtime.py", libDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/pyj/minescript.py", pyjDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/pyj/sys.py", pyjDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/pyj/math.py", pyjDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/pyj/json.py", pyjDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/pyj/pathlib.py", pyjDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/pyj/atexit.py", pyjDir, FileOverwritePolicy.OVERWRITTE);
