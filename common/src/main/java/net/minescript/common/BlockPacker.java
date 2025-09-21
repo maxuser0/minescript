@@ -29,6 +29,12 @@ public class BlockPacker implements BlockPack.BlockConsumer {
 
   private boolean debug = false;
 
+  /**
+   * Constructs a new BlockPacker.
+   *
+   * <p>Initializes the packer and reserves the block type ID 0 for "structure_void", which is used
+   * to represent empty space within a tile.
+   */
   public BlockPacker() {
     int voidId = idAllocator.allocateId();
     if (voidId != 0) {
@@ -39,6 +45,7 @@ public class BlockPacker implements BlockPack.BlockConsumer {
     symbolMap.put(voidId, "structure_void");
   }
 
+  /** Enables the printing of debug information during the packing process. */
   public void enableDebug() {
     debug = true;
   }
@@ -56,6 +63,16 @@ public class BlockPacker implements BlockPack.BlockConsumer {
     return shorts;
   }
 
+  /**
+   * Adds a collection of blocks defined by Base64-encoded setblock and fill operations.
+   *
+   * @param offsetX The X-coordinate offset to apply to all block positions.
+   * @param offsetY The Y-coordinate offset to apply to all block positions.
+   * @param offsetZ The Z-coordinate offset to apply to all block positions.
+   * @param setblocksBase64 A Base64 string representing an array of setblock operations.
+   * @param fillsBase64 A Base64 string representing an array of fill operations.
+   * @param blocks A list of block type strings, serving as a symbol table.
+   */
   public void addBlocks(
       int offsetX,
       int offsetY,
@@ -68,6 +85,16 @@ public class BlockPacker implements BlockPack.BlockConsumer {
     addBlocks(offsetX, offsetY, offsetZ, setblocksArray, fillsArray, blocks);
   }
 
+  /**
+   * Adds a collection of blocks defined by setblock and fill operation arrays.
+   *
+   * @param offsetX The X-coordinate offset to apply to all block positions.
+   * @param offsetY The Y-coordinate offset to apply to all block positions.
+   * @param offsetZ The Z-coordinate offset to apply to all block positions.
+   * @param setblocksArray An array of setblock operations.
+   * @param fillsArray An array of fill operations.
+   * @param blocks A list of block type strings, serving as a symbol table.
+   */
   public void addBlocks(
       int offsetX,
       int offsetY,
@@ -102,6 +129,7 @@ public class BlockPacker implements BlockPack.BlockConsumer {
     }
   }
 
+  @Override
   public void fill(int x1, int y1, int z1, int x2, int y2, int z2, String blockType) {
     // TODO(maxuser): Consider the following optimizations:
     // 1. look up blockType in typeMap only once, not once per block in the fill (definitely)
@@ -121,6 +149,7 @@ public class BlockPacker implements BlockPack.BlockConsumer {
     }
   }
 
+  @Override
   public void setblock(int x, int y, int z, String blockType) {
     long key = BlockPack.getTileKey(x, y, z);
     Tile tile =
@@ -137,6 +166,7 @@ public class BlockPacker implements BlockPack.BlockConsumer {
     tile.setBlock(x, y, z, blockTypeId);
   }
 
+  /** Prints detailed debug information about the internal state of the packer to standard out. */
   public void printDebugInfo() {
     for (var entry : symbolMap.entrySet()) {
       System.out.printf("# symbol: %d -> %s\n", entry.getKey(), entry.getValue());
@@ -151,10 +181,21 @@ public class BlockPacker implements BlockPack.BlockConsumer {
     }
   }
 
+  /**
+   * Returns the map of comments associated with this packer.
+   *
+   * @return A map of comments.
+   */
   public Map<String, String> comments() {
     return comments;
   }
 
+  /**
+   * Processes the added blocks, optimizes them into run-lengths and fills, and creates an immutable
+   * {@link BlockPack}.
+   *
+   * @return A new {@code BlockPack} instance containing the packed block data.
+   */
   public BlockPack pack() {
     var packedTiles = new TreeMap<Long, BlockPack.Tile>();
     int packBytes = 0;
@@ -246,17 +287,33 @@ public class BlockPacker implements BlockPack.BlockConsumer {
     }
   }
 
+  /** A helper class for managing a dynamic list of shorts. */
   public static class ShortList {
     private int size = 0;
     private short[] shorts = new short[64];
 
+    /** Constructs a new, empty ShortList. */
     public ShortList() {}
 
+    /**
+     * Packs tile-local coordinates into a short and adds it to the list.
+     *
+     * @param x The x-coordinate, in range [0, 31].
+     * @param y The y-coordinate, in range [0, 31].
+     * @param z The z-coordinate, in range [0, 31].
+     * @return This ShortList instance for chaining.
+     */
     public ShortList addCoord(int x, int y, int z) {
       // TODO(maxuser): Throw an exception if x, y, and z aren't in range [0, 15].
       return add((short) ((x << 10) | (y << 5) | z));
     }
 
+    /**
+     * Adds a short value to the end of the list.
+     *
+     * @param i The short to add.
+     * @return This ShortList instance for chaining.
+     */
     public ShortList add(short i) {
       if (size >= shorts.length) {
         short[] newInts = new short[2 * shorts.length];
@@ -267,14 +324,30 @@ public class BlockPacker implements BlockPack.BlockConsumer {
       return this;
     }
 
+    /**
+     * Returns the number of elements in the list.
+     *
+     * @return The size of the list.
+     */
     public int size() {
       return size;
     }
 
+    /**
+     * Retrieves the short at the specified index.
+     *
+     * @param i The index of the element to return.
+     * @return The short value at the specified index.
+     */
     public short get(int i) {
       return shorts[i];
     }
 
+    /**
+     * Returns a new array containing all the elements in this list.
+     *
+     * @return A new short array with the contents of the list.
+     */
     public short[] toArray() {
       short[] copy = new short[size];
       System.arraycopy(shorts, 0, copy, 0, size);
@@ -282,6 +355,9 @@ public class BlockPacker implements BlockPack.BlockConsumer {
     }
   }
 
+  /**
+   * Represents a mutable 3D grid of blocks within a BlockPacker, corresponding to a BlockPack.Tile.
+   */
   public static class Tile {
     private final int xOffset;
     private final int yOffset;
@@ -315,6 +391,13 @@ public class BlockPacker implements BlockPack.BlockConsumer {
     // - bit 15: 1 if this block has been filled during packing, 0 otherwise
     private short[] blockMetrics;
 
+    /**
+     * Constructs a new Tile with default dimensions (32x32x32).
+     *
+     * @param xOffset The world x-coordinate of the tile's origin.
+     * @param yOffset The world y-coordinate of the tile's origin.
+     * @param zOffset The world z-coordinate of the tile's origin.
+     */
     public Tile(int xOffset, int yOffset, int zOffset) {
       this(
           xOffset,
@@ -325,6 +408,16 @@ public class BlockPacker implements BlockPack.BlockConsumer {
           BlockPack.Z_TILE_SIZE);
     }
 
+    /**
+     * Constructs a new Tile with specified dimensions.
+     *
+     * @param xOffset The world x-coordinate of the tile's origin.
+     * @param yOffset The world y-coordinate of the tile's origin.
+     * @param zOffset The world z-coordinate of the tile's origin.
+     * @param xSize The size of the tile along the X-axis.
+     * @param ySize The size of the tile along the Y-axis.
+     * @param zSize The size of the tile along the Z-axis.
+     */
     public Tile(int xOffset, int yOffset, int zOffset, int xSize, int ySize, int zSize) {
       if (xSize < 1 || xSize > 32) {
         throw new IllegalArgumentException("xSize outside bounds [1, 32]: " + xSize);
@@ -357,6 +450,14 @@ public class BlockPacker implements BlockPack.BlockConsumer {
       typeFrequencies.put(voidId, xyzVolume);
     }
 
+    /**
+     * Converts tile-local 3D coordinates to a 1D array index.
+     *
+     * @param x The x-coordinate within the tile.
+     * @param y The y-coordinate within the tile.
+     * @param z The z-coordinate within the tile.
+     * @return The corresponding 1D index in the `blocks` array.
+     */
     public int coordToIndex(int x, int y, int z) {
       return x + xSize * z + xzArea * y;
     }
@@ -399,6 +500,14 @@ public class BlockPacker implements BlockPack.BlockConsumer {
       }
     }
 
+    /**
+     * Sets the block type at the given world coordinates.
+     *
+     * @param x The world x-coordinate.
+     * @param y The world y-coordinate.
+     * @param z The world z-coordinate.
+     * @param blockTypeId The packer-level ID of the block type.
+     */
     public void setBlock(int x, int y, int z, int blockTypeId) {
       if (x < xOffset
           || x >= xOffset + xSize
@@ -434,6 +543,10 @@ public class BlockPacker implements BlockPack.BlockConsumer {
       }
     }
 
+    /**
+     * Analyzes the block data to compute run-lengths of identical adjacent blocks in the X, Y, and
+     * Z directions. This is a prerequisite for {@link #computeBlockCommands}.
+     */
     public void computeRunLengths() {
       // Algorithm:
       // 1. Iterate x, y, z from 31 to 0 to accumulate run lengths in positive x, y, z direction.
@@ -491,6 +604,13 @@ public class BlockPacker implements BlockPack.BlockConsumer {
       }
     }
 
+    /**
+     * Uses the pre-computed run-lengths to generate optimized fill and setblock commands for this
+     * tile.
+     *
+     * @param fills A ShortList to be populated with fill command data.
+     * @param setblocks A ShortList to be populated with setblock command data.
+     */
     public void computeBlockCommands(ShortList fills, ShortList setblocks) {
       // Use the runs of consecutive blocks of the same type computed above to identify x,z-plane
       // areas and x,y,z rectangular volumes of the same type of block.
@@ -628,6 +748,12 @@ public class BlockPacker implements BlockPack.BlockConsumer {
       return String.format("%X", value);
     }
 
+    /**
+     * Generates a string containing detailed debug information for this tile.
+     *
+     * @param symbolMap The packer-level symbol map to resolve block type names.
+     * @return A formatted string for debugging.
+     */
     public String getDebugInfo(Map<Integer, String> symbolMap) {
       updateTypeList();
       var buffer = new StringBuilder();

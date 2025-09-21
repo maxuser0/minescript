@@ -2103,6 +2103,22 @@ class BlockPack:
       a base64-encoded string containing this blockpack's data
     """
     return _blockpack_export_data(self._id)
+  
+  def visit_blocks(
+    setblock: Callable[[int, int, int, str], None],
+    fill: Callable[[int, int, int, int, int, int, str], None]) -> None:
+    """Invokes the given callbacks to visit all the blocks in this BlockPack.
+
+    Args:
+      setblock: for each block that's not adjacent to any blocks of the same type, invoke this as
+          setblock(x, y, z, block)
+      fill: for each axis-aligned bounding box (aabb) of blocks of the same type greater than 1x1x1
+          between opposing corners (x1, y1, z1) and (x2, y2, z2), invoke this as
+          fill(x1, y1, z1, x2, y2, z2, block)
+    
+    Compatibility: Pyjinn only.
+    """
+    raise NotImplementedError("visit_blocks is implemented in Java for Pyjinn scripts")
 
   def __del__(self):
     """Frees this BlockPack to be garbage collected."""
@@ -2341,17 +2357,17 @@ def java_bool(b: bool) -> JavaHandle:
 
 java_bool = ScriptFunction("java_bool", java_bool)
 
-def java_ctor(klass: JavaHandle):
+def java_ctor(clazz: JavaHandle):
   """Returns handle to a constructor set for the given class handle.
 
   Args:
-    klass: Java class handle returned from `java_class`
+    clazz: Java class handle returned from `java_class`
 
   Compatibility: Python only.
 
   Since: v4.0
   """
-  return (klass,)
+  return (clazz,)
 
 java_ctor = ScriptFunction("java_ctor", java_ctor)
 
@@ -2373,12 +2389,12 @@ def java_new_instance(ctor: JavaHandle, *args: List[JavaHandle]) -> JavaHandle:
 
 java_new_instance = ScriptFunction("java_new_instance", java_new_instance)
 
-def java_member(klass: JavaHandle, name: str) -> JavaHandle:
+def java_member(clazz: JavaHandle, name: str) -> JavaHandle:
   """Gets Java member(s) matching `name`.
 
   Args:
-    klass: Java class handle returned from `java_class` to look up member within
-    name: name of member to look up within `klass`
+    clazz: Java class handle returned from `java_class` to look up member within
+    name: name of member to look up within `clazz`
 
   Returns:
     Java member object for use with `java_access_field` or `java_call_method`.
@@ -2387,7 +2403,7 @@ def java_member(klass: JavaHandle, name: str) -> JavaHandle:
 
   Since: v4.0
   """
-  return (klass, name)
+  return (clazz, name)
 
 java_member = ScriptFunction("java_member", java_member)
 
@@ -2519,8 +2535,8 @@ def java_assign(dest: JavaHandle, source: JavaHandle):
 
 java_assign = ScriptFunction("java_assign", java_assign)
 
-def java_field_names(klass: JavaHandle) -> List[str]:
-  """Returns a list of fields names for the class referenced by handle `klass`.
+def java_field_names(clazz: JavaHandle) -> List[str]:
+  """Returns a list of fields names for the class referenced by handle `clazz`.
 
   If mappings are installed, official field names are returned.
 
@@ -2528,12 +2544,12 @@ def java_field_names(klass: JavaHandle) -> List[str]:
 
   Since: v5.0
   """
-  return (klass,)
+  return (clazz,)
 
 java_field_names = ScriptFunction("java_field_names", java_field_names)
 
-def java_method_names(klass: JavaHandle) -> List[str]:
-  """Returns a list of methods names for the class referenced by handle `klass`.
+def java_method_names(clazz: JavaHandle) -> List[str]:
+  """Returns a list of methods names for the class referenced by handle `clazz`.
 
   If mappings are installed, official method names are returned.
 
@@ -2541,7 +2557,7 @@ def java_method_names(klass: JavaHandle) -> List[str]:
 
   Since: v5.0
   """
-  return (klass,)
+  return (clazz,)
 
 java_method_names = ScriptFunction("java_method_names", java_method_names)
 

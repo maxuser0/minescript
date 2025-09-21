@@ -7,6 +7,7 @@ import com.google.common.collect.ImmutableList;
 import java.util.List;
 import java.util.Optional;
 
+/** Exception information translated into serializable form for scripts. */
 public record ExceptionInfo(
     String type,
     String message,
@@ -14,8 +15,10 @@ public record ExceptionInfo(
     List<StackElement> stack,
     /* nullable */ ExceptionInfo cause) {
 
+  /** Serializable stack element. */
   public record StackElement(String file, String method, int line) {}
 
+  /** Create {@code ExceptionInfo} from a Java exception. */
   public static ExceptionInfo fromException(Throwable e) {
     var type = e.getClass().getName();
     var desc = e.toString();

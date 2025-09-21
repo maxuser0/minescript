@@ -7,6 +7,13 @@ import java.util.Optional;
 import java.util.Queue;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 
+/**
+ * Provides an interface for managing and interacting with a running job (e.g., a script or
+ * command).
+ *
+ * <p>This interface allows for controlling the lifecycle of a job (suspending, resuming, killing),
+ * queuing messages, handling I/O, and managing asynchronous operations within the job.
+ */
 public interface JobControl {
   int jobId();
 
