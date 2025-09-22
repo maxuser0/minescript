@@ -10,6 +10,7 @@ import java.util.Map;
 import net.minescript.common.BlockPacker;
 import net.minescript.common.Message;
 import net.minescript.common.Minescript;
+import net.minescript.common.blocks.BlockRegionReader;
 import org.pyjinn.interpreter.Script.KeywordArgs;
 import org.pyjinn.interpreter.Script.PyjDict;
 import org.pyjinn.interpreter.Script.PyjTuple;
@@ -83,16 +84,25 @@ public class BlockPack {
 
     boolean safetyLimit = (Boolean) kwargs.getOrDefault("safety_limit", true);
 
-    Minescript.readBlocks(
-        p1[0],
-        p1[1],
-        p1[2],
-        p2[0],
-        p2[1],
-        p2[2],
-        safetyLimit,
-        new net.minescript.common.BlockPack.TransformedBlockConsumer(
-            rotation, offset, blockpacker));
+    var blockConsumer =
+        new net.minescript.common.BlockPack.TransformedBlockConsumer(rotation, offset, blockpacker);
+    var blockReader =
+        BlockRegionReader.withBounds(p1[0], p1[1], p1[2], p2[0], p2[1], p2[2], safetyLimit);
+    blockReader.readBlocks(
+        new BlockRegionReader.BlockConsumer() {
+          @Override
+          public void setblock(int x, int y, int z, String block) {
+            blockConsumer.setblock(x, y, z, block);
+          }
+
+          @Override
+          public void setAir(int x, int y, int z) {}
+
+          @Override
+          public void reportBlockError(int x, int y, int z, String error) {
+            Minescript.systemMessageQueue.logUserError(error);
+          }
+        });
     return new BlockPack(blockpacker.pack());
   }
 

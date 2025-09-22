@@ -595,6 +595,65 @@ def getblocklist(positions: List[List[int]]) -> List[str]:
   return __mcall__("getblocklist", [positions])
 
 
+class BlockRegion:
+  """Accessor for blocks within an axis-aligned bounding box.
+
+  Since: v5.0
+  """
+  
+  def __init__(self, min_pos: BlockPos, max_pos: BlockPos, blocks: Tuple[str, ...]):
+    """Creates a block region betwen min_pos and max_pos, inclusive.
+    
+    Args:
+      min_pos: minimum position of axis-aligned bounding box
+      max_pos: maximum position of axis-aligned bounding box
+      blocks: tuple of block type strings covering the volume of blocks between min_pos and
+          max_pos, inclusive; given Lx, Ly, Lz lengths of the bounding box in x, y, and z
+          dimensions: the first value in the tuple represents the block at the min_pos;
+          the first Lx values represent the min y, z edge of the volume; the first Lx * Lz
+          values represent the blocks in the min y plane of the volume; the last value represents
+          the block at max_pos.
+    """
+    self.min_pos = min_pos
+    self.max_pos = max_pos
+    self.x_length = max_pos[0] - min_pos[0] + 1
+    self.y_length = max_pos[1] - min_pos[1] + 1
+    self.z_length = max_pos[2] - min_pos[2] + 1
+    self.blocks = blocks
+
+  def getblock(self, x: int, y: int, z: int) -> str:
+    """Gets the type of block at position (x, y, z)."""
+
+    x_index = x - self.min_pos[0]
+    y_index = y - self.min_pos[1]
+    z_index = z - self.min_pos[2]
+
+    if not (0 <= x_index < self.x_length and
+            0 <= y_index < self.y_length and
+            0 <= z_index < self.z_length):
+      raise IndexError(
+          f"Block position {(x, y, z)} out of bounds for BlockRegion covering {self.min_pos} to {self.max_pos}")
+
+    index = x_index + z_index * self.x_length + y_index * self.x_length * self.z_length
+    return self.blocks[index]
+
+
+def get_block_region(pos1: BlockPos, pos2: BlockPos, safety_limit: bool = True) -> BlockRegion:
+  """Gets the types of blocks in the axis-aligned bounding box between pos1 and pos2, inclusive.
+
+  Args:
+    pos1, pos2: opposing corners of an axis-aligned bounding box (aabb)
+    safety_limit: if `True`, fail if requested volume spans more than 1600 chunks
+
+  Returns:
+    block types at given positions as list of strings
+
+  Since: v5.0
+  """
+  region = __mcall__("get_block_region", [pos1, pos2, safety_limit])
+  return BlockRegion(region.min_pos, region.max_pos, region.blocks)
+
+
 def screen_name() -> Union[str, None]:
   """Gets the current GUI screen name, if there is one.
 

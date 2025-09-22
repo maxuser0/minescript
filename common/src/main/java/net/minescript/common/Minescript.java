@@ -80,6 +80,7 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minescript.common.CommandSyntax.Token;
 import net.minescript.common.blocks.BlockPositionReader;
+import net.minescript.common.blocks.BlockRegionReader;
 import net.minescript.common.blocks.BlockSequenceReader;
 import net.minescript.common.dataclasses.*;
 import net.minescript.common.events.*;
@@ -1075,73 +1076,6 @@ public class Minescript {
     coords[4] = Integer.valueOf(match.group(5));
     coords[5] = Integer.valueOf(match.group(6));
     return true;
-  }
-
-  public static void readBlocks(
-      int x0,
-      int y0,
-      int z0,
-      int x1,
-      int y1,
-      int z1,
-      boolean safetyLimit,
-      BlockPack.BlockConsumer blockConsumer) {
-    var minecraft = Minecraft.getInstance();
-    var player = minecraft.player;
-    if (player == null) {
-      throw new IllegalStateException("Unable to read blocks because player is null.");
-    }
-
-    Level level = minecraft.level;
-
-    int xMin = Math.min(x0, x1);
-    int yMin = Math.max(Math.min(y0, y1), level.getMinY());
-    int zMin = Math.min(z0, z1);
-
-    int xMax = Math.max(x0, x1);
-    int yMax = Math.min(Math.max(y0, y1), level.getMaxY());
-    int zMax = Math.max(z0, z1);
-
-    if (safetyLimit) {
-      // Estimate the number of chunks to check against a soft limit.
-      int numChunks = ((xMax - xMin) / 16 + 1) * ((zMax - zMin) / 16 + 1);
-      if (numChunks > 1600) {
-        throw new IllegalArgumentException(
-            "`blockpack_read_world` exceeded soft limit of 1600 chunks (region covers "
-                + numChunks
-                + " chunks; "
-                + "override this safety check by passing `no_limit` to `copy` command or "
-                + "`safety_limit=False` to `blockpack_read_world` function).");
-      }
-    }
-
-    var pos = new BlockPos.MutableBlockPos();
-    for (int x = xMin; x <= xMax; x += 16) {
-      for (int z = zMin; z <= zMax; z += 16) {
-        String block = BlockPositionReader.getBlockStateString(level, pos.set(x, 0, z));
-        if (block == null || block.equals("minecraft:void_air")) {
-          throw new IllegalStateException(
-              "Not all chunks are loaded within the requested `copy` volume.");
-        }
-      }
-    }
-
-    for (int x = xMin; x <= xMax; ++x) {
-      for (int y = yMin; y <= yMax; ++y) {
-        for (int z = zMin; z <= zMax; ++z) {
-          BlockState blockState = level.getBlockState(pos.set(x, y, z));
-          if (!blockState.isAir()) {
-            String block = BlockPositionReader.blockStateToString(blockState);
-            if (block != null) {
-              blockConsumer.setblock(x, y, z, block);
-            } else {
-              systemMessageQueue.logUserError(
-                  "Unexpected BlockState format: {}", blockState.toString());
-            }
-          }
-        }
-      }
-    }
   }
 
   public static final String[] EMPTY_STRING_ARRAY = {};
@@ -2389,6 +2323,31 @@ public class Minescript {
     return runScriptFunction(job, funcCallId, functionCall).get();
   }
 
+  private static class BlockRegionConsumer implements BlockRegionReader.BlockConsumer {
+    private String[] blocks;
+    private int index = 0;
+
+    public BlockRegionConsumer(String[] blocks) {
+      this.blocks = blocks;
+    }
+
+    @Override
+    public void setblock(int x, int y, int z, String block) {
+      blocks[index++] = block;
+    }
+
+    @Override
+    public void setAir(int x, int y, int z) {
+      blocks[index++] = null;
+    }
+
+    @Override
+    public void reportBlockError(int x, int y, int z, String error) {
+      blocks[index++] = null;
+      systemMessageQueue.logUserError(error);
+    }
+  }
+
   private static ScriptValue runScriptFunction(
       JobControl job, long funcCallId, ScriptFunctionCall functionCall) throws Exception {
     var minecraft = Minecraft.getInstance();
@@ -2429,6 +2388,36 @@ public class Minescript {
         {
           args.expectSize(1);
           return ScriptValue.of(BlockSequenceReader.toStringArray(minecraft.level, args.get(0)));
+        }
+
+      case "get_block_region":
+        {
+          args.expectArgs("min_pos", "max_pos", "safety_limit");
+          var pos1 = args.getIntListWithSize(0, 3);
+          var pos2 = args.getIntListWithSize(1, 3);
+          boolean safetyLimit = args.getBoolean(2);
+          final int numBlocks =
+              (Math.abs(pos1.get(0) - pos2.get(0)) + 1)
+                  * (Math.abs(pos1.get(1) - pos2.get(1)) + 1)
+                  * (Math.abs(pos1.get(2) - pos2.get(2)) + 1);
+          String[] blocks = new String[numBlocks];
+          var blockReader =
+              BlockRegionReader.withBounds(
+                  pos1.get(0),
+                  pos1.get(1),
+                  pos1.get(2),
+                  pos2.get(0),
+                  pos2.get(1),
+                  pos2.get(2),
+                  safetyLimit);
+          blockReader.readBlocks(new BlockRegionConsumer(blocks));
+          var blockRegion = new BlockRegion();
+          blockRegion.min_pos =
+              new int[] {blockReader.xMin(), blockReader.yMin(), blockReader.zMin()};
+          blockRegion.max_pos =
+              new int[] {blockReader.xMax(), blockReader.yMax(), blockReader.zMax()};
+          blockRegion.blocks = blocks;
+          return ScriptValue.of(blockRegion);
         }
 
       case "unregister_event_handler":
@@ -3061,15 +3050,31 @@ public class Minescript {
           boolean safetyLimit = args.getBoolean(5);
 
           var blockpacker = new BlockPacker();
-          readBlocks(
-              pos1.get(0),
-              pos1.get(1),
-              pos1.get(2),
-              pos2.get(0),
-              pos2.get(1),
-              pos2.get(2),
-              safetyLimit,
-              new BlockPack.TransformedBlockConsumer(rotation, offset, blockpacker));
+          var blockConsumer = new BlockPack.TransformedBlockConsumer(rotation, offset, blockpacker);
+          var blockReader =
+              BlockRegionReader.withBounds(
+                  pos1.get(0),
+                  pos1.get(1),
+                  pos1.get(2),
+                  pos2.get(0),
+                  pos2.get(1),
+                  pos2.get(2),
+                  safetyLimit);
+          blockReader.readBlocks(
+              new BlockRegionReader.BlockConsumer() {
+                @Override
+                public void setblock(int x, int y, int z, String block) {
+                  blockConsumer.setblock(x, y, z, block);
+                }
+
+                @Override
+                public void setAir(int x, int y, int z) {}
+
+                @Override
+                public void reportBlockError(int x, int y, int z, String error) {
+                  systemMessageQueue.logUserError(error);
+                }
+              });
           blockpacker.comments().putAll(comments);
           var blockpack = blockpacker.pack();
           long key = job.blockpacks.retain(blockpack);
