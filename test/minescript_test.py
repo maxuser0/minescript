@@ -375,14 +375,38 @@ def player_position_test():
   print_success(f"got position: {x} {y} {z}")
 
 
-@test
-def getblock_test():
-  block = minescript.getblock(0, 0, 0)
-  print_success(f"block at 0 0 0: {repr(block)}")
+pyjinn_block_source = r"""
+import minescript
 
-  x, y, z = minescript.player_position()
-  block = minescript.getblock(x, y - 1, z)
-  print_success(f"block under player: {repr(block)}")
+x, y, z = [round(p) for p in minescript.player_position()]
+block = minescript.get_block(x, y - 1, z)
+
+block_list = minescript.get_block_list(
+    [(x, y - 1, z), (x + 1, y - 1, z), (x, y - 1, z + 1)])
+
+block_region = minescript.get_block_region(
+    (x - 1, y - 1, z - 1), (x + 1, y - 1, z + 1)).blocks
+"""
+
+@test
+def block_test():
+  x, y, z = [round(p) for p in minescript.player_position()]
+  block = minescript.get_block(x, y - 1, z)
+
+  block_list = minescript.get_block_list(
+      [(x, y - 1, z), (x + 1, y - 1, z), (x, y - 1, z + 1)])
+
+  block_region = minescript.get_block_region(
+      (x - 1, y - 1, z - 1), (x + 1, y - 1, z + 1)).blocks
+
+  with java.eval_pyjinn_script(pyjinn_block_source) as script:
+    expect_equal(block, script.get("block"))
+
+    pyjinn_block_list = list(script.get("block_list"))
+    expect_equal(block_list, pyjinn_block_list)
+
+    pyjinn_block_region = list(script.get("block_region"))
+    expect_equal(block_region, pyjinn_block_region)
 
 
 @test
@@ -572,8 +596,8 @@ def do_async_functions() -> str:
 
   x, y, z = player_pos
   block, blocks = [x.wait() for x in [
-      minescript.getblock.as_async(x, y - 1, z),
-      minescript.getblocklist.as_async([
+      minescript.get_block.as_async(x, y - 1, z),
+      minescript.get_block_list.as_async([
           [x - 1, y - 1, z - 1],
           [x - 1, y - 1, z + 1],
           [x + 1, y - 1, z - 1],
@@ -589,8 +613,8 @@ def do_blocking_functions() -> str:
   inventory = minescript.player_inventory()
 
   x, y, z = player_pos
-  block = minescript.getblock(x, y - 1, z)
-  blocks = minescript.getblocklist([
+  block = minescript.get_block(x, y - 1, z)
+  blocks = minescript.get_block_list([
       [x - 1, y - 1, z - 1],
       [x - 1, y - 1, z + 1],
       [x + 1, y - 1, z - 1],
