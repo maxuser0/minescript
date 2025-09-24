@@ -9,6 +9,7 @@
 
 ## Minescript 5.0b7
 
+- Fix install_mappings and support -f/force-download ([44122c3](https://github.com/maxuser0/minescript/commit/44122c38e117f2ac5dd9f2a46334d955b658d635))
 - Aliases: get_block(), get_block_list(); doc update ([5a46ad8](https://github.com/maxuser0/minescript/commit/5a46ad8d4a43e4d42070083869762eb94e90e782))
 - Auto-convert PyjTuple to List<> for script fn args ([e62ff20](https://github.com/maxuser0/minescript/commit/e62ff202366aed73b5b5506d6e83be7b3d1a1e69))
 - Add get_block_region() to get blocks in volume ([8b69e2a](https://github.com/maxuser0/minescript/commit/8b69e2ab60a81e00cb05c5d8fb108e7bc155ef14))
@@ -39,6 +40,7 @@
 
 ### Pyjinn 0.10
 
+- Specialize JavaString ctor to call String ctor ([896fc13](https://github.com/maxuser0/pyjinn/commit/896fc13253fad406c794d0002e5dbec4533196a4))
 - Remove built-in math global ([961468c](https://github.com/maxuser0/pyjinn/commit/961468cc27764b561d545606e9efa34abb1ce6ac))
 - Rename Pyjinn types named Py... to Pyj... ([0f74f80](https://github.com/maxuser0/pyjinn/commit/0f74f800206cb3d6ce85df19b2bfab6ec833a6cd))
 - Fix bool, int, float, str, tuple, list, dict types ([50206f7](https://github.com/maxuser0/pyjinn/commit/50206f777f6e948d7d8a5456fc2a03bfced23468))
