@@ -27,6 +27,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 
+/** Manages Minescript configuration settings, loaded from `config.txt`. */
 public class Config {
   private static final Logger LOGGER = LogManager.getLogger();
   private static final Pattern CONFIG_LINE_RE = Pattern.compile("([^=]+)=(.*)");
@@ -84,6 +85,15 @@ public class Config {
   private int commandCycleDeadlineUsecs = 10_000; // 10 milliseconds
   private int reportJobSuccessThresholdMillis = 3000;
 
+  /**
+   * Constructs a new Config object.
+   *
+   * @param minescriptDirName The name of the Minescript directory.
+   * @param configFileName The name of the configuration file within the Minescript directory.
+   * @param builtinCommands A list of commands that are built-in and always available.
+   * @param ignoreDirsForCompletions A set of directory names to ignore when providing command
+   *     completions.
+   */
   public Config(
       String minescriptDirName,
       String configFileName,
@@ -96,6 +106,11 @@ public class Config {
     this.ignoreDirsForCompletions = ignoreDirsForCompletions;
   }
 
+  /**
+   * Returns the {@link File} object representing the configuration file.
+   *
+   * @return The configuration file.
+   */
   public File file() {
     return file;
   }
@@ -179,62 +194,142 @@ public class Config {
     }
   }
 
+  /**
+   * Returns the script configuration, which includes settings for running external scripts.
+   *
+   * @return The current {@link ScriptConfig}.
+   */
   public ScriptConfig scriptConfig() {
     return scriptConfig;
   }
 
+  /**
+   * Gets the list of commands to be executed automatically when a specific world is loaded.
+   *
+   * @param worldName The name of the world.
+   * @return A list of {@link Message} objects representing the autorun commands, or null if none
+   *     are defined.
+   */
   public List<Message> getAutorunCommands(String worldName) {
     return autorunCommands.get(worldName);
   }
 
+  /**
+   * Returns the regex pattern used to filter stderr messages from being displayed in chat.
+   *
+   * @return The compiled {@link Pattern} for ignoring stderr lines.
+   */
   public Pattern stderrChatIgnorePattern() {
     return stderrChatIgnorePattern;
   }
 
+  /**
+   * Checks if the `on_chat_received` event is enabled.
+   *
+   * @return True if the event is enabled, false otherwise.
+   */
   public boolean minescriptOnChatReceivedEvent() {
     return minescriptOnChatReceivedEvent;
   }
 
+  /**
+   * Gets the key code configured to act as a secondary "Enter" key in the chat input.
+   *
+   * @return The integer key code.
+   */
   public int secondaryEnterKeyCode() {
     return secondaryEnterKeyCode;
   }
 
+  /**
+   * Gets the time threshold in milliseconds, above which successful jobs will report their
+   * completion time.
+   *
+   * @return The threshold in milliseconds.
+   */
   public int reportJobSuccessThresholdMillis() {
     return reportJobSuccessThresholdMillis;
   }
 
+  /**
+   * Enables or disables debug output.
+   *
+   * @param enable True to enable debug output, false to disable.
+   */
   public void setDebugOutptut(boolean enable) {
     debugOutput = enable;
   }
 
+  /**
+   * Checks if debug output is enabled.
+   *
+   * @return True if debug output is enabled, false otherwise.
+   */
   public boolean debugOutput() {
     return debugOutput;
   }
 
+  /**
+   * Enables or disables incremental command suggestions.
+   *
+   * @param enable True to enable incremental suggestions, false to disable.
+   */
   public void setIncrementalCommandSuggestions(boolean enable) {
     incrementalCommandSuggestions = enable;
   }
 
+  /**
+   * Checks if incremental command suggestions are enabled.
+   *
+   * @return True if incremental suggestions are enabled, false otherwise.
+   */
   public boolean incrementalCommandSuggestions() {
     return incrementalCommandSuggestions;
   }
 
+  /**
+   * Gets the maximum number of commands that can be executed in a single game cycle.
+   *
+   * @return The maximum number of commands per cycle.
+   */
   public int maxCommandsPerCycle() {
     return maxCommandsPerCycle;
   }
 
+  /**
+   * Gets the deadline in microseconds for processing commands within a single cycle.
+   *
+   * @return The command cycle deadline in microseconds.
+   */
   public int commandCycleDeadlineUsecs() {
     return commandCycleDeadlineUsecs;
   }
 
+  /**
+   * Gets the number of game ticks that constitute a single processing cycle for Minescript
+   * commands.
+   *
+   * @return The number of ticks per cycle.
+   */
   public int ticksPerCycle() {
     return ticksPerCycle;
   }
 
+  /**
+   * Gets the list of all available configuration variable names for use in commands.
+   *
+   * @return An immutable list of configuration variable names.
+   */
   public ImmutableList<String> getConfigVariables() {
     return CONFIG_VARIABLE_LIST;
   }
 
+  /**
+   * Iterates over all configuration key-value pairs.
+   *
+   * @param consumer A {@link BiConsumer} that accepts the name and string value of each
+   *     configuration setting.
+   */
   public void forEachValue(BiConsumer<String, String> consumer) {
     consumer.accept("python", getValue("python"));
     consumer.accept("command", getValue("command"));
@@ -261,6 +356,13 @@ public class Config {
     }
   }
 
+  /**
+   * Retrieves the string value of a configuration setting by its name.
+   *
+   * @param name The name of the configuration variable.
+   * @return The string representation of the variable's value.
+   * @throws IllegalArgumentException if the name is not a recognized configuration variable.
+   */
   public String getValue(String name) {
     switch (name) {
       case "python":
@@ -324,8 +426,22 @@ public class Config {
     }
   }
 
+  /**
+   * Represents the status of a configuration-setting operation.
+   *
+   * @param success True if the operation was successful, false otherwise.
+   * @param message A descriptive message about the outcome.
+   */
   public record Status(boolean success, String message) {}
 
+  /**
+   * Sets the value of a configuration variable by its name.
+   *
+   * @param name The name of the configuration variable to set.
+   * @param value The new string value for the variable.
+   * @param out A {@link Consumer} that receives a {@link Status} object indicating the outcome of
+   *     the operation.
+   */
   public void setValue(String name, String value, Consumer<Status> out) {
     switch (name) {
       case "python":
@@ -515,6 +631,13 @@ public class Config {
     out.accept(new Status(true, ParameterizedMessage.format(messagePattern, arguments)));
   }
 
+  /**
+   * Reports an error message through the status consumer.
+   *
+   * @param out The consumer to report the status to.
+   * @param messagePattern The message format string.
+   * @param arguments The arguments for the message format string.
+   */
   public void reportError(Consumer<Status> out, String messagePattern, Object... arguments) {
     out.accept(new Status(false, ParameterizedMessage.format(messagePattern, arguments)));
   }

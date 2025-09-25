@@ -32,7 +32,7 @@ dependencies {
     // fabric and neoforge both bundle mixinextras, so it is safe to use it in common
     compileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
     annotationProcessor group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
-    api 'org.pyjinn:pyjinn-lib:0.9:all'
+    api 'org.pyjinn:pyjinn-lib:0.10:all'
 }
 
 configurations {
@@ -43,6 +43,12 @@ configurations {
     commonResources {
         canBeResolved = false
         canBeConsumed = true
+    }
+}
+
+subprojects {
+    tasks.withType(Javadoc).configureEach {
+        options.addStringOption('Xdoclint:none', '-quiet')
     }
 }
 

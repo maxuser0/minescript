@@ -13,6 +13,25 @@ import java.util.regex.Pattern;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
 
+/**
+ * Represents a set of criteria for selecting entities from the world.
+ *
+ * <p>This record encapsulates various filters such as UUID, name, type, position, and distance, as
+ * well as sorting and limiting options. It provides a flexible way to query for entities based on a
+ * combination of these attributes.
+ *
+ * @param uuid An optional regex pattern for the entity's UUID.
+ * @param name An optional regex pattern for the entity's name.
+ * @param type An optional regex pattern for the entity's type (e.g., "minecraft:creeper").
+ * @param position An optional base position `[x, y, z]` for distance calculations. Defaults to the
+ *     player's position.
+ * @param offset An optional offset `[dx, dy, dz]` from the `position` to define a bounding box for
+ *     selection.
+ * @param minDistance An optional minimum distance from the `position`.
+ * @param maxDistance An optional maximum distance from the `position`.
+ * @param sort An optional sorting method for the results.
+ * @param limit An optional limit on the number of entities to return.
+ */
 public record EntitySelection(
     Optional<String> uuid,
     Optional<String> name,
@@ -24,13 +43,24 @@ public record EntitySelection(
     Optional<SortType> sort,
     OptionalInt limit) {
 
+  /** Describes the available sorting methods for entity selections. */
   public static enum SortType {
+    /** Sort entities from nearest to furthest. */
     NEAREST,
+    /** Sort entities from furthest to nearest. */
     FURTHEST,
+    /** Sort entities in a pseudo-random but stable order based on their hash code. */
     RANDOM,
+    /** No specific sorting is applied; the order is not guaranteed. */
     ARBITRARY
   }
 
+  /**
+   * Selects entities from a given collection that match the criteria defined by this record.
+   *
+   * @param entities An iterable collection of entities to filter, sort, and limit.
+   * @return A new list of {@link Entity} objects that match the selection criteria.
+   */
   public List<Entity> selectFrom(Iterable<? extends Entity> entities) {
     var minecraft = Minecraft.getInstance();
     var player = minecraft.player;
@@ -158,10 +188,26 @@ public record EntitySelection(
     private final double z;
     private final int sign;
 
+    /**
+     * Creates a comparator that sorts entities by their distance from a point, in ascending order.
+     *
+     * @param x The x-coordinate of the origin point.
+     * @param y The y-coordinate of the origin point.
+     * @param z The z-coordinate of the origin point.
+     * @return A new {@link EntityDistanceComparator} for sorting nearest first.
+     */
     public static EntityDistanceComparator nearest(double x, double y, double z) {
       return new EntityDistanceComparator(x, y, z, 1);
     }
 
+    /**
+     * Creates a comparator that sorts entities by their distance from a point, in descending order.
+     *
+     * @param x The x-coordinate of the origin point.
+     * @param y The y-coordinate of the origin point.
+     * @param z The z-coordinate of the origin point.
+     * @return A new {@link EntityDistanceComparator} for sorting furthest first.
+     */
     public static EntityDistanceComparator furthest(double x, double y, double z) {
       return new EntityDistanceComparator(x, y, z, -1);
     }

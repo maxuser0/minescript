@@ -7,6 +7,77 @@
 - To set up Fabric mappings for Pyjinn scripts see
   [minescript.net/mappings](https://minescript.net/mappings)
 
+## Minescript 5.0b7
+
+- Fix install_mappings and support -f/force-download ([44122c3](https://github.com/maxuser0/minescript/commit/44122c38e117f2ac5dd9f2a46334d955b658d635))
+- Aliases: get_block(), get_block_list(); doc update ([5a46ad8](https://github.com/maxuser0/minescript/commit/5a46ad8d4a43e4d42070083869762eb94e90e782))
+- Auto-convert PyjTuple to List<> for script fn args ([e62ff20](https://github.com/maxuser0/minescript/commit/e62ff202366aed73b5b5506d6e83be7b3d1a1e69))
+- Add get_block_region() to get blocks in volume ([8b69e2a](https://github.com/maxuser0/minescript/commit/8b69e2ab60a81e00cb05c5d8fb108e7bc155ef14))
+- Add basic `math` module for Pyjinn scripts ([86832f1](https://github.com/maxuser0/minescript/commit/86832f1ec8b5e8ac8696bcb7a3c8296f9bbe1a00))
+- Add javadoc; add pydoc to BlockPack.visit_blocks() ([1b45799](https://github.com/maxuser0/minescript/commit/1b457998ebb7abe9a222edd0094ccd159b9db867))
+- Add BlockPack method to read block data in Pyjinn ([ec9482f](https://github.com/maxuser0/minescript/commit/ec9482f4447e07675fccfc0aed71a42dd0f866a6))
+- Rename Pyjinn types named Py... to Pyj... ([3b90377](https://github.com/maxuser0/minescript/commit/3b90377fa738b92e413c217c2e35f469e9420960))
+- Support embedded Pyjinn script in "with" block ([9bc3a71](https://github.com/maxuser0/minescript/commit/9bc3a71af452c2930393d81958d4d86964883cd0))
+- Add test pyjinn_module_test() for Pyjinn modules ([c45989a](https://github.com/maxuser0/minescript/commit/c45989a4f9338aafa837e005602c06fc5fdc6378))
+- Script/Env: rename get/setVariable to get/set ([268302c](https://github.com/maxuser0/minescript/commit/268302c4cb6ec7867a6e71512c3dd39b1e8808eb))
+- Use Pyjinn funcs, classes via Script.getVariable() ([ae423fe](https://github.com/maxuser0/minescript/commit/ae423fe020d98b7865084dbdf497037744c0ad8e))
+- import_pyjinn_script() relative to minescript dir ([14d45d7](https://github.com/maxuser0/minescript/commit/14d45d7b63b22e35ddb95f9a4cc789ed8d587aa2))
+- Update docs, e.g. add_event_listener event types ([c39b8ec](https://github.com/maxuser0/minescript/commit/c39b8ec3d365a25f1661d09e7393d4f62608b876))
+- Support keyword args from Python calls to Pyjinn ([e47d3f9](https://github.com/maxuser0/minescript/commit/e47d3f9fd13bab9b5d535c424e29134ce7d7a619))
+- Support passing list/tuple from Python to Pyjinn ([fbfa31a](https://github.com/maxuser0/minescript/commit/fbfa31a55bbb77358e586e24b1afd2d2719d98c4))
+- Typo fix "verison" to "version" (#42) ([611c19e](https://github.com/maxuser0/minescript/commit/611c19e1fae2aaa2d23807f2edab3172049325c8))
+- Fix reference counting bug in java.py ([c32ad52](https://github.com/maxuser0/minescript/commit/c32ad528c930457474210a1f0e56addd95d7b2e9))
+- Delete dead code in java.py and pyinterpreter.py ([fc676a7](https://github.com/maxuser0/minescript/commit/fc676a7e7c01d3a2fc999d78f5428c0c9143a04d))
+- Access Pyjinn object's fields/methods from Python ([f7d207c](https://github.com/maxuser0/minescript/commit/f7d207cc1f6f03361dd4540bfac81034b1f8395c))
+- Improve exception handling between Java and Python ([bcfe455](https://github.com/maxuser0/minescript/commit/bcfe4555aa3dbabca79db5f6a169ae97d7cb62c7))
+- Support several block pos types in getblocklist() ([350f00e](https://github.com/maxuser0/minescript/commit/350f00ec13d146f3f58d9c42b3d057d090aef476))
+- Update Minescript's Pyjinn version to 0.10 ([4a3e5ef](https://github.com/maxuser0/minescript/commit/4a3e5ef5b2f44c1932897cae537ba6a3916b6c53))
+- More Java, Pyjinn, Python integration in java.py ([6b96f81](https://github.com/maxuser0/minescript/commit/6b96f8141428ce8cc2d1850fd9b10bbf82608d6a)
+)
+- Fix typo in Pyjinn version of getblock() ([2b05e25](https://github.com/maxuser0/minescript/commit/2b05e2512aa5b13f8ff6ee6120d1fc54d6ae3918))
+- Add support for rotations to Pyjinn BlockPacks ([af07cea](https://github.com/maxuser0/minescript/commit/af07ceac32a4155e26c398dc35e52a6382cf79b9))
+- Fix NPE in Pyjinn BlockPack.read_world() ([15948f3](https://github.com/maxuser0/minescript/commit/15948f36d90ac4f778551bdd5fe4923d40ad8f3e))
+
+### Pyjinn 0.10
+
+- Specialize JavaString ctor to call String ctor ([896fc13](https://github.com/maxuser0/pyjinn/commit/896fc13253fad406c794d0002e5dbec4533196a4))
+- Remove built-in math global ([961468c](https://github.com/maxuser0/pyjinn/commit/961468cc27764b561d545606e9efa34abb1ce6ac))
+- Rename Pyjinn types named Py... to Pyj... ([0f74f80](https://github.com/maxuser0/pyjinn/commit/0f74f800206cb3d6ce85df19b2bfab6ec833a6cd))
+- Fix bool, int, float, str, tuple, list, dict types ([50206f7](https://github.com/maxuser0/pyjinn/commit/50206f777f6e948d7d8a5456fc2a03bfced23468))
+- Add method to Script: Module module(String name) ([709ddd8](https://github.com/maxuser0/pyjinn/commit/709ddd86ff8b04320b077e76850ab93f51a75ae9))
+- Script/Env: get/set/deleteVariable -> get/set/del ([7ce366d](https://github.com/maxuser0/pyjinn/commit/7ce366d9d1ba309b45458ad904b0d5a7c4dac7d6))
+- Make Lengthable extend Iterable<Object> ([2d409a1](https://github.com/maxuser0/pyjinn/commit/2d409a119308163ca5b84e123ad9b8a5d850e8bf))
+- Update Pyjinn version to 0.10 ([8c61880](https://github.com/maxuser0/pyjinn/commit/8c6188040ecaaa03fc96e66754bcf6dc9929a15d))
+
+## Minescript 5.0b6
+
+- Update docs for Minescript 5.0b6 and Pyjinn 0.9 ([9cfaf63](https://github.com/maxuser0/minescript/commit/9cfaf63a45e23813ff4fab9631c8dbc11cb8ee70))
+- Add test for `atexit.register/unregister()` ([ac3492f](https://github.com/maxuser0/minescript/commit/ac3492f8691252ab440dcd960a217df0147c8b74))
+- `**args` in `set_timeout, set_interval, atexit.register` ([edeb1dc](https://github.com/maxuser0/minescript/commit/edeb1dcbec9e55cb2aafdba47792ef62e510a47e))
+- Support `atexit.unregister(func)` ([0f42a21](https://github.com/maxuser0/minescript/commit/0f42a21db495d65c780a45c4c761367eb432f288))
+- Support `bool()` operator for `JavaObject` ([9807573](https://github.com/maxuser0/minescript/commit/980757315f8951230733a836c39fce1cd5d51716))
+- Update Pyjinn docs with support for `//` operator ([fa6a536](https://github.com/maxuser0/minescript/commit/fa6a5363568c2a44330a757d4374758001edfdaf))
+- Docs for `set_timeout, set_interval, ManagedCallback` ([dccfcc5](https://github.com/maxuser0/minescript/commit/dccfcc52050af998ecaa8e4ff359914ad363804b))
+- Add `import_pyjinn_script()` to java.py library ([d3076bb](https://github.com/maxuser0/minescript/commit/d3076bbe627fa1d9959635a83b470851cfe75f60))
+- Support `atexit.register(func, *args)` in Pyjinn ([df2f4fb](https://github.com/maxuser0/minescript/commit/df2f4fb42efae35af93c178d848d09806950fbe5))
+- Update Pyjinn version to 0.9 ([82a83b0](https://github.com/maxuser0/minescript/commit/82a83b014a646664dd6a9201de7741f47ff067fb))
+- Fix bug in java.py for accessing static fields ([ec25ff7](https://github.com/maxuser0/minescript/commit/ec25ff794d1bb57e80720f71794fb31cef192e4a))
+- Update Minescript version to 5.0b6 ([89a876b](https://github.com/maxuser0/minescript/commit/89a876bf7a90c1e544ffc0ff3b0be4ff6df6cf9d))
+
+### Pyjinn 0.9
+
+- General improvements to handling of `**kwargs` ([025115c](https://github.com/maxuser0/pyjinn/commit/025115c46d7d1b59246ace86a191f278d3cec2b6))
+- Support unregistering `atexit` callbacks ([c80beec](https://github.com/maxuser0/pyjinn/commit/c80beec8c1cc77a3f3ef693f04cde893404002b1))
+- Support floor div operator in Pyjinn: `x // y` ([90665f0](https://github.com/maxuser0/pyjinn/commit/90665f062728f2130a70545c9efcf71e180b9afc))
+- Support `dict()`, `**args` in func defs and func calls ([6d007e8](https://github.com/maxuser0/pyjinn/commit/6d007e89e7d78e74e2c0da6d00479737b29a818e))
+- Support invocation of nested class constructors ([664ef92](https://github.com/maxuser0/pyjinn/commit/664ef9208eb2b70e500474377c8d65bb6ee51227))
+- Support Pyjinn function passed to nested interface ([da77064](https://github.com/maxuser0/pyjinn/commit/da7706469fb292f70f255e8dca6ebf6e224e3722))
+- Add unittest for one-line while statment ([d31c2f4](https://github.com/maxuser0/pyjinn/commit/d31c2f445ce921f8e6b107af2d1919f76fba497f))
+- Support single-line forms of def, while, for, if ([b27a47d](https://github.com/maxuser0/pyjinn/commit/b27a47d419278ecc370ec0fd5f0038baae782596))
+- Add `__atexit__()` for registering exit callbacks ([85200ab](https://github.com/maxuser0/pyjinn/commit/85200ab1e7a4a0f449cf103d1ad01c61ca739647))
+- Update Pyjinn version to 0.9 ([01fdfc3](https://github.com/maxuser0/pyjinn/commit/01fdfc3c732cae66fcee4f10dbe78701b57ddd28))
+
+
 ## Minescript 5.0b5
 
 - Update docs for Minescript 5.0 and Pyjinn ([75a2815](https://github.com/maxuser0/minescript/commit/75a28157216374b5b9d668a0b3e46d459b5ea665))

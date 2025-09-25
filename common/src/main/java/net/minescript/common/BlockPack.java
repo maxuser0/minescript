@@ -42,8 +42,13 @@ public class BlockPack {
   private static final int Z_BUILD_MAX = (1 << 25) - 1;
 
   // X_TILE_SIZE * Y_TILE_SIZE * Z_TILE_SIZE must fit within 16 bits.
+  /** The size of a tile along the X-axis. */
   public static final int X_TILE_SIZE = 32;
+
+  /** The size of a tile along the Y-axis. */
   public static final int Y_TILE_SIZE = 32;
+
+  /** The size of a tile along the Z-axis. */
   public static final int Z_TILE_SIZE = 32;
 
   private static final long MASK_26_BITS = (1L << 26) - 1;
@@ -65,20 +70,40 @@ public class BlockPack {
 
   private final ImmutableMap<String, String> comments;
 
+  /** The minimum X-coordinate of any tile in this blockpack. */
   public final int minTileX;
+
+  /** The minimum Y-coordinate of any tile in this blockpack. */
   public final int minTileY;
+
+  /** The minimum Z-coordinate of any tile in this blockpack. */
   public final int minTileZ;
 
+  /** The maximum X-coordinate of any tile in this blockpack. */
   public final int maxTileX;
+
+  /** The maximum Y-coordinate of any tile in this blockpack. */
   public final int maxTileY;
+
+  /** The maximum Z-coordinate of any tile in this blockpack. */
   public final int maxTileZ;
 
+  /** The minimum X-coordinate of any block in this blockpack. */
   public final int minBlockX;
+
+  /** The minimum Y-coordinate of any block in this blockpack. */
   public final int minBlockY;
+
+  /** The minimum Z-coordinate of any block in this blockpack. */
   public final int minBlockZ;
 
+  /** The maximum X-coordinate of any block in this blockpack. */
   public final int maxBlockX;
+
+  /** The maximum Y-coordinate of any block in this blockpack. */
   public final int maxBlockY;
+
+  /** The maximum Z-coordinate of any block in this blockpack. */
   public final int maxBlockZ;
 
   private static class BlockType {
@@ -121,10 +146,26 @@ public class BlockPack {
     return ((z >= 0) ? (z / Z_TILE_SIZE) : (((z + 1) / Z_TILE_SIZE) - 1)) * Z_TILE_SIZE;
   }
 
+  /**
+   * Calculates a key for a tile based on world coordinates.
+   *
+   * @param x The world x-coordinate.
+   * @param y The world y-coordinate.
+   * @param z The world z-coordinate.
+   * @return A long key representing the tile containing the given coordinates.
+   */
   public static long getTileKey(int x, int y, int z) {
     return packCoords(worldXToTileX(x), worldYToTileY(y), worldZToTileZ(z));
   }
 
+  /**
+   * Packs tile coordinates into a single 64-bit long value.
+   *
+   * @param x The tile x-coordinate.
+   * @param y The tile y-coordinate.
+   * @param z The tile z-coordinate.
+   * @return The packed long value.
+   */
   public static long packCoords(int x, int y, int z) {
     // Adjust x, y, z to non-negative values so they're amenable to bit operations.
     int xOffset = x - X_BUILD_MIN;
@@ -137,18 +178,43 @@ public class BlockPack {
         | ((long) zOffset & MASK_26_BITS);
   }
 
+  /**
+   * Extracts the X-coordinate from a packed coordinate key.
+   *
+   * @param key The packed long key.
+   * @return The tile X-coordinate.
+   */
   public static int getXFromPackedCoords(long key) {
     return (int) ((key >>> 26) & MASK_26_BITS) + X_BUILD_MIN;
   }
 
+  /**
+   * Extracts the Y-coordinate from a packed coordinate key.
+   *
+   * @param key The packed long key.
+   * @return The tile Y-coordinate.
+   */
   public static int getYFromPackedCoords(long key) {
     return (int) (key >>> (26 + 26)) + Y_BUILD_MIN;
   }
 
+  /**
+   * Extracts the Z-coordinate from a packed coordinate key.
+   *
+   * @param key The packed long key.
+   * @return The tile Z-coordinate.
+   */
   public static int getZFromPackedCoords(long key) {
     return (int) (key & MASK_26_BITS) + Z_BUILD_MIN;
   }
 
+  /**
+   * Constructs a BlockPack from its underlying data structures.
+   *
+   * @param symbolMap A map from internal block IDs to their string representations.
+   * @param tiles A sorted map of tile keys to Tile objects.
+   * @param comments A map of comments associated with the blockpack.
+   */
   public BlockPack(
       Map<Integer, String> symbolMap, SortedMap<Long, Tile> tiles, Map<String, String> comments) {
     this.tiles = tiles;
@@ -255,10 +321,21 @@ public class BlockPack {
     this.maxBlockZ = maxBlockZ;
   }
 
+  /**
+   * Returns the comments associated with this blockpack.
+   *
+   * @return An immutable map of comments.
+   */
   public ImmutableMap<String, String> comments() {
     return comments;
   }
 
+  /**
+   * Returns the bounding box of all blocks in this blockpack.
+   *
+   * @return An array of 6 integers: {minBlockX, minBlockY, minBlockZ, maxBlockX, maxBlockY,
+   *     maxBlockZ}.
+   */
   public int[] blockBounds() {
     return new int[] {minBlockX, minBlockY, minBlockZ, maxBlockX, maxBlockY, maxBlockZ};
   }
@@ -340,6 +417,12 @@ public class BlockPack {
     return (int) (crc32.getValue() & 0xffffffff);
   }
 
+  /**
+   * Serializes the BlockPack into a byte array.
+   *
+   * @return A byte array representing the BlockPack.
+   * @throws RuntimeException if an I/O error occurs during serialization.
+   */
   public byte[] toBytes() {
     try (var bytesOut = new ByteArrayOutputStream();
         var dataOut = new DataOutputStream(bytesOut)) {
@@ -350,10 +433,22 @@ public class BlockPack {
     }
   }
 
+  /**
+   * Serializes the BlockPack into a Base64 encoded string.
+   *
+   * @return A Base64 string representing the BlockPack.
+   */
   public String toBase64EncodedString() {
     return Base64.getEncoder().encodeToString(toBytes());
   }
 
+  /**
+   * Writes the BlockPack to a zip file. The file will contain a single entry with a `.blox`
+   * extension.
+   *
+   * @param filename The path to the output zip file.
+   * @throws Exception if an I/O error occurs.
+   */
   public void writeZipFile(String filename) throws Exception {
     // Add ".zip" if filename doesn't already end with it.
     int dotZipIndex = filename.toLowerCase().lastIndexOf(".zip");
@@ -587,6 +682,13 @@ public class BlockPack {
     writeChunk(dataOut, "Done", d -> {});
   }
 
+  /**
+   * Deserializes a BlockPack from a byte array.
+   *
+   * @param bytes The byte array containing BlockPack data.
+   * @return A new BlockPack instance.
+   * @throws RuntimeException if an I/O error occurs during deserialization.
+   */
   public static BlockPack fromBytes(byte[] bytes) {
     try (var bytesIn = new ByteArrayInputStream(bytes);
         var dataIn = new DataInputStream(bytesIn)) {
@@ -596,10 +698,23 @@ public class BlockPack {
     }
   }
 
+  /**
+   * Deserializes a BlockPack from a Base64 encoded string.
+   *
+   * @param base64 The Base64 string representing a BlockPack.
+   * @return A new BlockPack instance.
+   */
   public static BlockPack fromBase64EncodedString(String base64) {
     return fromBytes(Base64.getDecoder().decode(base64));
   }
 
+  /**
+   * Reads a BlockPack from a zip file.
+   *
+   * @param filename The path to the zip file.
+   * @return A new BlockPack instance.
+   * @throws Exception if an I/O error or format error occurs.
+   */
   public static BlockPack readZipFile(String filename) throws Exception {
     // Add ".zip" if filename doesn't already end with it.
     int dotZipIndex = filename.toLowerCase().lastIndexOf(".zip");
@@ -693,9 +808,32 @@ public class BlockPack {
     }
   }
 
+  /**
+   * A consumer for block placement operations, supporting both individual blocks and filled
+   * regions.
+   */
   public interface BlockConsumer {
+    /**
+     * Consumes a single block placement.
+     *
+     * @param x The x-coordinate.
+     * @param y The y-coordinate.
+     * @param z The z-coordinate.
+     * @param block The block state string.
+     */
     void setblock(int x, int y, int z, String block);
 
+    /**
+     * Consumes a rectangular region filled with a single block type.
+     *
+     * @param x1 The first x-coordinate.
+     * @param y1 The first y-coordinate.
+     * @param z1 The first z-coordinate.
+     * @param x2 The second x-coordinate.
+     * @param y2 The second y-coordinate.
+     * @param z2 The second z-coordinate.
+     * @param block The block state string.
+     */
     void fill(int x1, int y1, int z1, int x2, int y2, int z2, String block);
   }
 
@@ -771,12 +909,23 @@ public class BlockPack {
     return block;
   }
 
+  /**
+   * A {@link BlockConsumer} that transforms coordinates and block states before passing them to
+   * another consumer.
+   */
   public static class TransformedBlockConsumer implements BlockConsumer {
     private final int[] rotation;
     private final int[] offset;
     private final BlockConsumer blockConsumer;
 
-    /** BlockConsumer that transforms coordinates first through a rotation then a translation. */
+    /**
+     * Creates a BlockConsumer that transforms coordinates first through a rotation then a
+     * translation.
+     *
+     * @param rotation A 9-element array representing a 3x3 rotation matrix. Can be null.
+     * @param offset A 3-element array representing an (x, y, z) translation. Can be null.
+     * @param blockConsumer The downstream consumer to receive the transformed block operations.
+     */
     public TransformedBlockConsumer(int[] rotation, int[] offset, BlockConsumer blockConsumer) {
       if (rotation != null && rotation.length != 9) {
         throw new IllegalArgumentException(
@@ -856,6 +1005,13 @@ public class BlockPack {
     }
   }
 
+  /**
+   * Generates Minecraft commands (`/setblock` and `/fill`) for all blocks in the pack.
+   *
+   * @param rotation An optional 9-element rotation matrix to apply.
+   * @param offset An optional 3-element offset to apply.
+   * @param commandConsumer A consumer to receive the generated command strings.
+   */
   // TODO(maxuser): Replace getBlockCommands with general-purpose iterability of tiles in layers
   // (see #Layering below).
   public void getBlockCommands(int rotation[], int[] offset, Consumer<String> commandConsumer) {
@@ -877,6 +1033,11 @@ public class BlockPack {
             }));
   }
 
+  /**
+   * Iterates through all blocks in the pack, passing them to the provided {@link BlockConsumer}.
+   *
+   * @param blockConsumer The consumer for the block operations.
+   */
   public void getBlocks(BlockConsumer blockConsumer) {
     for (Tile tile : tiles.values()) {
       // TODO(maxuser): Use tile.getBlockCommands(...) for the initial "stable blocks" layer, and
@@ -933,6 +1094,7 @@ public class BlockPack {
   // Tile.blockTypes[] are ordered so that stable block types have lower indices than unstable block
   // types; all indices less than Tile.firstUnstableBlockType correspond to stable blocks; all
   // indices at least Tile.firstUnstableBlockType correspond to unstable blocks.
+  /** Represents a 32x32x32 chunk of blocks within a {@link BlockPack}. */
   public static class Tile {
     private final int xOffset;
     private final int yOffset;
@@ -946,6 +1108,16 @@ public class BlockPack {
     // Every 2 shorts represents: (x, y, z) and block_type
     private final short[] setblocks;
 
+    /**
+     * Constructs a new Tile.
+     *
+     * @param xOffset The world x-coordinate of the tile's origin.
+     * @param yOffset The world y-coordinate of the tile's origin.
+     * @param zOffset The world z-coordinate of the tile's origin.
+     * @param blockTypes An array of block type IDs used within this tile.
+     * @param fills An array of packed data for fill operations.
+     * @param setblocks An array of packed data for setblock operations.
+     */
     // blockTypes contains indices into BlockPack symbol table.
     public Tile(
         int xOffset, int yOffset, int zOffset, int[] blockTypes, short[] fills, short[] setblocks) {
@@ -957,6 +1129,13 @@ public class BlockPack {
       this.fills = fills;
     }
 
+    /**
+     * Generates Minecraft commands for the blocks in this tile.
+     *
+     * @param setblockOnly If true, all fills will be expanded into individual setblock commands.
+     * @param symbolMap The symbol map from the parent BlockPack.
+     * @param commandConsumer A consumer for the generated command strings.
+     */
     public void getBlockCommands(
         boolean setblockOnly, Map<Integer, BlockType> symbolMap, Consumer<String> commandConsumer) {
       int[] coord = new int[3];
@@ -1006,6 +1185,13 @@ public class BlockPack {
       return coord;
     }
 
+    /**
+     * Iterates through the blocks in this tile in ascending Y-order, passing them to a {@link
+     * BlockConsumer}.
+     *
+     * @param symbolMap The symbol map from the parent BlockPack.
+     * @param blockConsumer The consumer for the block operations.
+     */
     public void getBlocksInAscendingYOrder(
         Map<Integer, BlockType> symbolMap, BlockConsumer blockConsumer) {
       final int setblocksSize = setblocks.length;

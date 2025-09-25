@@ -41,6 +41,7 @@ for line in html_output.splitlines():
   if local_html_output:
     line = re.sub(url_rewrite_re, r'\1.html\2\3', line)
   else:
+    line = line.replace('<a href="README.md', '<a href="docs')
     line = re.sub(url_rewrite_re, r'\1\2\3', line)
   
   line = line.replace("\\", "&#92;")
