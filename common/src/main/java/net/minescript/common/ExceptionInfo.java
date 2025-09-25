@@ -5,12 +5,21 @@ package net.minescript.common;
 
 import com.google.common.collect.ImmutableList;
 import java.util.List;
+import java.util.Optional;
 
-public record ExceptionInfo(String type, String message, String desc, List<StackElement> stack) {
+/** Exception information translated into serializable form for scripts. */
+public record ExceptionInfo(
+    String type,
+    String message,
+    String desc,
+    List<StackElement> stack,
+    /* nullable */ ExceptionInfo cause) {
 
+  /** Serializable stack element. */
   public record StackElement(String file, String method, int line) {}
 
-  public static ExceptionInfo fromException(Exception e) {
+  /** Create {@code ExceptionInfo} from a Java exception. */
+  public static ExceptionInfo fromException(Throwable e) {
     var type = e.getClass().getName();
     var desc = e.toString();
     var stackBuilder = new ImmutableList.Builder<StackElement>();
@@ -33,6 +42,7 @@ public record ExceptionInfo(String type, String message, String desc, List<Stack
       stackBuilder.add(
           new StackElement(fileName, element.getMethodName(), element.getLineNumber()));
     }
-    return new ExceptionInfo(type, e.getMessage(), desc, stackBuilder.build());
+    var cause = Optional.ofNullable(e.getCause()).map(ExceptionInfo::fromException);
+    return new ExceptionInfo(type, e.getMessage(), desc, stackBuilder.build(), cause.orElse(null));
   }
 }

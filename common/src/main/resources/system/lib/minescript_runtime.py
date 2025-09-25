@@ -335,9 +335,22 @@ class JavaException(Exception):
   message: str
   desc: str
   stack: List[StackElement]
+  cause: "JavaException" = None
 
   def __str__(self):
-    return self.desc
+    s = self.desc
+    if self.cause is not None:
+      s += "\ncaused by:\n  " + str(self.cause)
+    return s
+
+def _jsonToJavaException(e: Dict[str, Any]) -> JavaException:
+  if e is None:
+    return None
+  else:
+    return JavaException(
+        e["type"], e["message"], e["desc"],
+        [StackElement(s["file"], s["method"], s["line"]) for s in e["stack"]],
+        _jsonToJavaException(e.get("cause")))
 
 
 def _ScriptServiceLoopImpl():
@@ -387,9 +400,7 @@ def _ScriptServiceLoopImpl():
 
     if "except" in reply:
       e = reply["except"]
-      exception = JavaException(
-          e["type"], e["message"], e["desc"],
-          [StackElement(s["file"], s["method"], s["line"]) for s in e["stack"]])
+      exception = _jsonToJavaException(e)
       if exception_handler is None:
         exception_message = f"JavaException raised in `{func_name}`: {exception}"
         debug_log("minescript_runtime.py:", exception_message)
@@ -581,7 +592,7 @@ def CheckVersionCompatibility(
           if debug:
             version_str = VersionAsString(actual_version)
             print(
-                f'(debug) module verison previously computed: {name} {version_str}',
+                f'(debug) module version previously computed: {name} {version_str}',
                 file=sys.stderr)
 
         if not actual_version:

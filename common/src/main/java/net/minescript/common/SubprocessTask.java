@@ -162,10 +162,11 @@ public class SubprocessTask implements Task {
     }
     try {
       var response = new JsonObject();
+      Gson gson = new GsonBuilder().serializeNulls().setPrettyPrinting().create();
       response.addProperty("fcid", functionCallId);
       response.addProperty("conn", "close");
-      var json = GSON.toJsonTree(ExceptionInfo.fromException(exception));
-      LOGGER.warn("Translating Java exception as JSON: {}", json);
+      var json = gson.toJsonTree(ExceptionInfo.fromException(exception));
+      LOGGER.warn("Translating Java exception as JSON: {}", gson.toJson(json));
       response.add("except", json);
 
       String responseString = GSON.toJson(response);

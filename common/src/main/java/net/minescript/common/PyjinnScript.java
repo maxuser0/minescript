@@ -23,7 +23,8 @@ import org.pyjinn.parser.PyjinnParser;
 public class PyjinnScript {
   private static final Logger LOGGER = LogManager.getLogger();
 
-  private static final Script.PyDict gameGlobalDict = new Script.PyDict(new ConcurrentHashMap<>());
+  private static final Script.PyjDict gameGlobalDict =
+      new Script.PyjDict(new ConcurrentHashMap<>());
 
   private PyjinnScript() {}
 
@@ -216,7 +217,7 @@ public class PyjinnScript {
         switch (importedModule.name()) {
           case "minescript":
           case "system.pyj.minescript":
-            module.globals().setVariable("__has_explicit_minescript_import__", true);
+            module.globals().set("__has_explicit_minescript_import__", true);
             return;
         }
       }
@@ -227,7 +228,7 @@ public class PyjinnScript {
       switch (fromModule.module()) {
         case "minescript":
         case "system.pyj.minescript":
-          module.globals().setVariable("__has_explicit_minescript_import__", true);
+          module.globals().set("__has_explicit_minescript_import__", true);
           return;
       }
     }
@@ -257,8 +258,8 @@ public class PyjinnScript {
       // extension and dir separators replaced with dots.
       if (module.name().equals("minescript.system.pyj.minescript")) {
         LOGGER.info("Adding built-in functions to Minescript Pyjinn module");
-        module.globals().setVariable("add_event_listener", new AddEventListener());
-        module.globals().setVariable("remove_event_listener", new RemoveEventListener());
+        module.globals().set("add_event_listener", new AddEventListener());
+        module.globals().set("remove_event_listener", new RemoveEventListener());
       } else if (module.name().equals("__main__")
           && !(Boolean) module.globals().vars().get("__has_explicit_minescript_import__", false)) {
         LOGGER.info("Adding implicit import of Minescript Pyjinn module");
@@ -271,8 +272,8 @@ public class PyjinnScript {
                     -1,
                     "system.pyj.minescript",
                     List.of(new Script.ImportName("*", Optional.empty()))));
-        module.globals().setVariable("add_event_listener", new AddEventListener());
-        module.globals().setVariable("remove_event_listener", new RemoveEventListener());
+        module.globals().set("add_event_listener", new AddEventListener());
+        module.globals().set("remove_event_listener", new RemoveEventListener());
       }
     }
   }
@@ -361,7 +362,7 @@ public class PyjinnScript {
               : new Script.KeywordArgs();
 
       try {
-        var script = (Script) env.getVariable("__script__");
+        var script = (Script) env.get("__script__");
         var job = (PyjinnJob) script.vars.__getitem__("job");
         long listenerId = job.nextFcallId++;
 
@@ -393,7 +394,7 @@ public class PyjinnScript {
       expectNumParams(params, 1);
       if (params[0] instanceof Number listenerNum) {
         try {
-          var script = (Script) env.getVariable("__script__");
+          var script = (Script) env.get("__script__");
           var job = (PyjinnJob) script.vars.__getitem__("job");
           Long listenerId = listenerNum.longValue();
           job.cancelOperation(listenerId);

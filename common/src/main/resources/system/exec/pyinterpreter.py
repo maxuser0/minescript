@@ -57,7 +57,6 @@ from minescript import (
 )
 
 from java import (
-  AutoReleasePool,
   JavaClass,
   JavaClassType,
   JavaObject,
@@ -139,25 +138,24 @@ def get_completions(target, local_vars, partial):
     completions = set()
     if target:
       try:
-        with AutoReleasePool() as auto:
-          target = builtins.eval(target)
-          if isinstance(target, JavaObject):
-            log(f"target -> {target} ({target.__dict__})")
-            if isinstance(target, JavaClassType):
-              target_class = target.class_
-            else:
-              target_class = target.getClass()
-            log(f"target class -> {target_class}")
+        target = builtins.eval(target)
+        if isinstance(target, JavaObject):
+          log(f"target -> {target} ({target.__dict__})")
+          if isinstance(target, JavaClassType):
+            target_class = target.class_
+          else:
+            target_class = target.getClass()
+          log(f"target class -> {target_class}")
 
-            methods = [name for name in java_method_names(target_class.id) if name.startswith(partial)]
-            methods.sort()
-            for method in methods:
-              completions.add(method + "(")
+          methods = [name for name in java_method_names(target_class.id) if name.startswith(partial)]
+          methods.sort()
+          for method in methods:
+            completions.add(method + "(")
 
-            fields = [name for name in java_field_names(target_class.id) if name.startswith(partial)]
-            fields.sort()
-            for field in fields:
-              completions.add(field)
+          fields = [name for name in java_field_names(target_class.id) if name.startswith(partial)]
+          fields.sort()
+          for field in fields:
+            completions.add(field)
       except Exception as e:
         echo_json({"text": f"Error: {str(e)}", "color": "red"})
     else:

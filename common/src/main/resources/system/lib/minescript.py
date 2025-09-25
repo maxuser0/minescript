@@ -818,10 +818,20 @@ def getblock(x: int, y: int, z: int) -> str:
 
   Returns:
     block type at (x, y, z) as a string
+
+  Update in v5.0:
+    Added alias `get_block(...)`.
   """
   return (x, y, z)
 
 getblock = ScriptFunction("getblock", getblock)
+
+get_block = getblock
+"""Alias for `getblock(...)`.
+
+Since: v5.0
+"""
+
 
 
 def getblocklist(positions: List[List[int]]) -> List[str]:
@@ -833,6 +843,9 @@ def getblocklist(positions: List[List[int]]) -> List[str]:
   Returns:
     block types at given positions as list of strings
 
+  Update in v5.0:
+    Added alias `get_block_list(...)`.
+
   Update in v4.0:
     Removed `done_callback` arg. Use `getblocklist.as_async(...)` for async execution.
 
@@ -841,6 +854,81 @@ def getblocklist(positions: List[List[int]]) -> List[str]:
   return (positions,)
 
 getblocklist = ScriptFunction("getblocklist", getblocklist)
+
+get_block_list = getblocklist
+"""Alias for `getblocklist(...)`.
+
+Since: v5.0
+"""
+
+
+class BlockRegion:
+  """Accessor for blocks within an axis-aligned bounding box.
+
+  See `get_block_region(...)` for creating a `BlockRegion`.
+
+  Since: v5.0
+  """
+  
+  def __init__(self, min_pos: BlockPos, max_pos: BlockPos, blocks: Tuple[str, ...]):
+    """Creates a block region between `min_pos` and `max_pos`, inclusive.
+    
+    Args:
+      min_pos: minimum position of axis-aligned bounding box
+      max_pos: maximum position of axis-aligned bounding box
+      blocks: tuple of block type strings covering the volume of blocks between `min_pos` and
+          `max_pos`, inclusive; given Lx, Ly, Lz lengths of the bounding box in x, y, and z
+          dimensions, the first value in the tuple represents the block at the min_pos;
+          the first Lx values represent the min y, z edge of the volume; the first Lx * Lz
+          values represent the blocks in the min y plane of the volume; the last value represents
+          the block at max_pos.
+    """
+    self.min_pos = min_pos
+    self.max_pos = max_pos
+    self.x_length = max_pos[0] - min_pos[0] + 1
+    self.y_length = max_pos[1] - min_pos[1] + 1
+    self.z_length = max_pos[2] - min_pos[2] + 1
+    self.blocks = blocks
+
+  def get_block(self, x: int, y: int, z: int) -> str:
+    """Gets the type of block at position (x, y, z)."""
+    return self.blocks[self.get_index(x, y, z)]
+
+  def get_index(self, x: int, y: int, z: int) -> int:
+    """Gets the index into `blocks` sequence for position (x, y, z)."""
+
+    x_index = x - self.min_pos[0]
+    y_index = y - self.min_pos[1]
+    z_index = z - self.min_pos[2]
+
+    if not (0 <= x_index < self.x_length and
+            0 <= y_index < self.y_length and
+            0 <= z_index < self.z_length):
+      raise IndexError(
+          f"Block position {(x, y, z)} out of bounds for BlockRegion covering {self.min_pos} to {self.max_pos}")
+
+    return x_index + z_index * self.x_length + y_index * self.x_length * self.z_length
+
+
+def get_block_region(pos1: BlockPos, pos2: BlockPos, safety_limit: bool = True) -> BlockRegion:
+  """Gets the types of blocks in the axis-aligned bounding box between pos1 and pos2, inclusive.
+
+  Args:
+    pos1, pos2: opposing corners of an axis-aligned bounding box (aabb)
+    safety_limit: if `True`, fail if requested volume spans more than 1600 chunks
+
+  Returns:
+    `BlockRegion` covering the requested volume of blocks.
+
+  Since: v5.0
+  """
+  return (pos1, pos2, safety_limit)
+
+def _get_block_region_result_transform(block_region):
+  return BlockRegion(**block_region)
+
+get_block_region = ScriptFunction(
+    "get_block_region", get_block_region, _get_block_region_result_transform)
 
 
 def await_loaded_region(x1: int, z1: int, x2: int, z2: int):
@@ -1251,7 +1339,7 @@ class EventQueue:
         echo("Who's there?")
   ```
 
-  Compatibility: Python only.
+  Compatibility: Python only. (See `add_event_listener` for Pyjinn event handling.)
 
   Since: v4.0
   """
@@ -1717,7 +1805,6 @@ class Rotations:
   """Invert the z coordinate (multiply by -1)."""
 
 
-# TODO(maxuser): Move this into Rotations class and rename to compose(...).
 def combine_rotations(rot1: Rotation, rot2: Rotation, /) -> Rotation:
   """Combines two rotation matrices into a single rotation matrix.
 
@@ -2102,8 +2189,25 @@ class BlockPack:
 
     Returns:
       a base64-encoded string containing this blockpack's data
+   
     """
     return _blockpack_export_data(self._id)
+  
+  def visit_blocks(
+    setblock: Callable[[int, int, int, str], None],
+    fill: Callable[[int, int, int, int, int, int, str], None]) -> None:
+    """Invokes the given callbacks to visit all the blocks in this BlockPack.
+
+    Args:
+      setblock: for each block that's not adjacent to any blocks of the same type, invoke this as
+          setblock(x, y, z, block)
+      fill: for each axis-aligned bounding box (aabb) of blocks of the same type greater than 1x1x1
+          between opposing corners (x1, y1, z1) and (x2, y2, z2), invoke this as
+          fill(x1, y1, z1, x2, y2, z2, block)
+    
+    Compatibility: Pyjinn only.
+    """
+    raise NotImplementedError("visit_blocks is implemented in Java for Pyjinn scripts")
 
   def __del__(self):
     """Frees this BlockPack to be garbage collected."""
@@ -2342,17 +2446,17 @@ def java_bool(b: bool) -> JavaHandle:
 
 java_bool = ScriptFunction("java_bool", java_bool)
 
-def java_ctor(klass: JavaHandle):
+def java_ctor(clazz: JavaHandle):
   """Returns handle to a constructor set for the given class handle.
 
   Args:
-    klass: Java class handle returned from `java_class`
+    clazz: Java class handle returned from `java_class`
 
   Compatibility: Python only.
 
   Since: v4.0
   """
-  return (klass,)
+  return (clazz,)
 
 java_ctor = ScriptFunction("java_ctor", java_ctor)
 
@@ -2374,12 +2478,12 @@ def java_new_instance(ctor: JavaHandle, *args: List[JavaHandle]) -> JavaHandle:
 
 java_new_instance = ScriptFunction("java_new_instance", java_new_instance)
 
-def java_member(klass: JavaHandle, name: str) -> JavaHandle:
+def java_member(clazz: JavaHandle, name: str) -> JavaHandle:
   """Gets Java member(s) matching `name`.
 
   Args:
-    klass: Java class handle returned from `java_class` to look up member within
-    name: name of member to look up within `klass`
+    clazz: Java class handle returned from `java_class` to look up member within
+    name: name of member to look up within `clazz`
 
   Returns:
     Java member object for use with `java_access_field` or `java_call_method`.
@@ -2388,7 +2492,7 @@ def java_member(klass: JavaHandle, name: str) -> JavaHandle:
 
   Since: v4.0
   """
-  return (klass, name)
+  return (clazz, name)
 
 java_member = ScriptFunction("java_member", java_member)
 
@@ -2520,8 +2624,8 @@ def java_assign(dest: JavaHandle, source: JavaHandle):
 
 java_assign = ScriptFunction("java_assign", java_assign)
 
-def java_field_names(klass: JavaHandle) -> List[str]:
-  """Returns a list of fields names for the class referenced by handle `klass`.
+def java_field_names(clazz: JavaHandle) -> List[str]:
+  """Returns a list of fields names for the class referenced by handle `clazz`.
 
   If mappings are installed, official field names are returned.
 
@@ -2529,12 +2633,12 @@ def java_field_names(klass: JavaHandle) -> List[str]:
 
   Since: v5.0
   """
-  return (klass,)
+  return (clazz,)
 
 java_field_names = ScriptFunction("java_field_names", java_field_names)
 
-def java_method_names(klass: JavaHandle) -> List[str]:
-  """Returns a list of methods names for the class referenced by handle `klass`.
+def java_method_names(clazz: JavaHandle) -> List[str]:
+  """Returns a list of methods names for the class referenced by handle `clazz`.
 
   If mappings are installed, official method names are returned.
 
@@ -2542,7 +2646,7 @@ def java_method_names(klass: JavaHandle) -> List[str]:
 
   Since: v5.0
   """
-  return (klass,)
+  return (clazz,)
 
 java_method_names = ScriptFunction("java_method_names", java_method_names)
 
@@ -2563,7 +2667,23 @@ if "Pyjinn" in sys.version:
   def add_event_listener(event_type: str, callback: Callable[[Any], None], **args) -> int:
     """Adds an event listener with the given callback and args.
 
-    Compatibility: Pyjinn only.
+    Supported event types:
+    
+    - `"add_entity"` - `AddEntityEvent`
+    - `"block_update"` - `BlockUpdateEvent`
+    - `"chat"` - `ChatEvent`
+    - `"chunk"` - `ChunkEvent`
+    - `"damage"` - `DamageEvent`
+    - `"explosion"` - `ExplosionEvent`
+    - `"key"` - `KeyEvent`
+    - `"mouse"` - `MouseEvent`
+    - `"outgoing_chat_intercept"` - `ChatEvent`
+    - `"render"` - `RenderEvent`
+    - `"take_item"` - `TakeItemEvent`
+    - `"tick"` - `TickEvent`
+    - `"world"` - `WorldEvent`
+
+    Compatibility: Pyjinn only. (See `EventQueue` for Python event handling.)
     """
     raise NotImplementedError("add_event_listener is implemented in Java for Pyjinn scripts")
 

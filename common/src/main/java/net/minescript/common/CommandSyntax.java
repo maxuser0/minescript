@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+/** A utility class for parsing and quoting shell-like command strings. */
 public class CommandSyntax {
 
   private enum ParseState {
@@ -67,15 +68,26 @@ public class CommandSyntax {
     return buffer.toString();
   }
 
+  /**
+   * Represents a token from a parsed command string. A token can be a string value or a special
+   * command operator.
+   */
   public static class Token {
 
+    /** The type of a command token. */
     public static enum Type {
+      /** A string argument. */
       STRING,
-      AND,
+      /** The '&amp;&amp;' operator. */
+      AND, // &&
+      /** The '||' operator. */
       OR,
+      /** The ';' operator. */
       SEMICOLON,
-      REDIRECT_STDOUT,
-      REDIRECT_STDERR
+      /** The '&gt;' redirection operator. */
+      REDIRECT_STDOUT, // >
+      /** The '2&gt;' redirection operator. */
+      REDIRECT_STDERR // 2>
     }
 
     private static final Token AND_TOKEN = new Token(Type.AND);
@@ -87,30 +99,66 @@ public class CommandSyntax {
     private final Optional<String> string;
     private final Type type;
 
+    /**
+     * Creates a new STRING token.
+     *
+     * @param string The string value of the token.
+     * @return A new Token of type STRING.
+     */
     public static Token string(String string) {
       return new Token(string);
     }
 
+    /**
+     * Returns the singleton AND token.
+     *
+     * @return The AND token.
+     */
     public static Token and() {
       return AND_TOKEN;
     }
 
+    /**
+     * Returns the singleton OR token.
+     *
+     * @return The OR token.
+     */
     public static Token or() {
       return OR_TOKEN;
     }
 
+    /**
+     * Returns the singleton SEMICOLON token.
+     *
+     * @return The SEMICOLON token.
+     */
     public static Token semicolon() {
       return SEMICOLON_TOKEN;
     }
 
+    /**
+     * Returns the singleton REDIRECT_STDOUT token.
+     *
+     * @return The REDIRECT_STDOUT token.
+     */
     public static Token redirectStdout() {
       return REDIRECT_STDOUT_TOKEN;
     }
 
+    /**
+     * Returns the singleton REDIRECT_STDERR token.
+     *
+     * @return The REDIRECT_STDERR token.
+     */
     public static Token redirectStderr() {
       return REDIRECT_STDERR_TOKEN;
     }
 
+    /**
+     * Gets the type of this token.
+     *
+     * @return The token type.
+     */
     public Type type() {
       return type;
     }
@@ -152,6 +200,16 @@ public class CommandSyntax {
     return s;
   }
 
+  /**
+   * Parses a command string into a list of tokens.
+   *
+   * <p>This parser handles single and double quotes for string arguments, as well as special shell
+   * operators.
+   *
+   * @param command The command string to parse.
+   * @return A list of {@link Token} objects.
+   * @throws IllegalStateException if the command string is malformed.
+   */
   public static List<Token> parseCommand(String command) {
     command += " "; // add space for simpler termination of parsing
     List<Token> args = new ArrayList<>();
@@ -270,7 +328,7 @@ public class CommandSyntax {
                 argBuilder.append('\n');
                 break;
               }
-              // intentional fallthru
+            // intentional fallthru
             default:
               argBuilder.append(ch);
           }
@@ -292,7 +350,7 @@ public class CommandSyntax {
                 argBuilder.append('\n');
                 break;
               }
-              // intentional fallthru
+            // intentional fallthru
             default:
               argBuilder.append(ch);
           }

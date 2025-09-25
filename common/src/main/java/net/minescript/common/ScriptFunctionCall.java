@@ -12,6 +12,8 @@ import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
+import org.pyjinn.interpreter.Script;
 
 /** Accessors and precondition enforcement for an argument list to a script function. */
 public class ScriptFunctionCall {
@@ -201,7 +203,7 @@ public class ScriptFunctionCall {
     }
 
     public List<Integer> getIntListWithSize(int argPos, int expectedSize) {
-      var object = args.get(argPos);
+      var object = convertToList(args.get(argPos));
       if (!(object instanceof List<?> list) || list.size() != expectedSize) {
         throw new IllegalArgumentException(
             expectedArgsNames == null
@@ -237,7 +239,7 @@ public class ScriptFunctionCall {
     }
 
     public List<Double> getDoubleListWithSize(int argPos, int expectedSize) {
-      var object = args.get(argPos);
+      var object = convertToList(args.get(argPos));
       if (!(object instanceof List<?> list) || list.size() != expectedSize) {
         throw new IllegalArgumentException(
             expectedArgsNames == null
@@ -274,7 +276,7 @@ public class ScriptFunctionCall {
 
     /** Converts arg at argPos to a list of strings, using .toString() on elements as needed. */
     public List<String> getConvertibleStringList(int argPos) {
-      var object = args.get(argPos);
+      var object = convertToList(args.get(argPos));
       if (!(object instanceof List<?> list)) {
         throw new IllegalArgumentException(
             expectedArgsNames == null
@@ -291,6 +293,17 @@ public class ScriptFunctionCall {
         stringList.add(element.toString());
       }
       return stringList;
+    }
+
+    private Object convertToList(Object object) {
+      if (object instanceof Script.PyjList pyjList) {
+        // Auto-convert Pyjinn list to Java List.
+        return Script.JavaListFunction.INSTANCE.call(/* env= */ null, pyjList);
+      } else if (object instanceof Script.PyjTuple pyjTuple) {
+        // Auto-convert Pyjinn tuple to Java List.
+        return StreamSupport.stream(pyjTuple.spliterator(), false).toList();
+      }
+      return object;
     }
 
     /** Returns map of */

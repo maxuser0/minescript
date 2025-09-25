@@ -4,6 +4,8 @@
 
 - [What is Pyjinn?](#what-is-pyjinn)
 - [Pyjinn in Minescript 5.0](#pyjinn-in-minescript-50)
+  - [When to use Pyjinn](#when-to-use-pyjinn)
+  - [Embedding Pyjinn in Python scripts](#embedding-pyjinn-in-python-scripts)
 - [Java Integration](#java-integration)
 - [Python Language Features](#python-language-features)
 - [Python 3.x feature support](#python-3x-feature-support)
@@ -35,14 +37,14 @@ Minescript Pyjinn scripts use single-threaded event handling inspired by
 JavaScript:
 
 - `add_event_listener(event_type: str, callback: Callable[..., None], **args) -> int`
-- `set_interval(callback: Callable[..., None], timer_millis: int, *args) -> int`
-- `set_timeout(callback: Callable[..., None], timer_millis: int, *args) -> int`
+- `set_interval(callback: Callable[..., None], timer_millis: int, *args, **kwargs) -> int`
+- `set_timeout(callback: Callable[..., None], timer_millis: int, *args, **kwargs) -> int`
 - `remove_event_listener(listener_id: int) -> bool`
 
 The supported event types are:
 
 - "tick", "render", "key", "mouse", "chat", "outgoing_chat_intercept", "add_entity",
-  "block_update", "explosion", "take_item", "damage", "chunk"
+  "block_update", "explosion", "take_item", "damage", "chunk", "world"
 
 Scripts can import the Minescript standard library explicitly. For simple IDE integration (e.g.
 VSCode), you can use imports like these:
@@ -97,6 +99,41 @@ if "Pyjinn" not in sys.version:
 ```
 
 
+#### When to use Pyjinn
+
+Pyjinn is best used in these scenarios:
+
+- Developing scripts that can run on systems that don't have a Python installation.
+- Scripts that need to start quickly and don't use Python standard libraries or third-party
+  Python libraries. (Pyjinn scripts launch faster than Python scripts because Pyjinn scripts run
+  inside the game's Java process rather than spawning a subprocess.)
+- Scripts that require synchronization with game events, such as scripted game rendering which needs
+  to execute arbitrarily complex user-defined script code while blocking the game's render thread.
+
+Python scripts can call into Java code (Minecraft code and any currently loaded mod code, including
+Minescript Java code; see [`java.py` module](README.md#java-module)) and Pyjinn code (see
+[`eval_pyjinn_script()`](README.md#eval_pyjinn_script) and
+[`import_pyjinn_script()`](README.md#import_pyjinn_script)).
+
+Java and Pyjinn can make synchronous calls into each other. This means that each can make a
+function or method call into the other and get a return value on the same Java thread, allowing
+Pyjinn scripts to register callbacks that are invoked during game ticks and game rendering.
+
+Java and Pyjinn cannot call synchronously into Python code; to do so would be make the game stutter
+at best, and unresponsive at worst. While Java code can send events asynchronously via an
+[`EventQueue`](README.md#eventqueue) to Python, the Python code is not synchronized to the game tick
+or rendered frame in Java that triggered the event. For example, a Python script that registers for
+a game event may get called during a later tick than the one that triggered the event.
+
+The following diagram summarizes callability across Python, Pyjinn, and Java. The yellow oval
+represents a Python script process, green ovals represent code running in the game's Java process,
+solid arrows indicate a synchronous function or method call, and dotted arrow indicates an
+asynchronous call:
+
+![Callability across Python, Pyjinn, and Java](python-pyjinn-java-graph.png)
+
+
+
 #### Embedding Pyjinn in Python scripts
 
 Minescript's pre-installed `java` library for Python (`minescript/system/lib/java.py`) supports
@@ -130,14 +167,14 @@ def get_fps(units: str) -> str:
   return f"{Minecraft.getInstance().getFps()} {units}"
 """)
 
-get_fps = script.getFunction("get_fps")
+get_fps = script.get("get_fps")
 print("fps:", get_fps("frames per second"))
 
-print(f"x from Python = {script.getVariable('x')}")
+print(f"x from Python = {script.get('x')}")
 
-print_x = script.getFunction("print_x")
+print_x = script.get("print_x")
 print_x()
-script.setVariable("x", 99)
+script.set("x", 99)
 print_x()
 ```
 
@@ -152,9 +189,8 @@ x from Pyjinn = 99
 
 The Python script accesses globals from the Pyjinn script:
 
-- accesses functions using `script.getFunction(function_name: str)`
-- gets the value of a global variable using `script.getVariable(variable_name: str)`
-- sets the value of a global variable using `script.setVariable(variable_name: str, value: Any)`
+- gets the value of a global variable using `script.get(variable_name: str)`
+- sets the value of a global variable using `script.set(variable_name: str, value: Any)`
 
 Supported global variable types include `bool`, `float`, `int`, `str`, and references to Java
 objects.
@@ -398,8 +434,17 @@ X in Y
 X not in Y
 
 # Call function with an iterable sequence into distinct args:
-X = [1, 2, 3]
-FUNC(*X)  # call as FUNC(1, 2, 3)
+FUNC(*[1, 2, 3])  # call as FUNC(1, 2, 3)
+
+# Convert dict with str keys into keyword arguments to a function:
+# (since Pyjinn 0.9)
+FUNC(**{"K1": V1, "K2": V2, ...}) 
+# equivalent to: FUNC(K1=V1, K2=V2, ...)
+
+# Capture keyword args passed to a function as a dict:
+# (since Pyjinn 0.9)
+def FUNC(**kwargs):
+  ...
 
 # Operators:
 -X  # for numeric types
@@ -420,13 +465,20 @@ X >> Y  # since Pyjinn 0.6
 abs(X)
 bool(X)
 chr(INT)
+dict:
+  dict()
+  dict(DICT_TO_COPY)
+  dict(ITERABLE_OF_PAIRS)  # e.g. dict([(K1, V1), (K2, V2)])
+  dict(K1=V1, K2=V2, ...)
 enumerate(ITERABLE)
 float(X)
 globals()
 hex(X)
 int(X)
 len(ITERABLE)
-list(ITERABLE)
+list:
+  list()
+  list(ITERABLE)
 max(X, Y, ...)
 min(X, Y, ...)
 ord(STR)
@@ -576,10 +628,6 @@ Language features currently **NOT** supported by Pyjinn:
 
 - Python standard library (except for some basics in `sys` module: `sys.argv`,
   `sys.version`, `sys.stdout`, `sys.stderr`)
-- `**kwargs` on caller side and callee side of a function call (but individual keyword args are
-  supported, e.g. `print("foo", file=sys.stderr)`)
-- `dict(k1=v1, k2=v2, ...)` syntax for constructing a dictionary (but `{k1: v1, k2: v2, ...}` is
-  supported)
 - `else` blocks following `for` and `while` blocks
 - generators and `yield` statement
 - threading, asyncio, and async/await syntax (Java `Thread` is supported instead)

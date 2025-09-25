@@ -588,6 +588,9 @@ Python `float` maps to Java `double`, and Python doesn't have a built-in single-
   value: float
 ```
 
+#### JavaRef
+Reference counter for Java objects referenced from Python.
+
 #### JavaObject
 Python representation of a Java object.
 
@@ -639,6 +642,11 @@ If this JavaObject represents a Java array, returns the length of the array.
 
 Raises `TypeError` if this isn't an array.
 
+
+#### JavaObject.\_\_bool\_\_
+*Usage:* <code>JavaObject.\_\_bool\_\_() -> int</code>
+
+Returns False if the Java reference is null.
 
 #### JavaObject.\_\_getitem\_\_
 *Usage:* <code>JavaObject.\_\_getitem\_\_(i: int)</code>
@@ -829,6 +837,7 @@ is specified.
 - [`BlockPacker`](#blockpacker)
 - [`BlockPackerException`](#blockpackerexception)
 - [`BlockPos`](#blockpos)
+- [`BlockRegion`](#blockregion)
 - [`BlockUpdateEvent`](#blockupdateevent)
 - [`chat`](#chat)
 - [`chat_input`](#chat_input)
@@ -846,6 +855,9 @@ is specified.
 - [`execute`](#execute)
 - [`ExplosionEvent`](#explosionevent)
 - [`flush`](#flush)
+- [`get_block`](#get_block)
+- [`get_block_list`](#get_block_list)
+- [`get_block_region`](#get_block_region)
 - [`getblock`](#getblock)
 - [`getblocklist`](#getblocklist)
 - [`HandItems`](#handitems)
@@ -1608,6 +1620,15 @@ Gets the type of block at position (x, y, z).
 
 - block type at (x, y, z) as a string
 
+Update in v5.0:
+  Added alias [`get_block(...)`](#get_block).
+
+
+#### get_block
+Alias for [`getblock(...)`](#getblock).
+
+Since: v5.0
+
 
 #### getblocklist
 *Usage:* <code>getblocklist(positions: List[List[int]]) -> List[str]</code>
@@ -1622,10 +1643,71 @@ Gets the types of block at the specified [x, y, z] positions.
 
 - block types at given positions as list of strings
 
+Update in v5.0:
+  Added alias [`get_block_list(...)`](#get_block_list).
+
 Update in v4.0:
   Removed `done_callback` arg. Use `getblocklist.as_async(...)` for async execution.
 
 Since: v2.1
+
+
+#### get_block_list
+Alias for [`getblocklist(...)`](#getblocklist).
+
+Since: v5.0
+
+
+#### BlockRegion
+Accessor for blocks within an axis-aligned bounding box.
+
+See [`get_block_region(...)`](#get_block_region) for creating a [`BlockRegion`](#blockregion).
+
+Since: v5.0
+
+
+#### BlockRegion.\_\_init\_\_
+*Usage:* <code>BlockRegion(min_pos: [BlockPos](#blockpos), max_pos: [BlockPos](#blockpos), blocks: Tuple[str, ...])</code>
+
+Creates a block region between `min_pos` and `max_pos`, inclusive.
+
+*Args:*
+
+- `min_pos`: minimum position of axis-aligned bounding box
+- `max_pos`: maximum position of axis-aligned bounding box
+- `blocks`: tuple of block type strings covering the volume of blocks between `min_pos` and
+      `max_pos`, inclusive; given Lx, Ly, Lz lengths of the bounding box in x, y, and z
+      dimensions, the first value in the tuple represents the block at the min_pos;
+      the first Lx values represent the min y, z edge of the volume; the first Lx * Lz
+      values represent the blocks in the min y plane of the volume; the last value represents
+      the block at max_pos.
+
+
+#### BlockRegion.get_block
+*Usage:* <code>BlockRegion.get_block(x: int, y: int, z: int) -> str</code>
+
+Gets the type of block at position (x, y, z).
+
+#### BlockRegion.get_index
+*Usage:* <code>BlockRegion.get_index(x: int, y: int, z: int) -> int</code>
+
+Gets the index into `blocks` sequence for position (x, y, z).
+
+#### get_block_region
+*Usage:* <code>get_block_region(pos1: [BlockPos](#blockpos), pos2: [BlockPos](#blockpos), safety_limit: bool = True) -> [BlockRegion](#blockregion)</code>
+
+Gets the types of blocks in the axis-aligned bounding box between pos1 and pos2, inclusive.
+
+*Args:*
+
+- `pos1, pos2`: opposing corners of an axis-aligned bounding box (aabb)
+- `safety_limit`: if `True`, fail if requested volume spans more than 1600 chunks
+
+*Returns:*
+
+- [`BlockRegion`](#blockregion) covering the requested volume of blocks.
+
+Since: v5.0
 
 
 #### await_loaded_region
@@ -1782,7 +1864,7 @@ with EventQueue() as event_queue:
       echo("Who's there?")
 ```
 
-Compatibility: Python only.
+Compatibility: Python only. (See [`add_event_listener`](#add_event_listener) for Pyjinn event handling.)
 
 Since: v4.0
 
@@ -2304,6 +2386,23 @@ Serializes this BlockPack into a base64-encoded string.
 *Returns:*
 
 - a base64-encoded string containing this blockpack's data
+ 
+
+
+#### BlockPack.visit_blocks
+*Usage:* <code>BlockPack.visit_blocks(setblock: Callable[[int, int, int, str], None], fill: Callable[[int, int, int, int, int, int, str], None]) -> None</code>
+
+Invokes the given callbacks to visit all the blocks in this BlockPack.
+
+*Args:*
+
+- `setblock`: for each block that's not adjacent to any blocks of the same type, invoke this as
+      setblock(x, y, z, block)
+- `fill`: for each axis-aligned bounding box (aabb) of blocks of the same type greater than 1x1x1
+      between opposing corners (x1, y1, z1) and (x2, y2, z2), invoke this as
+      fill(x1, y1, z1, x2, y2, z2, block)
+
+Compatibility: Pyjinn only.
 
 
 #### BlockPack.\_\_del\_\_
@@ -2475,13 +2574,13 @@ Since: v4.0
 
 
 #### java_ctor
-*Usage:* <code>java_ctor(klass: JavaHandle)</code>
+*Usage:* <code>java_ctor(clazz: JavaHandle)</code>
 
 Returns handle to a constructor set for the given class handle.
 
 *Args:*
 
-- `klass`: Java class handle returned from [`java_class`](#java_class)
+- `clazz`: Java class handle returned from [`java_class`](#java_class)
 
 Compatibility: Python only.
 
@@ -2508,14 +2607,14 @@ Since: v4.0
 
 
 #### java_member
-*Usage:* <code>java_member(klass: JavaHandle, name: str) -> JavaHandle</code>
+*Usage:* <code>java_member(clazz: JavaHandle, name: str) -> JavaHandle</code>
 
 Gets Java member(s) matching `name`.
 
 *Args:*
 
-- `klass`: Java class handle returned from [`java_class`](#java_class) to look up member within
-- `name`: name of member to look up within `klass`
+- `clazz`: Java class handle returned from [`java_class`](#java_class) to look up member within
+- `name`: name of member to look up within `clazz`
 
 *Returns:*
 
@@ -2656,9 +2755,9 @@ Since: v4.0
 
 
 #### java_field_names
-*Usage:* <code>java_field_names(klass: JavaHandle) -> List[str]</code>
+*Usage:* <code>java_field_names(clazz: JavaHandle) -> List[str]</code>
 
-Returns a list of fields names for the class referenced by handle `klass`.
+Returns a list of fields names for the class referenced by handle `clazz`.
 
 If mappings are installed, official field names are returned.
 
@@ -2668,9 +2767,9 @@ Since: v5.0
 
 
 #### java_method_names
-*Usage:* <code>java_method_names(klass: JavaHandle) -> List[str]</code>
+*Usage:* <code>java_method_names(clazz: JavaHandle) -> List[str]</code>
 
-Returns a list of methods names for the class referenced by handle `klass`.
+Returns a list of methods names for the class referenced by handle `clazz`.
 
 If mappings are installed, official method names are returned.
 
@@ -2694,7 +2793,23 @@ Since: v4.0
 
 Adds an event listener with the given callback and args.
 
-  Compatibility: Pyjinn only.
+  Supported event types:
+  
+  - `"add_entity"` - [`AddEntityEvent`](#addentityevent)
+  - `"block_update"` - [`BlockUpdateEvent`](#blockupdateevent)
+  - `"chat"` - [`ChatEvent`](#chatevent)
+  - `"chunk"` - [`ChunkEvent`](#chunkevent)
+  - `"damage"` - [`DamageEvent`](#damageevent)
+  - `"explosion"` - [`ExplosionEvent`](#explosionevent)
+  - `"key"` - [`KeyEvent`](#keyevent)
+  - `"mouse"` - [`MouseEvent`](#mouseevent)
+  - `"outgoing_chat_intercept"` - [`ChatEvent`](#chatevent)
+  - `"render"` - [`RenderEvent`](#renderevent)
+  - `"take_item"` - [`TakeItemEvent`](#takeitemevent)
+  - `"tick"` - [`TickEvent`](#tickevent)
+  - `"world"` - [`WorldEvent`](#worldevent)
+
+  Compatibility: Pyjinn only. (See [`EventQueue`](#eventqueue) for Python event handling.)
   
 
 #### remove_event_listener
@@ -2727,7 +2842,7 @@ Tick event for use with callback to [`add_event_listener()`](#add_event_listener
 ```
 
 #### set_timeout
-*Usage:* <code>set_timeout(callback: Callable[..., None], timer_millis: int, \*args) -> int</code>
+*Usage:* <code>set_timeout(callback: Callable[..., None], timer_millis: int, \*args, \*\*kwargs) -> int</code>
 
 Schedules `callback` to be invoked once after `timer_millis` milliseconds.
   
@@ -2738,7 +2853,7 @@ Schedules `callback` to be invoked once after `timer_millis` milliseconds.
   
 
 #### set_interval
-*Usage:* <code>set_interval(callback: Callable[..., None], timer_millis: int, \*args) -> int</code>
+*Usage:* <code>set_interval(callback: Callable[..., None], timer_millis: int, \*args, \*\*kwargs) -> int</code>
 
 Schedules `callback` to be invoked every `timer_millis` milliseconds.
   
