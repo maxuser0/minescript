@@ -4,7 +4,7 @@
 
 - For Pyjinn integration with Java and language compatibility with Python see
   [minescript.net/pyjinn](https://minescript.net/pyjinn)
-- To set up Fabric mappings for Pyjinn scripts see
+- To set up Fabric mappings for Python and Pyjinn scripts see
   [minescript.net/mappings](https://minescript.net/mappings)
 
 ## Minescript 5.0b7
