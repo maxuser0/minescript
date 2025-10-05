@@ -26,9 +26,13 @@ public abstract class KeyMappingMixin {
   @Inject(
       at = @At("TAIL"),
       method =
-          "<init>(Ljava/lang/String;Lcom/mojang/blaze3d/platform/InputConstants$Type;ILjava/lang/String;)V")
+          "<init>(Ljava/lang/String;Lcom/mojang/blaze3d/platform/InputConstants$Type;ILnet/minecraft/client/KeyMapping$Category;)V")
   public void init(
-      String name, InputConstants.Type type, int keyCode, String category, CallbackInfo ci) {
+      String name,
+      InputConstants.Type type,
+      int keyCode,
+      KeyMapping.Category category,
+      CallbackInfo ci) {
     Minescript.setKeyBind(name, type.getOrCreate(keyCode));
   }
 

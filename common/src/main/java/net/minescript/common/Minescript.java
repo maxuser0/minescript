@@ -56,11 +56,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
-import net.minecraft.client.gui.screens.LevelLoadingScreen;
-import net.minecraft.client.gui.screens.ReceivingLevelScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.client.renderer.debug.DebugRenderer;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
@@ -1714,7 +1711,7 @@ public class Minescript {
     var minecraft = Minecraft.getInstance();
     var screen = minecraft.screen;
     if (screen == null && key == BACKSLASH_KEY) {
-      minecraft.setScreen(new ChatScreen(""));
+      minecraft.setScreen(new ChatScreen("", /* isDraft= */ false));
     }
   }
 
@@ -2241,15 +2238,7 @@ public class Minescript {
     }
     String name = screen.getTitle().getString();
     if (name.isEmpty()) {
-      if (screen instanceof CreativeModeInventoryScreen) {
-        name = "Creative Inventory";
-      } else if (screen instanceof LevelLoadingScreen) {
-        name = "Level Loading";
-      } else if (screen instanceof ReceivingLevelScreen) {
-        name = "Progress";
-      } else {
-        name = mappingsLoader.get().getPrettyClassName(screen.getClass().getName());
-      }
+      name = mappingsLoader.get().getPrettyClassName(screen.getClass().getName());
     }
     return Optional.of(name);
   }
@@ -2716,7 +2705,7 @@ public class Minescript {
           result.raining = levelProperties.isRaining();
           result.thundering = levelProperties.isThundering();
 
-          var spawnPos = levelProperties.getSpawnPos();
+          var spawnPos = levelProperties.getRespawnData().globalPos().pos();
           result.spawn[0] = spawnPos.getX();
           result.spawn[1] = spawnPos.getY();
           result.spawn[2] = spawnPos.getZ();
@@ -2802,7 +2791,7 @@ public class Minescript {
           final ScriptValue result;
           if (show) {
             if (screen == null) {
-              minecraft.setScreen(new ChatScreen(""));
+              minecraft.setScreen(new ChatScreen("", /* isDraft= */ false));
             }
             var prompt = args.get(1);
             if (prompt != null && checkChatScreenInput()) {

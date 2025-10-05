@@ -42,8 +42,9 @@ def escape_double_quotes(string):
   return string.replace('"', r'\"')
 
 def print_success(message):
-  minescript.echo_json(
-      { "text": f"[{current_test_}] {escape_double_quotes(message)}", "color": "green" })
+  with minescript.render_loop:
+    minescript.echo_json(
+        { "text": f"[{current_test_}] {escape_double_quotes(message)}", "color": "green" })
 
 def print_failure(message):
   minescript.echo(f'[{current_test_}] {message}')

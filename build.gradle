@@ -2,7 +2,7 @@
 // https://github.com/jaredlll08/MultiLoader-Template/blob/1.21/build.gradle
 plugins {
     // see https://fabricmc.net/develop/ for new versions
-    id 'fabric-loom' version '1.10-SNAPSHOT' apply false
+    id 'fabric-loom' version '1.11.7' apply false
     // see https://projects.neoforged.net/neoforged/moddevgradle for new versions
-    id 'net.neoforged.moddev' version '2.0.103' apply false
+    id 'net.neoforged.moddev' version '2.0.112' apply false
 }
