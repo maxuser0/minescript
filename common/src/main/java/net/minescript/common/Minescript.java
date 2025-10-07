@@ -56,11 +56,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
-import net.minecraft.client.gui.screens.LevelLoadingScreen;
-import net.minecraft.client.gui.screens.ReceivingLevelScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.client.renderer.debug.DebugRenderer;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
@@ -2241,15 +2238,7 @@ public class Minescript {
     }
     String name = screen.getTitle().getString();
     if (name.isEmpty()) {
-      if (screen instanceof CreativeModeInventoryScreen) {
-        name = "Creative Inventory";
-      } else if (screen instanceof LevelLoadingScreen) {
-        name = "Level Loading";
-      } else if (screen instanceof ReceivingLevelScreen) {
-        name = "Progress";
-      } else {
-        name = mappingsLoader.get().getPrettyClassName(screen.getClass().getName());
-      }
+      name = mappingsLoader.get().getPrettyClassName(screen.getClass().getName());
     }
     return Optional.of(name);
   }
