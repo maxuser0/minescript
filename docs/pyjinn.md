@@ -189,11 +189,11 @@ x from Pyjinn = 99
 
 The Python script accesses globals from the Pyjinn script:
 
-- gets the value of a global variable using `script.get(variable_name: str)`
-- sets the value of a global variable using `script.set(variable_name: str, value: Any)`
+- gets a Pyjinn global using `script.get(variable_name: str)`
+- sets a Pyjinn global using `script.set(variable_name: str, value: Any)`
 
-Supported global variable types include `bool`, `float`, `int`, `str`, and references to Java
-objects.
+Supported types of Pyjinn globals accessible from Python include: `bool`, `float`, `int`, `str`,
+`dict`, `list`, Java classes and objects, Java arrays, and user-defined Pyjinn classes and objects.
 
 
 ### Java Integration
