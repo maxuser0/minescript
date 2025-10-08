@@ -56,7 +56,8 @@ public class MinescriptNeoForgeClientMod {
       var screen = Minecraft.getInstance().screen;
       if (screen == null) {
         Minescript.onKeyInput(key);
-      } else if ((key == ENTER_KEY || key == config.secondaryEnterKeyCode())
+      } else if (config != null
+          && (key == ENTER_KEY || key == config.secondaryEnterKeyCode())
           && action == Constants.KEY_ACTION_DOWN
           && Minescript.onKeyboardKeyPressed(screen, key)) {
         // TODO(maxuser): InputEvent.Key isn't cancellable with NeoForge.
