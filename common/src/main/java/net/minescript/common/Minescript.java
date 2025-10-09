@@ -1512,7 +1512,44 @@ public class Minescript {
     }
   }
 
-  public static void onRenderWorld(Object context) {
+  private static LevelRenderContext levelRenderContext = null;
+
+  public static void onRenderBegin(LevelRenderContext context) {
+    if (config.debugOutput()) {
+      LOGGER.info("Begin render frame");
+    }
+    levelRenderContext = context;
+  }
+
+  public static void onRenderEnd() {
+    levelRenderContext = null;
+    if (config.debugOutput()) {
+      LOGGER.info("End render frame");
+    }
+  }
+
+  public static void onRenderPassBegin(String pass) {
+    if (levelRenderContext != null) {
+      if (config.debugOutput()) {
+        LOGGER.info("Begin render pass: {}", pass);
+      }
+    }
+  }
+
+  public static void onRenderPassEnd(String pass) {
+    if (levelRenderContext != null) {
+      if ("main".equals(pass)) {
+        onRenderWorld();
+      }
+      if (config.debugOutput()) {
+        LOGGER.info("End render pass: {}", pass);
+      }
+    }
+  }
+
+  // TODO(maxuser): Support event listeners for before/after these rendering passes:
+  // "clear", "sky", "main", "particles", "clouds", "weather", "late_debug"
+  public static void onRenderWorld() {
     // Process render event listeners from Pyjinn scripts.
     ScriptValue eventValue = null;
     for (var entry : renderEventListeners.entrySet()) {
@@ -1520,7 +1557,7 @@ public class Minescript {
       if (listener.isActive()) {
         if (eventValue == null) {
           var event = new RenderEvent();
-          event.context = context;
+          event.context = levelRenderContext;
           event.time = System.currentTimeMillis() / 1000.;
           eventValue = ScriptValue.of(event);
         }
