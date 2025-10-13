@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -293,7 +294,7 @@ public class Minescript {
     // Job operations should have been cleaned up when killing jobs, but the jobs killed above might
     // still be in the process of shutting down, or operations may have been leaked accidentally.
     // Clear any leaked operations here.
-    for (var dispatcher : eventDispatchers) {
+    for (var dispatcher : eventDispatchers.values()) {
       cancelOrphanedOperations(jobIdsToKeep, dispatcher);
     }
 
@@ -1512,20 +1513,19 @@ public class Minescript {
     }
   }
 
-  public static void onRenderWorld(Object context) {
-    // Process render event listeners from Pyjinn scripts.
-    ScriptValue eventValue = null;
-    for (var entry : renderEventListeners.entrySet()) {
-      var listener = entry.getValue();
-      if (listener.isActive()) {
-        if (eventValue == null) {
-          var event = new RenderEvent();
-          event.context = context;
-          event.time = System.currentTimeMillis() / 1000.;
-          eventValue = ScriptValue.of(event);
-        }
-        listener.respond(eventValue);
-      }
+  private static LevelRenderContext levelRenderContext = null;
+
+  public static void onRenderBegin(LevelRenderContext context) {
+    if (config.debugOutput()) {
+      LOGGER.info("Begin render frame");
+    }
+    levelRenderContext = context;
+  }
+
+  public static void onRenderEnd() {
+    levelRenderContext = null;
+    if (config.debugOutput()) {
+      LOGGER.info("End render frame");
     }
 
     if (++worldRenderEventCounter % config.ticksPerCycle() == 0) {
@@ -1533,6 +1533,56 @@ public class Minescript {
       var player = minecraft.player;
       if (player != null && !jobs.getMap().isEmpty()) {
         processMessageQueue(false /* processSystemMessages */, job -> job.renderQueue().poll());
+      }
+    }
+  }
+
+  /** Invoke listeners registered for {@code "render_before_" + pass} events. */
+  public static void onRenderPassBegin(String pass) {
+    if (levelRenderContext != null) {
+      onRender("render_before_" + pass);
+      if (config.debugOutput()) {
+        LOGGER.info("Begin render pass: {}", pass);
+      }
+    }
+  }
+
+  /** Invoke listeners registered for {@code "render_after_" + pass} events. */
+  public static void onRenderPassEnd(String pass) {
+    if (levelRenderContext != null) {
+      onRender("render_after_" + pass);
+      if (config.debugOutput()) {
+        LOGGER.info("End render pass: {}", pass);
+      }
+    }
+  }
+
+  private static long lastRenderEventWarningTimeMillis = 0;
+
+  // Process render event listeners from Pyjinn scripts.
+  private static void onRender(String renderEvent) {
+    final EventDispatcher renderEventDispatcher;
+    try {
+      renderEventDispatcher = getDispatcherForEventName(renderEvent);
+    } catch (Exception e) {
+      long nowMillis = System.currentTimeMillis();
+      if (nowMillis - lastRenderEventWarningTimeMillis > 60_000) {
+        LOGGER.warn("Render exception (rate-limited to 1 per minute):", e);
+        lastRenderEventWarningTimeMillis = nowMillis;
+      }
+      return;
+    }
+    ScriptValue eventValue = null;
+    for (var entry : renderEventDispatcher.entrySet()) {
+      var listener = entry.getValue();
+      if (listener.isActive()) {
+        if (eventValue == null) {
+          var event = new RenderEvent();
+          event.context = levelRenderContext;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
+        }
+        listener.respond(eventValue);
       }
     }
   }
@@ -1918,7 +1968,6 @@ public class Minescript {
   private static ServerBlockList serverBlockList = new ServerBlockList();
 
   private static EventDispatcher tickEventListeners = new EventDispatcher();
-  private static EventDispatcher renderEventListeners = new EventDispatcher();
   private static EventDispatcher keyEventListeners = new EventDispatcher();
   private static EventDispatcher mouseEventListeners = new EventDispatcher();
   private static EventDispatcher chatEventListeners = new EventDispatcher();
@@ -1932,40 +1981,41 @@ public class Minescript {
   private static EventDispatcher chunkEventListeners = new EventDispatcher();
   private static EventDispatcher worldListeners = new EventDispatcher();
 
-  private static ImmutableList<EventDispatcher> eventDispatchers =
-      ImmutableList.of(
-          tickEventListeners,
-          renderEventListeners,
-          keyEventListeners,
-          mouseEventListeners,
-          chatEventListeners,
-          chatInterceptors,
-          addEntityEventListeners,
-          blockUpdateEventListeners,
-          takeItemEventListeners,
-          damageEventListeners,
-          explosionEventListeners,
-          chunkEventListeners,
-          worldListeners);
+  static Map<String, EventDispatcher> eventDispatchers = new HashMap<>();
+
+  static {
+    eventDispatchers.put("tick", tickEventListeners);
+    eventDispatchers.put("key", keyEventListeners);
+    eventDispatchers.put("mouse", mouseEventListeners);
+    eventDispatchers.put("chat", chatEventListeners);
+    eventDispatchers.put("outgoing_chat_intercept", chatInterceptors);
+    eventDispatchers.put("add_entity", addEntityEventListeners);
+    eventDispatchers.put("block_update", blockUpdateEventListeners);
+    eventDispatchers.put("take_item", takeItemEventListeners);
+    eventDispatchers.put("damage", damageEventListeners);
+    eventDispatchers.put("explosion", explosionEventListeners);
+    eventDispatchers.put("chunk", chunkEventListeners);
+    eventDispatchers.put("world", worldListeners);
+  }
+
+  // Pattern for event names before/after render passes, e.g:
+  // "clear", "sky", "main", "particles", "clouds", "weather", "late_debug"
+  static Pattern RENDER_EVENT_NAME_RE = Pattern.compile("render_(before|after)_.*");
 
   /** Returns the event dispatcher for the given event name, or {@code null}. */
   static EventDispatcher getDispatcherForEventName(String eventName) throws Exception {
-    return switch (eventName) {
-      case "tick" -> tickEventListeners;
-      case "render" -> renderEventListeners;
-      case "key" -> keyEventListeners;
-      case "mouse" -> mouseEventListeners;
-      case "chat" -> chatEventListeners;
-      case "outgoing_chat_intercept" -> chatInterceptors;
-      case "add_entity" -> addEntityEventListeners;
-      case "block_update" -> blockUpdateEventListeners;
-      case "take_item" -> takeItemEventListeners;
-      case "damage" -> damageEventListeners;
-      case "explosion" -> explosionEventListeners;
-      case "chunk" -> chunkEventListeners;
-      case "world" -> worldListeners;
-      default -> null;
-    };
+    var dispatcher = eventDispatchers.get(eventName);
+    if (dispatcher == null) {
+      synchronized (eventDispatchers) {
+        if (RENDER_EVENT_NAME_RE.matcher(eventName).matches()) {
+          dispatcher = new EventDispatcher();
+          eventDispatchers.put(eventName, dispatcher);
+        } else {
+          throw new IllegalArgumentException("No event named '%s'".formatted(eventName));
+        }
+      }
+    }
+    return dispatcher;
   }
 
   private static Map<JobOperationId, ChunkLoadEventListener> chunkLoadEventListeners =
@@ -2975,9 +3025,6 @@ public class Minescript {
   static void startEventListener(JobControl job, long funcCallId, String eventName, long listenerId)
       throws Exception {
     var eventDispatcher = getDispatcherForEventName(eventName);
-    if (eventDispatcher == null) {
-      throw new IllegalArgumentException("No event named '%s'".formatted(eventName));
-    }
     var jobOpId = new JobOperationId(job.jobId(), listenerId);
     var listener = eventDispatcher.get(jobOpId);
     if (listener == null) {

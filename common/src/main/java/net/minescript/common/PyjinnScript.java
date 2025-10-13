@@ -12,8 +12,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import net.minescript.common.mappings.NameMappings;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -323,23 +323,6 @@ public class PyjinnScript {
     return script;
   }
 
-  // TODO(maxuser): Share these event names with Minescript.getDispatcherForEventName().
-  private static final Set<String> EVENT_NAMES =
-      Set.of(
-          "tick",
-          "render",
-          "key",
-          "mouse",
-          "chat",
-          "outgoing_chat_intercept",
-          "add_entity",
-          "block_update",
-          "explosion",
-          "take_item",
-          "damage",
-          "chunk",
-          "world");
-
   public static class AddEventListener implements Script.Function {
     @Override
     public Object call(Script.Environment env, Object... params) {
@@ -351,9 +334,21 @@ public class PyjinnScript {
                 + params[0].toString());
       }
 
-      if (!EVENT_NAMES.contains(eventName)) {
+      // Interprete "render" as a shorthand for "render_after_main".
+      if ("render".equals(eventName)) {
+        eventName = "render_after_main";
+      }
+
+      if (!Minescript.eventDispatchers.containsKey(eventName)
+          && !Minescript.RENDER_EVENT_NAME_RE.matcher(eventName).matches()) {
         throw new IllegalArgumentException(
-            "Unsupported event type: %s. Must be one of: %s".formatted(eventName, EVENT_NAMES));
+            "Unsupported event type: \"%s\". Must be one of: %s"
+                .formatted(
+                    eventName,
+                    Minescript.eventDispatchers.keySet().stream()
+                        .map(s -> '"' + s + '"')
+                        .sorted()
+                        .collect(Collectors.joining(", "))));
       }
 
       var kwargs =
