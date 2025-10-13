@@ -2000,7 +2000,7 @@ public class Minescript {
 
   // Pattern for event names before/after render passes, e.g:
   // "clear", "sky", "main", "particles", "clouds", "weather", "late_debug"
-  public static Pattern RENDER_EVENT_NAME_RE = Pattern.compile("render_(before|after)_[a-z_]+");
+  static Pattern RENDER_EVENT_NAME_RE = Pattern.compile("render_(before|after)_.*");
 
   /** Returns the event dispatcher for the given event name, or {@code null}. */
   static EventDispatcher getDispatcherForEventName(String eventName) throws Exception {
