@@ -8,6 +8,7 @@
     "ChatComponentMixin",
     "ChatScreenMixin",
     "ClientPacketListenerMixin",
+    "FrameGraphBuilderMixin",
     "KeyboardHandlerMixin",
     "KeyMappingMixin",
     "LevelRendererMixin",
