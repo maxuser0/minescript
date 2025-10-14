@@ -7,6 +7,24 @@
 - To set up Fabric mappings for Python and Pyjinn scripts see
   [minescript.net/mappings](https://minescript.net/mappings)
 
+## Minescript 5.0b8
+
+- Support render event names with uppercase chars ([99885f3](https://github.com/maxuser0/minescript/commit/99885f3cb3b5220791c822a7785a9a21209eb142))
+- Support script events for several render passes ([c24f8ee](https://github.com/maxuser0/minescript/commit/c24f8eed12ac770ddd7f8cfdc9e9ae0246f95b6f))
+- Update MC version to 1.21.10 ([9ddbcf7](https://github.com/maxuser0/minescript/commit/9ddbcf741aa48beed26cf8f385c27ae064d3c070))
+- Reimplement "render" event via LevelRenderer mixin ([55aa5d8](https://github.com/maxuser0/minescript/commit/55aa5d8da0ca9d072926d7a335c2bc1b506bbb2a))
+- Update Minescript version to 5.0b8, Pyjinn to 0.11 ([b46ab7b](https://github.com/maxuser0/minescript/commit/b46ab7b276a36013b2d8cfe8ddae3d1027d6c1a6))
+- Update MC version to 1.21.9 ([289a396](https://github.com/maxuser0/minescript/commit/289a396c37401b6cd767111307c141cd6996a060))
+- Update documentation ([ef1266b](https://github.com/maxuser0/minescript/commit/ef1266bfaa77801e741f503111d4a3326e13f055))
+
+### Pyjinn 0.11
+
+- Support multiple return values as tuple ([1489f58](https://github.com/maxuser0/pyjinn/commit/1489f58dd3ca12c37159c94ab1dd624ef082c7cd))
+- Support starred iterables in tuple/list literals ([065c4b6](https://github.com/maxuser0/pyjinn/commit/065c4b6ecc5dd8d450a9b006030dbc78fcb7b99c))
+- Support tuple addition, e.g. (1, 2) + (3, 4) ([75f6bff](https://github.com/maxuser0/pyjinn/commit/75f6bff4c467ae74291d7cc0f74cb0ef2099506e))
+- Implement isinstance() and NoneType ([c8d5f59](https://github.com/maxuser0/pyjinn/commit/c8d5f594a583d7f0635cf4b046a00bf9cff31ea1))
+- Update Pyjinn version to 0.11 ([dd88c66](https://github.com/maxuser0/pyjinn/commit/dd88c66f917142a991ef3314efa3b31cd264dbf9))
+
 ## Minescript 5.0b7
 
 - Fix install_mappings and support -f/force-download ([44122c3](https://github.com/maxuser0/minescript/commit/44122c38e117f2ac5dd9f2a46334d955b658d635))
