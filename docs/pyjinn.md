@@ -326,14 +326,17 @@ x.run()  # prints: hello!
 Pyjinn `int` represents a 32-bit or 64-bit integer value, depending on the number of bits required
 to represent the value. E.g. `x = 123` is represented as a 32-bit integer using `java.lang.Integer`
 whereas `y = 4_000_000_000` is represented as a 64-bit integer using `java.lang.Long`. Binary
-arithmetic operators operating two `int` values where one uses 32 bits and the other uses 64 bits
-results in the 32-bit value being promoted to 64 bits similar to `int`-to-`long` promotion in Java.
-A Pyjinn numeric value can be cast to a 32-bit integer value equivalent to Java `int` or `Integer`
-using the Pyjinn built-in function `JavaInt(...)`.
+arithmetic operators operating on two `int` values where one uses 32 bits and the other uses 64 bits
+results in the 32-bit value being promoted to 64 bits similar to the promotion of `int` to `long` in
+Java.  A Pyjinn numeric value can be cast to a 32-bit integer value equivalent to Java `int` or
+`Integer` using the Pyjinn built-in function `JavaInt(...)`.
 
-Pyjinn `float` is a 64-bit double-precision floating point number, matching Python `float` and Java
-`double`.  A Pyjinn numeric value can be cast to a 32-bit single-precision floating point value
+Pyjinn `float` is a 64-bit double-precision floating point number, equivalent to Python `float` and
+Java `double`.  A Pyjinn numeric value can be cast to a 32-bit single-precision floating point value
 equivalent to Java `float` or `java.lang.Float` using the Pyjinn built-in function `JavaFloat(...)`.
+
+In binary arithmetic operations involving a `float` and an `int` in Pyjinn, the `int` is
+automatically converted to `float`.
 
 Similar to Java, Pyjinn supports the following numeric conversions when passed to a Java method:
 
