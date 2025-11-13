@@ -255,14 +255,40 @@ print(java_list.size())
 
 #### JavaList
 
-Get Java List from Pyjinn list (does **not** make a copy of the list or its elements):
+`JavaList` takes a Pyjinn list and returns a Java List:
+
 ```
 java_list = JavaList([1, 2, 3])
 ```
 
+The returned Java List is the internal representation of the Pyjinn list, so changes to one are
+visible in the other.
+
+#### JavaMap
+
+`JavaMap` takes a Pyjinn dict and returns a Java Map:
+
+```
+java_map = JavaMap({1: "one", 2: "two"})
+```
+
+The returned Java Map is the internal representation of the Pyjinn dict, so changes to one are
+visible in the other.
+
+#### JavaSet
+
+`JavaSet` takes a Pyjinn set and returns a Java Set:
+
+```
+java_set = JavaSet({1, 2, 3})
+```
+
+The returned Java Set is the internal representation of the Pyjinn set, so changes to one are
+visible in the other.
+
 #### JavaArray
 
-Get Java array (`Object[]`) from Pyjinn tuple:
+`JavaArray` takes a Pyjinn tuple and returns a Java array (`Object[]`):
 ```
 my_tuple = (1, 2, 3, "foo", "bar")
 java_array = JavaArray(my_tuple)
@@ -696,13 +722,13 @@ Language features currently **NOT** supported by Pyjinn:
   - `__eq__(value) -> bool`
   - `__ne__(value) -> bool`
   - `__len__() -> int`
-  - `__getitem__(key)`
+  - `__getitem__(key) -> Any`
   - `count(value) -> int`
   - `index(value) -> int`
 
 #### list
 
-- `class list` (runtime type is `org.pyjinn.interpreter.Script.PyList`)
+- `class list` (runtime type is `org.pyjinn.interpreter.Script.PyjList`)
   - `__add__(value) -> list`
   - `__contains__(key) -> bool`
   - `__delitem__(key)`
@@ -710,7 +736,7 @@ Language features currently **NOT** supported by Pyjinn:
   - `__ne__(value) -> bool`
   - `__iadd__(value)`
   - `__len__() -> int`
-  - `__getitem__(key)`
+  - `__getitem__(key) -> Any`
   - `__setitem__(key, value)`
   - `append(object)`
   - `clear()`
@@ -719,28 +745,49 @@ Language features currently **NOT** supported by Pyjinn:
   - `extend(iterable)`
   - `index(value) -> int`
   - `insert(index: int, object)`
-  - `pop()`
-  - `pop(index: int)`
+  - `pop() -> Any`
+  - `pop(index: int) -> Any`
   - `remove(value)`
   - `reverse()`
   - `sort()`
 
 #### dict
 
-- `class dict` (runtime type is `org.pyjinn.interpreter.Script.PyDict`)
+- `class dict` (runtime type is `org.pyjinn.interpreter.Script.PyjDict`)
   - `items() -> iterable`
   - `keys() -> iterable`
   - `values() -> iterable`
   - `__len__() -> int`
-  - `get(key)`
-  - `get(key, default_value)`
-  - `setdefault(key)`
-  - `setdefault(key, default_value)`
-  - `__getitem__(key)`
+  - `get(key) -> Any`
+  - `get(key, default_value) -> Any`
+  - `setdefault(key) -> Any`
+  - `setdefault(key, default_value) -> Any`
+  - `__getitem__(key) -> Any`
   - `__setitem__(key, value)`
   - `__contains__(key) -> bool`
   - `__delitem__(key)`
 
+#### set
+
+- `class set` (runtime type is `org.pyjinn.interpreter.Script.PyjSet`)
+  - `__contains__(element) -> bool`
+  - `__len__() -> int`
+  - `add(element)`
+  - `clear()`
+  - `discard(element)`
+  - `pop() -> Any`
+  - `update(iterable)`
+  - `difference(iterable) -> set`
+  - `difference_update(iterable)`
+  - `intersection(iterable) -> set`
+  - `intersection_update(iterable)`
+  - `symmetric_difference(iterable) -> set`
+  - `symmetric_difference_update(iterable)`
+  - `union(iterable) -> set`
+  - `copy() -> set`
+  - `isdisjoint(iterable) -> bool`
+  - `issubset(iterable) -> bool`
+  - `issuperset(iterable) -> bool`
 
 #### Built-in functions
 
@@ -782,7 +829,7 @@ Status of built-in function support in Pyjinn:
 - `id()` - no
 - `input()` - no
 - `int()` - yes
-- `isinstance()` - no
+- `isinstance()` - yes
 - `issubclass()` - no
 - `iter()` - no
 - `len()` - yes (supported for both Python-compatible types and Java iterable types)
@@ -804,7 +851,7 @@ Status of built-in function support in Pyjinn:
 - `repr()` - no
 - `reversed()` - no
 - `round()` - yes
-- `set()` - no
+- `set()` - yes
 - `setattr()` - no
 - `slice()` - no
 - `sorted()` - no
