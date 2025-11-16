@@ -149,6 +149,7 @@ def _find_java_member(clss, name: str):
 
 with script_loop:
   Object_id = _find_java_class("java.lang.Object")
+  Object_equals_id = _find_java_member(Object_id, "equals")
   Object_getClass_id = _find_java_member(Object_id, "getClass")
 
   Objects_id = _find_java_class("java.util.Objects")
@@ -176,10 +177,6 @@ with script_loop:
   Float_id = _find_java_class("java.lang.Float")
   Double_id = _find_java_class("java.lang.Double")
 
-  Array_id = _find_java_class("java.lang.reflect.Array")
-  Array_get_id = _find_java_member(Array_id, "get")
-  Array_getLength_id = _find_java_member(Array_id, "getLength")
-
   Iterable_id = _find_java_class("java.lang.Iterable")
 
   Collection_id = _find_java_class("java.util.Collection")
@@ -191,6 +188,7 @@ with script_loop:
   PyjObject_callMethod_id = _find_java_member(PyjObject_id, "callMethod")
   PyjObject_class_id = _find_java_member(PyjObject_id, "__class__")
   PyjObject_dict_id = _find_java_member(PyjObject_id, "__dict__")
+  PyjObject_UNDEFINED_RESULT_id = _find_java_member(PyjObject_id, "UNDEFINED_RESULT")
   PyjClass_id = _find_java_class("org.pyjinn.interpreter.Script$PyjClass")
   PyjClass_name_id = _find_java_member(PyjClass_id, "name")
   PyjDict_id = _find_java_class("org.pyjinn.interpreter.Script$PyjDict")
@@ -207,6 +205,8 @@ with script_loop:
   KeywordArgs_id = _find_java_class("org.pyjinn.interpreter.Script$KeywordArgs")
   KeywordArgs_ctor_id = java_ctor(KeywordArgs_id)
   KeywordArgs_put_id = _find_java_member(KeywordArgs_id, "put")
+
+  UNDEFINED_RESULT = java_access_field(_null_id, PyjObject_UNDEFINED_RESULT_id)
 
 @dataclass
 class Float:
@@ -384,16 +384,19 @@ class JavaObject:
           # no matching method:
           # Object[] callMethod(Environment env, String methodName, Object... params)
           params = create_java_object_array(args)
-          result = auto(java_call_method(
+          result = java_call_method(
                   self.id,
                   PyjObject_callMethod_id,
                   self.script_env,
                   auto(java_string(name)),
-                  params.id))
-          if from_java_handle(java_call_method(_null_id, Array_getLength_id, result)) > 0:
-            return from_java_handle(java_call_method(_null_id, Array_get_id, result, auto(java_int(0))))
+                  params.id)
+          # Call as UNDEFINED_RESULT.equals(result) because UNDEFINED_RESULT is not null but result
+          # may be null.
+          if not from_java_handle(java_call_method(UNDEFINED_RESULT, Object_equals_id, result)):
+            return from_java_handle(result)
           else:
             # No dynamic PyjObject method found, so fall back to compiled Java method call.
+            java_release(result)
             binding = JavaBoundMember(
                 self.get_class_id(), self.id, name, ref=self.ref, script_env=self.script_env)
             return binding(*args)
