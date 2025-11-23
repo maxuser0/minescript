@@ -186,7 +186,8 @@ public class PyjinnScript {
       boolean autoExit,
       Runnable doneCallback)
       throws Exception {
-    var script = loadScript(boundCommand.command(), scriptCode, nameMappings);
+    var script =
+        loadScript(boundCommand.command(), scriptCode, config.scriptConfig(), nameMappings);
     var job =
         new PyjinnJob(
             jobId,
@@ -208,9 +209,8 @@ public class PyjinnScript {
     return job;
   }
 
-  private static class MinescriptModuleHandler implements Script.ModuleHandler {
-    public MinescriptModuleHandler() {}
-
+  private record MinescriptModuleHandler(ImmutableList<Path> pyjinnImportPath)
+      implements Script.ModuleHandler {
     @Override
     public void onParseImport(Script.Module module, Script.Import importModules) {
       for (var importedModule : importModules.modules()) {
@@ -233,14 +233,13 @@ public class PyjinnScript {
       }
     }
 
-    private static ImmutableList<Path> importDirs =
-        ImmutableList.of(Paths.get("minescript"), Paths.get("minescript", "system", "pyj"));
+    private static Path minescriptDir = Paths.get("minescript");
 
     @Override
     public Path getModulePath(String name) {
       Path relativeImportPath = Script.ModuleHandler.super.getModulePath(name);
-      for (Path dir : importDirs) {
-        Path path = dir.resolve(relativeImportPath);
+      for (Path dir : pyjinnImportPath) {
+        Path path = minescriptDir.resolve(dir).resolve(relativeImportPath);
         if (Files.exists(path)) {
           LOGGER.info("Resolved import of {} to {}", name, path);
           return path;
@@ -248,7 +247,7 @@ public class PyjinnScript {
       }
       throw new IllegalArgumentException(
           "No module named '%s' (%s) found in import dirs: %s"
-              .formatted(name, relativeImportPath, importDirs));
+              .formatted(name, relativeImportPath, pyjinnImportPath));
     }
 
     @Override
@@ -278,7 +277,8 @@ public class PyjinnScript {
     }
   }
 
-  public static Script loadScript(String[] argv, String scriptCode, NameMappings nameMappings)
+  public static Script loadScript(
+      String[] argv, String scriptCode, ScriptConfig scriptConfig, NameMappings nameMappings)
       throws Exception {
     final String scriptFilename;
     if (argv[0].toLowerCase().endsWith(".pyj")) {
@@ -287,7 +287,7 @@ public class PyjinnScript {
       scriptFilename = argv[0] + ".pyj";
     }
 
-    var moduleHandler = new MinescriptModuleHandler();
+    var moduleHandler = new MinescriptModuleHandler(scriptConfig.pyjinnImportPath());
     var script =
         new Script(
             scriptFilename,

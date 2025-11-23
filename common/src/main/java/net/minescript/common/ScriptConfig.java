@@ -33,6 +33,9 @@ public class ScriptConfig {
   private ImmutableList<Path> commandPath =
       ImmutableList.of(Paths.get("system", "exec"), Paths.get(""));
 
+  private ImmutableList<Path> pyjinnImportPath =
+      ImmutableList.of(Paths.get("system", "pyj"), Paths.get(""));
+
   private String minescriptCommandPathEnvVar;
 
   private Map<String, FileTypeConfig> fileTypeMap = new ConcurrentHashMap<>();
@@ -55,10 +58,9 @@ public class ScriptConfig {
                     .collect(Collectors.toList()));
 
     // Configure ".pyj" as the built-in file type for Pyjinn scripts.
-    // TODO(maxuser): Prevent ".pyj" from being overwritten by user configuration.
     var commandPattern = ImmutableList.of("{command}", "{args}");
     var environmentVars = ImmutableList.<String>of();
-    configureFileType(
+    configureFileTypeImpl(
         new CommandConfig(".pyj", commandPattern, environmentVars), /* createsSubprocess= */ false);
   }
 
@@ -74,6 +76,10 @@ public class ScriptConfig {
                     .collect(Collectors.toList()));
   }
 
+  public void setPyjinnImportPath(List<Path> pyjinnImportPath) {
+    this.pyjinnImportPath = ImmutableList.copyOf(pyjinnImportPath);
+  }
+
   public void setEscapeCommandDoubleQuotes(boolean enable) {
     this.escapeCommandDoubleQuotes = enable;
   }
@@ -84,6 +90,10 @@ public class ScriptConfig {
 
   public ImmutableList<Path> commandPath() {
     return commandPath;
+  }
+
+  public ImmutableList<Path> pyjinnImportPath() {
+    return pyjinnImportPath;
   }
 
   // Add to `matches` all the files in `commandDir` that match `prefix`.
@@ -190,12 +200,19 @@ public class ScriptConfig {
 
   public record CommandConfig(String extension, List<String> command, List<String> environment) {}
 
-  public void configureFileType(CommandConfig commandConfig, boolean createsSubprocess) {
+  public void configureSubprocessFileType(CommandConfig commandConfig) {
+    configureFileTypeImpl(commandConfig, /* createsSubprocess= */ true);
+  }
+
+  private void configureFileTypeImpl(CommandConfig commandConfig, boolean createsSubprocess) {
     Preconditions.checkNotNull(commandConfig.extension);
     Preconditions.checkArgument(
         commandConfig.extension.startsWith("."),
         "File extension does not start with dot: \"%s\"",
         commandConfig.extension);
+    Preconditions.checkArgument(
+        !(createsSubprocess && commandConfig.extension().toLowerCase().equals(".pyj")),
+        ".pyj extension cannot be configured as a subprocess command type");
 
     var fileTypeConfig =
         new FileTypeConfig(

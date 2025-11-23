@@ -880,7 +880,10 @@ public class Minescript {
   public static Script loadPyjinnScript(List<String> scriptCommand, String scriptCode)
       throws Exception {
     return PyjinnScript.loadScript(
-        scriptCommand.toArray(String[]::new), scriptCode, mappingsLoader.get());
+        scriptCommand.toArray(String[]::new),
+        scriptCode,
+        config.scriptConfig(),
+        mappingsLoader.get());
   }
 
   private static boolean checkMinescriptDir() {

@@ -3,6 +3,8 @@
 
 package net.minescript.common;
 
+import static java.util.stream.Collectors.joining;
+
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.gson.Gson;
@@ -41,6 +43,7 @@ public class Config {
           "command",
           "escape_command_double_quotes",
           "command_path",
+          "pyjinn_import_path",
           "max_commands_per_cycle",
           "command_cycle_deadline_usecs",
           "ticks_per_cycle",
@@ -335,6 +338,7 @@ public class Config {
     consumer.accept("command", getValue("command"));
     consumer.accept("escape_command_double_quotes", getValue("escape_command_double_quotes"));
     consumer.accept("command_path", getValue("command_path"));
+    consumer.accept("pyjinn_import_path", getValue("pyjinn_import_path"));
     consumer.accept("max_commands_per_cycle", getValue("max_commands_per_cycle"));
     consumer.accept("command_cycle_deadline_usecs", getValue("command_cycle_deadline_usecs"));
     consumer.accept("ticks_per_cycle", getValue("ticks_per_cycle"));
@@ -375,9 +379,14 @@ public class Config {
         return String.valueOf(scriptConfig.escapeCommandDoubleQuotes());
 
       case "command_path":
-        return String.join(
-            File.pathSeparator,
-            scriptConfig.commandPath().stream().map(Path::toString).collect(Collectors.toList()));
+        return scriptConfig.commandPath().stream()
+            .map(Path::toString)
+            .collect(joining(File.pathSeparator));
+
+      case "pyjinn_import_path":
+        return scriptConfig.pyjinnImportPath().stream()
+            .map(Path::toString)
+            .collect(joining(File.pathSeparator));
 
       case "max_commands_per_cycle":
         return String.valueOf(maxCommandsPerCycle);
@@ -475,7 +484,7 @@ public class Config {
         try {
           var commandConfig =
               new ScriptConfig.CommandConfig(".py", commandPattern, environmentVars);
-          scriptConfig.configureFileType(commandConfig, /* createsSubprocess= */ true);
+          scriptConfig.configureSubprocessFileType(commandConfig);
           reportInfo(out, "Setting config var: {} = \"{}\" ({})", name, value, commandConfig);
           pythonLocation = python;
         } catch (Exception e) {
@@ -488,7 +497,7 @@ public class Config {
         commands.add(value);
         try {
           var commandConfig = GSON.fromJson(value, ScriptConfig.CommandConfig.class);
-          scriptConfig.configureFileType(commandConfig, /* createsSubprocess= */ true);
+          scriptConfig.configureSubprocessFileType(commandConfig);
           reportInfo(out, "Configured script execution for \"{}\"", commandConfig);
         } catch (Exception e) {
           reportError(out, "Failed to configure script execution: {}", e.toString());
@@ -508,6 +517,15 @@ public class Config {
                 .collect(Collectors.toList());
         scriptConfig.setCommandPath(commandPath);
         reportInfo(out, "Setting command_path to {}", commandPath);
+        break;
+
+      case "pyjinn_import_path":
+        var pyjinnImportPath =
+            Arrays.stream(value.split(Pattern.quote(File.pathSeparator), -1))
+                .map(Paths::get)
+                .collect(Collectors.toList());
+        scriptConfig.setPyjinnImportPath(pyjinnImportPath);
+        reportInfo(out, "Setting pyjinn_import_path to {}", pyjinnImportPath);
         break;
 
       case "max_commands_per_cycle":
