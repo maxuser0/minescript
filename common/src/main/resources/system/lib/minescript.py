@@ -2664,6 +2664,55 @@ java_release = ScriptFunction("java_release", java_release)
 
 # The definitions below are provided for IDEs and are not used in Python scripts.
 if "Pyjinn" in sys.version:
+  def JavaClass(class_name: str) -> JavaHandle:
+    """Pyjinn built-in that returns a Java class given its fully qualified name.
+
+    Compatibility: Pyjinn only. (Supported in Python via java.py.)
+    """
+    raise NotImplementedError("JavaClass is implemented in Java for Pyjinn scripts")
+
+  def JavaArray(pyjinn_tuple, element_type: JavaHandle = None) -> JavaHandle:
+    """Pyjinn built-in that returns a Java array given a Pyjinn tuple and optional element type.
+
+    Compatibility: Pyjinn only.
+    """
+    raise NotImplementedError("JavaArray is implemented in Java for Pyjinn scripts")
+
+  def JavaFloat(number) -> JavaHandle:
+    """Pyjinn built-in that invokes the java.lang.Float constructor.
+
+    Compatibility: Pyjinn only.
+    """
+    raise NotImplementedError("JavaFloat is implemented in Java for Pyjinn scripts")
+
+  def JavaInt(number) -> JavaHandle:
+    """Pyjinn built-in that invokes the java.lang.Integer constructor.
+
+    Compatibility: Pyjinn only.
+    """
+    raise NotImplementedError("JavaInt is implemented in Java for Pyjinn scripts")
+
+  def JavaList(pyjinn_list) -> JavaHandle:
+    """Pyjinn built-in that returns the Java List representing the given Pyjinn list.
+
+    Compatibility: Pyjinn only.
+    """
+    raise NotImplementedError("JavaList is implemented in Java for Pyjinn scripts")
+
+  def JavaMap(pyjinn_list) -> JavaHandle:
+    """Pyjinn built-in that returns the Java Map representing the given Pyjinn dict.
+
+    Compatibility: Pyjinn only.
+    """
+    raise NotImplementedError("JavaMap is implemented in Java for Pyjinn scripts")
+
+  def JavaString(pyjinn_str) -> JavaHandle:
+    """Pyjinn built-in that exposes the Java String API for the given Pyjinn str.
+
+    Compatibility: Pyjinn only.
+    """
+    raise NotImplementedError("JavaString is implemented in Java for Pyjinn scripts")
+
   def add_event_listener(event_type: str, callback: Callable[[Any], None], **args) -> int:
     """Adds an event listener with the given callback and args.
 

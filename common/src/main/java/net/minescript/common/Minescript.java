@@ -880,7 +880,10 @@ public class Minescript {
   public static Script loadPyjinnScript(List<String> scriptCommand, String scriptCode)
       throws Exception {
     return PyjinnScript.loadScript(
-        scriptCommand.toArray(String[]::new), scriptCode, mappingsLoader.get());
+        scriptCommand.toArray(String[]::new),
+        scriptCode,
+        config.scriptConfig(),
+        mappingsLoader.get());
   }
 
   private static boolean checkMinescriptDir() {
@@ -1379,8 +1382,8 @@ public class Minescript {
         systemMessageQueue.logUserInfo("");
         systemMessageQueue.logUserInfo("Minescript command directories:");
         Path minescriptDir = Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR);
-        for (Path commandDir : config.scriptConfig().commandPath()) {
-          Path path = minescriptDir.resolve(commandDir);
+        for (FilePattern commandDir : config.scriptConfig().commandPath()) {
+          var path = FilePattern.of(minescriptDir).and(commandDir);
           systemMessageQueue.logUserInfo("  {}", path);
         }
         if (!command[0].equals("ls")) {
@@ -1690,6 +1693,7 @@ public class Minescript {
       if (value.stripTrailing().length() > 0) {
         String command = getCompletableCommand(value.substring(1));
         if (key == TAB_KEY && !commandSuggestions.isEmpty()) {
+          // User hit tab key and there are completions to apply to the chat edit text.
           cancel = true;
           if (cursorPos == command.length() + 1) {
             // Insert the remainder of the completed command.
@@ -1723,8 +1727,11 @@ public class Minescript {
             return cancel;
           }
         }
+        // User is typing a command, so highlight the command text in aqua when the user has typed a
+        // partial (prefix) match, and in green for a full match.
         var completions = getCommandCompletions(command);
-        if (completions.contains(command)) {
+        final boolean hasFullMatch = completions.contains(command);
+        if (completions.size() == 1 && hasFullMatch) {
           chatEditBox.setTextColor(0xff5ee85e); // green
           commandSuggestions = new ArrayList<>();
         } else {
@@ -1744,7 +1751,11 @@ public class Minescript {
               }
               commandSuggestions = newCommandSuggestions;
             }
-            chatEditBox.setTextColor(0xff5ee8e8); // cyan
+            if (hasFullMatch) {
+              chatEditBox.setTextColor(0xff5ee85e); // green
+            } else {
+              chatEditBox.setTextColor(0xff5ee8e8); // cyan
+            }
           } else {
             chatEditBox.setTextColor(0xffe85e5e); // red
             commandSuggestions = new ArrayList<>();

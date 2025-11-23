@@ -18,8 +18,8 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
 
-    include 'org.pyjinn:pyjinn-lib:0.11:all'
-    implementation 'org.pyjinn:pyjinn-lib:0.11:all'
+    include 'org.pyjinn:pyjinn-lib:0.12:all'
+    implementation 'org.pyjinn:pyjinn-lib:0.12:all'
 }
 
 loom {

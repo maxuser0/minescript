@@ -255,14 +255,40 @@ print(java_list.size())
 
 #### JavaList
 
-Get Java List from Pyjinn list (does **not** make a copy of the list or its elements):
+`JavaList` takes a Pyjinn list and returns a Java List:
+
 ```
 java_list = JavaList([1, 2, 3])
 ```
 
+The returned Java List is the internal representation of the Pyjinn list, so changes to one are
+visible in the other.
+
+#### JavaMap
+
+`JavaMap` takes a Pyjinn dict and returns a Java Map:
+
+```
+java_map = JavaMap({1: "one", 2: "two"})
+```
+
+The returned Java Map is the internal representation of the Pyjinn dict, so changes to one are
+visible in the other.
+
+#### JavaSet
+
+`JavaSet` takes a Pyjinn set and returns a Java Set:
+
+```
+java_set = JavaSet({1, 2, 3})
+```
+
+The returned Java Set is the internal representation of the Pyjinn set, so changes to one are
+visible in the other.
+
 #### JavaArray
 
-Get Java array (`Object[]`) from Pyjinn tuple:
+`JavaArray` takes a Pyjinn tuple and returns a Java array (`Object[]`):
 ```
 my_tuple = (1, 2, 3, "foo", "bar")
 java_array = JavaArray(my_tuple)
@@ -320,6 +346,34 @@ Runnable = JavaClass("java.lang.Runnable")
 x = Runnable(lambda: print("hello!"))
 x.run()  # prints: hello!
 ```
+
+#### Numeric types
+
+Pyjinn `int` represents a 32-bit or 64-bit integer value, depending on the number of bits required
+to represent the value. E.g. `x = 123` is represented as a 32-bit integer using `java.lang.Integer`
+whereas `y = 4_000_000_000` is represented as a 64-bit integer using `java.lang.Long`. Binary
+arithmetic operators operating on two `int` values where one uses 32 bits and the other uses 64 bits
+results in the 32-bit value being promoted to 64 bits similar to the promotion of `int` to `long` in
+Java.  A Pyjinn numeric value can be cast to a 32-bit integer value equivalent to Java `int` or
+`Integer` using the Pyjinn built-in function `JavaInt(...)`.
+
+Pyjinn `float` is a 64-bit double-precision floating point number, equivalent to Python `float` and
+Java `double`.  A Pyjinn numeric value can be cast to a 32-bit single-precision floating point value
+equivalent to Java `float` or `java.lang.Float` using the Pyjinn built-in function `JavaFloat(...)`.
+
+In binary arithmetic operations involving a `float` and an `int` in Pyjinn, the `int` is
+automatically converted to `float`.
+
+Similar to Java, Pyjinn supports the following numeric conversions when passed to a Java method:
+
+- Pyjinn `int` with a 32-bit value is implicitly converted to Java `int`, `long`, `float`, or `double`
+- Pyjinn `int` with a 64-bit value is implicitly converted to Java `long`, `float`, or `double`
+- Pyjinn `float` is implicitly converted to Java `float` or `double`
+
+Note that Java `double` cannot be passed directly to a Java method expecting `float`, but Pyjinn
+`float` (which is equivalent to Java `double`) can be passed to a Java method expecting `float` as a
+convenience.
+
 
 #### Strings
 
@@ -668,13 +722,13 @@ Language features currently **NOT** supported by Pyjinn:
   - `__eq__(value) -> bool`
   - `__ne__(value) -> bool`
   - `__len__() -> int`
-  - `__getitem__(key)`
+  - `__getitem__(key) -> Any`
   - `count(value) -> int`
   - `index(value) -> int`
 
 #### list
 
-- `class list` (runtime type is `org.pyjinn.interpreter.Script.PyList`)
+- `class list` (runtime type is `org.pyjinn.interpreter.Script.PyjList`)
   - `__add__(value) -> list`
   - `__contains__(key) -> bool`
   - `__delitem__(key)`
@@ -682,7 +736,7 @@ Language features currently **NOT** supported by Pyjinn:
   - `__ne__(value) -> bool`
   - `__iadd__(value)`
   - `__len__() -> int`
-  - `__getitem__(key)`
+  - `__getitem__(key) -> Any`
   - `__setitem__(key, value)`
   - `append(object)`
   - `clear()`
@@ -691,28 +745,49 @@ Language features currently **NOT** supported by Pyjinn:
   - `extend(iterable)`
   - `index(value) -> int`
   - `insert(index: int, object)`
-  - `pop()`
-  - `pop(index: int)`
+  - `pop() -> Any`
+  - `pop(index: int) -> Any`
   - `remove(value)`
   - `reverse()`
   - `sort()`
 
 #### dict
 
-- `class dict` (runtime type is `org.pyjinn.interpreter.Script.PyDict`)
+- `class dict` (runtime type is `org.pyjinn.interpreter.Script.PyjDict`)
   - `items() -> iterable`
   - `keys() -> iterable`
   - `values() -> iterable`
   - `__len__() -> int`
-  - `get(key)`
-  - `get(key, default_value)`
-  - `setdefault(key)`
-  - `setdefault(key, default_value)`
-  - `__getitem__(key)`
+  - `get(key) -> Any`
+  - `get(key, default_value) -> Any`
+  - `setdefault(key) -> Any`
+  - `setdefault(key, default_value) -> Any`
+  - `__getitem__(key) -> Any`
   - `__setitem__(key, value)`
   - `__contains__(key) -> bool`
   - `__delitem__(key)`
 
+#### set
+
+- `class set` (runtime type is `org.pyjinn.interpreter.Script.PyjSet`)
+  - `__contains__(element) -> bool`
+  - `__len__() -> int`
+  - `add(element)`
+  - `clear()`
+  - `discard(element)`
+  - `pop() -> Any`
+  - `update(iterable)`
+  - `difference(iterable) -> set`
+  - `difference_update(iterable)`
+  - `intersection(iterable) -> set`
+  - `intersection_update(iterable)`
+  - `symmetric_difference(iterable) -> set`
+  - `symmetric_difference_update(iterable)`
+  - `union(iterable) -> set`
+  - `copy() -> set`
+  - `isdisjoint(iterable) -> bool`
+  - `issubset(iterable) -> bool`
+  - `issuperset(iterable) -> bool`
 
 #### Built-in functions
 
@@ -754,7 +829,7 @@ Status of built-in function support in Pyjinn:
 - `id()` - no
 - `input()` - no
 - `int()` - yes
-- `isinstance()` - no
+- `isinstance()` - yes
 - `issubclass()` - no
 - `iter()` - no
 - `len()` - yes (supported for both Python-compatible types and Java iterable types)
@@ -776,7 +851,7 @@ Status of built-in function support in Pyjinn:
 - `repr()` - no
 - `reversed()` - no
 - `round()` - yes
-- `set()` - no
+- `set()` - yes
 - `setattr()` - no
 - `slice()` - no
 - `sorted()` - no
