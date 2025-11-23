@@ -149,6 +149,7 @@ def _find_java_member(clss, name: str):
 
 with script_loop:
   Object_id = _find_java_class("java.lang.Object")
+  Object_equals_id = _find_java_member(Object_id, "equals")
   Object_getClass_id = _find_java_member(Object_id, "getClass")
 
   Objects_id = _find_java_class("java.util.Objects")
@@ -176,10 +177,6 @@ with script_loop:
   Float_id = _find_java_class("java.lang.Float")
   Double_id = _find_java_class("java.lang.Double")
 
-  Array_id = _find_java_class("java.lang.reflect.Array")
-  Array_get_id = _find_java_member(Array_id, "get")
-  Array_getLength_id = _find_java_member(Array_id, "getLength")
-
   Iterable_id = _find_java_class("java.lang.Iterable")
 
   Collection_id = _find_java_class("java.util.Collection")
@@ -189,8 +186,9 @@ with script_loop:
   # Pyjinn built-in types:
   PyjObject_id = _find_java_class("org.pyjinn.interpreter.Script$PyjObject")
   PyjObject_callMethod_id = _find_java_member(PyjObject_id, "callMethod")
-  PyjObject_type_id = _find_java_member(PyjObject_id, "type")
+  PyjObject_class_id = _find_java_member(PyjObject_id, "__class__")
   PyjObject_dict_id = _find_java_member(PyjObject_id, "__dict__")
+  PyjObject_UNDEFINED_RESULT_id = _find_java_member(PyjObject_id, "UNDEFINED_RESULT")
   PyjClass_id = _find_java_class("org.pyjinn.interpreter.Script$PyjClass")
   PyjClass_name_id = _find_java_member(PyjClass_id, "name")
   PyjDict_id = _find_java_class("org.pyjinn.interpreter.Script$PyjDict")
@@ -207,6 +205,8 @@ with script_loop:
   KeywordArgs_id = _find_java_class("org.pyjinn.interpreter.Script$KeywordArgs")
   KeywordArgs_ctor_id = java_ctor(KeywordArgs_id)
   KeywordArgs_put_id = _find_java_member(KeywordArgs_id, "put")
+
+  UNDEFINED_RESULT = java_access_field(_null_id, PyjObject_UNDEFINED_RESULT_id)
 
 @dataclass
 class Float:
@@ -355,27 +355,22 @@ class JavaObject:
       return a `JavaBoundMember` equivalent to the Java expression
       `this::methodName`.
     """
+    # TODO(maxuser): Cache field names per class name at script level (not per class ID which is not 1:1 with Java class).
+    if name in java_field_names(self.get_class_id()):
+      binding = JavaBoundMember(
+          self.get_class_id(), self.id, name, ref=self.ref, script_env=self.script_env)
+      try:
+        field = java_access_field(self.id, binding.member_id)
+        return from_java_handle(field)
+      except Exception as e:
+        debug_log(f"java.py: caught exception accessing field `{name}`: {e}")
+        return binding
+
     # TODO(maxuser): Consider caching is_pyjinn_object.
     with script_loop:
       is_pyjinn_object = from_java_handle(
           java_call_method(PyjObject_id, Class_isAssignableFrom_id, self.get_class_id()))
     if is_pyjinn_object:
-      def call_pyjinn_method(*args):
-        with AutoReleasePool() as auto:
-          params = create_java_object_array(args)
-          result = auto(java_call_method(
-                  self.id,
-                  PyjObject_callMethod_id,
-                  self.script_env,
-                  auto(java_string(name)),
-                  params.id))
-          if from_java_handle(java_call_method(_null_id, Array_getLength_id, result)) > 0:
-            return from_java_handle(java_call_method(_null_id, Array_get_id, result, auto(java_int(0))))
-          else:
-            pyj_type = auto(java_access_field(self.id, PyjObject_type_id))
-            type_name = from_java_handle(java_access_field(pyj_type, PyjClass_name_id))
-            raise TypeError(f"Pyjinn object of type '{type_name}' has no member named '{name}'")
-
       # First check if Pyjinn object has a field with the given name.
       with AutoReleasePool() as auto:
         pyj_dict = auto(java_access_field(self.id, PyjObject_dict_id))
@@ -383,24 +378,34 @@ class JavaObject:
         if from_java_handle(java_call_method(pyj_dict, PyjDict_contains_id, jname)):
           return from_java_handle(java_call_method(pyj_dict, PyjDict_get_id, jname))
 
-      # Fall back to a Pyjinn method.
-      # TODO(maxuser): Check that there's a method with the given name, and throw an exception if
-      # there isn't.
+      def call_pyjinn_method(*args):
+        with AutoReleasePool() as auto:
+          # PyjObject::callMethod returns value wrapped in an array of 1 element, or empty array if
+          # no matching method:
+          # Object[] callMethod(Environment env, String methodName, Object... params)
+          params = create_java_object_array(args)
+          result = java_call_method(
+                  self.id,
+                  PyjObject_callMethod_id,
+                  self.script_env,
+                  auto(java_string(name)),
+                  params.id)
+          # Call as UNDEFINED_RESULT.equals(result) because UNDEFINED_RESULT is not null but result
+          # may be null.
+          if not from_java_handle(java_call_method(UNDEFINED_RESULT, Object_equals_id, result)):
+            return from_java_handle(result)
+          else:
+            # No dynamic PyjObject method found, so fall back to compiled Java method call.
+            java_release(result)
+            binding = JavaBoundMember(
+                self.get_class_id(), self.id, name, ref=self.ref, script_env=self.script_env)
+            return binding(*args)
+
+      # No field with the requested name, so fall back to a Pyjinn method.
       return call_pyjinn_method
-
-    binding = JavaBoundMember(
-        self.get_class_id(), self.id, name, ref=self.ref, script_env=self.script_env)
-
-    # TODO(maxuser): Cache field names per class name at script level (not per class ID which is not 1:1 with Java class).
-    if name not in java_field_names(self.get_class_id()):
-      return binding
-
-    try:
-      field = java_access_field(self.id, binding.member_id)
-      return from_java_handle(field)
-    except Exception as e:
-      debug_log(f"java.py: caught exception accessing field `{name}`: {e}")
-      return binding
+    else:
+      return JavaBoundMember(
+          self.get_class_id(), self.id, name, ref=self.ref, script_env=self.script_env)
 
   def __call__(self, *args, **kwargs):
     """Calls this callable object, if applicable.
