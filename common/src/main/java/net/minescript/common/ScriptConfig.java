@@ -3,6 +3,8 @@
 
 package net.minescript.common;
 
+import static java.util.stream.Collectors.joining;
+
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
@@ -15,9 +17,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -30,11 +32,11 @@ public class ScriptConfig {
 
   private boolean escapeCommandDoubleQuotes = System.getProperty("os.name").startsWith("Windows");
 
-  private ImmutableList<Path> commandPath =
-      ImmutableList.of(Paths.get("system", "exec"), Paths.get(""));
+  private ImmutableList<FilePattern> commandPath =
+      ImmutableList.of(FilePattern.of("system").and("exec"), FilePattern.of(""));
 
-  private ImmutableList<Path> pyjinnImportPath =
-      ImmutableList.of(Paths.get("system", "pyj"), Paths.get(""));
+  private ImmutableList<FilePattern> pyjinnImportPath =
+      ImmutableList.of(FilePattern.of("system").and("pyj"), FilePattern.of(""));
 
   private String minescriptCommandPathEnvVar;
 
@@ -51,11 +53,10 @@ public class ScriptConfig {
 
     minescriptCommandPathEnvVar =
         "MINESCRIPT_COMMAND_PATH="
-            + String.join(
-                File.pathSeparator,
-                commandPath.stream()
-                    .map(p -> minescriptDir.resolve(p).toString())
-                    .collect(Collectors.toList()));
+            + commandPath.stream()
+                .flatMap(fp -> fp.resolvePaths().stream())
+                .map(p -> minescriptDir.resolve(p).toString())
+                .collect(joining(File.pathSeparator));
 
     // Configure ".pyj" as the built-in file type for Pyjinn scripts.
     var commandPattern = ImmutableList.of("{command}", "{args}");
@@ -64,19 +65,18 @@ public class ScriptConfig {
         new CommandConfig(".pyj", commandPattern, environmentVars), /* createsSubprocess= */ false);
   }
 
-  public void setCommandPath(List<Path> commandPath) {
+  public void setCommandPath(List<FilePattern> commandPath) {
     this.commandPath = ImmutableList.copyOf(commandPath);
 
     minescriptCommandPathEnvVar =
         "MINESCRIPT_COMMAND_PATH="
-            + String.join(
-                File.pathSeparator,
-                this.commandPath.stream()
-                    .map(p -> minescriptDir.resolve(p).toString())
-                    .collect(Collectors.toList()));
+            + this.commandPath.stream()
+                .flatMap(fp -> fp.resolvePaths().stream())
+                .map(p -> minescriptDir.resolve(p).toString())
+                .collect(joining(File.pathSeparator));
   }
 
-  public void setPyjinnImportPath(List<Path> pyjinnImportPath) {
+  public void setPyjinnImportPath(List<FilePattern> pyjinnImportPath) {
     this.pyjinnImportPath = ImmutableList.copyOf(pyjinnImportPath);
   }
 
@@ -88,19 +88,18 @@ public class ScriptConfig {
     return escapeCommandDoubleQuotes;
   }
 
-  public ImmutableList<Path> commandPath() {
+  public ImmutableList<FilePattern> commandPath() {
     return commandPath;
   }
 
-  public ImmutableList<Path> pyjinnImportPath() {
+  public ImmutableList<FilePattern> pyjinnImportPath() {
     return pyjinnImportPath;
   }
 
   // Add to `matches` all the files in `commandDir` that match `prefix`.
   private void addMatchingFilesInDir(
-      String prefix, Path prefixPath, Path commandDir, List<String> matches) {
-    Path resolvedCommandDir = minescriptDir.resolve(commandDir);
-    Path resolvedDir = resolvedCommandDir;
+      Path prefixPath, boolean prefixEndsWithDirSeparator, Path commandDir, List<String> matches) {
+    Path resolvedDir = commandDir;
 
     // Iterate all but the last component of the prefix path to walk the path within commandDir.
     for (int i = 0; i < prefixPath.getNameCount() - 1; ++i) {
@@ -117,7 +116,7 @@ public class ScriptConfig {
     // component of the path is the component before the final separator. Treat the last name
     // component as empty instead.
     final String prefixFileName;
-    if (prefix.length() > 1 && prefix.endsWith(File.separator)) {
+    if (prefixEndsWithDirSeparator) {
       resolvedDir = resolvedDir.resolve(prefixPath.getFileName());
       if (resolvedDir == null || !Files.isDirectory(resolvedDir)) {
         return;
@@ -141,29 +140,25 @@ public class ScriptConfig {
             if (Files.isDirectory(path)) {
               if (fileName.startsWith(prefixFileName)) {
                 try {
-                  String relativeName = resolvedCommandDir.relativize(path).toString();
-                  if (!(commandDir.toString().isEmpty() && ignoreDirs.contains(relativeName))) {
+                  String relativeName = commandDir.relativize(path).toString();
+                  if (!(commandDir.equals(minescriptDir) && ignoreDirs.contains(relativeName))) {
                     matches.add(relativeName + File.separator);
                   }
                 } catch (IllegalArgumentException e) {
-                  LOGGER.info(
-                      "Dir completion: resolvedCommandDir: {}  path: {}", resolvedCommandDir, path);
+                  LOGGER.info("Dir completion: commandDir: {}  path: {}", commandDir, path);
                   throw e;
                 }
               }
             } else {
               if (fileExtensions.contains(getFileExtension(fileName))) {
                 try {
-                  String scriptName =
-                      removeFileExtension(resolvedCommandDir.relativize(path).toString());
-                  if (scriptName.startsWith(prefix) && !matches.contains(scriptName)) {
+                  String scriptName = removeFileExtension(commandDir.relativize(path).toString());
+                  if (scriptName.startsWith(prefixPath.toString())
+                      && !matches.contains(scriptName)) {
                     matches.add(scriptName);
                   }
                 } catch (IllegalArgumentException e) {
-                  LOGGER.info(
-                      "File completion: resolvedCommandDir: {}  path: {}",
-                      resolvedCommandDir,
-                      path);
+                  LOGGER.info("File completion: commandDir: {}  path: {}", commandDir, path);
                   throw e;
                 }
               }
@@ -191,8 +186,13 @@ public class ScriptConfig {
       }
     }
 
-    for (Path commandDir : commandPath) {
-      addMatchingFilesInDir(prefix, prefixPath, commandDir, matches);
+    var minescriptPattern = FilePattern.of(minescriptDir);
+    boolean prefixEndsWithDirSeparator =
+        prefix.length() > 1 && (prefix.endsWith(File.separator) || prefix.endsWith("/"));
+    for (FilePattern commandDir : commandPath) {
+      for (Path resolvedCommandPath : minescriptPattern.and(commandDir).resolvePaths()) {
+        addMatchingFilesInDir(prefixPath, prefixEndsWithDirSeparator, resolvedCommandPath, matches);
+      }
     }
 
     return matches;
@@ -244,11 +244,15 @@ public class ScriptConfig {
   }
 
   public Path resolveCommandPath(String command) {
-    for (Path commandDir : commandPath) {
+    for (FilePattern commandDir : commandPath) {
       for (String fileExtension : fileExtensions) {
-        Path path = minescriptDir.resolve(commandDir).resolve(command + fileExtension);
-        if (Files.exists(path)) {
-          return path;
+        Optional<Path> resolvedPath =
+            FilePattern.of(minescriptDir)
+                .and(commandDir)
+                .and(command + fileExtension)
+                .resolvePath();
+        if (resolvedPath.isPresent()) {
+          return resolvedPath.get();
         }
       }
     }

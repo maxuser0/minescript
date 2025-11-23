@@ -380,12 +380,12 @@ public class Config {
 
       case "command_path":
         return scriptConfig.commandPath().stream()
-            .map(Path::toString)
+            .map(FilePattern::toString)
             .collect(joining(File.pathSeparator));
 
       case "pyjinn_import_path":
         return scriptConfig.pyjinnImportPath().stream()
-            .map(Path::toString)
+            .map(FilePattern::toString)
             .collect(joining(File.pathSeparator));
 
       case "max_commands_per_cycle":
@@ -513,8 +513,8 @@ public class Config {
       case "command_path":
         var commandPath =
             Arrays.stream(value.split(Pattern.quote(File.pathSeparator), -1))
-                .map(Paths::get)
-                .collect(Collectors.toList());
+                .map(FilePattern::of)
+                .toList();
         scriptConfig.setCommandPath(commandPath);
         reportInfo(out, "Setting command_path to {}", commandPath);
         break;
@@ -522,8 +522,8 @@ public class Config {
       case "pyjinn_import_path":
         var pyjinnImportPath =
             Arrays.stream(value.split(Pattern.quote(File.pathSeparator), -1))
-                .map(Paths::get)
-                .collect(Collectors.toList());
+                .map(FilePattern::of)
+                .toList();
         scriptConfig.setPyjinnImportPath(pyjinnImportPath);
         reportInfo(out, "Setting pyjinn_import_path to {}", pyjinnImportPath);
         break;

@@ -5,7 +5,6 @@ package net.minescript.common;
 
 import com.google.common.collect.ImmutableList;
 import com.google.gson.JsonElement;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
@@ -209,7 +208,7 @@ public class PyjinnScript {
     return job;
   }
 
-  private record MinescriptModuleHandler(ImmutableList<Path> pyjinnImportPath)
+  private record MinescriptModuleHandler(ImmutableList<FilePattern> pyjinnImportPath)
       implements Script.ModuleHandler {
     @Override
     public void onParseImport(Script.Module module, Script.Import importModules) {
@@ -238,9 +237,11 @@ public class PyjinnScript {
     @Override
     public Path getModulePath(String name) {
       Path relativeImportPath = Script.ModuleHandler.super.getModulePath(name);
-      for (Path dir : pyjinnImportPath) {
-        Path path = minescriptDir.resolve(dir).resolve(relativeImportPath);
-        if (Files.exists(path)) {
+      for (FilePattern dir : pyjinnImportPath) {
+        Optional<Path> resolvedPath =
+            FilePattern.of(minescriptDir).and(dir).and(relativeImportPath).resolvePath();
+        if (resolvedPath.isPresent()) {
+          Path path = resolvedPath.get();
           LOGGER.info("Resolved import of {} to {}", name, path);
           return path;
         }

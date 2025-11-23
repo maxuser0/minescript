@@ -1382,8 +1382,8 @@ public class Minescript {
         systemMessageQueue.logUserInfo("");
         systemMessageQueue.logUserInfo("Minescript command directories:");
         Path minescriptDir = Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR);
-        for (Path commandDir : config.scriptConfig().commandPath()) {
-          Path path = minescriptDir.resolve(commandDir);
+        for (FilePattern commandDir : config.scriptConfig().commandPath()) {
+          var path = FilePattern.of(minescriptDir).and(commandDir);
           systemMessageQueue.logUserInfo("  {}", path);
         }
         if (!command[0].equals("ls")) {
