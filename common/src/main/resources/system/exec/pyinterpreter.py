@@ -3,12 +3,12 @@
 
 r"""interpreter v5.0 distributed via Minescript jar file
 
-A Python REPL interpreter in the Minecraft chat with
+A Python REPL interpreter in the Minecraft chat using
 Java reflection.
 
 If a file is found in any of the directories of the config
 variable `command_path` from `config.txt` with the filename
-`.interpreter_init.py`, that script is loaded during startup
+`.pyinterpreter_init.py`, that script is loaded during startup
 of the interpreter.
 
 When the interpreter launches, the prompt ">>>" appears
@@ -248,19 +248,19 @@ with EventQueue() as q:
 
     python_dirs = os.environ["MINESCRIPT_COMMAND_PATH"].split(os.pathsep)
     for dirname in python_dirs:
-      init_filename = os.path.join(dirname, ".interpreter_init.py")
+      init_filename = os.path.join(dirname, ".pyinterpreter_init.py")
       if os.path.exists(init_filename):
         with open(init_filename, "r") as init_file:
           builtins.exec(init_file.read())
         del init_file
-        print("Loaded .interpreter_init.py", file=sys.stderr)
+        print("Loaded .pyinterpreter_init.py", file=sys.stderr)
         break
 
     while True:
       try:
-        debug_log("interpreter.py: Waiting for event queue...")
+        debug_log("pyinterpreter.py: Waiting for event queue...")
         event = q.get()
-        debug_log(f"interpreter.py: Got event of type `{event.type}`")
+        debug_log(f"pyinterpreter.py: Got event of type `{event.type}`")
         if event.type == EventType.OUTGOING_CHAT_INTERCEPT:
           message = event.message
           with render_loop:
@@ -295,6 +295,6 @@ with EventQueue() as q:
         log("Unknown exception")
         echo_json({"text": "Unknown exception", "color": "red"})
 
-    debug_log("interpreter.py:", "Exited `while` loop")
+    debug_log("pyinterpreter.py:", "Exited `while` loop")
 
-debug_log("interpreter.py:", "Exited EventQueue")
+debug_log("pyinterpreter.py:", "Exited EventQueue")
