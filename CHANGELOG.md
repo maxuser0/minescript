@@ -7,6 +7,40 @@
 - To set up Fabric mappings for Python and Pyjinn scripts see
   [minescript.net/mappings](https://minescript.net/mappings)
 
+## Minescript 5.0b9
+
+- Fix tab completion for overlapping command names ([5930d92](https://github.com/maxuser0/minescript/commit/5930d921177c5615fc40d61105e5fa73954a5653))
+- Support globs in command_path, pyjinn_import_path ([bce4a43](https://github.com/maxuser0/minescript/commit/bce4a4357344c170e0429499c48a970d34267bea))
+- Support pyjinn_import_path config variable ([2dc6319](https://github.com/maxuser0/minescript/commit/2dc6319ebf44350c3d0b1e867e978d1c375101cb))
+- Update PyjObject.callMethod -> UNDEFINED_RESULT ([07a42e5](https://github.com/maxuser0/minescript/commit/07a42e53487693429c7cb7c177e838d6dba8de2b))
+- Pyjinn tuple/list/dict/set as PyjObject subclasses ([459ea27](https://github.com/maxuser0/minescript/commit/459ea276ed9739c694af86cbca73d8d2593cb8e1))
+- Update Pyjinn docs for set, JavaSet, and others ([abf2ded](https://github.com/maxuser0/minescript/commit/abf2dede02e76df9fe5f434f2561f52ce7161c77))
+- Rename pyinterpreter config .pyinterpreter_init.py ([838240a](https://github.com/maxuser0/minescript/commit/838240a0070d5f6fb6ddc9106b6229c2ba2d04ba))
+- Add nominal defs of Pyjinn built-ins for IDEs ([38889f1](https://github.com/maxuser0/minescript/commit/38889f1f47586e00e06d282cdda0acbb895d1d9f))
+- Update documentation of Pyjinn numeric types ([20ec3f9](https://github.com/maxuser0/minescript/commit/20ec3f945ff001ff1b3cc91c23a4f67402a80f2a))
+- Document Pyjinn numeric types and conversions ([67a7a1d](https://github.com/maxuser0/minescript/commit/67a7a1d15ed1941fa0e0e76bdb15bdf10b4d2543))
+- Update Minescript to 5.0b9 and Pyjinn to 0.12 ([8819a6f](https://github.com/maxuser0/minescript/commit/8819a6f3a5050583662f93764602d20639cc17d2))
+
+### Pyjinn 0.12
+
+- Support `set` operators: `<, <=, >, >=` ([33996c0](https://github.com/maxuser0/pyjinn/commit/33996c0d15b567e94c41145c82161539fc9f8793))
+- Add operator overloading for user-defined classes ([c834c3e](https://github.com/maxuser0/pyjinn/commit/c834c3e6624bf6a721645ef4edd69ea0a3604281))
+- Simplify PyjObject::callMethod -> UNDEFINED_RESULT ([2083748](https://github.com/maxuser0/pyjinn/commit/20837485c7741c3ec91a2d910ff15b40e52d42e4))
+- PyjTuple/PyjList/PyjDict/PyjSet subclass PyjObject ([2e3f63a](https://github.com/maxuser0/pyjinn/commit/2e3f63ac69bcd4c9fa6cf6b5d62ccfc6c425b698))
+- Implement Pyjinn set ([98f5838](https://github.com/maxuser0/pyjinn/commit/98f58389a6f92981bf297d002224fa7ccd9eb5a7))
+- Fix comparisons with None on lhs: None == "foo" ([0d74a12](https://github.com/maxuser0/pyjinn/commit/0d74a12c62fcbb57810c465b8442191bb22ee25c))
+- Implement walrus operator, e.g. `(x := 1)` ([8a57b14](https://github.com/maxuser0/pyjinn/commit/8a57b14f61dbef896b46bc33492371753d2cffd4))
+- Prevent PyjInt from being directly instantiated ([70f8d2d](https://github.com/maxuser0/pyjinn/commit/70f8d2d4c4ec890969f02d740617f32756f8c2ae))
+- Default ctors: float, int, str, JavaFloat, JavaInt ([181fb4f](https://github.com/maxuser0/pyjinn/commit/181fb4f8d67c757ad40d73e9c37956dab40596c6))
+- Make Pyjinn int act as superclass of Java int/long ([f370dcc](https://github.com/maxuser0/pyjinn/commit/f370dcc376431f6d4c1b74ef759e500f7978fb54))
+- Make JavaFloat an instance of JavaClass ([2179e58](https://github.com/maxuser0/pyjinn/commit/2179e5882eabbf6e24659c8649f1fdde14ac6d13))
+- Refactor interpreter tests to AST vs Script tests ([2f9ea64](https://github.com/maxuser0/pyjinn/commit/2f9ea64036b8eb10cbb1c8ef6aeeaeb0b07dc36a))
+- Support pow operator: `x ** y` ([aade911](https://github.com/maxuser0/pyjinn/commit/aade91164d5ac4c304fa44ab65aebc1ede18b035))
+- Support 2nd arg to int(value, base=10) ([057d51c](https://github.com/maxuser0/pyjinn/commit/057d51cf42971a05dd9bb7fc3d242cca32af48fe))
+- Add JavaInt(), JavaFloat(), float auto-conversion ([f9443a6](https://github.com/maxuser0/pyjinn/commit/f9443a6f0d81ab4c6bff2020d6d4237ff79e6420))
+- Support comparison operators for tuple and list ([d40ed47](https://github.com/maxuser0/pyjinn/commit/d40ed4747945cae029221567947ab33029898339))
+- Update Pyjinn version to 0.12 ([ed4d968](https://github.com/maxuser0/pyjinn/commit/ed4d968001c1a9e3f636a91af313694ddfc7c20f))
+
 ## Minescript 5.0b8
 
 - Support render event names with uppercase chars ([99885f3](https://github.com/maxuser0/minescript/commit/99885f3cb3b5220791c822a7785a9a21209eb142))
