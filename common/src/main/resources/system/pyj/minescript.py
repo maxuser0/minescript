@@ -41,6 +41,7 @@ _System = JavaClass("java.lang.System")
 Minescript = JavaClass("net.minescript.common.Minescript")
 BlockPack = JavaClass("net.minescript.common.pyjinn.BlockPack")
 BlockPacker = JavaClass("net.minescript.common.pyjinn.BlockPacker")
+Script = JavaClass("org.pyjinn.interpreter.Script")
 
 def __mcall__(name: str, args):
   return Minescript.call(__script__.vars["job"], 0, name, JavaList(args))
@@ -771,6 +772,20 @@ def set_interval(callback: Callable[[], None], timer_millis: int, *args, **kwarg
 
 
 def set_timeout(callback: Callable[[], None], timer_millis: int, *args, **kwargs) -> int:
+  """Sets a timeout for a callback to be executed after a specified amount of time.
+
+  Args:
+    callback: the callback function to execute; if callback(*args, **kwargs) returns a generator,
+      yielded values are interpreted as the time in milliseconds to delay until resuming
+    timer_millis: the amount of time in milliseconds to wait before executing the callback
+    *args: additional arguments to pass to the callback
+    **kwargs: additional keyword arguments to pass to the callback
+
+  Returns:
+    The ID of the timeout listener.
+
+  Since: v5.0
+  """
   listener_id = -1
   activation_time = _System.currentTimeMillis() + timer_millis
 
@@ -779,7 +794,17 @@ def set_timeout(callback: Callable[[], None], timer_millis: int, *args, **kwargs
     now = _System.currentTimeMillis()
     if now >= activation_time:
       try:
-        callback(*args, **kwargs)
+        if isinstance(callback, Script.BoundFunction) and callback.functionDef().hasYieldExpression():
+          gen = callback(*args, **kwargs)
+          next_time = next(gen)
+          set_timeout(gen, next_time)
+        elif isinstance(callback, Script.Generator):
+          next_time = next(callback)
+          set_timeout(callback, next_time)
+        else:
+          callback(*args, **kwargs)
+      except StopIteration:
+        pass
       finally:
         remove_event_listener(listener_id)
 
