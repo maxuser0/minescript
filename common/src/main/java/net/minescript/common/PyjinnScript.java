@@ -252,7 +252,7 @@ public class PyjinnScript {
     }
 
     @Override
-    public void onExecModule(Script.Module module) {
+    public void onCompileModule(Script.Module module) {
       LOGGER.info("Running Minescript module handler for Pyjinn module: {}", module.name());
       // The canonical module name is the filename relative to the Minecraft dir without the ".py"
       // extension and dir separators replaced with dots.
@@ -321,6 +321,7 @@ public class PyjinnScript {
 
     JsonElement scriptAst = PyjinnParser.parse(scriptFilename, scriptCode);
     script.parse(scriptAst, scriptFilename);
+    script.compile();
     return script;
   }
 
@@ -358,7 +359,7 @@ public class PyjinnScript {
               : new Script.KeywordArgs();
 
       try {
-        var script = (Script) env.get("__script__");
+        Script script = env.script();
         var job = (PyjinnJob) script.vars.__getitem__("job");
         long listenerId = job.nextFcallId++;
 
@@ -390,7 +391,7 @@ public class PyjinnScript {
       expectNumParams(params, 1);
       if (params[0] instanceof Number listenerNum) {
         try {
-          var script = (Script) env.get("__script__");
+          Script script = env.script();
           var job = (PyjinnJob) script.vars.__getitem__("job");
           Long listenerId = listenerNum.longValue();
           job.cancelOperation(listenerId);
