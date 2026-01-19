@@ -186,7 +186,12 @@ public class PyjinnScript {
       Runnable doneCallback)
       throws Exception {
     var script =
-        loadScript(boundCommand.command(), scriptCode, config.scriptConfig(), nameMappings);
+        loadScript(
+            boundCommand.command(),
+            scriptCode,
+            config.scriptConfig().pyjinnImportPath(),
+            nameMappings,
+            config.compilePyjinn());
     var job =
         new PyjinnJob(
             jobId,
@@ -208,7 +213,8 @@ public class PyjinnScript {
     return job;
   }
 
-  private record MinescriptModuleHandler(ImmutableList<FilePattern> pyjinnImportPath)
+  private record MinescriptModuleHandler(
+      ImmutableList<FilePattern> pyjinnImportPath, boolean compilePyjinn)
       implements Script.ModuleHandler {
     @Override
     public void onParseImport(Script.Module module, Script.Import importModules) {
@@ -253,6 +259,19 @@ public class PyjinnScript {
 
     @Override
     public void onCompileModule(Script.Module module) {
+      if (compilePyjinn) {
+        addMinescriptBuiltins(module);
+      }
+    }
+
+    @Override
+    public void onExecModule(Script.Module module) {
+      if (!compilePyjinn) {
+        addMinescriptBuiltins(module);
+      }
+    }
+
+    private void addMinescriptBuiltins(Script.Module module) {
       LOGGER.info("Running Minescript module handler for Pyjinn module: {}", module.name());
       // The canonical module name is the filename relative to the Minecraft dir without the ".py"
       // extension and dir separators replaced with dots.
@@ -279,7 +298,11 @@ public class PyjinnScript {
   }
 
   public static Script loadScript(
-      String[] argv, String scriptCode, ScriptConfig scriptConfig, NameMappings nameMappings)
+      String[] argv,
+      String scriptCode,
+      ImmutableList<FilePattern> pyjinnImportPath,
+      NameMappings nameMappings,
+      boolean compilePyjinn)
       throws Exception {
     final String scriptFilename;
     if (argv[0].toLowerCase().endsWith(".pyj")) {
@@ -288,7 +311,7 @@ public class PyjinnScript {
       scriptFilename = argv[0] + ".pyj";
     }
 
-    var moduleHandler = new MinescriptModuleHandler(scriptConfig.pyjinnImportPath());
+    var moduleHandler = new MinescriptModuleHandler(pyjinnImportPath, compilePyjinn);
     var script =
         new Script(
             scriptFilename,
@@ -321,7 +344,9 @@ public class PyjinnScript {
 
     JsonElement scriptAst = PyjinnParser.parse(scriptFilename, scriptCode);
     script.parse(scriptAst, scriptFilename);
-    script.compile();
+    if (compilePyjinn) {
+      script.compile();
+    }
     return script;
   }
 

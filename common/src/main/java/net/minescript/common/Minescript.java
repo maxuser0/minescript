@@ -882,8 +882,9 @@ public class Minescript {
     return PyjinnScript.loadScript(
         scriptCommand.toArray(String[]::new),
         scriptCode,
-        config.scriptConfig(),
-        mappingsLoader.get());
+        config.scriptConfig().pyjinnImportPath(),
+        mappingsLoader.get(),
+        config.compilePyjinn());
   }
 
   private static boolean checkMinescriptDir() {
