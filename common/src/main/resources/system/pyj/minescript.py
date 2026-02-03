@@ -42,6 +42,9 @@ Minescript = JavaClass("net.minescript.common.Minescript")
 BlockPack = JavaClass("net.minescript.common.pyjinn.BlockPack")
 BlockPacker = JavaClass("net.minescript.common.pyjinn.BlockPacker")
 Script = JavaClass("org.pyjinn.interpreter.Script")
+_Coroutine = JavaClass("org.pyjinn.interpreter.Coroutine")
+_RuntimeException = JavaClass("java.lang.RuntimeException")
+
 
 def __mcall__(name: str, args):
   return Minescript.call(__script__.vars["job"], 0, name, JavaList(args))
@@ -775,8 +778,7 @@ def set_timeout(callback: Callable[[], None], timer_millis: int, *args, **kwargs
   """Sets a timeout for a callback to be executed after a specified amount of time.
 
   Args:
-    callback: the callback function to execute; if callback(*args, **kwargs) returns a generator,
-      yielded values are interpreted as the time in milliseconds to delay until resuming
+    callback: the callback function to execute
     timer_millis: the amount of time in milliseconds to wait before executing the callback
     *args: additional arguments to pass to the callback
     **kwargs: additional keyword arguments to pass to the callback
@@ -794,17 +796,7 @@ def set_timeout(callback: Callable[[], None], timer_millis: int, *args, **kwargs
     now = _System.currentTimeMillis()
     if now >= activation_time:
       try:
-        if isinstance(callback, Script.BoundFunction) and callback.functionDef().hasYieldExpression():
-          gen = callback(*args, **kwargs)
-          next_time = next(gen)
-          set_timeout(gen, next_time)
-        elif isinstance(callback, Script.Generator):
-          next_time = next(callback)
-          set_timeout(callback, next_time)
-        else:
-          callback(*args, **kwargs)
-      except StopIteration:
-        pass
+        callback(*args, **kwargs)
       finally:
         remove_event_listener(listener_id)
 
@@ -921,3 +913,180 @@ def combine_rotations(rot1: Rotation, rot2: Rotation) -> Rotation:
       rot1[6] * rot2[0] + rot1[7] * rot2[3] + rot1[8] * rot2[6],
       rot1[6] * rot2[1] + rot1[7] * rot2[4] + rot1[8] * rot2[7],
       rot1[6] * rot2[2] + rot1[7] * rot2[5] + rot1[8] * rot2[8])
+
+@dataclass
+class _SleepRequest:
+  seconds: float
+
+@dataclass
+class _EventRequest:
+  timeout_seconds: float = None
+
+class EventLoop:
+  """An event loop for running asynchronous code that can react to events.
+
+  The event loop allows scripts to wait for events or sleep without
+  blocking the main thread, using async/await.
+
+  Since: v5.0
+  """
+
+  def __init__(self):
+    """Initializes a new EventLoop instance."""
+
+    self._listeners = dict()  # Map from event name to event listener ID.
+    self._event_request = None  # EventRequest
+    self._event_timeout_id = None  # int
+    self._queued_events = []  # Events queued while EventLoop is sleeping.
+    self._async_handler = None  # Async function supplied by user via EventLoop.run().
+
+  def run(self, async_function):
+    """Runs an asynchronous function within this event loop.
+
+    Args:
+      async_function: an async function that takes this `EventLoop` instance as its
+          only argument and returns a coroutine.
+
+    Raises:
+      RuntimeException: if `run()` has already been called for this event loop,
+          or if `async_function` does not return a coroutine.
+    """
+
+    if self._async_handler is not None:
+      raise _RuntimeException("EventLoop.run() already called for this event loop")
+
+    async_handler = async_function(self)
+    if not isinstance(async_handler, _Coroutine):
+      raise _RuntimeException(
+          f"EventLoop.run() expected an async function that returns a coroutine but got {type(async_handler)}")
+
+    self._async_handler = async_handler
+
+    try:
+      yielded_value = self._async_handler.send(None)
+    except StopIteration as stop:
+      return self._stop()
+    except Exception as e:
+      Minescript.reportJobException(__script__.vars["job"], e)
+      return self._stop()
+
+    self._next_loop_iteration(yielded_value)
+
+  def add_listener(self, event_type: str):
+    """Adds a listener for the specified event type.
+
+    Args:
+      event_type: the type of event to listen for (e.g., "chat", "tick", "render").
+
+    Returns:
+      `True` if the listener was successfully added; `False` if a listener for
+      this event type already exists.
+    """
+
+    if event_type in self._listeners:
+      return False
+    else:
+      self._listeners[event_type] = add_event_listener(event_type, self._handle_event)
+      return True
+
+  def remove_listener(self, event_type: str):
+    """Removes the listener for the specified event type.
+
+    Args:
+      event_type: the type of event to remove the listener for.
+
+    Returns:
+      `True` if the listener was successfully removed; `False` if no listener
+      exists for this event type.
+    """
+
+    if event_type in self._listeners:
+      remove_event_listener(self._listeners[event_type])
+      del self._listeners[event_type]
+      return True
+    else:
+      return False
+
+  # asyncio.sleep() returns the option result passed to sleep(), but this sleep() returns
+  # the list of events that fired while sleeping.
+  def sleep(self, seconds: float):
+    """Asynchronously sleeps for the given number of seconds.
+
+    While sleeping, any events that fire will be queued and returned as a list
+    when the sleep finishes.
+
+    Args:
+      seconds: the number of seconds to sleep.
+
+    Returns:
+      A list of events that occurred while sleeping.
+    """
+
+    events = yield _SleepRequest(seconds)
+    return events
+  
+  def event(self, timeout_seconds: float = None):
+    """Asynchronously waits for the next event to occur.
+
+    Args:
+      timeout_seconds: optional maximum time to wait for an event.
+
+    Returns:
+      The event that occurred, or `None` if the timeout was reached.
+    """
+
+    event = yield _EventRequest(timeout_seconds)
+    return event
+  
+  def _handle_event(self, event):
+    if self._event_request is None:
+      self._queued_events.append(event)
+    else:
+      self._event_request = None
+      if self._event_timeout_id is not None:
+        remove_event_listener(self._event_timeout_id)
+        self._event_timeout_id = None
+      try:
+        self._next_loop_iteration(self._async_handler.send(event))
+      except StopIteration as stop:
+        return self._stop()
+      except Exception as e:
+        Minescript.reportJobException(__script__.vars["job"], e)
+        return self._stop()
+
+  def _handle_event_timeout(self):
+    if self._event_request is not None:
+      self._event_request = None
+      try:
+        self._next_loop_iteration(self._async_handler.send(None))
+      except StopIteration as stop:
+        return self._stop()
+      except Exception as e:
+        Minescript.reportJobException(__script__.vars["job"], e)
+        return self._stop()
+
+  def _next_loop_iteration(self, yielded_value):
+    def on_finish_sleep():
+      events = self._queued_events
+      self._queued_events = []
+      try:
+        self._next_loop_iteration(self._async_handler.send(events))
+      except StopIteration as stop:
+        return self._stop()
+      except Exception as e:
+        Minescript.reportJobException(__script__.vars["job"], e)
+        return self._stop()
+
+    if isinstance(yielded_value, _SleepRequest):
+      set_timeout(on_finish_sleep, int(yielded_value.seconds * 1000))
+    elif isinstance(yielded_value, _EventRequest):
+      if yielded_value.timeout_seconds is not None:
+        self._event_timeout_id = set_timeout(
+            self._handle_event_timeout,
+            int(yielded_value.timeout_seconds * 1000))
+      self._event_request = yielded_value
+
+  def _stop(self):
+    for listener_id in self._listeners.values():
+      remove_event_listener(listener_id)
+    self._listeners.clear()
