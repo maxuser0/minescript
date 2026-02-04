@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
+# SPDX-FileCopyrightText: © 2022-2026 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: MIT
 
 # Update tag for Minescript and Minecraft versions in the current branch and
