@@ -31,9 +31,9 @@ Minecraft's Java process without requiring a separate Python installation.
 Externally executed Python scripts continue to be supported. Minescript Python
 scripts and Minescript Pyjinn scripts share the same
 [script APIs](https://minescript.net/docs/#minescript-module), with the
-exception of event handlers. Minescript Python scripts manage their own
-event queue using [EventQueue](https://minescript.net/docs/#eventqueue), whereas
-Minescript Pyjinn scripts use single-threaded event handling inspired by
+exception of event handling. Minescript Python scripts use an event queue
+managed by the [EventQueue](https://minescript.net/docs/#eventqueue) class,
+whereas Minescript Pyjinn scripts use single-threaded event handling inspired by
 JavaScript:
 
 - `add_event_listener(event_type: str, callback: Callable[..., None], **args) -> int`
@@ -45,6 +45,29 @@ The supported event types are:
 
 - "tick", "render", "key", "mouse", "chat", "outgoing_chat_intercept", "add_entity",
   "block_update", "explosion", "take_item", "damage", "chunk", "world"
+
+Additionally, Pyjinn scripts can use the `EventLoop` class to handle events in a unified loop
+similar to `EventQueue` in Python scripts, but using async/await syntax with `EventLoop.event()` and
+`EventLoop.sleep()`:
+
+```python
+async def handle_events(event_loop: EventLoop):
+  while True:
+    # Await an event for 3 seconds (omit param to wait indefinitely):
+    event = await event_loop.event(timeout_seconds=3)
+    if event is None:
+      print("No events in last 3 seconds. Awaiting more events...")
+    elif event.type == "mouse":
+      if event.button == 1 and event.action == 0:
+        print("Got right-click release. Quitting.")
+        break
+      else:
+        print("Got mouse event.")
+
+event_loop = EventLoop()
+event_loop.add_listener("mouse")
+event_loop.run(handle_events)
+```
 
 Scripts can import the Minescript standard library explicitly. For simple IDE integration (e.g.
 VSCode), you can use imports like these:
@@ -150,7 +173,7 @@ _**Note:**_ The script below accesses Java code (`net.minecraft.client.Minecraft
 using name mappings. For details see: [Mappings](mappings.md). **tl;dr:** If you're using the Fabric
 mod, install the mappings by running `\install_mappings` before running the script below.
 
-```
+```python
 # pyjinn_in_python_example.py
 
 import java
@@ -180,7 +203,7 @@ print_x()
 
 Chat output:
 
-```
+```python
 fps: 101 frames per second
 x from Python = 42
 x from Pyjinn = 42
@@ -203,7 +226,7 @@ Supported types of Pyjinn globals accessible from Python include: `bool`, `float
 
 Import Java classes with `JavaClass()` which takes a string literal:
 
-```
+```python
 List = JavaClass("java.util.List")
 ```
 
@@ -212,7 +235,7 @@ constructors using function-call syntax and static methods using method-call syn
 different from `Class<?>` instances which are metaclasses that provide access to reflection
 information. Calling `type()` on a `JavaClass` returns the Java metaclass (e.g. `String.class`).
 
-```
+```python
 print(JavaClass("java.lang.String"))
 # prints: JavaClass("java.lang.String")
 
@@ -241,13 +264,13 @@ print(Integer.TYPE)
 #### Calling static and non-static Java methods
 
 Call static method of Java class:
-```
+```python
 List = JavaClass("java.util.List")
 java_list = List.of(1, 2, 3)
 ```
 
 Call non-static method of Java object:
-```
+```python
 print(java_list.size())
 
 # Also available in Python-compatible form: len(java_list)
@@ -257,7 +280,7 @@ print(java_list.size())
 
 `JavaList` takes a Pyjinn list and returns a Java List:
 
-```
+```python
 java_list = JavaList([1, 2, 3])
 ```
 
@@ -268,7 +291,7 @@ visible in the other.
 
 `JavaMap` takes a Pyjinn dict and returns a Java Map:
 
-```
+```python
 java_map = JavaMap({1: "one", 2: "two"})
 ```
 
@@ -279,7 +302,7 @@ visible in the other.
 
 `JavaSet` takes a Pyjinn set and returns a Java Set:
 
-```
+```python
 java_set = JavaSet({1, 2, 3})
 ```
 
@@ -289,14 +312,14 @@ visible in the other.
 #### JavaArray
 
 `JavaArray` takes a Pyjinn tuple and returns a Java array (`Object[]`):
-```
+```python
 my_tuple = (1, 2, 3, "foo", "bar")
 java_array = JavaArray(my_tuple)
 print(len(java_array))  # Equivalent to the java code: java_array.length
 ```
 
 Java arrays and iterables are automatically treated as Pyjinn sequences and support slice notation:
-```
+```python
 int_tuple = (1, 2, 3)
 java_array = JavaArray(int_tuple)  # type of java_array is Object[]
 for x in java_array:
@@ -309,7 +332,7 @@ print(java_array[-2:])
 
 Convert tuple to a Java array of a specific type, e.g. `int[]`, by passing a type as the second
 argument:
-```
+```python
 Integer = JavaClass("java.lang.Integer")
 
 # Equivalent to this Java code:
@@ -329,7 +352,7 @@ converted to implementations of that interface. In this example, `Stream::map` i
 takes a `Function<>` and `Stream::filter` takes a `Predicate<>`. Here, Pyjinn `lambda` expressions
 are passed to those Java methods to square the input number and filter for the resulting values that
 are even numbers:
-```
+```python
 java_list = JavaList([x for x in range(10)])
 print(
     java_list.stream()
@@ -341,7 +364,7 @@ print(
 
 Pyjinn functions can also be converted manually to a Java interface by calling the Java interface as
 if it's a Python constructor:
-```
+```python
 Runnable = JavaClass("java.lang.Runnable")
 x = Runnable(lambda: print("hello!"))
 x.run()  # prints: hello!
@@ -382,7 +405,7 @@ Python-compatible methods can be called on Pyjinn strings (see [Python 3.x featu
 str](#str)), as well as the ~50 methods available to `java.lang.String`.
 
 Pyjinn strings support Python slice operations:
-```
+```python
 s = "foobarbaz"
 print(s[0])  # prints: f
 print(s[-1])  # prints: z
@@ -394,7 +417,7 @@ Although `String` is a `final` class in Java that cannot be subclassed, Pyjinn s
 they're a subclass of `String`, extended with some Python-specific methods. (They're not actually a
 subclass of `String`, there's just logic built into the interpreter to allow additional methods to
 be called on `String` objects in Pyjinn scripts.)
-```
+```python
 # Python-compatible call to str.startswith():
 print("foo".startswith("o", 1))  # prints: True
 
@@ -408,7 +431,7 @@ behavior.  For Pyjinn string methods that have Python-compatible behavior and th
 cases where a script needs to access Java `String` functionality that conflicts with the
 Python-compatible `str` behavior, the Java behavior can be accessed by wrapping the string in
 `JavaString()`:
-```
+```python
 s = "this is a test"
 
 # Call Python-compatible str.split():
@@ -425,7 +448,7 @@ Although the return value of `JavaString(...)` gives access to all the Java meth
 Both Pyjinn strings and `JavaString` objects can be passed without any explicit conversion to Java
 methods that expect `java.lang.String`. In the rare case that a `JavaString` needs to be converted
 explicitly back to `String`, a script can call its `toString()` method:
-```
+```python
 s = "foo"
 print(s is JavaString(s).toString())  # prints: True
 ```
@@ -443,7 +466,7 @@ Names in `UPPER_CASE_WITH_UNDERSCORES` are example names.
 
 **Python expressions:**
 
-```
+```python
 # Constant expressions:
 None  # NoneType
 True  # bool
@@ -592,7 +615,7 @@ lambda X, Y: print("2 args:", X, Y)
 
 **Python statements:**
 
-```
+```python
 # Imports:
 import MODULE
 import MODULE as ALIAS
