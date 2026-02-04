@@ -7,6 +7,29 @@
 - To set up Fabric mappings for Python and Pyjinn scripts see
   [minescript.net/mappings](https://minescript.net/mappings)
 
+## Minescript 5.0b10
+
+- Update Pyjinn docs to include EventLoop ([1a3810e](https://github.com/maxuser0/minescript/commit/1a3810e23219816fa690ca58161f2190bb49db44))
+- Implement EventLoop class for Pyjinn scripts ([d680374](https://github.com/maxuser0/minescript/commit/d6803744efb980f2872cf5f72654e0e7b11c495e))
+- Support disabling Pyjinn compilation (default on) ([152b158](https://github.com/maxuser0/minescript/commit/152b1582842a2ebcdb3dc239cd8dcd10a736b118))
+- Compile Pyjinn scripts to bytecode instructions ([0a3efe1](https://github.com/maxuser0/minescript/commit/0a3efe1b1ef85aa4ca1f650bf824ac6cfc8d2744))
+
+### Pyjinn 0.13
+
+- Support compilation of Pyjinn code to instructions executed via virtual machine
+- Support dict.clear() in PyjDict ([b6396a3](https://github.com/maxuser0/pyjinn/commit/b6396a30f65e028178a53a9094b8541f8293cd66))
+- Make Generator and Coroutine top-level classes ([863145d](https://github.com/maxuser0/pyjinn/commit/863145da2149fd138ab574f4bf2b3271103f18de))
+- Support `async` functions and `await` expressions ([964d92e](https://github.com/maxuser0/pyjinn/commit/964d92e40e1dce6fb1f23bdbe1e5be3befe58546))
+- Throw exception if value passed to Generator.send() ([c367c4f](https://github.com/maxuser0/pyjinn/commit/c367c4ff4723f6e563b9ed125593566d9adf40d7))
+- Support `yield from` and Generator.send(...) ([28447f1](https://github.com/maxuser0/pyjinn/commit/28447f1fd77c42439065a9b148fb385b09fb1685))
+- Optimize compiled code for ListComprehension ([5d4e7b3](https://github.com/maxuser0/pyjinn/commit/5d4e7b329205cae40a26b20742c2483c3d0ab255))
+- Support passing generator to list and set ctors ([10761ed](https://github.com/maxuser0/pyjinn/commit/10761ed36618d37fa043097a39fcd58d8a40e35b))
+- Support calling next() on generator from Java ([53a0d94](https://github.com/maxuser0/pyjinn/commit/53a0d9499a4b6bb8c237110b9eb06e53b895213c))
+- Set generator's caller each time next is called ([7c3446d](https://github.com/maxuser0/pyjinn/commit/7c3446d5767a554e99a8a21cd0d5402951b64576))
+- Support 'for' loops over generators ([1224336](https://github.com/maxuser0/pyjinn/commit/1224336cee1d9b34699211cd5920a99a5b8cb3be))
+- Support generators, yield expressions with next() ([2b7050b](https://github.com/maxuser0/pyjinn/commit/2b7050b58cf19296bc0ea40e476a172bddcd0d0b))
+- Support builtins iter(), next(), StopIteration ([fdd4409](https://github.com/maxuser0/pyjinn/commit/fdd440916fc8600f467f4ddf999ee72db04b669f))
+
 ## Minescript 5.0b9
 
 - Fix tab completion for overlapping command names ([5930d92](https://github.com/maxuser0/minescript/commit/5930d921177c5615fc40d61105e5fa73954a5653))
