@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
+// SPDX-FileCopyrightText: © 2022-2026 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
 package net.minescript.common;
@@ -44,6 +44,7 @@ public class Config {
           "escape_command_double_quotes",
           "command_path",
           "pyjinn_import_path",
+          "compile_pyjinn",
           "max_commands_per_cycle",
           "command_cycle_deadline_usecs",
           "ticks_per_cycle",
@@ -84,6 +85,7 @@ public class Config {
   private boolean debugOutput = false;
   private boolean incrementalCommandSuggestions = false;
   private int ticksPerCycle = 1;
+  private boolean compilePyjinn = true;
   private int maxCommandsPerCycle = 15;
   private int commandCycleDeadlineUsecs = 10_000; // 10 milliseconds
   private int reportJobSuccessThresholdMillis = 3000;
@@ -291,6 +293,15 @@ public class Config {
   }
 
   /**
+   * Gets whether compilation is enabled for Pyjinn scripts.
+   *
+   * @return True if compilation is enabled for Pyjinn scripts, false otherwise.
+   */
+  public boolean compilePyjinn() {
+    return compilePyjinn;
+  }
+
+  /**
    * Gets the maximum number of commands that can be executed in a single game cycle.
    *
    * @return The maximum number of commands per cycle.
@@ -339,6 +350,7 @@ public class Config {
     consumer.accept("escape_command_double_quotes", getValue("escape_command_double_quotes"));
     consumer.accept("command_path", getValue("command_path"));
     consumer.accept("pyjinn_import_path", getValue("pyjinn_import_path"));
+    consumer.accept("compile_pyjinn", getValue("compile_pyjinn"));
     consumer.accept("max_commands_per_cycle", getValue("max_commands_per_cycle"));
     consumer.accept("command_cycle_deadline_usecs", getValue("command_cycle_deadline_usecs"));
     consumer.accept("ticks_per_cycle", getValue("ticks_per_cycle"));
@@ -387,6 +399,9 @@ public class Config {
         return scriptConfig.pyjinnImportPath().stream()
             .map(FilePattern::toString)
             .collect(joining(File.pathSeparator));
+
+      case "compile_pyjinn":
+        return String.valueOf(compilePyjinn);
 
       case "max_commands_per_cycle":
         return String.valueOf(maxCommandsPerCycle);
@@ -526,6 +541,12 @@ public class Config {
                 .toList();
         scriptConfig.setPyjinnImportPath(pyjinnImportPath);
         reportInfo(out, "Setting pyjinn_import_path to {}", pyjinnImportPath);
+        break;
+
+      case "compile_pyjinn":
+        boolean compile = Boolean.valueOf(value);
+        compilePyjinn = compile;
+        reportInfo(out, "Setting compile_pyjinn to {}", compile);
         break;
 
       case "max_commands_per_cycle":

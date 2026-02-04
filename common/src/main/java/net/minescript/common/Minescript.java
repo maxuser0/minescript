@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
+// SPDX-FileCopyrightText: © 2022-2026 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
 package net.minescript.common;
@@ -882,8 +882,9 @@ public class Minescript {
     return PyjinnScript.loadScript(
         scriptCommand.toArray(String[]::new),
         scriptCode,
-        config.scriptConfig(),
-        mappingsLoader.get());
+        config.scriptConfig().pyjinnImportPath(),
+        mappingsLoader.get(),
+        config.compilePyjinn());
   }
 
   private static boolean checkMinescriptDir() {
@@ -3848,6 +3849,10 @@ public class Minescript {
 
   public static void reportException(Throwable e) {
     ScriptExceptionHandler.reportException(systemMessageQueue, e);
+  }
+
+  public static void reportJobException(Job job, Throwable e) {
+    ScriptExceptionHandler.reportException(systemMessageQueue, job, e);
   }
 
   public static void processMessageQueue(
