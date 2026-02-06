@@ -45,8 +45,8 @@ repositories {
 }
 
 dependencies {
-    jarJar('org.pyjinn:pyjinn-lib:0.13:all')
-    implementation('org.pyjinn:pyjinn-lib:0.13:all')
+    jarJar("org.pyjinn:pyjinn-lib:${pyjinn_version}:all")
+    implementation("org.pyjinn:pyjinn-lib:${pyjinn_version}:all")
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
