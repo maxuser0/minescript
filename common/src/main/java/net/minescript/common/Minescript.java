@@ -76,6 +76,8 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.timeline.Timeline;
+import net.minecraft.world.timeline.Timelines;
 import net.minescript.common.CommandSyntax.Token;
 import net.minescript.common.blocks.BlockPositionReader;
 import net.minescript.common.blocks.BlockRegionReader;
@@ -1844,8 +1846,8 @@ public class Minescript {
   }
 
   public static void onChunkLoad(LevelAccessor chunkLevel, ChunkAccess chunk) {
-    int chunkX = chunk.getPos().x;
-    int chunkZ = chunk.getPos().z;
+    int chunkX = chunk.getPos().x();
+    int chunkZ = chunk.getPos().z();
     if (config.debugOutput()) {
       LOGGER.info("world {} chunk loaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
     }
@@ -1862,8 +1864,8 @@ public class Minescript {
   }
 
   public static void onChunkUnload(LevelAccessor chunkLevel, ChunkAccess chunk) {
-    int chunkX = chunk.getPos().x;
-    int chunkZ = chunk.getPos().z;
+    int chunkX = chunk.getPos().x();
+    int chunkZ = chunk.getPos().z();
     if (config.debugOutput()) {
       LOGGER.info("world {} chunk unloaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
     }
@@ -2763,9 +2765,16 @@ public class Minescript {
 
           var result = new WorldInfo();
           result.game_ticks = levelProperties.getGameTime();
-          result.day_ticks = levelProperties.getDayTime();
-          result.raining = levelProperties.isRaining();
-          result.thundering = levelProperties.isThundering();
+          result.raining = world.isRaining();
+          result.thundering = world.isThundering();
+          world
+              .registryAccess()
+              .get(Timelines.OVERWORLD_DAY)
+              .ifPresent(
+                  timeline -> {
+                    result.day_ticks =
+                        ((Timeline) timeline.value()).getCurrentTicks(world.clockManager());
+                  });
 
           var spawnPos = levelProperties.getRespawnData().globalPos().pos();
           result.spawn[0] = spawnPos.getX();
