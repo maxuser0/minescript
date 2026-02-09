@@ -66,6 +66,7 @@ import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
@@ -2831,6 +2832,196 @@ public class Minescript {
             return ScriptValue.of(result.toArray(ItemStackData[]::new));
           } else {
             return ScriptValue.NULL;
+          }
+        }
+
+      case "container_click_slot": // Click a slot in the container
+        {
+          args.expectSize(3);
+          int slotIndex = args.getStrictInt(0);
+          int button = args.getStrictInt(1); // 0 = left, 1 = right, 2 = middle
+          boolean shift = args.getBoolean(2);
+
+          Screen screen = minecraft.screen;
+          if (screen instanceof AbstractContainerScreen<?> containerScreen) {
+            AbstractContainerMenu container = containerScreen.getMenu();
+            if (slotIndex < 0 || slotIndex >= container.slots.size()) {
+              throw new IllegalArgumentException("Invalid slot index: " + slotIndex);
+            }
+
+            // Simulate the click action
+            int clickType = shift ? 1 : 0; // 0 = PICKUP, 1 = QUICK_MOVE
+            minecraft.gameMode.handleInventoryMouseClick(
+                container.containerId, slotIndex, button, 
+                net.minecraft.world.inventory.ClickType.values()[clickType], player);
+            return ScriptValue.TRUE;
+          } else {
+            return ScriptValue.FALSE;
+          }
+        }
+
+      case "container_swap_slots": // Swap items between two slots
+        {
+          args.expectSize(2);
+          int slot1 = args.getStrictInt(0);
+          int slot2 = args.getStrictInt(1);
+
+          Screen screen = minecraft.screen;
+          if (screen instanceof AbstractContainerScreen<?> containerScreen) {
+            AbstractContainerMenu container = containerScreen.getMenu();
+            if (slot1 < 0 || slot1 >= container.slots.size() || 
+                slot2 < 0 || slot2 >= container.slots.size()) {
+              throw new IllegalArgumentException("Invalid slot indices");
+            }
+
+            // Pick up from slot1
+            minecraft.gameMode.handleInventoryMouseClick(
+                container.containerId, slot1, 0, 
+                net.minecraft.world.inventory.ClickType.PICKUP, player);
+            // Place in slot2
+            minecraft.gameMode.handleInventoryMouseClick(
+                container.containerId, slot2, 0, 
+                net.minecraft.world.inventory.ClickType.PICKUP, player);
+            // If slot2 had an item, place it back in slot1
+            if (!container.getCarried().isEmpty()) {
+              minecraft.gameMode.handleInventoryMouseClick(
+                  container.containerId, slot1, 0, 
+                  net.minecraft.world.inventory.ClickType.PICKUP, player);
+            }
+            return ScriptValue.TRUE;
+          } else {
+            return ScriptValue.FALSE;
+          }
+        }
+
+      case "container_get_slot": // Get a specific slot's item
+        {
+          args.expectSize(1);
+          int slotIndex = args.getStrictInt(0);
+
+          Screen screen = minecraft.screen;
+          if (screen instanceof AbstractContainerScreen<?> containerScreen) {
+            AbstractContainerMenu container = containerScreen.getMenu();
+            if (slotIndex < 0 || slotIndex >= container.slots.size()) {
+              throw new IllegalArgumentException("Invalid slot index: " + slotIndex);
+            }
+
+            Slot slot = container.slots.get(slotIndex);
+            ItemStack itemStack = slot.getItem();
+            if (itemStack.isEmpty()) {
+              return ScriptValue.NULL;
+            }
+            return ScriptValue.of(ItemStackData.of(itemStack, OptionalInt.of(slotIndex), false));
+          } else {
+            return ScriptValue.NULL;
+          }
+        }
+
+      case "container_close": // Close the current container
+        {
+          if (!args.isEmpty()) {
+            throw new IllegalArgumentException("Expected no params but got: " + args.toString());
+          }
+
+          Screen screen = minecraft.screen;
+          if (screen instanceof AbstractContainerScreen<?>) {
+            player.closeContainer();
+            return ScriptValue.TRUE;
+          } else {
+            return ScriptValue.FALSE;
+          }
+        }
+
+      case "container_get_info": // Get container information
+        {
+          if (!args.isEmpty()) {
+            throw new IllegalArgumentException("Expected no params but got: " + args.toString());
+          }
+
+          Screen screen = minecraft.screen;
+          if (screen instanceof AbstractContainerScreen<?> containerScreen) {
+            AbstractContainerMenu container = containerScreen.getMenu();
+            var info = new HashMap<String, Object>();
+            info.put("container_id", container.containerId);
+            info.put("slot_count", container.slots.size());
+            info.put("title", containerScreen.getTitle().getString());
+
+            // Count player inventory vs container slots
+            int playerSlots = 0;
+            int containerSlots = 0;
+            for (Slot slot : container.slots) {
+              if (slot.container == player.getInventory()) {
+                playerSlots++;
+              } else {
+                containerSlots++;
+              }
+            }
+            info.put("player_slots", playerSlots);
+            info.put("container_slots", containerSlots);
+
+            return ScriptValue.of(info, () -> new Gson().toJsonTree(info));
+          } else {
+            return ScriptValue.NULL;
+          }
+        }
+
+      case "container_find_item": // Find slots containing a specific item
+        {
+          args.expectSize(1);
+          String itemId = args.getString(0);
+
+          Screen screen = minecraft.screen;
+          if (screen instanceof AbstractContainerScreen<?> containerScreen) {
+            AbstractContainerMenu container = containerScreen.getMenu();
+            var slots = new ArrayList<Integer>();
+
+            for (int i = 0; i < container.slots.size(); i++) {
+              ItemStack itemStack = container.slots.get(i).getItem();
+              if (!itemStack.isEmpty()) {
+                String stackItemId = itemStack.getItem().toString();
+                if (stackItemId.contains(itemId) || 
+                    itemStack.getHoverName().getString().toLowerCase().contains(itemId.toLowerCase())) {
+                  slots.add(i);
+                }
+              }
+            }
+
+            return ScriptValue.of(slots.toArray(Integer[]::new));
+          } else {
+            return ScriptValue.of(new Integer[0]);
+          }
+        }
+
+      case "container_open": // Open a container at a block position
+        {
+          args.expectSize(3);
+          int x = args.getStrictInt(0);
+          int y = args.getStrictInt(1);
+          int z = args.getStrictInt(2);
+
+          BlockPos pos = new BlockPos(x, y, z);
+          BlockState blockState = minecraft.level.getBlockState(pos);
+          String blockName = blockState.getBlock().toString();
+
+          // Check if block has a container OR is a crafting table
+          if (blockState.hasBlockEntity() || blockName.contains("crafting_table")) {
+            // Right-click the block to open its container/GUI
+            BlockHitResult hitResult = new BlockHitResult(
+                Vec3.atCenterOf(pos), 
+                net.minecraft.core.Direction.UP, 
+                pos, 
+                false
+            );
+
+            minecraft.gameMode.useItemOn(
+                player,
+                net.minecraft.world.InteractionHand.MAIN_HAND,
+                hitResult
+            );
+
+            return ScriptValue.TRUE;
+          } else {
+            return ScriptValue.FALSE;
           }
         }
 
