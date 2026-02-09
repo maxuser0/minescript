@@ -18,6 +18,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.serialization.JsonOps;
+import io.netty.channel.ChannelFutureListener;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -59,12 +60,15 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.renderer.debug.DebugRenderer;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
+import net.minecraft.network.protocol.Packet;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
@@ -1591,6 +1595,74 @@ public class Minescript {
     }
   }
 
+  /**
+   * Called when a packet is sent to the server. Notifies serverbound packet listeners and allows
+   * them to cancel the packet.
+   *
+   * @param connection the connection over which the packet is sent
+   * @param packet the packet being sent to the server
+   * @param sendListener an optional listener to be notified when the packet is sent
+   * @param flush whether to flush the packet immediately
+   * @return true if the packet should be processed, false if it was cancelled by a listener
+   */
+  public static boolean onServerboundPacket(
+      Connection connection, Packet<?> packet, ChannelFutureListener sendListener, boolean flush) {
+    boolean cancel = false;
+    ServerboundPacketEvent event = null;
+    ScriptValue eventValue = null;
+    for (var entry : serverboundPacketListeners.entrySet()) {
+      var listener = entry.getValue();
+      if (listener.isActive()) {
+        if (eventValue == null) {
+          event = new ServerboundPacketEvent();
+          event.connection = connection;
+          event.packet = packet;
+          event.listener = sendListener;
+          event.flush = flush;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
+        }
+        listener.respond(eventValue);
+        if (event.cancelled()) {
+          cancel = true;
+        }
+      }
+    }
+    return !cancel;
+  }
+
+  /**
+   * Called when a packet is received from the server. Notifies clientbound packet listeners and
+   * allows them to cancel the packet.
+   *
+   * @param clientPacketListener the client packet listener
+   * @param packet the packet received from the server
+   * @return true if the packet should be processed, false if it was cancelled by a listener
+   */
+  public static boolean onClientboundPacket(
+      ClientPacketListener clientPacketListener, Packet<?> packet) {
+    boolean cancel = false;
+    ClientboundPacketEvent event = null;
+    ScriptValue eventValue = null;
+    for (var entry : clientboundPacketListeners.entrySet()) {
+      var listener = entry.getValue();
+      if (listener.isActive()) {
+        if (eventValue == null) {
+          event = new ClientboundPacketEvent();
+          event.listener = clientPacketListener;
+          event.packet = packet;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
+        }
+        listener.respond(eventValue);
+        if (event.cancelled()) {
+          cancel = true;
+        }
+      }
+    }
+    return !cancel;
+  }
+
   private static EditBox chatEditBox = null;
   private static boolean reportedChatEditBoxError = false;
 
@@ -1992,6 +2064,8 @@ public class Minescript {
   private static EventDispatcher explosionEventListeners = new EventDispatcher();
   private static EventDispatcher chunkEventListeners = new EventDispatcher();
   private static EventDispatcher worldListeners = new EventDispatcher();
+  private static EventDispatcher serverboundPacketListeners = new EventDispatcher();
+  private static EventDispatcher clientboundPacketListeners = new EventDispatcher();
 
   static Map<String, EventDispatcher> eventDispatchers = new HashMap<>();
 
@@ -2008,6 +2082,8 @@ public class Minescript {
     eventDispatchers.put("explosion", explosionEventListeners);
     eventDispatchers.put("chunk", chunkEventListeners);
     eventDispatchers.put("world", worldListeners);
+    eventDispatchers.put("serverbound_packet", serverboundPacketListeners);
+    eventDispatchers.put("clientbound_packet", clientboundPacketListeners);
   }
 
   // Pattern for event names before/after render passes, e.g:

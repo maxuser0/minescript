@@ -8,14 +8,14 @@
     "ChatComponentMixin",
     "ChatScreenMixin",
     "ClientPacketListenerMixin",
+    "ConnectionMixin",
     "FrameGraphBuilderMixin",
     "KeyboardHandlerMixin",
     "KeyMappingMixin",
     "LevelRendererMixin",
     "MouseHandlerMixin"
   ],
-  "client": [
-  ],
+  "client": [],
   "injectors": {
     "defaultRequire": 1
   }
