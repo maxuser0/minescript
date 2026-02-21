@@ -2851,6 +2851,8 @@ public class Minescript {
           result.difficulty = difficulty.getSerializedName();
           result.name = getWorldName();
           result.address = serverAddress;
+          var dimensionKey = world.dimension().toString();
+          result.dimension = dimensionKey.substring(dimensionKey.lastIndexOf('/') + 2, dimensionKey.length() - 1);
           return ScriptValue.of(result);
         }
 
