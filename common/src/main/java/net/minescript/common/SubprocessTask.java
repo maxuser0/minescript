@@ -11,7 +11,9 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+
 import java.util.concurrent.TimeUnit;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -52,7 +54,7 @@ public class SubprocessTask implements Task {
       return -2;
     }
 
-    stdinWriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
+    stdinWriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
 
     var stdoutThread =
         new Thread(this::processStdout, Thread.currentThread().getName() + "-stdout");
@@ -82,7 +84,7 @@ public class SubprocessTask implements Task {
   }
 
   private void processStdout() {
-    try (var stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+    try (var stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
       String line;
       while ((line = stdoutReader.readLine()) != null) {
         jobControl.yield();
@@ -101,7 +103,7 @@ public class SubprocessTask implements Task {
   }
 
   private void processStderr() {
-    try (var stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+    try (var stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
       String line;
       while ((line = stderrReader.readLine()) != null) {
         jobControl.yield();
