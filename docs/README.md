@@ -844,6 +844,7 @@ is specified.
 - [`ChatEvent`](#chatevent)
 - [`ChatEventListener`](#chateventlistener)
 - [`ChunkEvent`](#chunkevent)
+- [`ClientboundPacketEvent`](#clientboundpacketevent)
 - [`combine_rotations`](#combine_rotations)
 - [`container_get_items`](#container_get_items)
 - [`DamageEvent`](#damageevent)
@@ -851,6 +852,7 @@ is specified.
 - [`echo_json`](#echo_json)
 - [`entities`](#entities)
 - [`EntityData`](#entitydata)
+- [`EventLoop`](#eventloop)
 - [`EventQueue`](#eventqueue)
 - [`execute`](#execute)
 - [`ExplosionEvent`](#explosionevent)
@@ -883,6 +885,13 @@ is specified.
 - [`java_release`](#java_release)
 - [`java_string`](#java_string)
 - [`java_to_string`](#java_to_string)
+- [`JavaArray`](#javaarray)
+- [`JavaClass`](#javaclass)
+- [`JavaFloat`](#javafloat)
+- [`JavaInt`](#javaint)
+- [`JavaList`](#javalist)
+- [`JavaMap`](#javamap)
+- [`JavaString`](#javastring)
 - [`job_info`](#job_info)
 - [`JobInfo`](#jobinfo)
 - [`KeyEvent`](#keyevent)
@@ -924,6 +933,7 @@ is specified.
 - [`Rotations`](#rotations)
 - [`screen_name`](#screen_name)
 - [`screenshot`](#screenshot)
+- [`ServerboundPacketEvent`](#serverboundpacketevent)
 - [`set_chat_input`](#set_chat_input)
 - [`set_default_executor`](#set_default_executor)
 - [`set_interval`](#set_interval)
@@ -1864,7 +1874,7 @@ with EventQueue() as event_queue:
       echo("Who's there?")
 ```
 
-Compatibility: Python only. (See [`add_event_listener`](#add_event_listener) for Pyjinn event handling.)
+Compatibility: Python only. (See [`add_event_listener`](#add_event_listener) and [`EventLoop`](#eventloop) for Pyjinn event handling.)
 
 Since: v4.0
 
@@ -2788,6 +2798,62 @@ Compatibility: Python only.
 Since: v4.0
 
 
+#### JavaClass
+*Usage:* <code>JavaClass(class_name: str) -> JavaHandle</code>
+
+Pyjinn built-in that returns a Java class given its fully qualified name.
+
+  Compatibility: Pyjinn only. (Supported in Python via java.py.)
+  
+
+#### JavaArray
+*Usage:* <code>JavaArray(pyjinn_tuple, element_type: JavaHandle = None) -> JavaHandle</code>
+
+Pyjinn built-in that returns a Java array given a Pyjinn tuple and optional element type.
+
+  Compatibility: Pyjinn only.
+  
+
+#### JavaFloat
+*Usage:* <code>JavaFloat(number) -> JavaHandle</code>
+
+Pyjinn built-in that invokes the java.lang.Float constructor.
+
+  Compatibility: Pyjinn only.
+  
+
+#### JavaInt
+*Usage:* <code>JavaInt(number) -> JavaHandle</code>
+
+Pyjinn built-in that invokes the java.lang.Integer constructor.
+
+  Compatibility: Pyjinn only.
+  
+
+#### JavaList
+*Usage:* <code>JavaList(pyjinn_list) -> JavaHandle</code>
+
+Pyjinn built-in that returns the Java List representing the given Pyjinn list.
+
+  Compatibility: Pyjinn only.
+  
+
+#### JavaMap
+*Usage:* <code>JavaMap(pyjinn_list) -> JavaHandle</code>
+
+Pyjinn built-in that returns the Java Map representing the given Pyjinn dict.
+
+  Compatibility: Pyjinn only.
+  
+
+#### JavaString
+*Usage:* <code>JavaString(pyjinn_str) -> JavaHandle</code>
+
+Pyjinn built-in that exposes the Java String API for the given Pyjinn str.
+
+  Compatibility: Pyjinn only.
+  
+
 #### add_event_listener
 *Usage:* <code>add_event_listener(event_type: str, callback: Callable[[Any], None], \*\*args) -> int</code>
 
@@ -2799,12 +2865,14 @@ Adds an event listener with the given callback and args.
   - `"block_update"` - [`BlockUpdateEvent`](#blockupdateevent)
   - `"chat"` - [`ChatEvent`](#chatevent)
   - `"chunk"` - [`ChunkEvent`](#chunkevent)
+  - `"clientbound_packet"` - [`ClientboundPacketEvent`](#clientboundpacketevent)
   - `"damage"` - [`DamageEvent`](#damageevent)
   - `"explosion"` - [`ExplosionEvent`](#explosionevent)
   - `"key"` - [`KeyEvent`](#keyevent)
   - `"mouse"` - [`MouseEvent`](#mouseevent)
   - `"outgoing_chat_intercept"` - [`ChatEvent`](#chatevent)
   - `"render"` - [`RenderEvent`](#renderevent)
+  - `"serverbound_packet"` - [`ServerboundPacketEvent`](#serverboundpacketevent)
   - `"take_item"` - [`TakeItemEvent`](#takeitemevent)
   - `"tick"` - [`TickEvent`](#tickevent)
   - `"world"` - [`WorldEvent`](#worldevent)
@@ -2819,6 +2887,26 @@ Removes an event listener previously added using [`add_event_listener()`](#add_e
 
   Compatibility: Pyjinn only.
   
+
+#### ClientboundPacketEvent
+
+```
+  type: str
+  listener: JavaClass("net.minecraft.client.multiplayer.ClientPacketListener")
+  packet: JavaClass("net.minecraft.network.protocol.Packet")
+  time: float
+```
+
+#### ServerboundPacketEvent
+
+```
+  type: str
+  connection: JavaClass("net.minecraft.network.Connection")
+  packet: JavaClass("net.minecraft.network.protocol.Packet")
+  listener: JavaClass("io.netty.channel.ChannelFutureListener")
+  flush: bool  # whether to flush the packet immediately
+  time: float
+```
 
 #### RenderEvent
 Render event for use with callback to [`add_event_listener()`](#add_event_listener).
@@ -2899,4 +2987,85 @@ Cancels the callback, returning `default_value` if it continues to be called.
 *Usage:* <code>ManagedCallback.\_\_call\_\_(\*args)</code>
 
 Calls this callback, checking for cancellation.
+
+#### EventLoop
+An event loop for running asynchronous code that can react to events.
+
+  The event loop allows scripts to wait for events or sleep without
+  blocking the main thread, using async/await.
+
+  Compatibility: Pyjinn only.
+  
+
+#### EventLoop.\_\_init\_\_
+*Usage:* <code>EventLoop()</code>
+
+Initializes a new EventLoop instance.
+
+#### EventLoop.run
+*Usage:* <code>EventLoop.run(async_function)</code>
+
+Runs an asynchronous function within this event loop.
+
+  Args:
+- `  async_function`: an async function that takes this [`EventLoop`](#eventloop) instance as its
+        only argument and returns a coroutine.
+
+  Raises:
+    RuntimeException: if [`run()`](#eventlooprun) has already been called for this event loop,
+        or if `async_function` does not return a coroutine.
+  
+
+#### EventLoop.add_listener
+*Usage:* <code>EventLoop.add_listener(event_type: str)</code>
+
+Adds a listener for the specified event type.
+
+  Args:
+- `  event_type`: the type of event to listen for (e.g., "chat", "tick", "render").
+
+  Returns:
+    `True` if the listener was successfully added; `False` if a listener for
+    this event type already exists.
+  
+
+#### EventLoop.remove_listener
+*Usage:* <code>EventLoop.remove_listener(event_type: str)</code>
+
+Removes the listener for the specified event type.
+
+  Args:
+- `  event_type`: the type of event to remove the listener for.
+
+  Returns:
+    `True` if the listener was successfully removed; `False` if no listener
+    exists for this event type.
+  
+
+#### EventLoop.sleep
+*Usage:* <code>EventLoop.sleep(seconds: float)</code>
+
+Asynchronously sleeps for the given number of seconds.
+
+  While sleeping, any events that fire will be queued and returned as a list
+  when the sleep finishes.
+
+  Args:
+- `  seconds`: the number of seconds to sleep.
+
+  Returns:
+    A list of events that occurred while sleeping.
+  
+
+#### EventLoop.event
+*Usage:* <code>EventLoop.event(timeout_seconds: float = None)</code>
+
+Asynchronously waits for the next event to occur.
+
+  Args:
+- `  timeout_seconds`: optional maximum time to wait for an event.
+
+  Returns:
+    The event that occurred, or `None` if the timeout was reached.
+  
 
