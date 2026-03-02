@@ -3073,15 +3073,6 @@ public class Minescript {
                         .toArray(String[]::new));
           }
 
-          // If the message starts with a slash or backslash, prepend a space so that it's printed
-          // and not executed as a command.
-          if (message.length() > 0) {
-            char firstLetter = message.charAt(0);
-            if (firstLetter == '\\' || firstLetter == '/') {
-              message = " " + message;
-            }
-          }
-
           processChatMessage(message);
           return true;
         }
