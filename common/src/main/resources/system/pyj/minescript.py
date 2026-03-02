@@ -1024,7 +1024,7 @@ class EventLoop:
 
     events = yield _SleepRequest(seconds)
     return events
-  
+
   def event(self, timeout_seconds: float = None):
     """Asynchronously waits for the next event to occur.
 
