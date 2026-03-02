@@ -7,6 +7,26 @@
 - To set up Fabric mappings for Python and Pyjinn scripts see
   [minescript.net/mappings](https://minescript.net/mappings)
 
+## Minescript 5.0b11
+
+- Document EventLoop and packet events ([fa632c4](https://github.com/maxuser0/minescript/commit/fa632c48e4c3bc6d8c57a54b64c6ce202b40b350))
+- Let scripted chats start with slash or backslash ([0f5ae28](https://github.com/maxuser0/minescript/commit/0f5ae28d72655322165c4c1365fd76f8e314eff6))
+- Remove config for toggling Pyjinn compilation ([9ac864a](https://github.com/maxuser0/minescript/commit/9ac864a2fb9b36873a726e1b3175efdc735bcfd4))
+- Support packet interception/cancellation in Pyjinn ([77412bb](https://github.com/maxuser0/minescript/commit/77412bb5723a31b4a244b47a9a8e5375efe6ea2f))
+
+### Pyjinn 0.14
+
+- Fix handling of local class definitions ([d6a9297](https://github.com/maxuser0/pyjinn/commit/d6a9297c2331ed0eda089525b24735fa81505898))
+- Introduce CompiledClass to compile classes earlier ([8d7a5e1](https://github.com/maxuser0/pyjinn/commit/8d7a5e19c8ef70cd7454e0db3e294317ca273a29))
+- Remove Expression.eval, Statement.exec, overrides ([637e0fe](https://github.com/maxuser0/pyjinn/commit/637e0fe3941750242beb9e01f804080120a5732b))
+- Restore ability to add global vars outside scripts ([56428f8](https://github.com/maxuser0/pyjinn/commit/56428f826b27a7f527812ea734da15c181fd06a1))
+- Merge Script.parse() into Script.compile() ([5a24b76](https://github.com/maxuser0/pyjinn/commit/5a24b760a58b5ae67ae005f3d54f5d195daf3902))
+- Get/set local vars by int index, not string lookup ([742f762](https://github.com/maxuser0/pyjinn/commit/742f7626c80401775f39d6defeed3f3c165f2aec))
+- Require compilation; global/nonlocal decls in Code ([fbd5998](https://github.com/maxuser0/pyjinn/commit/fbd5998230de998e66046e92c9815c6ff46d1603))
+- Disallow function definitions/calls with bad args ([5acb01f](https://github.com/maxuser0/pyjinn/commit/5acb01fd2968b70e9f5a1061f4c6946772aa005a))
+- Support keyword-only args (following `*arg`) ([3854761](https://github.com/maxuser0/pyjinn/commit/3854761acdd80f3b04b3f65d0162c8925dfe8843))
+- Convert byte/short to Byte/Short in arg type check ([dcdd1a3](https://github.com/maxuser0/pyjinn/commit/dcdd1a32a03e1371431bf9b6204511b04680bef1))
+
 ## Minescript 5.0b10
 
 - Update Pyjinn docs to include EventLoop ([1a3810e](https://github.com/maxuser0/minescript/commit/1a3810e23219816fa690ca58161f2190bb49db44))
