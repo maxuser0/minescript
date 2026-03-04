@@ -810,6 +810,41 @@ def _world_info_result_transform(info):
 world_info = ScriptFunction("world_info", world_info, _world_info_result_transform)
 
 
+@dataclass
+class ScoreboardEntry:
+  name: str
+  score: int
+  display_name: str
+
+@dataclass
+class ScoreboardData:
+  objective_name: str
+  display_name: str
+  entries: List['ScoreboardEntry']
+
+def get_scoreboard() -> ScoreboardData:
+  """Gets the scoreboard data displayed on the sidebar.
+
+  Returns:
+    `ScoreboardData` with objective name, display name, and list of entries,
+    or `None` if no scoreboard is displayed on the sidebar.
+
+  Since: v5.1
+  """
+  return ()
+
+def _get_scoreboard_result_transform(data):
+  if data is None:
+    return None
+  entries = [ScoreboardEntry(**e) for e in data['entries']]
+  return ScoreboardData(
+      objective_name=data['objective_name'],
+      display_name=data['display_name'],
+      entries=entries)
+
+get_scoreboard = ScriptFunction("get_scoreboard", get_scoreboard, _get_scoreboard_result_transform)
+
+
 def getblock(x: int, y: int, z: int) -> str:
   """Gets the type of block at position (x, y, z).
 

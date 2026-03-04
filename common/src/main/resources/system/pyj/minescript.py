@@ -570,6 +570,18 @@ def world_info() -> WorldInfo:
   return __mcall__("world_info", [])
 
 
+def get_scoreboard() -> ScoreboardData:
+  """Gets the scoreboard data displayed on the sidebar.
+
+  Returns:
+    `ScoreboardData` with objective name, display name, and list of entries,
+    or `None` if no scoreboard is displayed on the sidebar.
+
+  Since: v5.1
+  """
+  return __mcall__("get_scoreboard", [])
+
+
 def getblock(x: int, y: int, z: int) -> str:
   """Gets the type of block at position (x, y, z).
 

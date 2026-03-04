@@ -2854,6 +2854,50 @@ public class Minescript {
           return ScriptValue.of(result);
         }
 
+      case "get_scoreboard":
+        {
+          args.expectSize(0);
+          var scoreboard = world.getScoreboard();
+          var objective = scoreboard.getDisplayObjective(net.minecraft.world.scores.DisplaySlot.SIDEBAR);
+          if (objective == null) {
+            return ScriptValue.NULL;
+          }
+          var playerScores = scoreboard.listPlayerScores(objective);
+          var entries = new ArrayList<ScoreboardEntry>();
+          for (var playerScore : playerScores) {
+            String owner = playerScore.owner();
+            int score = playerScore.value();
+            // Get the display text by checking if the owner belongs to a team
+            // Servers often use teams to set the visible text via prefix/suffix
+            var team = scoreboard.getPlayersTeam(owner);
+            String displayText;
+            if (team != null) {
+              // Team exists - get prefix + suffix which contains the visible text
+              var prefix = team.getPlayerPrefix();
+              var suffix = team.getPlayerSuffix();
+              String prefixStr = prefix != null ? prefix.getString() : "";
+              String suffixStr = suffix != null ? suffix.getString() : "";
+              displayText = prefixStr + suffixStr;
+              // If still empty, fall back to owner name
+              if (displayText.isEmpty()) {
+                var ownerName = playerScore.ownerName();
+                displayText = ownerName != null ? ownerName.getString() : owner;
+              }
+            } else {
+              // No team - use ownerName if available, otherwise owner
+              var ownerName = playerScore.ownerName();
+              displayText = ownerName != null ? ownerName.getString() : owner;
+            }
+            entries.add(new ScoreboardEntry(owner, score, displayText));
+          }
+          Collections.sort(entries, (a, b) -> Integer.compare(b.score, a.score));
+          var result = new ScoreboardData(
+              objective.getName(),
+              objective.getDisplayName().getString(),
+              entries.toArray(ScoreboardEntry[]::new));
+          return ScriptValue.of(result);
+        }
+
       case "screenshot":
         {
           args.expectArgs("filename");
