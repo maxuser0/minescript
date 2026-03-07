@@ -2202,7 +2202,7 @@ public class Minescript {
   private static void processPlainText(String text) {
     var minecraft = Minecraft.getInstance();
     var chat = minecraft.gui.getChat();
-    chat.addMessage(Component.nullToEmpty(text));
+    chat.addClientSystemMessage(Component.nullToEmpty(text));
   }
 
   private static void processJsonFormattedText(String text) {
@@ -2219,7 +2219,7 @@ public class Minescript {
                     string ->
                         LOGGER.warn("Failed to parse JSON-formatted text '{}': {}", text, string))
                 .orElse(null);
-    chat.addMessage(component);
+    chat.addClientSystemMessage(component);
   }
 
   static void processMessage(Message message) {

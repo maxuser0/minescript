@@ -3,8 +3,8 @@
 
 package net.minescript.common.mixin;
 
-import net.minecraft.client.GuiMessageTag;
 import net.minecraft.client.gui.components.ChatComponent;
+import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MessageSignature;
 import net.minescript.common.Minescript;
@@ -21,10 +21,20 @@ public class ChatComponentMixin {
 
   @Inject(
       at = @At("HEAD"),
-      method =
-          "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/GuiMessageTag;)V",
+      method = "addClientSystemMessage(Lnet/minecraft/network/chat/Component;)V",
       cancellable = true)
-  private void addMessage(
+  private void addClientSystemMessage(Component message, CallbackInfo ci) {
+    if (Minescript.onClientChatReceived(message)) {
+      ci.cancel();
+    }
+  }
+
+  @Inject(
+      at = @At("HEAD"),
+      method =
+          "addPlayerMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/multiplayer/chat/GuiMessageTag;)V",
+      cancellable = true)
+  private void addPlayerMessage(
       Component message, MessageSignature signature, GuiMessageTag tag, CallbackInfo ci) {
     if (Minescript.onClientChatReceived(message)) {
       ci.cancel();
