@@ -14,8 +14,8 @@ dependencies {
     implementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
     implementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
 
-    include 'org.pyjinn:pyjinn-lib:0.13:all'
-    implementation 'org.pyjinn:pyjinn-lib:0.13:all'
+    include "org.pyjinn:pyjinn-lib:${pyjinn_version}:all"
+    implementation "org.pyjinn:pyjinn-lib:${pyjinn_version}:all"
 }
 
 loom {
