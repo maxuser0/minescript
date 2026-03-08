@@ -784,6 +784,7 @@ class WorldInfo:
   difficulty: str
   name: str
   address: str
+  dimension: str
 
 def world_info() -> WorldInfo:
   """Gets world properties.
