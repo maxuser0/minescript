@@ -2665,14 +2665,14 @@ public class Minescript {
         }
 
       case "player_set_orientation":
-        {
+      {
           args.expectSize(2);
           Double yaw = args.getDouble(0);
           Double pitch = args.getDouble(1);
-          player.setYRot(yaw.floatValue() % 360.0f);
-          player.setXRot(pitch.floatValue() % 360.0f);
+          player.setYRot(yaw.floatValue());
+          player.setXRot(pitch.floatValue());
           return ScriptValue.TRUE;
-        }
+      }
 
       case "player_get_targeted_block":
         {
