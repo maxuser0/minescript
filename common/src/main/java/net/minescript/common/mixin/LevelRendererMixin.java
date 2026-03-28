@@ -9,10 +9,11 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderBuffers;
 import net.minecraft.client.renderer.chunk.ChunkSectionsToRender;
-import net.minecraft.client.renderer.state.CameraRenderState;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minescript.common.LevelRenderContext;
 import net.minescript.common.Minescript;
 import org.joml.Matrix4f;
+import org.joml.Matrix4fc;
 import org.joml.Vector4f;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -28,13 +29,13 @@ public class LevelRendererMixin {
   @Inject(
       at = @At("HEAD"),
       method =
-          "renderLevel(Lcom/mojang/blaze3d/resource/GraphicsResourceAllocator;Lnet/minecraft/client/DeltaTracker;ZLnet/minecraft/client/renderer/state/CameraRenderState;Lorg/joml/Matrix4f;Lcom/mojang/blaze3d/buffers/GpuBufferSlice;Lorg/joml/Vector4f;ZLnet/minecraft/client/renderer/chunk/ChunkSectionsToRender;)V")
+          "renderLevel(Lcom/mojang/blaze3d/resource/GraphicsResourceAllocator;Lnet/minecraft/client/DeltaTracker;ZLnet/minecraft/client/renderer/state/level/CameraRenderState;Lorg/joml/Matrix4fc;Lcom/mojang/blaze3d/buffers/GpuBufferSlice;Lorg/joml/Vector4f;ZLnet/minecraft/client/renderer/chunk/ChunkSectionsToRender;)V")
   public void renderLevelHead(
       GraphicsResourceAllocator graphicsResourceAllocator,
       DeltaTracker deltaTracker,
       boolean renderBlockOutline,
       CameraRenderState cameraState,
-      Matrix4f positionMatrix,
+      Matrix4fc positionMatrix,
       GpuBufferSlice fogBuffer,
       Vector4f fogColor,
       boolean renderSky,
@@ -57,13 +58,13 @@ public class LevelRendererMixin {
   @Inject(
       at = @At("TAIL"),
       method =
-          "renderLevel(Lcom/mojang/blaze3d/resource/GraphicsResourceAllocator;Lnet/minecraft/client/DeltaTracker;ZLnet/minecraft/client/renderer/state/CameraRenderState;Lorg/joml/Matrix4f;Lcom/mojang/blaze3d/buffers/GpuBufferSlice;Lorg/joml/Vector4f;ZLnet/minecraft/client/renderer/chunk/ChunkSectionsToRender;)V")
+          "renderLevel(Lcom/mojang/blaze3d/resource/GraphicsResourceAllocator;Lnet/minecraft/client/DeltaTracker;ZLnet/minecraft/client/renderer/state/level/CameraRenderState;Lorg/joml/Matrix4fc;Lcom/mojang/blaze3d/buffers/GpuBufferSlice;Lorg/joml/Vector4f;ZLnet/minecraft/client/renderer/chunk/ChunkSectionsToRender;)V")
   public void renderLevelTail(
       GraphicsResourceAllocator graphicsResourceAllocator,
       DeltaTracker deltaTracker,
       boolean renderBlockOutline,
       CameraRenderState cameraState,
-      Matrix4f positionMatrix,
+      Matrix4fc positionMatrix,
       GpuBufferSlice fogBuffer,
       Vector4f fogColor,
       boolean renderSky,

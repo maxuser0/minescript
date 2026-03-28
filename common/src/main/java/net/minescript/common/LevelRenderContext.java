@@ -8,8 +8,8 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.chunk.ChunkSectionsToRender;
-import net.minecraft.client.renderer.state.CameraRenderState;
-import org.joml.Matrix4f;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
+import org.joml.Matrix4fc;
 import org.joml.Vector4f;
 
 public record LevelRenderContext(
@@ -18,7 +18,7 @@ public record LevelRenderContext(
     DeltaTracker deltaTracker,
     boolean renderBlockOutline,
     CameraRenderState cameraState,
-    Matrix4f positionMatrix,
+    Matrix4fc positionMatrix,
     GpuBufferSlice fogBuffer,
     Vector4f fogColor,
     boolean renderSky,
