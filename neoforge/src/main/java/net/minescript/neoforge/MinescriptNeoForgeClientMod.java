@@ -47,7 +47,7 @@ public class MinescriptNeoForgeClientMod {
     public static void onKeyInputEvent(InputEvent.Key event) {
       var key = event.getKey();
       var action = event.getAction();
-      var screen = Minecraft.getInstance().screen;
+      var screen = Minecraft.getInstance().gui.screen();
       if (screen == null) {
         Minescript.onKeyInput(key);
       } else if (config != null

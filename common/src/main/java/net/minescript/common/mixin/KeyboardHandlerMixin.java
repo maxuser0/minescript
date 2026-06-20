@@ -28,7 +28,7 @@ public class KeyboardHandlerMixin {
     int scanCode = event.scancode();
     int modifiers = event.modifiers();
     Minescript.onKeyboardEvent(key, scanCode, action, modifiers);
-    var screen = Minecraft.getInstance().screen;
+    var screen = Minecraft.getInstance().gui.screen();
     if (screen == null) {
       Minescript.onKeyInput(key);
     } else if (config != null

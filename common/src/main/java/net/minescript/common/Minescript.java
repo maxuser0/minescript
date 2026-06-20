@@ -1844,9 +1844,9 @@ public class Minescript {
 
   public static void onKeyInput(int key) {
     var minecraft = Minecraft.getInstance();
-    var screen = minecraft.screen;
+    var screen = minecraft.gui.screen();
     if (screen == null && key == BACKSLASH_KEY) {
-      minecraft.setScreen(new ChatScreen("", /* isDraft= */ false));
+      minecraft.gui.setScreen(new ChatScreen("", /* isDraft= */ false));
     }
   }
 
@@ -1975,7 +1975,7 @@ public class Minescript {
     boolean cancel = false;
     var minecraft = Minecraft.getInstance();
     if (message.startsWith("\\")) {
-      minecraft.gui.getChat().addRecentChat(message);
+      minecraft.gui.hud.getChat().addRecentChat(message);
 
       LOGGER.info("Processing command from chat event: {}", message);
       runMinescriptCommand(message.substring(1));
@@ -1985,7 +1985,7 @@ public class Minescript {
     } else if (customNickname != null && !message.startsWith("/")) {
       String tellrawCommand = "tellraw @a " + String.format(customNickname, message);
       systemMessageQueue.add(Message.createMinecraftCommand(tellrawCommand));
-      var chat = minecraft.gui.getChat();
+      var chat = minecraft.gui.hud.getChat();
       // TODO(maxuser): There appears to be a bug truncating the chat HUD command history. It might
       // be that onClientChat(...) can get called on a different thread from what other callers are
       // expecting, thereby corrupting the history. Verify whether this gets called on the same
@@ -2276,13 +2276,13 @@ public class Minescript {
 
   private static void processPlainText(String text) {
     var minecraft = Minecraft.getInstance();
-    var chat = minecraft.gui.getChat();
+    var chat = minecraft.gui.hud.getChat();
     chat.addClientSystemMessage(Component.nullToEmpty(text));
   }
 
   private static void processJsonFormattedText(String text) {
     var minecraft = Minecraft.getInstance();
-    var chat = minecraft.gui.getChat();
+    var chat = minecraft.gui.hud.getChat();
 
     JsonElement jsonElement = JsonParser.parseString(text);
     var component =
@@ -2371,7 +2371,7 @@ public class Minescript {
 
   public static Optional<String> getScreenName() {
     var minecraft = Minecraft.getInstance();
-    var screen = minecraft.screen;
+    var screen = minecraft.gui.screen();
     if (screen == null) {
       return Optional.empty();
     }
@@ -2884,7 +2884,7 @@ public class Minescript {
           Screenshot.grab(
               minecraft.gameDirectory,
               filename,
-              minecraft.getMainRenderTarget(),
+              minecraft.gameRenderer.mainRenderTarget(),
               /* downScale= */ 1,
               message -> job.log(message.getString()));
           return ScriptValue.TRUE;
@@ -2901,7 +2901,7 @@ public class Minescript {
           if (!args.isEmpty()) {
             throw new IllegalArgumentException("Expected no params but got: " + args.toString());
           }
-          Screen screen = minecraft.screen;
+          Screen screen = minecraft.gui.screen();
           if (screen instanceof AbstractContainerScreen<?> handledScreen) {
             AbstractContainerMenu screenHandler = handledScreen.getMenu();
             Slot[] slots = screenHandler.slots.toArray(new Slot[0]);
@@ -2933,11 +2933,11 @@ public class Minescript {
         {
           args.expectSize(2);
           boolean show = args.getBoolean(0);
-          var screen = minecraft.screen;
+          var screen = minecraft.gui.screen();
           final ScriptValue result;
           if (show) {
             if (screen == null) {
-              minecraft.setScreen(new ChatScreen("", /* isDraft= */ false));
+              minecraft.gui.setScreen(new ChatScreen("", /* isDraft= */ false));
             }
             var prompt = args.get(1);
             if (prompt != null && checkChatScreenInput()) {
@@ -2979,7 +2979,7 @@ public class Minescript {
 
       case "append_chat_history":
         args.expectSize(1);
-        minecraft.gui.getChat().addRecentChat(args.getString(0));
+        minecraft.gui.hud.getChat().addRecentChat(args.getString(0));
         return ScriptValue.NULL;
 
       case "chat_input":
