@@ -462,6 +462,11 @@ def blockpack_test():
   comments = blockpack.comments()
   expect_equal({"hello": "world", "foo": "bar"}, comments)
 
+  blockpacker = minescript.BlockPacker()
+  blockpacker.add_blockpack(blockpack)
+  repacked_blockpack = blockpacker.pack()
+  expect_equal(blockpack.block_bounds(), repacked_blockpack.block_bounds())
+
 
 @test
 def await_loaded_region_test():
