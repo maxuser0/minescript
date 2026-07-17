@@ -2315,6 +2315,9 @@ class BlockPacker:
       self._flush_blocks()
 
   def _flush_blocks(self):
+    if self.offset is None:
+      return
+
     if sys.byteorder != "big":
       # Swap to network (big-endian) byte order.
       self.setblocks.byteswap()
