@@ -673,7 +673,8 @@ def screen_name_test():
 @test
 def world_info_test():
   info = minescript.world_info()
-  expect_equal(len(info.__dict__), 9)
+  expect_equal(len(info.__dict__), 10)
+  expect_startswith(info.dimension, "minecraft:")
 
 
 @test

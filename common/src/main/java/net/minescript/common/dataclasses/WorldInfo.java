@@ -15,4 +15,5 @@ public class WorldInfo extends Jsonable {
   public String difficulty;
   public String name;
   public String address;
+  public String dimension;
 }
