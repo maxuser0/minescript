@@ -71,6 +71,7 @@ import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -2604,9 +2605,20 @@ public class Minescript {
 
       case "player_inventory_slot_to_hotbar":
         {
-          throw new UnsupportedOperationException(
-              "player_inventory_slot_to_hotbar: support for ServerboundPickItemPacket removed in"
-                  + " Minecraft 1.21.4");
+          args.expectSize(1);
+          int slot = args.getStrictInt(0);
+          var inventory = player.getInventory();
+          var menu = player.containerMenu;
+          int menuSlot =
+              menu.findSlot(inventory, slot)
+                  .orElseThrow(
+                      () ->
+                          new IllegalArgumentException(
+                              "Inventory slot " + slot + " is not available in the current menu"));
+          int selectedSlot = inventory.getSelectedSlot();
+          minecraft.gameMode.handleContainerInput(
+              menu.containerId, menuSlot, selectedSlot, ContainerInput.SWAP, player);
+          return ScriptValue.of(selectedSlot);
         }
 
       case "player_inventory_select_slot":
