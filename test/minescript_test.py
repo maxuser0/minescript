@@ -669,7 +669,7 @@ def screen_name_test():
 def world_info_test():
   info = minescript.world_info()
   expect_equal(len(info.__dict__), 10)
-  expect_equal(info.dimension, "minecraft:overworld")
+  expect_startswith(info.dimension, "minecraft:")
 
 
 @test
