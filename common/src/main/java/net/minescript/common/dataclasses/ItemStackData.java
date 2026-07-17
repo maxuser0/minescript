@@ -4,6 +4,7 @@
 package net.minescript.common.dataclasses;
 
 import java.util.OptionalInt;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.Tag;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.item.ItemStack;
@@ -22,12 +23,16 @@ public class ItemStackData extends Jsonable {
     this.count = count;
   }
 
-  public static ItemStackData of(ItemStack itemStack, OptionalInt slot, boolean markSelected) {
+  public static ItemStackData of(
+      ItemStack itemStack,
+      OptionalInt slot,
+      boolean markSelected,
+      HolderLookup.Provider registries) {
     if (itemStack.getCount() == 0) {
       return null;
     } else {
       var reporter = new ProblemReporter.Collector();
-      var nbtOutput = TagValueOutput.createWithoutContext(reporter);
+      var nbtOutput = TagValueOutput.createWithContext(reporter, registries);
       nbtOutput.store("minescript_item_wrapper", ItemStack.CODEC, itemStack);
       Tag nbt = nbtOutput.buildResult().get("minescript_item_wrapper");
 
