@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
+// SPDX-FileCopyrightText: © 2022-2026 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
 package net.minescript.neoforge;
@@ -47,7 +47,7 @@ public class MinescriptNeoForgeClientMod {
     public static void onKeyInputEvent(InputEvent.Key event) {
       var key = event.getKey();
       var action = event.getAction();
-      var screen = Minecraft.getInstance().screen;
+      var screen = Minecraft.getInstance().gui.screen();
       if (screen == null) {
         Minescript.onKeyInput(key);
       } else if (config != null

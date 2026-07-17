@@ -7,6 +7,49 @@
 - To set up Fabric mappings for Python and Pyjinn scripts see
   [minescript.net/mappings](https://minescript.net/mappings)
 
+## Minescript 5.0b11
+
+- Document EventLoop and packet events ([fa632c4](https://github.com/maxuser0/minescript/commit/fa632c48e4c3bc6d8c57a54b64c6ce202b40b350))
+- Let scripted chats start with slash or backslash ([0f5ae28](https://github.com/maxuser0/minescript/commit/0f5ae28d72655322165c4c1365fd76f8e314eff6))
+- Remove config for toggling Pyjinn compilation ([9ac864a](https://github.com/maxuser0/minescript/commit/9ac864a2fb9b36873a726e1b3175efdc735bcfd4))
+- Support packet interception/cancellation in Pyjinn ([77412bb](https://github.com/maxuser0/minescript/commit/77412bb5723a31b4a244b47a9a8e5375efe6ea2f))
+
+### Pyjinn 0.14
+
+- Fix handling of local class definitions ([d6a9297](https://github.com/maxuser0/pyjinn/commit/d6a9297c2331ed0eda089525b24735fa81505898))
+- Introduce CompiledClass to compile classes earlier ([8d7a5e1](https://github.com/maxuser0/pyjinn/commit/8d7a5e19c8ef70cd7454e0db3e294317ca273a29))
+- Remove Expression.eval, Statement.exec, overrides ([637e0fe](https://github.com/maxuser0/pyjinn/commit/637e0fe3941750242beb9e01f804080120a5732b))
+- Restore ability to add global vars outside scripts ([56428f8](https://github.com/maxuser0/pyjinn/commit/56428f826b27a7f527812ea734da15c181fd06a1))
+- Merge Script.parse() into Script.compile() ([5a24b76](https://github.com/maxuser0/pyjinn/commit/5a24b760a58b5ae67ae005f3d54f5d195daf3902))
+- Get/set local vars by int index, not string lookup ([742f762](https://github.com/maxuser0/pyjinn/commit/742f7626c80401775f39d6defeed3f3c165f2aec))
+- Require compilation; global/nonlocal decls in Code ([fbd5998](https://github.com/maxuser0/pyjinn/commit/fbd5998230de998e66046e92c9815c6ff46d1603))
+- Disallow function definitions/calls with bad args ([5acb01f](https://github.com/maxuser0/pyjinn/commit/5acb01fd2968b70e9f5a1061f4c6946772aa005a))
+- Support keyword-only args (following `*arg`) ([3854761](https://github.com/maxuser0/pyjinn/commit/3854761acdd80f3b04b3f65d0162c8925dfe8843))
+- Convert byte/short to Byte/Short in arg type check ([dcdd1a3](https://github.com/maxuser0/pyjinn/commit/dcdd1a32a03e1371431bf9b6204511b04680bef1))
+
+## Minescript 5.0b10
+
+- Update Pyjinn docs to include EventLoop ([1a3810e](https://github.com/maxuser0/minescript/commit/1a3810e23219816fa690ca58161f2190bb49db44))
+- Implement EventLoop class for Pyjinn scripts ([d680374](https://github.com/maxuser0/minescript/commit/d6803744efb980f2872cf5f72654e0e7b11c495e))
+- Support disabling Pyjinn compilation (default on) ([152b158](https://github.com/maxuser0/minescript/commit/152b1582842a2ebcdb3dc239cd8dcd10a736b118))
+- Compile Pyjinn scripts to bytecode instructions ([0a3efe1](https://github.com/maxuser0/minescript/commit/0a3efe1b1ef85aa4ca1f650bf824ac6cfc8d2744))
+
+### Pyjinn 0.13
+
+- Support compilation of Pyjinn code to instructions executed via virtual machine
+- Support dict.clear() in PyjDict ([b6396a3](https://github.com/maxuser0/pyjinn/commit/b6396a30f65e028178a53a9094b8541f8293cd66))
+- Make Generator and Coroutine top-level classes ([863145d](https://github.com/maxuser0/pyjinn/commit/863145da2149fd138ab574f4bf2b3271103f18de))
+- Support `async` functions and `await` expressions ([964d92e](https://github.com/maxuser0/pyjinn/commit/964d92e40e1dce6fb1f23bdbe1e5be3befe58546))
+- Throw exception if value passed to Generator.send() ([c367c4f](https://github.com/maxuser0/pyjinn/commit/c367c4ff4723f6e563b9ed125593566d9adf40d7))
+- Support `yield from` and Generator.send(...) ([28447f1](https://github.com/maxuser0/pyjinn/commit/28447f1fd77c42439065a9b148fb385b09fb1685))
+- Optimize compiled code for ListComprehension ([5d4e7b3](https://github.com/maxuser0/pyjinn/commit/5d4e7b329205cae40a26b20742c2483c3d0ab255))
+- Support passing generator to list and set ctors ([10761ed](https://github.com/maxuser0/pyjinn/commit/10761ed36618d37fa043097a39fcd58d8a40e35b))
+- Support calling next() on generator from Java ([53a0d94](https://github.com/maxuser0/pyjinn/commit/53a0d9499a4b6bb8c237110b9eb06e53b895213c))
+- Set generator's caller each time next is called ([7c3446d](https://github.com/maxuser0/pyjinn/commit/7c3446d5767a554e99a8a21cd0d5402951b64576))
+- Support 'for' loops over generators ([1224336](https://github.com/maxuser0/pyjinn/commit/1224336cee1d9b34699211cd5920a99a5b8cb3be))
+- Support generators, yield expressions with next() ([2b7050b](https://github.com/maxuser0/pyjinn/commit/2b7050b58cf19296bc0ea40e476a172bddcd0d0b))
+- Support builtins iter(), next(), StopIteration ([fdd4409](https://github.com/maxuser0/pyjinn/commit/fdd440916fc8600f467f4ddf999ee72db04b669f))
+
 ## Minescript 5.0b9
 
 - Fix tab completion for overlapping command names ([5930d92](https://github.com/maxuser0/minescript/commit/5930d921177c5615fc40d61105e5fa73954a5653))

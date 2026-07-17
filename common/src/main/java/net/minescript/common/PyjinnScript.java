@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
+// SPDX-FileCopyrightText: © 2022-2026 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
 package net.minescript.common;
@@ -186,7 +186,11 @@ public class PyjinnScript {
       Runnable doneCallback)
       throws Exception {
     var script =
-        loadScript(boundCommand.command(), scriptCode, config.scriptConfig(), nameMappings);
+        loadScript(
+            boundCommand.command(),
+            scriptCode,
+            config.scriptConfig().pyjinnImportPath(),
+            nameMappings);
     var job =
         new PyjinnJob(
             jobId,
@@ -252,7 +256,11 @@ public class PyjinnScript {
     }
 
     @Override
-    public void onExecModule(Script.Module module) {
+    public void onCompileModule(Script.Module module) {
+      addMinescriptBuiltins(module);
+    }
+
+    private void addMinescriptBuiltins(Script.Module module) {
       LOGGER.info("Running Minescript module handler for Pyjinn module: {}", module.name());
       // The canonical module name is the filename relative to the Minecraft dir without the ".py"
       // extension and dir separators replaced with dots.
@@ -279,7 +287,10 @@ public class PyjinnScript {
   }
 
   public static Script loadScript(
-      String[] argv, String scriptCode, ScriptConfig scriptConfig, NameMappings nameMappings)
+      String[] argv,
+      String scriptCode,
+      ImmutableList<FilePattern> pyjinnImportPath,
+      NameMappings nameMappings)
       throws Exception {
     final String scriptFilename;
     if (argv[0].toLowerCase().endsWith(".pyj")) {
@@ -288,7 +299,7 @@ public class PyjinnScript {
       scriptFilename = argv[0] + ".pyj";
     }
 
-    var moduleHandler = new MinescriptModuleHandler(scriptConfig.pyjinnImportPath());
+    var moduleHandler = new MinescriptModuleHandler(pyjinnImportPath);
     var script =
         new Script(
             scriptFilename,
@@ -320,7 +331,7 @@ public class PyjinnScript {
         });
 
     JsonElement scriptAst = PyjinnParser.parse(scriptFilename, scriptCode);
-    script.parse(scriptAst, scriptFilename);
+    script.compile(scriptAst, scriptFilename);
     return script;
   }
 
@@ -358,7 +369,7 @@ public class PyjinnScript {
               : new Script.KeywordArgs();
 
       try {
-        var script = (Script) env.get("__script__");
+        Script script = env.script();
         var job = (PyjinnJob) script.vars.__getitem__("job");
         long listenerId = job.nextFcallId++;
 
@@ -390,7 +401,7 @@ public class PyjinnScript {
       expectNumParams(params, 1);
       if (params[0] instanceof Number listenerNum) {
         try {
-          var script = (Script) env.get("__script__");
+          Script script = env.script();
           var job = (PyjinnJob) script.vars.__getitem__("job");
           Long listenerId = listenerNum.longValue();
           job.cancelOperation(listenerId);

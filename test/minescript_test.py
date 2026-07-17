@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
+# SPDX-FileCopyrightText: © 2022-2026 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: GPL-3.0-only
 
 r"""minescript_test v4.0 from https://github.com/maxuser0/minescript
@@ -462,6 +462,11 @@ def blockpack_test():
   comments = blockpack.comments()
   expect_equal({"hello": "world", "foo": "bar"}, comments)
 
+  blockpacker = minescript.BlockPacker()
+  blockpacker.add_blockpack(blockpack)
+  repacked_blockpack = blockpacker.pack()
+  expect_equal(blockpack.block_bounds(), repacked_blockpack.block_bounds())
+
 
 @test
 def await_loaded_region_test():
@@ -668,7 +673,8 @@ def screen_name_test():
 @test
 def world_info_test():
   info = minescript.world_info()
-  expect_equal(len(info.__dict__), 9)
+  expect_equal(len(info.__dict__), 10)
+  expect_startswith(info.dimension, "minecraft:")
 
 
 @test

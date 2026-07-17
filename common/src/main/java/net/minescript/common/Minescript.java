@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
+// SPDX-FileCopyrightText: © 2022-2026 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
 package net.minescript.common;
@@ -18,6 +18,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.serialization.JsonOps;
+import io.netty.channel.ChannelFutureListener;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -59,12 +60,15 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.renderer.debug.DebugRenderer;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
+import net.minecraft.network.protocol.Packet;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
@@ -76,6 +80,8 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.timeline.Timeline;
+import net.minecraft.world.timeline.Timelines;
 import net.minescript.common.CommandSyntax.Token;
 import net.minescript.common.blocks.BlockPositionReader;
 import net.minescript.common.blocks.BlockRegionReader;
@@ -882,7 +888,7 @@ public class Minescript {
     return PyjinnScript.loadScript(
         scriptCommand.toArray(String[]::new),
         scriptCode,
-        config.scriptConfig(),
+        config.scriptConfig().pyjinnImportPath(),
         mappingsLoader.get());
   }
 
@@ -1590,6 +1596,74 @@ public class Minescript {
     }
   }
 
+  /**
+   * Called when a packet is sent to the server. Notifies serverbound packet listeners and allows
+   * them to cancel the packet.
+   *
+   * @param connection the connection over which the packet is sent
+   * @param packet the packet being sent to the server
+   * @param sendListener an optional listener to be notified when the packet is sent
+   * @param flush whether to flush the packet immediately
+   * @return true if the packet should be processed, false if it was cancelled by a listener
+   */
+  public static boolean onServerboundPacket(
+      Connection connection, Packet<?> packet, ChannelFutureListener sendListener, boolean flush) {
+    boolean cancel = false;
+    ServerboundPacketEvent event = null;
+    ScriptValue eventValue = null;
+    for (var entry : serverboundPacketListeners.entrySet()) {
+      var listener = entry.getValue();
+      if (listener.isActive()) {
+        if (eventValue == null) {
+          event = new ServerboundPacketEvent();
+          event.connection = connection;
+          event.packet = packet;
+          event.listener = sendListener;
+          event.flush = flush;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
+        }
+        listener.respond(eventValue);
+        if (event.cancelled()) {
+          cancel = true;
+        }
+      }
+    }
+    return !cancel;
+  }
+
+  /**
+   * Called when a packet is received from the server. Notifies clientbound packet listeners and
+   * allows them to cancel the packet.
+   *
+   * @param clientPacketListener the client packet listener
+   * @param packet the packet received from the server
+   * @return true if the packet should be processed, false if it was cancelled by a listener
+   */
+  public static boolean onClientboundPacket(
+      ClientPacketListener clientPacketListener, Packet<?> packet) {
+    boolean cancel = false;
+    ClientboundPacketEvent event = null;
+    ScriptValue eventValue = null;
+    for (var entry : clientboundPacketListeners.entrySet()) {
+      var listener = entry.getValue();
+      if (listener.isActive()) {
+        if (eventValue == null) {
+          event = new ClientboundPacketEvent();
+          event.listener = clientPacketListener;
+          event.packet = packet;
+          event.time = System.currentTimeMillis() / 1000.;
+          eventValue = ScriptValue.of(event);
+        }
+        listener.respond(eventValue);
+        if (event.cancelled()) {
+          cancel = true;
+        }
+      }
+    }
+    return !cancel;
+  }
+
   private static EditBox chatEditBox = null;
   private static boolean reportedChatEditBoxError = false;
 
@@ -1770,9 +1844,9 @@ public class Minescript {
 
   public static void onKeyInput(int key) {
     var minecraft = Minecraft.getInstance();
-    var screen = minecraft.screen;
+    var screen = minecraft.gui.screen();
     if (screen == null && key == BACKSLASH_KEY) {
-      minecraft.setScreen(new ChatScreen("", /* isDraft= */ false));
+      minecraft.gui.setScreen(new ChatScreen("", /* isDraft= */ false));
     }
   }
 
@@ -1843,8 +1917,8 @@ public class Minescript {
   }
 
   public static void onChunkLoad(LevelAccessor chunkLevel, ChunkAccess chunk) {
-    int chunkX = chunk.getPos().x;
-    int chunkZ = chunk.getPos().z;
+    int chunkX = chunk.getPos().x();
+    int chunkZ = chunk.getPos().z();
     if (config.debugOutput()) {
       LOGGER.info("world {} chunk loaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
     }
@@ -1861,8 +1935,8 @@ public class Minescript {
   }
 
   public static void onChunkUnload(LevelAccessor chunkLevel, ChunkAccess chunk) {
-    int chunkX = chunk.getPos().x;
-    int chunkZ = chunk.getPos().z;
+    int chunkX = chunk.getPos().x();
+    int chunkZ = chunk.getPos().z();
     if (config.debugOutput()) {
       LOGGER.info("world {} chunk unloaded: {} {}", chunkLevel.hashCode(), chunkX, chunkZ);
     }
@@ -1901,7 +1975,7 @@ public class Minescript {
     boolean cancel = false;
     var minecraft = Minecraft.getInstance();
     if (message.startsWith("\\")) {
-      minecraft.gui.getChat().addRecentChat(message);
+      minecraft.gui.hud.getChat().addRecentChat(message);
 
       LOGGER.info("Processing command from chat event: {}", message);
       runMinescriptCommand(message.substring(1));
@@ -1911,7 +1985,7 @@ public class Minescript {
     } else if (customNickname != null && !message.startsWith("/")) {
       String tellrawCommand = "tellraw @a " + String.format(customNickname, message);
       systemMessageQueue.add(Message.createMinecraftCommand(tellrawCommand));
-      var chat = minecraft.gui.getChat();
+      var chat = minecraft.gui.hud.getChat();
       // TODO(maxuser): There appears to be a bug truncating the chat HUD command history. It might
       // be that onClientChat(...) can get called on a different thread from what other callers are
       // expecting, thereby corrupting the history. Verify whether this gets called on the same
@@ -1991,6 +2065,8 @@ public class Minescript {
   private static EventDispatcher explosionEventListeners = new EventDispatcher();
   private static EventDispatcher chunkEventListeners = new EventDispatcher();
   private static EventDispatcher worldListeners = new EventDispatcher();
+  private static EventDispatcher serverboundPacketListeners = new EventDispatcher();
+  private static EventDispatcher clientboundPacketListeners = new EventDispatcher();
 
   static Map<String, EventDispatcher> eventDispatchers = new HashMap<>();
 
@@ -2007,6 +2083,8 @@ public class Minescript {
     eventDispatchers.put("explosion", explosionEventListeners);
     eventDispatchers.put("chunk", chunkEventListeners);
     eventDispatchers.put("world", worldListeners);
+    eventDispatchers.put("serverbound_packet", serverboundPacketListeners);
+    eventDispatchers.put("clientbound_packet", clientboundPacketListeners);
   }
 
   // Pattern for event names before/after render passes, e.g:
@@ -2198,13 +2276,13 @@ public class Minescript {
 
   private static void processPlainText(String text) {
     var minecraft = Minecraft.getInstance();
-    var chat = minecraft.gui.getChat();
-    chat.addMessage(Component.nullToEmpty(text));
+    var chat = minecraft.gui.hud.getChat();
+    chat.addClientSystemMessage(Component.nullToEmpty(text));
   }
 
   private static void processJsonFormattedText(String text) {
     var minecraft = Minecraft.getInstance();
-    var chat = minecraft.gui.getChat();
+    var chat = minecraft.gui.hud.getChat();
 
     JsonElement jsonElement = JsonParser.parseString(text);
     var component =
@@ -2216,7 +2294,7 @@ public class Minescript {
                     string ->
                         LOGGER.warn("Failed to parse JSON-formatted text '{}': {}", text, string))
                 .orElse(null);
-    chat.addMessage(component);
+    chat.addClientSystemMessage(component);
   }
 
   static void processMessage(Message message) {
@@ -2293,7 +2371,7 @@ public class Minescript {
 
   public static Optional<String> getScreenName() {
     var minecraft = Minecraft.getInstance();
-    var screen = minecraft.screen;
+    var screen = minecraft.gui.screen();
     if (screen == null) {
       return Optional.empty();
     }
@@ -2762,9 +2840,16 @@ public class Minescript {
 
           var result = new WorldInfo();
           result.game_ticks = levelProperties.getGameTime();
-          result.day_ticks = levelProperties.getDayTime();
-          result.raining = levelProperties.isRaining();
-          result.thundering = levelProperties.isThundering();
+          result.raining = world.isRaining();
+          result.thundering = world.isThundering();
+          world
+              .registryAccess()
+              .get(Timelines.OVERWORLD_DAY)
+              .ifPresent(
+                  timeline -> {
+                    result.day_ticks =
+                        ((Timeline) timeline.value()).getCurrentTicks(world.clockManager());
+                  });
 
           var spawnPos = levelProperties.getRespawnData().globalPos().pos();
           result.spawn[0] = spawnPos.getX();
@@ -2775,6 +2860,8 @@ public class Minescript {
           result.difficulty = difficulty.getSerializedName();
           result.name = getWorldName();
           result.address = serverAddress;
+          var dimensionKey = world.dimension().toString();
+          result.dimension = dimensionKey.substring(dimensionKey.lastIndexOf('/') + 2, dimensionKey.length() - 1);
           return ScriptValue.of(result);
         }
 
@@ -2843,7 +2930,7 @@ public class Minescript {
           Screenshot.grab(
               minecraft.gameDirectory,
               filename,
-              minecraft.getMainRenderTarget(),
+              minecraft.gameRenderer.mainRenderTarget(),
               /* downScale= */ 1,
               message -> job.log(message.getString()));
           return ScriptValue.TRUE;
@@ -2860,7 +2947,7 @@ public class Minescript {
           if (!args.isEmpty()) {
             throw new IllegalArgumentException("Expected no params but got: " + args.toString());
           }
-          Screen screen = minecraft.screen;
+          Screen screen = minecraft.gui.screen();
           if (screen instanceof AbstractContainerScreen<?> handledScreen) {
             AbstractContainerMenu screenHandler = handledScreen.getMenu();
             Slot[] slots = screenHandler.slots.toArray(new Slot[0]);
@@ -2892,11 +2979,11 @@ public class Minescript {
         {
           args.expectSize(2);
           boolean show = args.getBoolean(0);
-          var screen = minecraft.screen;
+          var screen = minecraft.gui.screen();
           final ScriptValue result;
           if (show) {
             if (screen == null) {
-              minecraft.setScreen(new ChatScreen("", /* isDraft= */ false));
+              minecraft.gui.setScreen(new ChatScreen("", /* isDraft= */ false));
             }
             var prompt = args.get(1);
             if (prompt != null && checkChatScreenInput()) {
@@ -2938,7 +3025,7 @@ public class Minescript {
 
       case "append_chat_history":
         args.expectSize(1);
-        minecraft.gui.getChat().addRecentChat(args.getString(0));
+        minecraft.gui.hud.getChat().addRecentChat(args.getString(0));
         return ScriptValue.NULL;
 
       case "chat_input":
@@ -3039,15 +3126,6 @@ public class Minescript {
                         .map(Object::toString)
                         .collect(Collectors.toList())
                         .toArray(String[]::new));
-          }
-
-          // If the message starts with a slash or backslash, prepend a space so that it's printed
-          // and not executed as a command.
-          if (message.length() > 0) {
-            char firstLetter = message.charAt(0);
-            if (firstLetter == '\\' || firstLetter == '/') {
-              message = " " + message;
-            }
           }
 
           processChatMessage(message);
@@ -3893,6 +3971,10 @@ public class Minescript {
 
   public static void reportException(Throwable e) {
     ScriptExceptionHandler.reportException(systemMessageQueue, e);
+  }
+
+  public static void reportJobException(Job job, Throwable e) {
+    ScriptExceptionHandler.reportException(systemMessageQueue, job, e);
   }
 
   public static void processMessageQueue(

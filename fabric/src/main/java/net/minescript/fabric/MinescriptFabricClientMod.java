@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
+// SPDX-FileCopyrightText: © 2022-2026 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
 package net.minescript.fabric;
@@ -27,7 +27,7 @@ public final class MinescriptFabricClientMod implements ClientModInitializer {
         (world, chunk) -> Minescript.onChunkUnload(world, chunk));
 
     Minescript.init(new FabricPlatform());
-    ClientTickEvents.START_WORLD_TICK.register(world -> Minescript.onClientWorldTick());
+    ClientTickEvents.START_LEVEL_TICK.register(world -> Minescript.onClientWorldTick());
     ScreenEvents.AFTER_INIT.register(this::afterInitScreen);
   }
 

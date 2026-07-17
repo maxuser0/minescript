@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
+// SPDX-FileCopyrightText: © 2022-2026 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
 package net.minescript.common.mixin;
@@ -28,7 +28,7 @@ public class KeyboardHandlerMixin {
     int scanCode = event.scancode();
     int modifiers = event.modifiers();
     Minescript.onKeyboardEvent(key, scanCode, action, modifiers);
-    var screen = Minecraft.getInstance().screen;
+    var screen = Minecraft.getInstance().gui.screen();
     if (screen == null) {
       Minescript.onKeyInput(key);
     } else if (config != null

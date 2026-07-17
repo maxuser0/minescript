@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
+// SPDX-FileCopyrightText: © 2022-2026 Greg Christiana <maxuser@minescript.net>
 // SPDX-License-Identifier: GPL-3.0-only
 
 package net.minescript.common;
@@ -12,7 +12,15 @@ class ScriptExceptionHandler {
 
   public static void reportException(SystemMessageQueue systemMessageQueue, Throwable e) {
     systemMessageQueue.logUserError(prettyPrintScriptException(e, /* toplevelException= */ true));
-    LOGGER.error("Caught script exception:", e);
+    LOGGER.error("Script exception:", e);
+  }
+
+  public static void reportException(SystemMessageQueue systemMessageQueue, Job job, Throwable e) {
+    var jobSummary = job.jobSummary();
+    systemMessageQueue.logUserError(
+        "Script exception in job %s:\n %s"
+            .formatted(jobSummary, prettyPrintScriptException(e, /* toplevelException= */ true)));
+    LOGGER.error("Script exception in job %s:".formatted(jobSummary), e);
   }
 
   private static String prettyPrintScriptException(Throwable e, boolean toplevelException) {

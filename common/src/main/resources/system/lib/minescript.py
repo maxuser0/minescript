@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
+# SPDX-FileCopyrightText: © 2022-2026 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: GPL-3.0-only
 
 # WARNING: This file is generated from the Minescript jar file. This file will
@@ -784,6 +784,7 @@ class WorldInfo:
   difficulty: str
   name: str
   address: str
+  dimension: str
 
 def world_info() -> WorldInfo:
   """Gets world properties.
@@ -1374,7 +1375,7 @@ class EventQueue:
         echo("Who's there?")
   ```
 
-  Compatibility: Python only. (See `add_event_listener` for Pyjinn event handling.)
+  Compatibility: Python only. (See `add_event_listener` and `EventLoop` for Pyjinn event handling.)
 
   Since: v4.0
   """
@@ -2350,6 +2351,9 @@ class BlockPacker:
       self._flush_blocks()
 
   def _flush_blocks(self):
+    if self.offset is None:
+      return
+
     if sys.byteorder != "big":
       # Swap to network (big-endian) byte order.
       self.setblocks.byteswap()
@@ -2757,12 +2761,14 @@ if "Pyjinn" in sys.version:
     - `"block_update"` - `BlockUpdateEvent`
     - `"chat"` - `ChatEvent`
     - `"chunk"` - `ChunkEvent`
+    - `"clientbound_packet"` - `ClientboundPacketEvent`
     - `"damage"` - `DamageEvent`
     - `"explosion"` - `ExplosionEvent`
     - `"key"` - `KeyEvent`
     - `"mouse"` - `MouseEvent`
     - `"outgoing_chat_intercept"` - `ChatEvent`
     - `"render"` - `RenderEvent`
+    - `"serverbound_packet"` - `ServerboundPacketEvent`
     - `"take_item"` - `TakeItemEvent`
     - `"tick"` - `TickEvent`
     - `"world"` - `WorldEvent`
@@ -2777,6 +2783,22 @@ if "Pyjinn" in sys.version:
     Compatibility: Pyjinn only.
     """
     raise NotImplementedError("remove_event_listener is implemented in Java for Pyjinn scripts")
+
+  @dataclass
+  class ClientboundPacketEvent:
+    type: str
+    listener: JavaClass("net.minecraft.client.multiplayer.ClientPacketListener")
+    packet: JavaClass("net.minecraft.network.protocol.Packet")
+    time: float
+
+  @dataclass
+  class ServerboundPacketEvent:
+    type: str
+    connection: JavaClass("net.minecraft.network.Connection")
+    packet: JavaClass("net.minecraft.network.protocol.Packet")
+    listener: JavaClass("io.netty.channel.ChannelFutureListener")
+    flush: bool  # whether to flush the packet immediately
+    time: float
 
   @dataclass
   class RenderEvent:
@@ -2848,4 +2870,79 @@ if "Pyjinn" in sys.version:
 
     def __call__(self, *args):
       """Calls this callback, checking for cancellation."""
+      pass
+
+  class EventLoop:
+    """An event loop for running asynchronous code that can react to events.
+
+    The event loop allows scripts to wait for events or sleep without
+    blocking the main thread, using async/await.
+
+    Compatibility: Pyjinn only.
+    """
+
+    def __init__(self):
+      """Initializes a new EventLoop instance."""
+      pass
+
+    def run(self, async_function):
+      """Runs an asynchronous function within this event loop.
+
+      Args:
+        async_function: an async function that takes this `EventLoop` instance as its
+            only argument and returns a coroutine.
+
+      Raises:
+        RuntimeException: if `run()` has already been called for this event loop,
+            or if `async_function` does not return a coroutine.
+      """
+      pass
+
+    def add_listener(self, event_type: str):
+      """Adds a listener for the specified event type.
+
+      Args:
+        event_type: the type of event to listen for (e.g., "chat", "tick", "render").
+
+      Returns:
+        `True` if the listener was successfully added; `False` if a listener for
+        this event type already exists.
+      """
+      pass
+
+    def remove_listener(self, event_type: str):
+      """Removes the listener for the specified event type.
+
+      Args:
+        event_type: the type of event to remove the listener for.
+
+      Returns:
+        `True` if the listener was successfully removed; `False` if no listener
+        exists for this event type.
+      """
+      pass
+
+    def sleep(self, seconds: float):
+      """Asynchronously sleeps for the given number of seconds.
+
+      While sleeping, any events that fire will be queued and returned as a list
+      when the sleep finishes.
+
+      Args:
+        seconds: the number of seconds to sleep.
+
+      Returns:
+        A list of events that occurred while sleeping.
+      """
+      pass
+
+    def event(self, timeout_seconds: float = None):
+      """Asynchronously waits for the next event to occur.
+
+      Args:
+        timeout_seconds: optional maximum time to wait for an event.
+
+      Returns:
+        The event that occurred, or `None` if the timeout was reached.
+      """
       pass

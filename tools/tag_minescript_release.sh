@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# SPDX-FileCopyrightText: © 2022-2025 Greg Christiana <maxuser@minescript.net>
+# SPDX-FileCopyrightText: © 2022-2026 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: MIT
 
 # Update tag for Minescript and Minecraft versions in the current branch and
@@ -32,8 +32,8 @@ if [[ ! -f gradle.properties ]]; then
 fi
 
 mc_version=mc$(cat gradle.properties |grep '^minecraft_version=' |sed 's/.*=//')
-if [[ ! "$mc_version" =~ ^mc1\..* ]]; then
-  echo "Error: mc_version does not begin with 'mc1.': $mc_version" >&2
+if [[ -z "$mc_version" ]]; then
+  echo "Error: minecraft_version not found in gradle.properties" >&2
   exit 2
 fi
 
