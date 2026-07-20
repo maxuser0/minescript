@@ -2581,9 +2581,11 @@ public class Minescript {
           args.expectSize(0);
           var handItems = new HandItems();
           handItems.main_hand =
-              ItemStackData.of(player.getMainHandItem(), OptionalInt.empty(), false);
+              ItemStackData.of(
+                  player.getMainHandItem(), OptionalInt.empty(), false, world.registryAccess());
           handItems.off_hand =
-              ItemStackData.of(player.getOffhandItem(), OptionalInt.empty(), false);
+              ItemStackData.of(
+                  player.getOffhandItem(), OptionalInt.empty(), false, world.registryAccess());
           return ScriptValue.of(handItems);
         }
 
@@ -2596,7 +2598,9 @@ public class Minescript {
           for (int i = 0; i < inventory.getContainerSize(); i++) {
             var itemStack = inventory.getItem(i);
             if (itemStack.getCount() > 0) {
-              result.add(ItemStackData.of(itemStack, OptionalInt.of(i), i == selectedSlot));
+              result.add(
+                  ItemStackData.of(
+                      itemStack, OptionalInt.of(i), i == selectedSlot, world.registryAccess()));
             }
           }
           return ScriptValue.of(result.toArray(ItemStackData[]::new));
@@ -2913,7 +2917,9 @@ public class Minescript {
               if (itemStack.isEmpty()) {
                 continue;
               }
-              result.add(ItemStackData.of(itemStack, OptionalInt.of(slot.index), false));
+              result.add(
+                  ItemStackData.of(
+                      itemStack, OptionalInt.of(slot.index), false, world.registryAccess()));
             }
             return ScriptValue.of(result.toArray(ItemStackData[]::new));
           } else {
