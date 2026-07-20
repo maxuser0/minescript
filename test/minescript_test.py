@@ -509,6 +509,35 @@ def player_inventory_test():
 
 
 @test
+def player_inventory_components_test():
+  Minecraft = java.JavaClass("net.minecraft.client.Minecraft")
+  ItemStack = java.JavaClass("net.minecraft.world.item.ItemStack")
+  Items = java.JavaClass("net.minecraft.world.item.Items")
+  Registries = java.JavaClass("net.minecraft.core.registries.Registries")
+  Enchantments = java.JavaClass("net.minecraft.world.item.enchantment.Enchantments")
+
+  minecraft = Minecraft.getInstance()
+  inventory = minecraft.player.getInventory()
+  selected_slot = inventory.getSelectedSlot()
+  original_item = inventory.getItem(selected_slot).copy()
+
+  enchanted_sword = ItemStack(Items.WOODEN_SWORD)
+  enchantments = minecraft.level.registryAccess().lookupOrThrow(Registries.ENCHANTMENT)
+  enchanted_sword.enchant(enchantments.getOrThrow(Enchantments.SHARPNESS), 2)
+
+  try:
+    inventory.setItem(selected_slot, enchanted_sword)
+    selected_item = next(
+        item for item in minescript.player_inventory() if item.slot == selected_slot)
+    expect_equal("minecraft:wooden_sword", selected_item.item)
+    expect_true(selected_item.nbt is not None)
+    expect_contains(selected_item.nbt, '"minecraft:enchantments"')
+    expect_contains(selected_item.nbt, '"minecraft:sharpness":2')
+  finally:
+    inventory.setItem(selected_slot, original_item)
+
+
+@test
 def player_test():
   name = minescript.player_name()
   x, y, z = minescript.player_position()
