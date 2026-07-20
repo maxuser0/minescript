@@ -201,6 +201,24 @@ def player_inventory() -> List[ItemStack]:
   return __mcall__("player_inventory", [])
 
 
+def player_inventory_slot_to_hotbar(slot: int) -> int:
+  """Swaps an inventory item into the hotbar.
+
+  Args:
+    slot: inventory slot (9 or higher) to swap into the hotbar
+
+  Returns:
+    hotbar slot (0-8) into which the inventory item was swapped
+
+  Update in v4.0:
+    Removed `done_callback` arg. Use `player_inventory_slot_to_hotbar.as_async(...)`
+    for async execution.
+
+  Since: v3.0
+  """
+  return __mcall__("player_inventory_slot_to_hotbar", [slot])
+
+
 def player_inventory_select_slot(slot: int) -> int:
   """Selects the given slot within the player's hotbar.
 
