@@ -1,8 +1,9 @@
 # Minescript Terms of Use
 
-**Last Updated:** August 1, 2025
+**Last Updated:** July 19, 2026
 
-Please read these Terms of Use ("Terms", "TOU") carefully before using the Minescript mod (the "Mod") developed by **maxuser** ("the Developer").
+Please read these Terms of Use ("Terms", "TOU") carefully before using the Minescript mod (the
+"Mod") maintained by Greg Christiana ("the Lead Developer", "we", "us", "our").
 
 By downloading, installing, using, or contributing to Minescript, you agree to be bound by these Terms. If you do not agree to these Terms, you may not use the Mod.
 
@@ -52,18 +53,26 @@ By using Minescript, you agree to:
 
 ## 5. Third-Party Content and User-Generated Scripts
 
-Minescript allows users to create and execute their own scripts. The Developer does not review, endorse, or assume responsibility for any user-generated scripts or content created using Minescript. You acknowledge and agree that:
+Minescript allows users to create and execute their own scripts. The Lead Developer does not review, endorse, or assume responsibility for any user-generated scripts or content created using Minescript. You acknowledge and agree that:
 
-- (a) The Developer has no control over, and is not responsible for, the behavior or content of third-party scripts.
+- (a) The Lead Developer has no control over, and is not responsible for, the behavior or content of third-party scripts.
 - (b) You download and execute user-generated scripts at your own risk.
-- (c) The Developer is not liable for any damages or harm caused by user-generated scripts, including but not limited to server bans, data loss, or system instability.
+- (c) The Lead Developer is not liable for any damages or harm caused by user-generated scripts, including but not limited to server bans, data loss, or system instability.
 
 ---
 
 ## 6. Intellectual Property
 
-- (a)**The Developer's Intellectual Property:** All intellectual property rights in and to the Minescript Mod itself (excluding user-generated scripts) remain with the Developer. This includes, but is not limited to, the source code, design, and branding.
-- (b) **Your Content:** Any original scripts or content you create using Minescript belong to you, subject to your compliance with these Terms and the Mod's open-source license.
+- (a) **Source Code Copyright:** The underlying source code of the Mod is owned collectively by its
+  authors (the "Minescript Contributors"), as documented in the project's `CONTRIBUTORS.md` file and
+  version control history, and is licensed to the public under the GPL-3.0-only license.
+- (b) **Branding and Trademarks:** "Minescript", the Minescript logos, documentation prose, the
+  minescript.net domain, and associated brand assets are the exclusive intellectual property and
+  trademarks of the Lead Developer. While the source code is open-source, these Terms do not grant
+  you any right or license to use our trademarks or branding to distribute modified versions or
+  forks of the Mod, or to imply official endorsement by the Lead Developer.
+- (c) **Your Content:** Any original scripts or content you create using Minescript belong to
+  you, subject to your compliance with these Terms and the Mod's open-source license.
 
 ---
 
@@ -71,7 +80,7 @@ Minescript allows users to create and execute their own scripts. The Developer d
 
 **MINESCRIPT IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE MOD OR THE USE OR OTHER DEALINGS IN THE MOD.**
 
-The Developer does not warrant that:
+The Lead Developer does not warrant that:
 
 - (a) The Mod will meet your specific requirements.
 - (b) The Mod will be uninterrupted, timely, secure, or error-free.
@@ -100,7 +109,7 @@ You agree to defend, indemnify, and hold harmless the Developer and the Mod's co
 
 ## 10. Termination
 
-The Developer may terminate or suspend your license or permission to use the Mod immediately, without prior notice or liability, for any reason whatsoever, including without limitation if you breach these Terms.
+The Lead Developer may terminate or suspend your license or permission to use the Mod immediately, without prior notice or liability, for any reason whatsoever, including without limitation if you breach these Terms.
 
 Upon such termination or suspension, your right to use the Mod will immediately cease. Your continued possession or use of the Mod following termination of your license constitutes a breach of these Terms.
 
@@ -110,21 +119,27 @@ Upon such termination or suspension, your right to use the Mod will immediately 
 
 These Terms shall be governed and construed in accordance with the laws of the Commonwealth of Massachusetts, without regard to its conflict of law provisions.
 
-The Developer's failure to enforce any right or provision of these Terms will not be considered a waiver of those rights. If any provision of these Terms is held to be invalid or unenforceable by a court, the remaining provisions of these Terms will remain in effect. These Terms constitute the entire agreement between us regarding the Developer's Mod, and supersede and replace any prior agreements we might have between us regarding the Mod.
+The Lead Developer's failure to enforce any right or provision of these Terms will not be considered
+a waiver of those rights. If any provision of these Terms is held to be invalid or unenforceable by
+a court, the remaining provisions of these Terms will remain in effect. These Terms constitute the
+entire agreement between us regarding the Lead Developer's Mod, and supersede and replace any prior agreements we might have between us regarding the Mod.
 
 ---
 
 ## 12. Changes to These Terms
 
-The Developer reserves the right, at the Developer's sole discretion, to modify or replace these Terms at any time. If a revision is material, the Developer will try to provide at least 30 days' notice prior to any new terms taking effect. What constitutes a material change will be determined at the Developer's sole discretion.
+The Lead Developer reserves the right, at the Lead Developer's sole discretion, to modify or replace
+these Terms at any time. If a revision is material, the Lead Developer will try to provide at least
+30 days' notice prior to any new terms taking effect. What constitutes a material change will be
+determined at the Lead Developer's sole discretion.
 
-By continuing to access or use the Developer's Mod after those revisions become effective, you agree to be bound by the revised terms. If you do not agree to the new terms, please stop using the Mod.
+By continuing to access or use the Lead Developer's Mod after those revisions become effective, you agree to be bound by the revised terms. If you do not agree to the new terms, please stop using the Mod.
 
 ---
 
-## 13. Contact the Developer
+## 13. Contact the Lead Developer
 
-If you have any questions about these Terms, please contact the Developer:
+If you have any questions about these Terms, please contact the Lead Developer:
 
 * **Email:** maxuser@minescript.net
 * **GitHub:** <https://github.com/maxuser0/minescript>

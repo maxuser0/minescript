@@ -1,7 +1,0 @@
-[maxuser0](https://github.com/maxuser0)
-[heinGertenbach](https://github.com/heinGertenbach)
-[sam-ple](https://github.com/sam-ple)
-[R4z0rX](https://github.com/R4z0rX)
-[nelsnelson](https://github.com/nelsnelson)
-[MCT32](https://github.com/MCT32)
-[Supernova125](https://github.com/Supernova125)
