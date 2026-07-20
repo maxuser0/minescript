@@ -11,6 +11,11 @@
 Minescript standard library for Pyjinn scripts.
 """
 
+if "__script__" not in globals():
+  raise ImportError(
+      "system.pyj.minescript is only available to Pyjinn scripts (.pyj); "
+      "Python scripts should use `import minescript`")
+
 import system.pyj.sys as sys
 
 if "Pyjinn" not in sys.version:
