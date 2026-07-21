@@ -22,9 +22,13 @@ import sys
 import time
 import threading
 import traceback
+import io
 
 from dataclasses import dataclass
 from typing import Any, List, Set, Dict, Tuple, Optional, Callable
+
+if sys.stdin.encoding != 'utf-8':
+    sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8', errors='replace')
 
 AnyConsumer = Callable[[str], None]
 ExceptionHandler = Callable[[Exception], None]
