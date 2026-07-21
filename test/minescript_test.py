@@ -577,6 +577,17 @@ def player_test():
       players)]
   expect_equal(players_with_my_name, [(name, [x, y, z], yaw, pitch)])
 
+  current_tablist = minescript.tablist()
+  tablist_players = current_tablist.players()
+  expect_contains([p.name for p in tablist_players], name)
+  for entry in tablist_players:
+    expect_true(entry.display_name.plain is not None)
+    expect_true(entry.display_name.json is not None)
+  if current_tablist.header() is not None:
+    expect_equal(current_tablist.header().lines(), current_tablist.header().plain.splitlines())
+  if current_tablist.footer() is not None:
+    expect_equal(current_tablist.footer().lines(), current_tablist.footer().plain.splitlines())
+
   entities_with_my_name = [
       (e.name, e.position, e.yaw, e.pitch)
       for e in filter(lambda e: e.name == name, entities)]

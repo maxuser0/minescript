@@ -13,7 +13,8 @@
     "KeyboardHandlerMixin",
     "KeyMappingMixin",
     "LevelRendererMixin",
-    "MouseHandlerMixin"
+    "MouseHandlerMixin",
+    "PlayerTabOverlayAccessor"
   ],
   "client": [],
   "injectors": {

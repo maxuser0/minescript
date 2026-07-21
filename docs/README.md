@@ -939,6 +939,11 @@ is specified.
 - [`set_interval`](#set_interval)
 - [`set_timeout`](#set_timeout)
 - [`show_chat_screen`](#show_chat_screen)
+- [`tablist`](#tablist)
+- [`TabListData`](#tablistdata)
+- [`TabListObjective`](#tablistobjective)
+- [`TabListPlayer`](#tablistplayer)
+- [`TabListText`](#tablisttext)
 - [`TakeItemEvent`](#takeitemevent)
 - [`TargetedBlock`](#targetedblock)
 - [`TickEvent`](#tickevent)
@@ -1436,6 +1441,94 @@ Since: v3.0
   passengers: List[str] = None  # UUIDs of passengers as strings
   nbt: str = None
 ```
+
+#### TabListText
+Minecraft text in both plain-text and structured JSON forms.
+```
+  plain: str
+  json: Any
+```
+
+#### TabListText.lines
+*Usage:* <code>TabListText.lines() -> List[str]</code>
+
+Returns the plain text split into lines.
+
+#### TabListPlayer
+Snapshot of a player-list entry, including server-created fake players.
+```
+  uuid: str
+  name: str
+  display_name: TabListText
+  latency: int
+  game_mode: str
+  team: str = None
+  order: int = 0
+  skin_texture: str = None
+  show_hat: bool = True
+  score: int = None
+  score_display: TabListText = None
+```
+
+#### TabListObjective
+Scoreboard objective displayed beside player-list entries.
+```
+  name: str
+  display_name: TabListText
+  render_type: str
+```
+
+#### TabListData
+Snapshot of the player-list overlay.
+
+#### TabListData.players
+*Usage:* <code>TabListData.players() -> List[TabListPlayer]</code>
+
+Returns the entries rendered in the player list, in display order.
+
+#### TabListData.header
+*Usage:* <code>TabListData.header() -> Union[TabListText, None]</code>
+
+Returns the text above the player entries, or `None`.
+
+#### TabListData.footer
+*Usage:* <code>TabListData.footer() -> Union[TabListText, None]</code>
+
+Returns the text below the player entries, or `None`.
+
+#### TabListData.objective
+*Usage:* <code>TabListData.objective() -> Union[TabListObjective, None]</code>
+
+Returns the scoreboard objective rendered beside entries, or `None`.
+
+#### tablist
+*Usage:* <code>tablist() -> [TabListData](#tablistdata)</code>
+
+Gets a snapshot of the in-game player-list overlay.
+
+Unlike [`players()`](#players), this reads the client network entries used by the Tab key overlay. This
+includes server-created "fake players" that do not exist as entities in the world.
+
+Each [`TabListText`](#tablisttext) value includes convenient plain text and the original structured Minecraft
+JSON text, preserving colors, styling, translations, and other component metadata.
+
+*Example:*
+
+```python
+current_tablist = minescript.tablist()
+player_names = [player.display_name.plain for player in current_tablist.players()]
+header_lines = [] if current_tablist.header() is None else current_tablist.header().lines()
+footer = None if current_tablist.footer() is None else current_tablist.footer().plain
+```
+
+*Returns:*
+
+- [`TabListData`](#tablistdata) containing the displayed entries, header, footer, and optional list scoreboard
+objective. Entries are returned in the same order and with the same 80-entry limit as the
+vanilla overlay.
+
+Since: v5.0
+
 
 #### player_get_targeted_entity
 *Usage:* <code>player_get_targeted_entity(max_distance: float = 20, nbt: bool = False) -> Union[EntityData, None]</code>
