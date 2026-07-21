@@ -509,6 +509,33 @@ def player_inventory_test():
 
 
 @test
+def player_inventory_slot_to_hotbar_test():
+  def items_by_slot():
+    return {item.slot: item for item in minescript.player_inventory()}
+
+  def contents(item):
+    return None if item is None else (item.item, item.count, item.nbt)
+
+  inventory_slot = 9
+  before = items_by_slot()
+  hotbar_slot = None
+  try:
+    hotbar_slot = minescript.player_inventory_slot_to_hotbar(inventory_slot)
+    expect_true(0 <= hotbar_slot <= 8)
+    after_swap = items_by_slot()
+    expect_equal(contents(before.get(inventory_slot)), contents(after_swap.get(hotbar_slot)))
+    expect_equal(contents(before.get(hotbar_slot)), contents(after_swap.get(inventory_slot)))
+  finally:
+    if hotbar_slot is not None:
+      restored_hotbar_slot = minescript.player_inventory_slot_to_hotbar(inventory_slot)
+
+  expect_equal(hotbar_slot, restored_hotbar_slot)
+  restored = items_by_slot()
+  expect_equal(contents(before.get(inventory_slot)), contents(restored.get(inventory_slot)))
+  expect_equal(contents(before.get(hotbar_slot)), contents(restored.get(hotbar_slot)))
+
+
+@test  
 def player_inventory_components_test():
   Minecraft = java.JavaClass("net.minecraft.client.Minecraft")
   ItemStack = java.JavaClass("net.minecraft.world.item.ItemStack")
