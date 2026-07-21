@@ -734,6 +734,29 @@ def world_info_test():
 
 
 @test
+def scoreboard_test():
+  scoreboard = minescript.get_scoreboard()
+  if scoreboard is None:
+    print_success("No scoreboard is displayed")
+    return
+
+  expect_equal(minescript.ScoreboardData, type(scoreboard))
+  expect_equal(str, type(scoreboard.objective_name))
+  expect_equal(str, type(scoreboard.display_name))
+  expect_equal(list, type(scoreboard.entries))
+
+  previous_score = None
+  for entry in scoreboard.entries:
+    expect_equal(minescript.ScoreboardEntry, type(entry))
+    expect_equal(str, type(entry.name))
+    expect_equal(int, type(entry.score))
+    expect_equal(str, type(entry.display_name))
+    if previous_score is not None:
+      expect_true(previous_score >= entry.score)
+    previous_score = entry.score
+
+
+@test
 def command_parse_test():
   minescript.execute(r"""\eval 'print("this is " + "a test")' 2>null""")
   await_script("eval")
