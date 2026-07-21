@@ -33,6 +33,7 @@ dependencies {
     compileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
     annotationProcessor group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
     api "org.pyjinn:pyjinn-lib:${pyjinn_version}:all"
+    testImplementation 'junit:junit:4.13.2'
 }
 
 configurations {
@@ -56,4 +57,3 @@ artifacts {
     commonJava sourceSets.main.java.sourceDirectories.singleFile
     commonResources sourceSets.main.resources.sourceDirectories.singleFile
 }
-
