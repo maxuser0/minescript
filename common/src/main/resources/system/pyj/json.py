@@ -22,6 +22,7 @@ HashMap = JavaClass("java.util.HashMap")
 List = JavaClass("java.util.List")
 ArrayList = JavaClass("java.util.ArrayList")
 String = JavaClass("java.lang.String")
+Long = JavaClass("java.lang.Long")
 
 def _listify_pyjinnlist(items):
     lst = ArrayList()
@@ -50,6 +51,7 @@ def _dictify_javamap(javamap):
 def _handle_fromjson(obj):
     if isinstance(obj, Map): return _dictify_javamap(obj)
     elif isinstance(obj, List): return [_handle_fromjson(javaobj) for javaobj in obj]
+    elif isinstance(obj, Long): return int(obj)
     else: return obj
 
 def _handle_tojson(obj):
