@@ -156,6 +156,7 @@ public class Minescript {
 
     worldListenerThread =
         new Thread(Minescript::runWorldListenerThread, "minescript-world-listener");
+    worldListenerThread.setDaemon(true);
     worldListenerThread.start();
 
     Path minescriptDir = Paths.get(System.getProperty("user.dir"), MINESCRIPT_DIR);
