@@ -23,7 +23,7 @@ displayName="Minescript" #mandatory
 # A URL for the "homepage" for this mod, displayed in the mod UI
 displayURL="https://minescript.net/" #optional
 # A file name (in the root of the mod JAR) containing a logo for display
-logoFile="minescript-logo.png" #optional
+iconFile="minescript-logo.png" #optional
 # A text field displayed in the mod UI
 credits="Special thanks to Spiderfffun and Coolbou0427 for testing." #optional
 # A text field displayed in the mod UI

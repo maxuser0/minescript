@@ -25,7 +25,7 @@ public class KeyboardHandlerMixin {
       cancellable = true)
   private void keyPress(long window, int action, KeyEvent event, CallbackInfo ci) {
     int key = event.key();
-    int scanCode = event.scancode();
+    int scanCode = event.keycode();
     int modifiers = event.modifiers();
     Minescript.onKeyboardEvent(key, scanCode, action, modifiers);
     var screen = Minecraft.getInstance().gui.screen();

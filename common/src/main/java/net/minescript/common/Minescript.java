@@ -92,6 +92,7 @@ import net.minescript.common.events.*;
 import net.minescript.common.mappings.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.lwjgl.sdl.SDLKeyboard;
 import org.pyjinn.interpreter.Script;
 
 public class Minescript {
@@ -1758,13 +1759,19 @@ public class Minescript {
         return cancel;
       }
       int cursorPos = chatEditBox.getCursorPosition();
-      if (key >= 32 && key < 127) {
-        // TODO(maxuser): use chatEditBox.setSuggestion(String) to set suggestion?
-        // TODO(maxuser): detect upper vs lower case properly
-        String extraChar = Character.toString((char) key).toLowerCase();
-        value = insertSubstring(value, cursorPos, extraChar);
-      } else if (key == BACKSPACE_KEY) {
+      if (key == BACKSPACE_KEY) {
         value = eraseChar(value, cursorPos);
+      } else if (key != TAB_KEY
+          && key != ENTER_KEY
+          && (config == null || key != config.secondaryEnterKeyCode())
+          && key != ESCAPE_KEY) {
+        int keycode = SDLKeyboard.SDL_GetKeyFromScancode(key, (short) 0, false);
+        if (keycode >= 32 && keycode < 127) {
+          // TODO(maxuser): use chatEditBox.setSuggestion(String) to set suggestion?
+          // TODO(maxuser): detect upper vs lower case properly
+          String extraChar = Character.toString((char) keycode).toLowerCase();
+          value = insertSubstring(value, cursorPos, extraChar);
+        }
       }
       if (value.stripTrailing().length() > 0) {
         String command = getCompletableCommand(value.substring(1));
@@ -1848,7 +1855,7 @@ public class Minescript {
     var minecraft = Minecraft.getInstance();
     var screen = minecraft.gui.screen();
     if (screen == null && key == BACKSLASH_KEY) {
-      minecraft.gui.setScreen(new ChatScreen("", /* isDraft= */ false));
+      minecraft.gui.setScreen(new ChatScreen("\\", /* isDraft= */ false));
     }
   }
 

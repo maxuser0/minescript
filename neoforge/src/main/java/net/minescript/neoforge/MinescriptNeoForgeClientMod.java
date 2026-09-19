@@ -38,7 +38,7 @@ public class MinescriptNeoForgeClientMod {
   public static class ClientEvents {
     @SubscribeEvent
     public static void onKeyboardKeyPressedEvent(ScreenEvent.KeyPressed.Pre event) {
-      if (Minescript.onKeyboardKeyPressed(event.getScreen(), event.getKeyCode())) {
+      if (Minescript.onKeyboardKeyPressed(event.getScreen(), event.getKey())) {
         event.setCanceled(true);
       }
     }
