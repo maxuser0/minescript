@@ -72,12 +72,15 @@ import re
 import sys
 import time
 
-TAB_KEY = 258
-RIGHT_KEY = 262
-LEFT_KEY = 263
+with script_loop:
+  InputConstants = JavaClass("com.mojang.blaze3d.platform.InputConstants")
+  TAB_KEY = InputConstants.KEY_TAB
+  RIGHT_KEY = InputConstants.KEY_RIGHT
+  LEFT_KEY = InputConstants.KEY_LEFT
+  enter_key = InputConstants.KEY_RETURN
+  trigger_key = InputConstants.KEY_I # `i` key
+
 control_modifier = 2
-enter_key = 257
-trigger_key = 73 # `i` key
 chat_prefix = ">>> "
 last_code_time = 0
 
