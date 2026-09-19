@@ -1425,13 +1425,13 @@ public class Minescript {
   private static long worldRenderEventCounter = 0;
   private static long clientTickEventCounter = 0;
 
-  private static int BACKSLASH_KEY = 92;
-  private static int ESCAPE_KEY = 256;
-  public static int ENTER_KEY = 257;
-  private static int TAB_KEY = 258;
-  private static int BACKSPACE_KEY = 259;
-  private static int UP_ARROW_KEY = 265;
-  private static int DOWN_ARROW_KEY = 264;
+  private static int BACKSLASH_KEY = InputConstants.KEY_BACKSLASH;
+  private static int ESCAPE_KEY = InputConstants.KEY_ESCAPE;
+  public static int ENTER_KEY = InputConstants.KEY_RETURN;
+  private static int TAB_KEY = InputConstants.KEY_TAB;
+  private static int BACKSPACE_KEY = InputConstants.KEY_BACKSPACE;
+  private static int UP_ARROW_KEY = InputConstants.KEY_UP;
+  private static int DOWN_ARROW_KEY = InputConstants.KEY_DOWN;
 
   private static String insertSubstring(String original, int position, String insertion) {
     return original.substring(0, position) + insertion + original.substring(position);

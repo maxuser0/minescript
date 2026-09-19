@@ -9,6 +9,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.mojang.blaze3d.platform.InputConstants;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -75,8 +76,8 @@ public class Config {
 
   private boolean minescriptOnChatReceivedEvent = false;
 
-  // Default secondary `enter` key code to value of KEY_KP_ENTER from GLFW.
-  private int secondaryEnterKeyCode = 335;
+  // Default secondary `enter` key code to value of KEY_NUMPADENTER from InputConstants.
+  private int secondaryEnterKeyCode = InputConstants.KEY_NUMPADENTER;
 
   // Map from world name (or "*" for all) to a list of Minescript/Minecraft commands.
   private Map<String, List<Message>> autorunCommands = new ConcurrentHashMap<>();
