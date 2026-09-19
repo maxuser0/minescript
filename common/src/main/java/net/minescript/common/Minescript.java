@@ -1817,6 +1817,9 @@ public class Minescript {
         if (completions.size() == 1 && hasFullMatch) {
           chatEditBox.setTextColor(0xff5ee85e); // green
           commandSuggestions = new ArrayList<>();
+        } else if (command.isEmpty() || command.equals("\\")) {
+          chatEditBox.setTextColor(0xffaaaaaa); // light gray
+          commandSuggestions = new ArrayList<>();
         } else {
           List<String> newCommandSuggestions = new ArrayList<>();
           newCommandSuggestions.addAll(completions);
