@@ -248,6 +248,7 @@ public class Minescript {
         "system/exec/install_mappings.pyj", execDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/exec/eval.pyj", execDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/exec/pyeval.py", execDir, FileOverwritePolicy.OVERWRITTE);
+    copyJarResourceToFile("system/exec/interpreter.pyj", execDir, FileOverwritePolicy.OVERWRITTE);
     copyJarResourceToFile("system/exec/pyinterpreter.py", execDir, FileOverwritePolicy.OVERWRITTE);
   }
 
