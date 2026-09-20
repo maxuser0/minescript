@@ -635,13 +635,17 @@ def screenshot_test():
 
 @test
 def player_targeted_block_test():
-  # Record player orientation then look down for the targeted block test since player is likely to
-  # have ground beneath them. Lastly, restore player's original orientation.
-  yaw, pitch = minescript.player_orientation()
-  minescript.player_set_orientation(yaw, 90)
-  max_distance = 400
-  result = minescript.player_get_targeted_block(max_distance)
-  minescript.player_set_orientation(yaw, pitch)
+  # Using the tick loop so state mutations are reflected in subsequent reads. By default, the render
+  # loop can miss state updates.
+  with minescript.tick_loop:
+    # Record player orientation then look down for the targeted block test since player is likely to
+    # have ground beneath them. Lastly, restore player's original orientation.
+    yaw, pitch = minescript.player_orientation()
+    minescript.player_set_orientation(yaw, 90)
+    max_distance = 400
+    result = minescript.player_get_targeted_block(max_distance)
+    minescript.player_set_orientation(yaw, pitch)
+
   expect_true(result is not None)
   expect_equal(len(result[0]), 3)
   expect_equal([type(x) for x in result[0]], [int, int, int])
