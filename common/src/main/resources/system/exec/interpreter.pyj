@@ -1,0 +1,345 @@
+#!python
+# SPDX-FileCopyrightText: © 2026 Minescript Contributors
+# SPDX-License-Identifier: GPL-3.0-only
+
+# WARNING: This file is generated from the Minescript jar file. This file will
+# be overwritten automatically when Minescript updates to a new version. If you
+# make edits to this file, make sure to save a backup copy when upgrading to a
+# new version of Minescript.
+
+r"""interpreter v5.0 distributed via Minescript jar file
+
+A Pyjinn REPL interpreter in the Minecraft chat.
+
+If a file is found in any of the directories of the config
+variable `command_path` from `config.txt` with the filename
+`.interpreter_init.pyj`, that script is loaded during startup
+of the interpreter.
+
+When the interpreter launches, the prompt ">>>" appears
+in the Minecraft chat. Enter Pyjinn statements or expressions
+just as you would in a Python REPL in a terminal.
+
+Put the interpreter in the background by hitting the escape
+key or deleting the ">>>" prompt to enter a Minecraft command,
+chat message, or Minescript command.
+
+Bring the interpreter to the foreground by pressing "i" while
+no GUI screens are visible.
+
+Typing "." at the ">>>" prompt exits the interpreter.
+
+Requires:
+  minescript v5.0
+
+Usage:
+  ```
+  \interpreter
+  ```
+"""
+
+from system.pyj.minescript import *
+import system.pyj.sys as sys
+
+Class = JavaClass("java.lang.Class")
+File = JavaClass("java.io.File")
+FilePattern = JavaClass("net.minescript.common.FilePattern")
+Files = JavaClass("java.nio.file.Files")
+InputConstants = JavaClass("com.mojang.blaze3d.platform.InputConstants")
+Integer = JavaClass("java.lang.Integer")
+JsonObject = JavaClass("com.google.gson.JsonObject")
+Minescript = JavaClass("net.minescript.common.Minescript")
+PyjinnParser = JavaClass("org.pyjinn.parser.PyjinnParser")
+Script = JavaClass("org.pyjinn.interpreter.Script")
+System = JavaClass("java.lang.System")
+
+TAB_KEY = InputConstants.KEY_TAB
+RIGHT_KEY = InputConstants.KEY_RIGHT
+LEFT_KEY = InputConstants.KEY_LEFT
+enter_key = InputConstants.KEY_RETURN
+trigger_key = InputConstants.KEY_I  # `i` key
+
+chat_prefix = ">>> "
+last_code_time = 0.0
+
+DEFAULT_TEXT_COLOR = Integer.parseUnsignedInt("ffffffff", 16)  # opaque white
+FULL_COMPLETION_COLOR = Integer.parseUnsignedInt("ff5ee85e", 16)  # opaque green
+PARTIAL_COMPLETION_COLOR = Integer.parseUnsignedInt("ff5ee8e8", 16)  # opaque cyan
+
+repl_script = Minescript.loadPyjinnScript(JavaList(["__interpreter__.pyj"]), "pass")
+repl_script.redirectStdout(__script__.stdout)
+repl_script.redirectStderr(__script__.stderr)
+for name in __script__.vars.keys():
+  repl_script.vars[name] = __script__.vars[name]
+
+repl_script.exec()
+
+def on_global_expression(result):
+  if result is not None:
+    print(result, file=sys.stderr)
+
+repl_script.setGlobalExpressionHandler(on_global_expression)
+
+import system.pyj.atexit as atexit
+
+def on_script_exit():
+  try:
+    repl_script.exit(0)
+  except Exception:
+    pass
+
+atexit.register(on_script_exit)
+
+def reset_repl_context():
+  try:
+    globals_ctx = repl_script.mainModule().globals()
+    globals_ctx.globalStatements().clear()
+    globals_ctx.ip = globals_ctx.code.instructions.size()
+    while globals_ctx.dataStackSize() > 0:
+      globals_ctx.popData()
+  except Exception:
+    pass
+
+def str_rfind(s, ch):
+  pos = -1
+  for i in range(len(s)):
+    if s[i] == ch:
+      pos = i
+  return pos
+
+def is_valid_subexpression(text):
+  if not text or not text.strip():
+    return False
+  try:
+    PyjinnParser.parse("<stdin>", text)
+    return True
+  except Exception:
+    return False
+
+def longest_trailing_subexpression(text):
+  if not text:
+    return None
+  ends_in_dot = text.endswith(".")
+  if ends_in_dot:
+    text = text[:-1]
+  for i in range(len(text)):
+    suffix = text[i:]
+    if is_valid_subexpression(suffix):
+      return suffix + "." if ends_in_dot else suffix
+  return None
+
+def get_completions(target, partial):
+  completions = set()
+  if target:
+    try:
+      ast = PyjinnParser.parse("<stdin>", f"__eval_tmp__ = {target}")
+      repl_script.compile(ast, "<stdin>")
+      repl_script.exec()
+      target_val = repl_script.get("__eval_tmp__")
+      repl_script.set("__eval_tmp__", None)
+
+      if target_val is not None:
+        target_class = None
+        if isinstance(type(target_val), Class):
+          target_class = type(target_val)
+        elif isinstance(target_val, Class):
+          target_class = target_val
+        elif target_val.getClass().getName().endswith("PyjClass"):
+          inst_methods = target_val.getClass().getField("instanceMethods").get(target_val)
+          for name in inst_methods.keySet():
+            if name.startswith(partial):
+              completions.add(name + "(")
+          class_methods = target_val.getClass().getField("classLevelMethods").get(target_val)
+          for name in class_methods.keySet():
+            if name.startswith(partial):
+              completions.add(name + "(")
+        elif target_val.getClass().getName().endswith("PyjObject"):
+          cls = target_val.getClass().getField("__class__").get(target_val)
+          if cls is not None:
+            inst_methods = cls.getClass().getField("instanceMethods").get(cls)
+            for name in inst_methods.keySet():
+              if name.startswith(partial):
+                completions.add(name + "(")
+          d = target_val.getClass().getField("__dict__").get(target_val)
+          if d is not None:
+            for name in d.keys():
+              if name.startswith(partial):
+                val = d.get(name)
+                if val is not None and val.getClass().getName().endswith("Function"):
+                  completions.add(name + "(")
+                else:
+                  completions.add(name)
+        else:
+          target_class = target_val.getClass()
+
+        if target_class is not None:
+          try:
+            mappings = Minescript.mappingsLoader.get()
+          except Exception:
+            mappings = None
+
+          if mappings is not None:
+            for name in mappings.getPrettyMethodNames(target_class):
+              if name.startswith(partial):
+                completions.add(name + "(")
+            for name in mappings.getPrettyFieldNames(target_class):
+              if name.startswith(partial):
+                completions.add(name)
+          else:
+            for m in target_class.getMethods():
+              name = m.getName()
+              if name.startswith(partial):
+                completions.add(name + "(")
+            for f in target_class.getFields():
+              name = f.getName()
+              if name.startswith(partial):
+                completions.add(name)
+    except Exception as e:
+      reset_repl_context()
+      err_json = JsonObject()
+      err_json.addProperty("text", f"Error: {str(e)}")
+      err_json.addProperty("color", "red")
+      echo_json(err_json.toString())
+  else:
+    globals_ctx = repl_script.mainModule().globals()
+    for name in globals_ctx.code.variableNames:
+      if name != "__eval_tmp__" and (not name.startswith("__") or partial.startswith("_")):
+        if name.startswith(partial):
+          completions.add(name)
+    for name in globals_ctx.vars().keys():
+      if name != "__eval_tmp__" and (not name.startswith("__") or partial.startswith("_")):
+        if name.startswith(partial):
+          completions.add(name)
+
+  res = list(completions)
+  res.sort()
+  return res
+
+def longest_common_prefix(strings):
+  if not strings:
+    return ""
+  longest = strings[0]
+  for i in range(1, len(strings)):
+    string = strings[i]
+    end = min(len(string), len(longest))
+    if end < len(longest):
+      longest = longest[0:end]
+    for j in range(end):
+      if string[j] != longest[j]:
+        longest = longest[0:j]
+        break
+  return longest
+
+def process_key_event(event):
+  global last_code_time
+  try:
+    if event.key == trigger_key and event.action == 1 and event.screen is None:
+      show_chat_screen(True, chat_prefix)
+    elif abs(event.time - last_code_time) < 0.5:
+      if event.key == enter_key and event.action != 1 and event.screen is None:
+        show_chat_screen(True, chat_prefix)
+    elif event.key == TAB_KEY and event.action == 1 and event.screen == "Chat screen":
+      text, pos = chat_input()
+      if text.startswith(chat_prefix) and pos == len(text):
+        suffix = longest_trailing_subexpression(text[len(chat_prefix):])
+        if not suffix:
+          return
+        last_dot = str_rfind(suffix, ".")
+        if last_dot == -1:
+          target = None
+          partial = suffix
+        else:
+          target = suffix[:last_dot]
+          partial = suffix[last_dot + 1:]
+        start_time = System.currentTimeMillis() / 1000.0
+        completions = get_completions(target, partial)
+        end_time = System.currentTimeMillis() / 1000.0
+        log(f"Finished completions for `{partial}` in {end_time - start_time} seconds")
+        color = FULL_COMPLETION_COLOR
+        if len(completions) > 1:
+          color = PARTIAL_COMPLETION_COLOR
+          print(" ", file=sys.stderr)
+          for c in completions:
+            print(c, file=sys.stderr)
+        match = longest_common_prefix(completions)
+        if match:
+          text += match[len(partial):]
+          set_chat_input(text, len(text), color)
+    elif event.action == 1 and event.screen == "Chat screen" and event.key not in (
+        LEFT_KEY, RIGHT_KEY):
+      text, _ = chat_input()
+      if text and text.startswith(chat_prefix):
+        set_chat_input(color=DEFAULT_TEXT_COLOR)
+  except Exception as e:
+    err_json = JsonObject()
+    err_json.addProperty("text", f"Error in key event: {str(e)}")
+    err_json.addProperty("color", "red")
+    echo_json(err_json.toString())
+
+def process_chat_event(event):
+  global last_code_time
+  message = event.message
+  append_chat_history(message)
+  if message.startswith(chat_prefix):
+    last_code_time = event.time
+    print(message, file=sys.stderr)
+    source_code = message[len(chat_prefix):]
+    if source_code == ".":
+      print("Stopping interpreter.", file=sys.stderr)
+      repl_script.exit(0)
+      remove_event_listener(key_listener_id)
+      remove_event_listener(chat_listener_id)
+      return
+    elif source_code and source_code.strip():
+      try:
+        ast = PyjinnParser.parse("<stdin>", source_code)
+        repl_script.compile(ast, "<stdin>")
+        repl_script.exec()
+      except Exception as e:
+        reset_repl_context()
+        err_json = JsonObject()
+        err_json.addProperty("text", f"Error: {str(e)}")
+        err_json.addProperty("color", "red")
+        echo_json(err_json.toString())
+      except:
+        reset_repl_context()
+        log("Unknown exception")
+        err_json = JsonObject()
+        err_json.addProperty("text", "Unknown exception")
+        err_json.addProperty("color", "red")
+        echo_json(err_json.toString())
+
+minescript_dir = File(System.getProperty("user.dir"), "minescript").toPath()
+init_loaded = False
+if Minescript.config is not None:
+  for fp in Minescript.config.scriptConfig().commandPath():
+    if init_loaded:
+      break
+    for p in fp.resolvePaths():
+      init_path = minescript_dir.resolve(p).resolve(".interpreter_init.pyj")
+      if init_path.toFile().exists():
+        try:
+          init_code = Files.readString(init_path)
+          if init_code and init_code.strip():
+            ast = PyjinnParser.parse(".interpreter_init.pyj", init_code)
+            repl_script.compile(ast, ".interpreter_init.pyj")
+            repl_script.exec()
+          print("Loaded .interpreter_init.pyj", file=sys.stderr)
+          init_loaded = True
+          break
+        except Exception as e:
+          reset_repl_context()
+          err_json = JsonObject()
+          err_json.addProperty("text", f"Error loading .interpreter_init.pyj: {str(e)}")
+          err_json.addProperty("color", "red")
+          echo_json(err_json.toString())
+
+key_listener_id = add_event_listener("key", process_key_event)
+chat_listener_id = add_event_listener("outgoing_chat_intercept", process_chat_event, prefix=chat_prefix)
+
+print("Press `i` to return to the interpreter. Type `.` to exit.", file=sys.stderr)
+
+# Schedule the reopening of the chat screen with the REPL prompt. show_chat_screen() cannot be
+# called directly here because the chat screen is likely still open while this code is executing,
+# and will close momentarily.
+set_timeout(lambda: show_chat_screen(True, chat_prefix), 0)
