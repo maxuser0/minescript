@@ -230,14 +230,17 @@ def longest_common_prefix(strings):
         break
   return longest
 
+def async_show_chat_screen():
+  set_timeout(lambda: show_chat_screen(True, chat_prefix), 0)
+
 def process_key_event(event):
   global last_code_time
   try:
     if event.key == trigger_key and event.action == 1 and event.screen is None:
-      show_chat_screen(True, chat_prefix)
+      async_show_chat_screen()
     elif abs(event.time - last_code_time) < 0.5:
       if event.key == enter_key and event.action != 1 and event.screen is None:
-        show_chat_screen(True, chat_prefix)
+        async_show_chat_screen()
     elif event.key == TAB_KEY and event.action == 1 and event.screen == "Chat screen":
       text, pos = chat_input()
       if text.startswith(chat_prefix) and pos == len(text):
@@ -342,4 +345,4 @@ print("Press `i` to return to the interpreter. Type `.` to exit.", file=sys.stde
 # Schedule the reopening of the chat screen with the REPL prompt. show_chat_screen() cannot be
 # called directly here because the chat screen is likely still open while this code is executing,
 # and will close momentarily.
-set_timeout(lambda: show_chat_screen(True, chat_prefix), 0)
+async_show_chat_screen()
