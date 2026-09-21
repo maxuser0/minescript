@@ -127,7 +127,7 @@ function update_mods_for_mc_version {
   if [[ $new_loader = "fabric" ]]; then
     update_fabric_api
   elif [[ $new_loader = "neoforge" ]]; then
-    install_neoforge.sh
+    ./tools/neoforge_installer.sh
   fi
   new_minescript_mod_release_path="$(ls -t ${minescript_release_dir}/minescript-${new_loader}-${new_mc_version}-*.jar |grep -v -- '-\(sources\|javadoc\)\.jar$' | head -1)"
   if [[ -f $new_minescript_mod_release_path ]]; then
