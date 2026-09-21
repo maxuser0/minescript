@@ -1615,6 +1615,9 @@ Renamed from `world_properties()` from v3.1.
 
 - [`WorldInfo`](#worldinfo)
 
+Update in v5.0:
+  Added `dimension` field to [`WorldInfo`](#worldinfo).
+
 Since: v4.0
 
 

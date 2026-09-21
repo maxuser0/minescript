@@ -798,6 +798,9 @@ def world_info() -> WorldInfo:
   Returns:
     `WorldInfo`
 
+  Update in v5.0:
+    Added `dimension` field to `WorldInfo`.
+
   Since: v4.0
   """
   return ()
