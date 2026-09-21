@@ -71,7 +71,7 @@ import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -2623,8 +2623,8 @@ public class Minescript {
                           new IllegalArgumentException(
                               "Inventory slot " + slot + " is not available in the current menu"));
           int selectedSlot = inventory.getSelectedSlot();
-          minecraft.gameMode.handleContainerInput(
-              menu.containerId, menuSlot, selectedSlot, ContainerInput.SWAP, player);
+          minecraft.gameMode.handleInventoryMouseClick(
+              menu.containerId, menuSlot, selectedSlot, ClickType.SWAP, player);
           return ScriptValue.of(selectedSlot);
         }
 
