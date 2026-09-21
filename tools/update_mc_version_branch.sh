@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # SPDX-FileCopyrightText: © 2022-2026 Greg Christiana <maxuser@minescript.net>
 # SPDX-License-Identifier: MIT
 
@@ -20,6 +19,11 @@ for commit in $(git rev-list --reverse --no-merges --cherry-pick --right-only HE
 
   # Skip Minecraft version-specific commits:
   if [[ "$subject" =~ ^Update\ (MC|Minecraft|mc[0-9]) ]]; then
+    echo "Skipping version-specific commit $commit: $subject" >&2
+    continue
+  fi
+  # Weirdly described commit updating the Minecraft verison.
+  if [[ "$subject" =~ ^Update\ Minescript\ to\ 26.1-snapshot-6 ]]; then
     echo "Skipping version-specific commit $commit: $subject" >&2
     continue
   fi
