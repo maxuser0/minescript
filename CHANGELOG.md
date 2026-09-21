@@ -7,6 +7,39 @@
 - To set up Fabric mappings for Python and Pyjinn scripts see
   [minescript.net/mappings](https://minescript.net/mappings)
 
+## Minescript 5.0
+
+Highlights of cumulative changes across beta releases:
+
+- Integrated Pyjinn interpreter: run `.pyj` scripts written in Python syntax directly within
+the game (no external Python installation required) ([eff8e22](https://github.com/maxuser0/minescript/commit/eff8e22f25fcdea652c91ea1eb2d4ee0c704b30b),
+[393d74c](https://github.com/maxuser0/minescript/commit/393d74cb366fbc5cb8b149c19b60ae70a71e3f9a))
+- Built-in Pyjinn-based REPL interpreter (`\interpreter`) with tab-completion ([59a46aa](https://github.com/maxuser0/minescript/commit/59a46aadbb8e94c52782d5b7a9b4066b4a2cbfa5))
+- Asynchronous Pyjinn scripting with `async`/`await` and `EventLoop` class
+([d680374](https://github.com/maxuser0/minescript/commit/d6803744efb980f2872cf5f72654e0e7b11c495e))
+- Support packet interception and cancellation in Pyjinn scripts via `serverbound_packet` and
+`clientbound_packet` events ([77412bb](https://github.com/maxuser0/minescript/commit/77412bb5723a31b4a244b47a9a8e5375efe6ea2f))
+- Support Pyjinn script events for several render passes
+([c24f8ee](https://github.com/maxuser0/minescript/commit/c24f8eed12ac770ddd7f8cfdc9e9ae0246f95b6f),
+[55aa5d8](https://github.com/maxuser0/minescript/commit/55aa5d8da0ca9d072926d7a335c2bc1b506bbb2a))
+- Add scoreboard query function `get_scoreboard()`
+([a574c95](https://github.com/maxuser0/minescript/commit/a574c9559b37ee0eb170ba711aa915775f051950))
+- Add current dimension to `world_info()` ([2211c43](https://github.com/maxuser0/minescript/commit/2211c43f4df184b9fbf113c448aa00f6bc4c1206))
+- Add `get_block_region()` to get blocks in a 3D volume ([8b69e2a](https://github.com/maxuser0/minescript/commit/8b69e2ab60a81e00cb05c5d8fb108e7bc155ef14))
+- Add `install_mappings` script for installing Mojang official mappings (mappings no longer needed for game versions 26.x and above) ([418afa3](https://github.com/maxuser0/minescript/commit/418afa353d4ceb2b32e01f9066ef35c12a61ca67))
+- Support running embedded Pyjinn scripts within Python via built-in `java.py`
+([fc2eb1b](https://github.com/maxuser0/minescript/commit/fc2eb1beb4dea3f41ed53a0d4004f6f4458bb83a),
+[ab6bfb5](https://github.com/maxuser0/minescript/commit/ab6bfb548da7f7ea6817c03d8c34af567cbf8057),
+[9bc3a71](https://github.com/maxuser0/minescript/commit/9bc3a71af452c2930393d81958d4d86964883cd0))
+- Pyjinn support for JavaScript-style timers: `set_timeout()`, `set_interval()`, and
+`remove_event_listener()` ([8849da8](https://github.com/maxuser0/minescript/commit/8849da83386aaee59d82273849055dd7e01712c3))
+- Support `"world"` event to keep persistent scripts running across connect/disconnect
+([0c2d139](https://github.com/maxuser0/minescript/commit/0c2d1392eb5b600c1c50aa6f63d2511c12a18a6f))
+- Support globs in `command_path`
+[bce4a43](https://github.com/maxuser0/minescript/commit/bce4a4357344c170e0429499c48a970d34267bea))
+- Track and list child jobs with `\jobs all` while hiding them from default `\jobs`
+([fdeab5f](https://github.com/maxuser0/minescript/commit/fdeab5f589567ba09502dc294f93db3e2b1fff03))
+
 ## Minescript 5.0b11
 
 - Document EventLoop and packet events ([fa632c4](https://github.com/maxuser0/minescript/commit/fa632c48e4c3bc6d8c57a54b64c6ce202b40b350))
