@@ -46,7 +46,7 @@ public class SubprocessTask implements Task {
     }
 
     try {
-      process = Runtime.getRuntime().exec(exec.command(), exec.environment());
+      process = SubprocessProcessBuilder.create(exec.command(), exec.environment()).start();
     } catch (IOException e) {
       jobControl.logJobException(e);
       return -2;
