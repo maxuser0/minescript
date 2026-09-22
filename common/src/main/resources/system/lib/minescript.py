@@ -592,6 +592,107 @@ class EntityData:
   nbt: str = None
 
 
+@dataclass(frozen=True)
+class TabListText:
+  """Minecraft text in both plain-text and structured JSON forms."""
+  plain: str
+  json: Any
+
+  def lines(self) -> List[str]:
+    """Returns the plain text split into lines."""
+    return self.plain.splitlines()
+
+
+@dataclass(frozen=True)
+class TabListPlayer:
+  """Snapshot of a player-list entry, including server-created fake players."""
+  uuid: str
+  name: str
+  display_name: TabListText
+  latency: int
+  game_mode: str
+  team: str = None
+  order: int = 0
+  skin_texture: str = None
+  show_hat: bool = True
+  score: int = None
+  score_display: TabListText = None
+
+
+@dataclass(frozen=True)
+class TabListObjective:
+  """Scoreboard objective displayed beside player-list entries."""
+  name: str
+  display_name: TabListText
+  render_type: str
+
+
+class TabListData:
+  """Snapshot of the player-list overlay."""
+
+  def __init__(self, players, header, footer, objective):
+    self._players = [
+        TabListPlayer(
+            **dict(player, display_name=TabListText(**player["display_name"]),
+                   score_display=(None if player["score_display"] is None
+                                  else TabListText(**player["score_display"]))))
+        for player in players]
+    self._header = None if header is None else TabListText(**header)
+    self._footer = None if footer is None else TabListText(**footer)
+    self._objective = (
+        None if objective is None else
+        TabListObjective(
+            **dict(objective, display_name=TabListText(**objective["display_name"]))))
+
+  def players(self) -> List[TabListPlayer]:
+    """Returns the entries rendered in the player list, in display order."""
+    return self._players
+
+  def header(self) -> Union[TabListText, None]:
+    """Returns the text above the player entries, or `None`."""
+    return self._header
+
+  def footer(self) -> Union[TabListText, None]:
+    """Returns the text below the player entries, or `None`."""
+    return self._footer
+
+  def objective(self) -> Union[TabListObjective, None]:
+    """Returns the scoreboard objective rendered beside entries, or `None`."""
+    return self._objective
+
+
+def tablist() -> TabListData:
+  """Gets a snapshot of the in-game player-list overlay.
+
+  Unlike `players()`, this reads the client network entries used by the Tab key overlay. This
+  includes server-created "fake players" that do not exist as entities in the world.
+
+  Each `TabListText` value includes convenient plain text and the original structured Minecraft
+  JSON text, preserving colors, styling, translations, and other component metadata.
+
+  Example:
+    ```python
+    current_tablist = minescript.tablist()
+    player_names = [player.display_name.plain for player in current_tablist.players()]
+    header_lines = [] if current_tablist.header() is None else current_tablist.header().lines()
+    footer = None if current_tablist.footer() is None else current_tablist.footer().plain
+    ```
+
+  Returns:
+    `TabListData` containing the displayed entries, header, footer, and optional list scoreboard
+    objective. Entries are returned in the same order and with the same 80-entry limit as the
+    vanilla overlay.
+
+  Since: v5.0
+  """
+  return ()
+
+def _tablist_result_transform(result):
+  return TabListData(**result)
+
+tablist = ScriptFunction("tablist", tablist, _tablist_result_transform)
+
+
 def player_get_targeted_entity(max_distance: float = 20, nbt: bool = False) -> Union[EntityData, None]:
   """Gets the entity targeted in the local player's crosshairs, if any.
 

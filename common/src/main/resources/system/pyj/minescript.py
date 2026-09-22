@@ -518,6 +518,33 @@ def players(
 get_players = players  # Alias for scripts with `players` variables.
 
 
+def tablist() -> TabListData:
+  """Gets a snapshot of the in-game player-list overlay.
+
+  Unlike `players()`, this reads the client network entries used by the Tab key overlay. This
+  includes server-created "fake players" that do not exist as entities in the world.
+
+  Each `TabListText` value includes convenient plain text and the original structured Minecraft
+  JSON text, preserving colors, styling, translations, and other component metadata.
+
+  Example:
+    ```python
+    current_tablist = minescript.tablist()
+    player_names = [player.display_name.plain for player in current_tablist.players()]
+    header_lines = [] if current_tablist.header() is None else current_tablist.header().lines()
+    footer = None if current_tablist.footer() is None else current_tablist.footer().plain
+    ```
+
+  Returns:
+    `TabListData` containing the displayed entries, header, footer, and optional list scoreboard
+    objective. Entries are returned in the same order and with the same 80-entry limit as the
+    vanilla overlay.
+
+  Since: v5.0
+  """
+  return __mcall__("tablist", [])
+
+
 def entities(
     nbt: bool = False, uuid: str = None, name: str = None, type: str = None,
     position: Vector3f = None, offset: Vector3f = None, min_distance: float = None,

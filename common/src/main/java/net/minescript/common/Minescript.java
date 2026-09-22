@@ -2800,6 +2800,10 @@ public class Minescript {
                           .selectFrom(world.players())));
         }
 
+      case "tablist":
+        args.expectSize(0);
+        return ScriptValue.of(TabListExporter.export(minecraft));
+
       case "entities":
         {
           args.expectArgs(
